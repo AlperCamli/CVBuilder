@@ -1,111 +1,88 @@
-# Architecture Note (Phase 3)
+# Architecture Note (Phase 4A)
 
-## Frozen Decisions (Still Applied)
+## Frozen Decisions (Reconfirmed)
 
 - Frontend remains React + Vite and is the UI source of truth.
 - Backend remains TypeScript.
-- Supabase remains database/auth/storage backend.
-- Deployment target remains Vercel.
-- Architecture remains a modular monolith.
-- Master CV and Tailored CV remain separate concepts and separate tables.
+- Supabase remains database/auth/storage.
+- Vercel remains deployment target.
+- Backend remains a modular monolith.
+- Master CV and Tailored CV remain separate concepts and tables.
 - Tailored CV remains the core product object.
-- Tailored CVs remain stored as full current snapshots.
-- AI block edits require explicit apply/reject before mutating current content.
-- Block-level revision history is mandatory.
+- Tailored CV snapshots remain full current snapshots.
+- Block-level revision compatibility remains intact.
+- AI block changes remain apply/reject gated.
 - No microservices introduced.
 
-## Phase 3 Extension Strategy
+## How Phase 4A Extends Earlier Phases
 
-Phase 3 extends Phase 1+2 without rewriting existing architecture:
-- added `ai` module for orchestration, run/suggestion persistence, and flow endpoints
-- added `cv-revisions` module for block history and restore/compare
-- extended `tailored-cv` service so manual block edits create revisions
-- preserved response/error contracts, auth/session handling, and repository-first data access style
+Phase 4A extends Phase 1-3 without architecture rewrite:
+- keeps existing module boundaries and response/error conventions
+- replaces placeholder dashboard reads with persisted aggregations
+- finalizes jobs tracker endpoints and status transition handling
+- adds template metadata module and dedicated template assignment endpoints
+- introduces centralized rendering module used by both master/tailored preview endpoints and unsaved preview endpoint
 
-## Module Responsibilities
+## Module Responsibilities (Phase 4A)
 
-## `ai`
+### `jobs`
+- tracker list/detail/update endpoints
+- status-only transition endpoint
+- kanban board grouped payload
+- lightweight status transition history (`job_status_history`)
+- job-to-tailored linkage visibility in list/detail/board payloads
 
-Responsibilities:
-- provider abstraction boundary (`AiProvider`)
-- flow registry (`flow_type -> prompt config + output contract`)
-- orchestration of AI runs with persistence (`ai_runs`)
-- structured output validation before completion
-- suggestion persistence (`ai_suggestions`) for block-level AI edits
-- suggestion apply/reject coordination
+### `dashboard`
+- user-facing summary composition from persisted entities
+- counts and recent items for master CVs, tailored CVs, jobs
+- counts by job status
+- lightweight recent activity feed from existing tables
 
-Important behavior:
-- AI block suggestion endpoints do **not** mutate `tailored_cvs.current_content`.
-- Suggestion apply endpoint mutates content and creates revision (`change_source = 'ai'`).
-- Suggestion reject endpoint only updates suggestion status.
+### `templates`
+- active template listing
+- template detail retrieval
+- template assignment validation rule (`active` required for assignment)
+- template resolution support for rendering (selected/default/none)
 
-## `cv-revisions`
+### `rendering`
+- single normalized rendering payload builder
+- canonical-content-to-render transformation (no schema redesign)
+- template-aware render contract for:
+  - frontend preview
+  - future PDF export pipeline
+  - future DOCX export pipeline
 
-Responsibilities:
-- centralized revision number allocation
-- revision creation for accepted block changes
-- list/detail endpoints for revision browsing
-- block-level restore endpoint
-- compare endpoint for practical diff payload
+### `master-cv` / `tailored-cv` (extended)
+- dedicated template assignment endpoints
+- preview endpoints finalized to return:
+  - canonical `current_content`
+  - resolved template summary
+  - normalized rendering payload
 
-Important behavior:
-- restore is additive: it updates current block snapshot and creates a **new** revision with `change_source = 'restore'`.
-- no destructive rollback/event-sourcing behavior introduced.
+## Rendering Contract Rationale
 
-## `tailored-cv` (extended)
+Phase 4A chooses one consistent strategy:
+- preview responses return both canonical editor state and normalized rendering payload.
 
-Responsibilities added in Phase 3:
-- manual block update endpoint now creates revision (`change_source = 'manual'`)
+Why:
+- frontend keeps direct access to canonical `current_content` (editor compatibility)
+- preview/export layers share one stable render contract
+- no duplicate transformation logic in controllers
+- preserves backward compatibility while enabling future export implementations
 
-Unchanged responsibilities:
-- tailored current snapshot lifecycle
-- source linkage to master CV and job
-- list/detail/content preview/source flows
+## Layering and Data Access
 
-## `master-cv` and `jobs` (reused)
+- Routes: auth + validation + endpoint binding.
+- Controllers: thin wrappers only.
+- Services: ownership checks + business rules + orchestration.
+- Repositories: Supabase access only.
 
-Phase 3 uses:
-- `master-cv` read access as tailoring/analysis source
-- `jobs` context for AI analysis and comparison flows
+All protected operations remain user-scoped in service/repository queries.
 
-## Request and Orchestration Flow
+## Forward Compatibility
 
-1. Request enters Express and auth middleware resolves user context.
-2. Zod validation normalizes inputs.
-3. Controller delegates to service.
-4. Service enforces ownership and business rules.
-5. Repository layer performs Supabase access with user-scoped criteria.
-6. AI flows persist `ai_runs` (`pending -> completed|failed`) and optionally `ai_suggestions`.
-7. Block mutations create revisions via `cv-revisions` service.
-8. Responses return normalized success envelope.
-9. Errors are normalized by global middleware.
-
-## AI Flow Architecture
-
-- Distinct flow types: `job_analysis`, `follow_up_questions`, `tailored_draft`, `block_suggest`, `block_compare`, `multi_option`.
-- Flow definitions include:
-  - prompt key/version
-  - system prompt string
-  - output schema
-- `AiService.executeFlow(...)` centralizes:
-  - run creation
-  - provider execution
-  - output schema validation
-  - completed/failed state persistence
-
-This keeps provider logic modular and future-friendly for non-mock providers.
-
-## Revision Architecture
-
-- Revisions stored in `cv_block_revisions`.
-- Revision number is per block scope (currently tailored CV block scope in active behavior).
-- Snapshot is full block JSON (`content_snapshot`).
-- Change sources tracked: `manual`, `ai`, `restore`, with `import/system` reserved for future extension.
-
-## Future Compatibility Preserved
-
-This Phase 3 implementation keeps extension points for later phases without contract rewrites:
-- export pipelines can consume stable tailored snapshot + revision history
-- billing can meter AI runs/actions from `ai_runs`/`ai_suggestions`
-- localization can build on existing language fields and structured content model
-- observability/security hardening can be layered over current service boundaries
+Phase 4A keeps extension paths clean for later phases:
+- export execution can consume rendering contract directly
+- billing can continue to meter usage/AI/export events
+- localization can continue from language fields and structured content
+- observability/security hardening can layer on current module boundaries without refactor

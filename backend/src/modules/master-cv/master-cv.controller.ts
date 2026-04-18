@@ -44,6 +44,15 @@ export class MasterCvController {
     sendSuccess(response, data);
   });
 
+  patchMasterCvTemplate = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.masterCvService.assignTemplate(
+      requireSession(request),
+      request.params.masterCvId,
+      request.body.template_id
+    );
+    sendSuccess(response, data);
+  });
+
   putMasterCvContent = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.masterCvService.replaceMasterCvContent(
       requireSession(request),

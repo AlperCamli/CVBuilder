@@ -1,6 +1,8 @@
 import type { AuthenticatedRequestContext } from "../auth/auth.types";
 import type { CvBlock, CvBlockPatch, CvContent, CvPreview } from "../../shared/cv-content/cv-content.types";
 import type { MasterCvSourceType } from "../../shared/types/domain";
+import type { RenderingPayload } from "../rendering/rendering.types";
+import type { ResolvedTemplateSummary } from "../templates/templates.types";
 
 export type SessionContext = AuthenticatedRequestContext;
 
@@ -57,4 +59,6 @@ export interface MasterCvPreviewResponse {
   };
   current_content: CvContent;
   preview: CvPreview;
+  selected_template: ResolvedTemplateSummary;
+  rendering: RenderingPayload;
 }

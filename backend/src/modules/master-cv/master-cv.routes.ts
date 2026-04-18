@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { MasterCvController } from "./master-cv.controller";
 import {
+  assignMasterCvTemplateSchema,
   createMasterCvSchema,
   masterCvBlockParamsSchema,
   masterCvIdParamSchema,
@@ -58,6 +59,13 @@ export const createMasterCvRouter = (
     authMiddleware,
     validate({ params: masterCvIdParamSchema }),
     masterCvController.getMasterCv
+  );
+
+  router.patch(
+    "/master-cvs/:masterCvId/template",
+    authMiddleware,
+    validate({ params: masterCvIdParamSchema, body: assignMasterCvTemplateSchema }),
+    masterCvController.patchMasterCvTemplate
   );
 
   router.patch(

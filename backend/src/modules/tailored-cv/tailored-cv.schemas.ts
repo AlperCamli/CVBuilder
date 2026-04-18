@@ -66,3 +66,9 @@ export const updateTailoredCvSchema = z
 export const replaceTailoredCvContentSchema = cvContentReplacementSchema;
 
 export const updateTailoredCvBlockSchema = cvBlockPatchSchema;
+
+export const assignTailoredCvTemplateSchema = z
+  .object({
+    template_id: uuidSchema.nullable()
+  })
+  .strict();

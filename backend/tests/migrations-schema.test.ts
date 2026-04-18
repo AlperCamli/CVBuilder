@@ -84,4 +84,15 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/create policy ai_suggestions_select_own/i);
     expect(migration).toMatch(/create policy cv_block_revisions_select_own/i);
   });
+
+  it("contains phase 4A job status alignment and tracker history table", () => {
+    const migration = readMigration("20260418123000_phase4a_jobs_dashboard_rendering.sql");
+
+    expect(migration).toMatch(/update public\.jobs[\s\S]*status = 'interview'/i);
+    expect(migration).toMatch(/update public\.jobs[\s\S]*status = 'offer'/i);
+    expect(migration).toMatch(/create table if not exists public\.job_status_history/i);
+    expect(migration).toMatch(/job_status_history_to_status_check/i);
+    expect(migration).toMatch(/create policy job_status_history_select_own/i);
+    expect(migration).toMatch(/create policy job_status_history_insert_own/i);
+  });
 });

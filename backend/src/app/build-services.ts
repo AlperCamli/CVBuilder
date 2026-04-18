@@ -9,7 +9,7 @@ import { AuthService } from "../modules/auth/auth.service";
 import { SupabaseAuthProvider } from "../modules/auth/supabase-auth-provider";
 import { DashboardService } from "../modules/dashboard/dashboard.service";
 import {
-  PlaceholderDashboardRepository,
+  SupabaseDashboardRepository,
   type DashboardRepository
 } from "../modules/dashboard/dashboard.repository";
 import { ImportsService } from "../modules/imports/imports.service";
@@ -49,6 +49,12 @@ import {
   SupabaseCvRevisionsRepository,
   type CvRevisionsRepository
 } from "../modules/cv-revisions/cv-revisions.repository";
+import { TemplatesService } from "../modules/templates/templates.service";
+import {
+  SupabaseTemplatesRepository,
+  type TemplatesRepository
+} from "../modules/templates/templates.repository";
+import { RenderingService } from "../modules/rendering/rendering.service";
 
 export interface AppServices {
   authService: AuthService;
@@ -61,6 +67,8 @@ export interface AppServices {
   tailoredCvService: TailoredCvService;
   cvRevisionsService: CvRevisionsService;
   aiService: AiService;
+  templatesService: TemplatesService;
+  renderingService: RenderingService;
 }
 
 export interface ServiceOverrides {
@@ -78,6 +86,7 @@ export interface ServiceOverrides {
   aiRepository?: AiRepository;
   aiProvider?: AiProvider;
   cvParser?: CvParser;
+  templatesRepository?: TemplatesRepository;
 }
 
 export const buildDefaultServices = (
@@ -97,7 +106,8 @@ export const buildDefaultServices = (
 
   const authProvider =
     overrides?.authProvider ?? new SupabaseAuthProvider(supabaseClients.serviceRoleClient);
-  const dashboardRepository = overrides?.dashboardRepository ?? new PlaceholderDashboardRepository();
+  const dashboardRepository =
+    overrides?.dashboardRepository ?? new SupabaseDashboardRepository(supabaseClients.serviceRoleClient);
   const databaseHealthChecker =
     overrides?.databaseHealthChecker ?? new DatabaseHealthChecker(supabaseClients.serviceRoleClient);
   const masterCvRepository =
@@ -113,13 +123,17 @@ export const buildDefaultServices = (
     new SupabaseCvRevisionsRepository(supabaseClients.serviceRoleClient);
   const aiRepository = overrides?.aiRepository ?? new SupabaseAiRepository(supabaseClients.serviceRoleClient);
   const aiProvider = overrides?.aiProvider ?? createAiProvider(config);
+  const templatesRepository =
+    overrides?.templatesRepository ?? new SupabaseTemplatesRepository(supabaseClients.serviceRoleClient);
   const cvParser = overrides?.cvParser ?? new SimpleCvParser();
 
   const authService = new AuthService(authProvider, usersRepository);
   const usersService = new UsersService(usersRepository, subscriptionsRepository, usageRepository);
   const dashboardService = new DashboardService(usersService, dashboardRepository);
   const systemService = new SystemService(config, databaseHealthChecker);
-  const masterCvService = new MasterCvService(masterCvRepository);
+  const templatesService = new TemplatesService(templatesRepository);
+  const renderingService = new RenderingService(templatesService);
+  const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
   const importsService = new ImportsService(importsRepository, masterCvRepository, cvParser);
   const jobsService = new JobsService(jobsRepository);
   const cvRevisionsService = new CvRevisionsService(cvRevisionsRepository, tailoredCvRepository);
@@ -127,7 +141,9 @@ export const buildDefaultServices = (
     tailoredCvRepository,
     masterCvRepository,
     jobsRepository,
-    cvRevisionsService
+    cvRevisionsService,
+    templatesService,
+    renderingService
   );
   const aiService = new AiService(
     aiRepository,
@@ -136,6 +152,7 @@ export const buildDefaultServices = (
     tailoredCvRepository,
     jobsRepository,
     cvRevisionsService,
+    templatesService,
     config.ai.promptProfile
   );
 
@@ -149,6 +166,8 @@ export const buildDefaultServices = (
     jobsService,
     tailoredCvService,
     cvRevisionsService,
-    aiService
+    aiService,
+    templatesService,
+    renderingService
   };
 };

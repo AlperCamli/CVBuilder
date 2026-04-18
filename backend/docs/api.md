@@ -1,30 +1,37 @@
-# API Documentation (Phase 3)
+# API Documentation (Phase 4A)
 
 Base path:
 - `/api/v1`
 
-Response envelope:
-- Success: `{ "success": true, "data": ..., "meta"?: ... }`
-- Error: `{ "success": false, "error": { "code", "message", "details"? } }`
-
-## Auth Requirement
-
-All Phase 3 endpoints are protected.
+All Phase 4A endpoints are protected:
 
 ```http
-Authorization: Bearer <Supabase access token>
+Authorization: Bearer <supabase_access_token>
 ```
 
-## Ownership Behavior
+## Response Envelope
 
-All Phase 3 data access is user-scoped.
-Users can only access their own:
-- `master_cvs`
-- `tailored_cvs`
-- `jobs`
-- `ai_runs`
-- `ai_suggestions`
-- `cv_block_revisions`
+Success:
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "SOME_ERROR_CODE",
+    "message": "Human readable message",
+    "details": {}
+  }
+}
+```
 
 ## Common Error Codes
 
@@ -34,519 +41,306 @@ Users can only access their own:
 - `FORBIDDEN`
 - `NOT_FOUND`
 - `CONFLICT`
-- `AI_PROVIDER_ERROR`
-- `AI_FLOW_FAILED`
-- `REVISION_NOT_APPLICABLE`
-- `SUGGESTION_NOT_APPLICABLE`
 - `INTERNAL_ERROR`
-- `ROUTE_NOT_FOUND`
+
+Template/rule violations use normalized validation or not-found errors.
+
+## Ownership Behavior
+
+All reads/writes are user-scoped. Users only access their own:
+- jobs
+- master CVs
+- tailored CVs
+- preview data
+- dashboard activity derived from their entities
 
 ---
 
-## AI Job Analysis / Question Flow
+## Jobs / Tracker
 
-1) `POST /ai/job-analysis`
-
-Purpose:
-- analyze job description against a master CV
-
-Body:
-```json
-{
-  "master_cv_id": "uuid",
-  "job": {
-    "company_name": "string",
-    "job_title": "string",
-    "job_description": "string"
-  }
-}
-```
-
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "keywords": ["..."],
-  "requirements": ["..."],
-  "strengths": ["..."],
-  "gaps": ["..."],
-  "summary": "string",
-  "fit_score": 0
-}
-```
-
-2) `POST /ai/follow-up-questions`
+### 1) `GET /jobs`
 
 Purpose:
-- generate structured follow-up questions for tailoring
+- list current user jobs for tracker
 
-Body:
-```json
-{
-  "master_cv_id": "uuid",
-  "job": {
-    "company_name": "string",
-    "job_title": "string",
-    "job_description": "string"
-  },
-  "prior_analysis": {}
-}
-```
+Query:
+- `status?: saved|applied|interview|offer|rejected|archived`
+- `search?: string` (company/job title contains)
+- `sort_by?: created_at|updated_at|company_name|job_title|status|applied_at`
+- `sort_order?: asc|desc`
+- `linked_tailored_cv?: boolean`
+- `page?: number` (default `1`)
+- `limit?: number` (default `20`, max `100`)
 
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "questions": [
-    {
-      "id": "string",
-      "question": "string",
-      "question_type": "single_choice",
-      "choices": [{ "id": "string", "label": "string" }],
-      "target_hint": "summary"
-    }
-  ]
-}
-```
+`data`:
+- `items[]` job summaries
+- `page`
+- `limit`
+- `total`
 
----
+Job summary fields:
+- `id`
+- `company_name`
+- `job_title`
+- `status`
+- `job_posting_url`
+- `location_text`
+- `tailored_cv_id`
+- `tailored_cv_title`
+- `created_at`
+- `updated_at`
+- `applied_at`
 
-## AI Tailored Draft Flow
-
-3) `POST /ai/tailored-cv-draft`
+### 2) `GET /jobs/:jobId`
 
 Purpose:
-- generate tailored draft from master CV + job + follow-up answers
+- tracker detail screen payload
+
+`data`:
+- `job` (summary fields above)
+- `job_description`
+- `notes`
+- `linked_tailored_cv` (`id`, `title`, `status`, `updated_at`) or `null`
+- `status_last_changed_at`
+
+### 3) `PATCH /jobs/:jobId`
+
+Purpose:
+- update job metadata (non-status)
 
 Body:
+
 ```json
 {
-  "master_cv_id": "uuid",
-  "tailored_cv_id": "uuid",
-  "language": "en",
-  "template_id": "uuid",
-  "job": {
-    "company_name": "string",
-    "job_title": "string",
-    "job_description": "string",
-    "job_posting_url": "https://...",
-    "location_text": "string",
-    "notes": "string"
-  },
-  "answers": [
-    {
-      "question_id": "string",
-      "answer_text": "string",
-      "selected_options": ["..."]
-    }
-  ]
+  "company_name": "optional",
+  "job_title": "optional",
+  "job_description": "optional",
+  "job_posting_url": "optional or null",
+  "location_text": "optional or null",
+  "notes": "optional or null"
+}
+```
+
+`data`:
+- same shape as `GET /jobs/:jobId`
+
+### 4) `PATCH /jobs/:jobId/status`
+
+Purpose:
+- status-only transition endpoint
+
+Body:
+
+```json
+{
+  "status": "saved|applied|interview|offer|rejected|archived"
 }
 ```
 
 Behavior:
-- validates `master_cv_id` ownership
-- if `tailored_cv_id` exists, reuses it (must belong to same master CV)
-- creates or updates linked job context
-- persists AI run
-- updates `tailored_cvs.current_content` with generated full snapshot
-- updates `tailored_cvs.ai_generation_status` (`pending -> completed|failed`)
+- validates ownership
+- records status history row in `job_status_history` when status changes
+- sets `applied_at` if moving to `applied` and previously null
 
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "tailored_cv": {
-    "id": "uuid",
-    "title": "string",
-    "language": "en",
-    "status": "draft",
-    "master_cv_id": "uuid",
-    "job_id": "uuid",
-    "template_id": "uuid",
-    "ai_generation_status": "completed",
-    "created_at": "iso",
-    "updated_at": "iso",
-    "current_content": {},
-    "preview": {}
-  },
-  "job": {
-    "id": "uuid",
-    "company_name": "string",
-    "job_title": "string",
-    "status": "saved"
-  },
-  "generation_metadata": {
-    "provider": "mock",
-    "model_name": "mock-cv-builder-v1",
-    "flow_type": "tailored_draft",
-    "prompt_key": "tailored-draft",
-    "prompt_version": "phase3-v1",
-    "changed_block_ids": ["..."],
-    "generation_summary": "string"
-  }
-}
-```
+`data`:
+- `job` (same as `GET /jobs/:jobId`)
+- `status_history_entry` or `null` when unchanged
+
+### 5) `GET /jobs/board`
+
+Purpose:
+- kanban-friendly grouped job payload
+
+Query:
+- `search?`
+- `sort_by?`
+- `sort_order?`
+- `linked_tailored_cv?`
+
+`data`:
+- `groups[]` each item:
+  - `status`
+  - `count`
+  - `items[]` (job summaries)
+- `counts_by_status` object
+- `total`
+
+### 6) `GET /jobs/:jobId/history`
+
+Purpose:
+- return status transition history
+
+`data`:
+- `job_id`
+- `current_status`
+- `current_status_updated_at`
+- `history[]`:
+  - `id`
+  - `from_status`
+  - `to_status`
+  - `changed_at`
+  - `changed_by_user_id`
 
 ---
 
-## AI Block-Level Suggestions
+## Dashboard
 
-4) `POST /ai/blocks/suggest`
-
-Purpose:
-- generate contextual suggestion(s) for one tailored block
-
-Body:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "block_id": "string",
-  "action_type": "improve",
-  "user_instruction": "string"
-}
-```
-
-`action_type` values:
-- `improve`, `summarize`, `rewrite`, `ats_optimize`, `shorten`, `expand`, `options`
-
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "suggestion_ids": ["uuid"],
-  "suggestions": [
-    {
-      "id": "uuid",
-      "ai_run_id": "uuid",
-      "tailored_cv_id": "uuid",
-      "block_id": "string",
-      "action_type": "improve",
-      "option_group_key": null,
-      "status": "pending",
-      "applied_at": null,
-      "created_at": "iso",
-      "before_content": {},
-      "suggested_content": {},
-      "rationale": "string"
-    }
-  ]
-}
-```
-
-5) `POST /ai/blocks/compare`
+### 7) `GET /dashboard`
 
 Purpose:
-- compare current block vs linked job requirements
+- product-focused home dashboard payload
 
-Body:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "block_id": "string"
-}
-```
+`data`:
+- `user_summary` (`id`, `email`, `full_name`)
+- `current_plan`
+- `usage_summary`
+- `master_cv_summary`
+  - `total_count`
+  - `primary_master_cv` or `null`
+- `tailored_cv_summary`
+  - `total_count`
+  - `recent_items[]`
+- `jobs_summary`
+  - `total_count`
+  - `counts_by_status`
+  - `recent_items[]`
+- `recent_activity[]`
+- `locale`
+- `onboarding_completed`
 
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "comparison_summary": "string",
-  "gap_highlights": ["..."],
-  "improvement_guidance": ["..."],
-  "matched_keywords": ["..."],
-  "missing_keywords": ["..."]
-}
-```
-
-6) `POST /ai/blocks/options`
+### 8) `GET /dashboard/activity`
 
 Purpose:
-- generate multiple rewrite options
+- lightweight activity feed
 
-Body:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "block_id": "string",
-  "user_instruction": "string",
-  "option_count": 3
-}
-```
-
-Response `data`:
-```json
-{
-  "ai_run_id": "uuid",
-  "option_group_key": "string",
-  "suggestions": [
-    {
-      "id": "uuid",
-      "action_type": "options",
-      "option_group_key": "string",
-      "status": "pending",
-      "suggested_content": {},
-      "rationale": "string"
-    }
-  ]
-}
-```
+`data`:
+- `activity[]` items:
+  - `id`
+  - `type` (`tailored_cv_created|tailored_cv_updated|ai_suggestion_applied|revision_restored|job_status_changed`)
+  - `message`
+  - `timestamp`
+  - `related_entity` (`kind`, `id`, `title`)
 
 ---
 
-## AI Suggestion Apply / Reject
+## Templates
 
-7) `GET /ai/suggestions/:suggestionId`
+### 9) `GET /templates`
 
-Response `data`:
+Purpose:
+- list active templates for user-facing selection
+
+`data`:
+- `templates[]`:
+  - `id`
+  - `name`
+  - `slug`
+  - `status`
+  - `preview_config`
+  - `export_config`
+  - `created_at`
+  - `updated_at`
+
+### 10) `GET /templates/:templateId`
+
+Purpose:
+- get template detail metadata
+
+`data`:
+- `template` (same fields as list item)
+
+### 11) `PATCH /master-cvs/:masterCvId/template`
+
+Purpose:
+- assign/unassign template for a Master CV
+
+Body:
+
 ```json
 {
-  "id": "uuid",
-  "ai_run_id": "uuid",
-  "tailored_cv_id": "uuid",
-  "block_id": "string",
-  "action_type": "rewrite",
-  "option_group_key": null,
-  "status": "pending",
-  "applied_at": null,
-  "created_at": "iso",
-  "before_content": {},
-  "suggested_content": {}
+  "template_id": "uuid or null"
 }
 ```
-
-8) `POST /ai/suggestions/:suggestionId/apply`
 
 Behavior:
-- validates ownership + pending status + applicability
-- applies `suggested_content` to target block
-- creates revision with `change_source = 'ai'`
-- marks suggestion `applied` and sets `applied_at`
+- ownership check on master CV
+- template existence and `active` status validation for non-null values
 
-Response `data`:
-```json
-{
-  "suggestion": {
-    "id": "uuid",
-    "status": "applied",
-    "applied_at": "iso"
-  },
-  "tailored_cv_id": "uuid",
-  "updated_block": {},
-  "section_id": "string"
-}
-```
+`data`:
+- updated master CV detail
 
-9) `POST /ai/suggestions/:suggestionId/reject`
-
-Behavior:
-- validates ownership + pending status
-- marks suggestion `rejected`
-- does not mutate current tailored content
-
-Response `data`:
-```json
-{
-  "suggestion_id": "uuid",
-  "status": "rejected"
-}
-```
-
-10) `GET /tailored-cvs/:tailoredCvId/ai-history`
+### 12) `PATCH /tailored-cvs/:tailoredCvId/template`
 
 Purpose:
-- list recent AI run and suggestion history for one tailored CV
-
-Response `data`:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "ai_runs": [
-    {
-      "id": "uuid",
-      "flow_type": "block_suggest",
-      "provider": "mock",
-      "model_name": "mock-cv-builder-v1",
-      "status": "completed",
-      "error_message": null,
-      "started_at": "iso",
-      "completed_at": "iso"
-    }
-  ],
-  "suggestions": [
-    {
-      "id": "uuid",
-      "ai_run_id": "uuid",
-      "tailored_cv_id": "uuid",
-      "block_id": "string",
-      "action_type": "improve",
-      "option_group_key": null,
-      "status": "pending",
-      "applied_at": null,
-      "created_at": "iso"
-    }
-  ]
-}
-```
-
----
-
-## Tailored CV Manual Block Editing
-
-11) `PATCH /tailored-cvs/:tailoredCvId/blocks/:blockId`
-
-Purpose:
-- manually patch one tailored CV block
-
-Behavior (Phase 3 change):
-- block update succeeds
-- backend creates revision (`change_source = 'manual'`)
+- assign/unassign template for a Tailored CV
 
 Body:
+
 ```json
 {
-  "fields": {},
-  "meta": {},
-  "replace_fields": false
+  "template_id": "uuid or null"
 }
 ```
-
-Response `data`:
-```json
-{
-  "tailored_cv": {},
-  "updated_block": {},
-  "section_id": "string"
-}
-```
-
----
-
-## Revision History Endpoints
-
-12) `GET /tailored-cvs/:tailoredCvId/revisions`
-
-Response `data`:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "revisions": [
-    {
-      "id": "uuid",
-      "cv_kind": "tailored",
-      "tailored_cv_id": "uuid",
-      "block_id": "string",
-      "block_type": "string",
-      "revision_number": 3,
-      "change_source": "manual",
-      "ai_suggestion_id": null,
-      "created_at": "iso",
-      "created_by_user_id": "uuid"
-    }
-  ]
-}
-```
-
-13) `GET /tailored-cvs/:tailoredCvId/blocks/:blockId/revisions`
-
-Response `data`:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "block_id": "string",
-  "revisions": [
-    {
-      "id": "uuid",
-      "revision_number": 2,
-      "change_source": "ai",
-      "created_at": "iso"
-    }
-  ]
-}
-```
-
-14) `GET /revisions/:revisionId`
-
-Response `data`:
-```json
-{
-  "id": "uuid",
-  "cv_kind": "tailored",
-  "tailored_cv_id": "uuid",
-  "block_id": "string",
-  "block_type": "summary",
-  "revision_number": 2,
-  "change_source": "ai",
-  "ai_suggestion_id": "uuid",
-  "created_at": "iso",
-  "created_by_user_id": "uuid",
-  "content_snapshot": {}
-}
-```
-
-15) `POST /revisions/:revisionId/restore`
 
 Behavior:
-- loads selected snapshot
-- updates current tailored CV block to that snapshot
-- creates new revision (`change_source = 'restore'`)
+- ownership check on tailored CV
+- template existence and `active` status validation for non-null values
 
-Response `data`:
-```json
-{
-  "tailored_cv_id": "uuid",
-  "restored_from_revision_id": "uuid",
-  "restored_block": {},
-  "section_id": "string",
-  "created_revision": {
-    "id": "uuid",
-    "revision_number": 5,
-    "change_source": "restore",
-    "block_id": "string"
-  }
-}
-```
-
-16) `POST /revisions/compare`
-
-Body:
-```json
-{
-  "from_revision_id": "uuid",
-  "to_revision_id": "uuid"
-}
-```
-
-Response `data`:
-```json
-{
-  "from_revision": {},
-  "to_revision": {},
-  "comparison": {
-    "same_cv": true,
-    "same_block": true,
-    "changed_block_type": false,
-    "changed_visibility": false,
-    "changed_order": false,
-    "changed_fields": ["text"],
-    "changed_meta": [],
-    "before_snapshot": {},
-    "after_snapshot": {}
-  }
-}
-```
-
-Note:
-- compare payload is practical field-level comparison for Phase 3 (not full semantic diff engine).
+`data`:
+- updated tailored CV detail
 
 ---
 
-## Legacy Endpoints
+## Rendering / Preview
 
-Phase 1/2 endpoints remain active and backward compatible:
-- system: `/health`, `/ready`, `/version`
-- users/profile/settings/usage: `/me`, `/me/settings`, `/me/usage`
-- dashboard endpoints
-- master CV CRUD/content/block endpoints
-- imports parse/review/convert endpoints
-- tailored CV list/detail/content/source/preview endpoints
-- jobs get/patch endpoints
+### 13) `GET /master-cvs/:masterCvId/preview`
+
+Purpose:
+- finalized master preview contract
+
+`data`:
+- `cv` metadata
+- `current_content` (canonical)
+- `preview` (legacy plain preview)
+- `selected_template` (resolved template summary with resolution mode)
+- `rendering` (normalized render payload)
+
+### 14) `GET /tailored-cvs/:tailoredCvId/preview`
+
+Purpose:
+- finalized tailored preview contract
+
+`data`:
+- `cv` metadata
+- `linked_job` summary or `null`
+- `current_content` (canonical)
+- `preview` (legacy plain preview)
+- `selected_template` (resolved template summary with resolution mode)
+- `rendering` (normalized render payload)
+
+### 15) `POST /rendering/preview`
+
+Purpose:
+- preview payload from unsaved/raw content without persistence
+
+Body:
+
+```json
+{
+  "cv_kind": "master|tailored",
+  "current_content": {},
+  "template_id": "uuid or null",
+  "language": "optional",
+  "context": {}
+}
+```
+
+Behavior:
+- normalizes incoming content
+- resolves template (selected/default/none)
+- does not write to DB
+
+`data`:
+- `current_content` (normalized canonical payload)
+- `resolved_template`
+- `rendering`

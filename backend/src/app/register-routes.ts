@@ -16,8 +16,12 @@ import { SystemController } from "../modules/system/system.controller";
 import { createSystemRouter } from "../modules/system/system.routes";
 import { TailoredCvController } from "../modules/tailored-cv/tailored-cv.controller";
 import { createTailoredCvRouter } from "../modules/tailored-cv/tailored-cv.routes";
+import { TemplatesController } from "../modules/templates/templates.controller";
+import { createTemplatesRouter } from "../modules/templates/templates.routes";
 import { UsersController } from "../modules/users/users.controller";
 import { createUsersRouter } from "../modules/users/users.routes";
+import { RenderingController } from "../modules/rendering/rendering.controller";
+import { createRenderingRouter } from "../modules/rendering/rendering.routes";
 import type { AppServices } from "./build-services";
 
 export const registerV1Routes = (router: Router, services: AppServices): void => {
@@ -32,6 +36,8 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   const tailoredCvController = new TailoredCvController(services.tailoredCvService);
   const cvRevisionsController = new CvRevisionsController(services.cvRevisionsService);
   const aiController = new AiController(services.aiService);
+  const templatesController = new TemplatesController(services.templatesService);
+  const renderingController = new RenderingController(services.renderingService);
 
   router.use(createSystemRouter(systemController));
   router.use(createUsersRouter(usersController, authMiddleware));
@@ -42,4 +48,6 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   router.use(createJobsRouter(jobsController, authMiddleware));
   router.use(createCvRevisionsRouter(cvRevisionsController, authMiddleware));
   router.use(createAiRouter(aiController, authMiddleware));
+  router.use(createTemplatesRouter(templatesController, authMiddleware));
+  router.use(createRenderingRouter(renderingController, authMiddleware));
 };

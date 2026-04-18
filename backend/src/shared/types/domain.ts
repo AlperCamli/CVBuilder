@@ -161,7 +161,7 @@ export interface CvBlockRevisionRecord {
   created_by_user_id: string | null;
 }
 
-export type JobStatus = "saved" | "applied" | "interviewing" | "offered" | "rejected" | "archived";
+export type JobStatus = "saved" | "applied" | "interview" | "offer" | "rejected" | "archived";
 
 export interface JobRecord {
   id: string;
@@ -177,6 +177,15 @@ export interface JobRecord {
   applied_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface JobStatusHistoryRecord {
+  id: string;
+  job_id: string;
+  from_status: JobStatus | null;
+  to_status: JobStatus;
+  changed_at: string;
+  changed_by_user_id: string;
 }
 
 export type FileType =

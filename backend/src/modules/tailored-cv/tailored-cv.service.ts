@@ -9,6 +9,8 @@ import type { JobRecord, MasterCvRecord, TailoredCvRecord } from "../../shared/t
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { JobsRepository } from "../jobs/jobs.repository";
 import type { MasterCvRepository } from "../master-cv/master-cv.repository";
+import type { RenderingService } from "../rendering/rendering.service";
+import type { TemplatesService } from "../templates/templates.service";
 import type { TailoredCvRepository } from "./tailored-cv.repository";
 import type {
   CreateTailoredCvInput,
@@ -30,7 +32,9 @@ export class TailoredCvService {
     private readonly tailoredCvRepository: TailoredCvRepository,
     private readonly masterCvRepository: MasterCvRepository,
     private readonly jobsRepository: JobsRepository,
-    private readonly cvRevisionsService: CvRevisionsService
+    private readonly cvRevisionsService: CvRevisionsService,
+    private readonly templatesService: TemplatesService,
+    private readonly renderingService: RenderingService
   ) {}
 
   async listTailoredCvs(
@@ -62,6 +66,10 @@ export class TailoredCvService {
 
   async createTailoredCv(session: SessionContext, input: CreateTailoredCvInput): Promise<TailoredCvDetail> {
     const sourceMasterCv = await this.requireSourceMasterCv(session.appUser.id, input.master_cv_id);
+    const validatedTemplateId =
+      input.template_id !== undefined
+        ? await this.templatesService.validateAssignableTemplateId(input.template_id)
+        : sourceMasterCv.template_id;
 
     const createdJob = await this.jobsRepository.create({
       user_id: session.appUser.id,
@@ -86,7 +94,7 @@ export class TailoredCvService {
       job_id: createdJob.id,
       title: input.title?.trim() || `${sourceMasterCv.title} - ${createdJob.company_name}`,
       language,
-      template_id: input.template_id ?? sourceMasterCv.template_id,
+      template_id: validatedTemplateId,
       current_content: clonedContent,
       status: "draft",
       ai_generation_status: null,
@@ -128,9 +136,14 @@ export class TailoredCvService {
     } = {
       title: input.title,
       language: input.language,
-      template_id: input.template_id,
       status: input.status
     };
+
+    if (input.template_id !== undefined) {
+      updatePayload.template_id = await this.templatesService.validateAssignableTemplateId(
+        input.template_id
+      );
+    }
 
     if (input.language && input.language !== existing.current_content.language) {
       const nextContent = cloneCvContent(existing.current_content);
@@ -239,11 +252,53 @@ export class TailoredCvService {
     };
   }
 
+  async assignTemplate(
+    session: SessionContext,
+    tailoredCvId: string,
+    templateId: string | null
+  ): Promise<TailoredCvDetail> {
+    await this.requireTailoredCv(session.appUser.id, tailoredCvId);
+    const validatedTemplateId = await this.templatesService.validateAssignableTemplateId(templateId);
+
+    const updated = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCvId, {
+      template_id: validatedTemplateId
+    });
+
+    if (!updated) {
+      throw new NotFoundError("Tailored CV was not found");
+    }
+
+    const linkedJob = updated.job_id
+      ? await this.jobsRepository.findById(session.appUser.id, updated.job_id)
+      : null;
+    const sourceMaster = await this.masterCvRepository.findAnyById(session.appUser.id, updated.master_cv_id);
+
+    return this.toDetail(updated, linkedJob, sourceMaster ? this.toSourceMasterSummary(sourceMaster) : null);
+  }
+
   async getTailoredCvPreview(
     session: SessionContext,
     tailoredCvId: string
   ): Promise<TailoredCvPreviewResponse> {
     const row = await this.requireTailoredCv(session.appUser.id, tailoredCvId);
+    const linkedJob = row.job_id ? await this.jobsRepository.findById(session.appUser.id, row.job_id) : null;
+    const renderingResult = await this.renderingService.buildRendering({
+      cv_kind: "tailored",
+      current_content: row.current_content,
+      template_id: row.template_id,
+      language: row.language,
+      document: {
+        id: row.id,
+        title: row.title,
+        updated_at: row.updated_at
+      },
+      context: {
+        status: row.status,
+        master_cv_id: row.master_cv_id,
+        job_id: row.job_id
+      },
+      allow_inactive_selected_template: true
+    });
 
     return {
       cv: {
@@ -256,8 +311,11 @@ export class TailoredCvService {
         template_id: row.template_id,
         updated_at: row.updated_at
       },
+      linked_job: linkedJob ? this.toJobSummary(linkedJob) : null,
       current_content: row.current_content,
-      preview: buildCvPreview(row.current_content)
+      preview: buildCvPreview(row.current_content),
+      selected_template: renderingResult.resolved_template,
+      rendering: renderingResult.rendering
     };
   }
 

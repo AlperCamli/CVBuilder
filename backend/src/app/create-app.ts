@@ -28,7 +28,9 @@ const hasCompleteServiceOverrides = (
       services?.jobsService &&
       services?.tailoredCvService &&
       services?.cvRevisionsService &&
-      services?.aiService
+      services?.aiService &&
+      services?.templatesService &&
+      services?.renderingService
   );
 };
 
@@ -51,7 +53,9 @@ export const createApp = (options?: CreateAppOptions): Express => {
     tailoredCvService: options?.services?.tailoredCvService ?? defaultServices?.tailoredCvService!,
     cvRevisionsService:
       options?.services?.cvRevisionsService ?? defaultServices?.cvRevisionsService!,
-    aiService: options?.services?.aiService ?? defaultServices?.aiService!
+    aiService: options?.services?.aiService ?? defaultServices?.aiService!,
+    templatesService: options?.services?.templatesService ?? defaultServices?.templatesService!,
+    renderingService: options?.services?.renderingService ?? defaultServices?.renderingService!
   };
 
   const app = express();

@@ -12,7 +12,13 @@ export const importIdParamSchema = z
 export const createImportSessionSchema = z
   .object({
     original_filename: z.string().trim().min(1).max(260),
-    mime_type: z.string().trim().min(1).max(160),
+    mime_type: z
+      .string()
+      .trim()
+      .max(160)
+      .optional()
+      .default("application/octet-stream")
+      .transform((value) => (value.length > 0 ? value : "application/octet-stream")),
     size_bytes: z.coerce.number().int().min(0),
     storage_bucket: z.string().trim().min(1).max(128),
     storage_path: z.string().trim().min(1).max(512),

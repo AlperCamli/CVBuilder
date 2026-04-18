@@ -12,9 +12,15 @@ import type {
 } from "../../src/shared/types/domain";
 import type {
   DashboardActivityItem,
-  DashboardCounts
+  DashboardJobItem,
+  DashboardJobStatusCounts,
+  DashboardMasterCvItem,
+  DashboardTailoredCvItem
 } from "../../src/modules/dashboard/dashboard.types";
-import type { DashboardRepository } from "../../src/modules/dashboard/dashboard.repository";
+import type {
+  DashboardRepository,
+  DashboardSummarySnapshot
+} from "../../src/modules/dashboard/dashboard.repository";
 import type {
   DatabaseHealthCheckerPort,
   DatabaseHealthStatus
@@ -172,30 +178,41 @@ export class FakeAuthProvider implements AuthProvider {
 }
 
 export class InMemoryDashboardRepository implements DashboardRepository {
-  private countsByUser = new Map<string, DashboardCounts>();
+  private summaryByUser = new Map<string, DashboardSummarySnapshot>();
   private activityByUser = new Map<string, DashboardActivityItem[]>();
 
-  setCounts(userId: string, counts: DashboardCounts): void {
-    this.countsByUser.set(userId, counts);
+  setSummary(userId: string, summary: DashboardSummarySnapshot): void {
+    this.summaryByUser.set(userId, summary);
   }
 
   setActivity(userId: string, activity: DashboardActivityItem[]): void {
     this.activityByUser.set(userId, activity);
   }
 
-  async getPlaceholderCounts(userId: string): Promise<DashboardCounts> {
+  async getSummarySnapshot(userId: string): Promise<DashboardSummarySnapshot> {
     return (
-      this.countsByUser.get(userId) ?? {
-        master_cvs: 0,
-        tailored_cvs: 0,
-        jobs: 0,
-        exports: 0
+      this.summaryByUser.get(userId) ??
+      {
+        master_total_count: 0,
+        primary_master_cv: null as DashboardMasterCvItem | null,
+        tailored_total_count: 0,
+        recent_tailored_cvs: [] as DashboardTailoredCvItem[],
+        jobs_total_count: 0,
+        jobs_counts_by_status: {
+          saved: 0,
+          applied: 0,
+          interview: 0,
+          offer: 0,
+          rejected: 0,
+          archived: 0
+        } as DashboardJobStatusCounts,
+        recent_jobs: [] as DashboardJobItem[]
       }
     );
   }
 
-  async getRecentActivity(userId: string): Promise<DashboardActivityItem[]> {
-    return this.activityByUser.get(userId) ?? [];
+  async getRecentActivity(userId: string, limit: number): Promise<DashboardActivityItem[]> {
+    return (this.activityByUser.get(userId) ?? []).slice(0, limit);
   }
 }
 

@@ -1,141 +1,137 @@
-# Frontend Integration Note (Phase 3)
+# Frontend Integration Note (Phase 4A)
 
-Frontend remains the UI source of truth. Backend now supports full AI + revision workflows required for Phase 3.
+Frontend remains the UI source of truth (React + Vite).  
+Phase 4A adds tracker/dashboard/template/rendering contracts for direct binding.
 
 ## Auth
 
-Frontend must attach Supabase access token:
+All Phase 4A endpoints require:
 
 ```http
 Authorization: Bearer <supabase_access_token>
 ```
 
-All Phase 3 endpoints are protected.
-
 ## Response Handling
 
-Always branch on top-level `success`:
+Branch on `success`:
 
 ```ts
 if (!json.success) {
-  // handle json.error.code, json.error.message, json.error.details
+  // json.error.code / json.error.message / json.error.details
 }
 ```
 
-## New Wireable Flows
+## Dashboard Loading Flow
 
-## 1) Job Analysis Flow
+1) Call `GET /api/v1/dashboard`.
+2) Bind:
+- `master_cv_summary`
+- `tailored_cv_summary.recent_items`
+- `jobs_summary.counts_by_status`
+- `jobs_summary.recent_items`
+- `recent_activity`
+3) Optional full feed: `GET /api/v1/dashboard/activity`.
 
-1. Call `POST /api/v1/ai/job-analysis`
-2. Use returned `keywords`, `requirements`, `strengths`, `gaps`, `summary`
-3. Keep `ai_run_id` for history/diagnostics UI
+## Job Tracker List + Board Flow
 
-## 2) Follow-Up Question Flow
+List view:
+- `GET /api/v1/jobs`
+- use query params for filters/sort/search/pagination:
+  - `status`
+  - `search`
+  - `sort_by`
+  - `sort_order`
+  - `linked_tailored_cv`
+  - `page`, `limit`
 
-1. Call `POST /api/v1/ai/follow-up-questions`
-2. Render `questions` by `question_type`
-3. Collect answers in frontend state for draft generation
+Board view:
+- `GET /api/v1/jobs/board`
+- response already grouped by status with counts.
 
-Question types returned:
-- `single_choice`
-- `multi_select`
-- `text`
+Job detail:
+- `GET /api/v1/jobs/:jobId`
+- includes linked tailored CV summary when available.
 
-## 3) Tailored Draft Generation Flow
+History panel:
+- `GET /api/v1/jobs/:jobId/history`
 
-1. Submit `master_cv_id`, `job`, and collected `answers` to:
-   - `POST /api/v1/ai/tailored-cv-draft`
-2. Optional: include `tailored_cv_id` to regenerate existing draft
-3. Backend returns:
-   - `ai_run_id`
-   - updated/created `tailored_cv` snapshot
-   - linked `job` summary
-   - `generation_metadata`
+## Job Status Update Flow
 
-Behavior note for frontend:
-- this endpoint is expected to persist full tailored snapshot directly (primary generation flow).
+Use status-only endpoint:
+- `PATCH /api/v1/jobs/:jobId/status`
 
-## 4) Block AI Suggestion Flow
+Body:
 
-For one block:
-- `POST /api/v1/ai/blocks/suggest`
+```json
+{
+  "status": "saved|applied|interview|offer|rejected|archived"
+}
+```
 
-For multiple options:
-- `POST /api/v1/ai/blocks/options`
+Response includes:
+- updated job detail
+- optional `status_history_entry`
 
-For comparison-only insights:
-- `POST /api/v1/ai/blocks/compare`
+Metadata edits (non-status):
+- `PATCH /api/v1/jobs/:jobId`
 
-Important:
-- suggest/options endpoints do not mutate current tailored content.
-- they return persisted pending suggestions.
+## Template Listing + Selection Flow
 
-## 5) Suggestion Apply / Reject Flow
+Template gallery:
+- `GET /api/v1/templates` (active templates)
 
-- Detail: `GET /api/v1/ai/suggestions/:suggestionId`
-- Apply: `POST /api/v1/ai/suggestions/:suggestionId/apply`
-- Reject: `POST /api/v1/ai/suggestions/:suggestionId/reject`
+Template detail:
+- `GET /api/v1/templates/:templateId`
 
-UI expectations:
-- `apply` updates block content and creates revision
-- `reject` only changes suggestion state
-- disable apply/reject actions when suggestion is no longer `pending`
+Assign to Master CV:
+- `PATCH /api/v1/master-cvs/:masterCvId/template`
 
-## 6) Manual Block Editing With Revision Side Effects
+Assign to Tailored CV:
+- `PATCH /api/v1/tailored-cvs/:tailoredCvId/template`
 
-Manual block patch endpoint remains:
-- `PATCH /api/v1/tailored-cvs/:tailoredCvId/blocks/:blockId`
+Body:
 
-Phase 3 side effect:
-- each successful manual block patch creates a block revision automatically
+```json
+{
+  "template_id": "uuid or null"
+}
+```
 
-No frontend request shape change is required.
+## Preview Loading Flow
 
-## 7) Revision Browsing and Restore Flow
+Master preview:
+- `GET /api/v1/master-cvs/:masterCvId/preview`
 
-- list all tailored revisions:
-  - `GET /api/v1/tailored-cvs/:tailoredCvId/revisions`
-- list revisions for one block:
-  - `GET /api/v1/tailored-cvs/:tailoredCvId/blocks/:blockId/revisions`
-- load revision detail:
-  - `GET /api/v1/revisions/:revisionId`
-- restore a revision:
-  - `POST /api/v1/revisions/:revisionId/restore`
-- compare two revisions:
-  - `POST /api/v1/revisions/compare`
+Tailored preview:
+- `GET /api/v1/tailored-cvs/:tailoredCvId/preview`
 
-Restore behavior:
-- restore creates a new revision row; history is preserved.
+Both return:
+- canonical `current_content`
+- resolved template summary (`selected_template`)
+- normalized `rendering` payload
+- legacy `preview` payload (for compatibility)
 
-## 8) Tailored CV AI History Screen
+Preferred frontend binding for preview screens:
+- use `rendering` as display contract
+- keep `current_content` as editor/source state
 
-Endpoint:
-- `GET /api/v1/tailored-cvs/:tailoredCvId/ai-history`
+## Unsaved Preview Flow
 
-Use this for:
-- recent run timeline
-- suggestion status timeline
-- debugging/status surfaces
+For unsaved editor state:
+- `POST /api/v1/rendering/preview`
 
-## Pending/Failed State Handling
+Body:
+- `cv_kind`
+- raw/unsaved `current_content`
+- optional `template_id`
+- optional `language`
+- optional `context`
 
-Draft generation state:
-- backend uses `tailored_cv.ai_generation_status` (e.g., `pending`, `completed`, `failed`)
+Behavior:
+- no persistence
+- returns normalized `current_content` + `resolved_template` + `rendering`
 
-AI run state:
-- `ai_runs.status` is `pending | completed | failed`
+## Deferred/Out-of-Scope Notes
 
-Suggested UI behavior:
-1. show spinner/disabled actions while generation is pending
-2. on failure, read normalized error response and show retry CTA
-3. keep last successful tailored snapshot until new generation succeeds
-
-## Forward-Compatibility Notes
-
-Current Phase 3 contracts are intentionally stable for upcoming phases:
-- export pipeline integration
-- billing/metering integration
-- localization expansion
-- observability/security hardening
-
-Frontend should avoid coupling to internal provider names and treat AI/revision payloads as contract-driven APIs.
+- PDF/DOCX generation is not implemented in Phase 4A.
+- Rendering contract is finalized so export pipelines can be added without frontend contract redesign.

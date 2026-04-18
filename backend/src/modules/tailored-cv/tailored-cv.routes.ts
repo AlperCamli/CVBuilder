@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { TailoredCvController } from "./tailored-cv.controller";
 import {
+  assignTailoredCvTemplateSchema,
   createTailoredCvSchema,
   listTailoredCvsQuerySchema,
   replaceTailoredCvContentSchema,
@@ -65,6 +66,13 @@ export const createTailoredCvRouter = (
     authMiddleware,
     validate({ params: tailoredCvIdParamSchema }),
     tailoredCvController.getTailoredCv
+  );
+
+  router.patch(
+    "/tailored-cvs/:tailoredCvId/template",
+    authMiddleware,
+    validate({ params: tailoredCvIdParamSchema, body: assignTailoredCvTemplateSchema }),
+    tailoredCvController.patchTailoredCvTemplate
   );
 
   router.patch(

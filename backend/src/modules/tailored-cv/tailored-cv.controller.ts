@@ -44,6 +44,15 @@ export class TailoredCvController {
     sendSuccess(response, data);
   });
 
+  patchTailoredCvTemplate = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.tailoredCvService.assignTemplate(
+      requireSession(request),
+      request.params.tailoredCvId,
+      request.body.template_id
+    );
+    sendSuccess(response, data);
+  });
+
   putTailoredCvContent = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.tailoredCvService.replaceTailoredCvContent(
       requireSession(request),

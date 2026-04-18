@@ -11,7 +11,8 @@ export class DashboardService {
 
   async getDashboard(session: SessionContext): Promise<DashboardResponseData> {
     const meData = await this.usersService.getMe(session);
-    const counts = await this.dashboardRepository.getPlaceholderCounts(session.appUser.id);
+    const summary = await this.dashboardRepository.getSummarySnapshot(session.appUser.id);
+    const recentActivity = await this.dashboardRepository.getRecentActivity(session.appUser.id, 8);
 
     return {
       user_summary: {
@@ -21,14 +22,27 @@ export class DashboardService {
       },
       current_plan: meData.current_plan,
       usage_summary: meData.usage_summary,
-      counts,
+      master_cv_summary: {
+        total_count: summary.master_total_count,
+        primary_master_cv: summary.primary_master_cv
+      },
+      tailored_cv_summary: {
+        total_count: summary.tailored_total_count,
+        recent_items: summary.recent_tailored_cvs
+      },
+      jobs_summary: {
+        total_count: summary.jobs_total_count,
+        counts_by_status: summary.jobs_counts_by_status,
+        recent_items: summary.recent_jobs
+      },
+      recent_activity: recentActivity,
       locale: meData.user.locale,
       onboarding_completed: meData.user.onboarding_completed
     };
   }
 
   async getActivity(session: SessionContext): Promise<DashboardActivityResponseData> {
-    const activity = await this.dashboardRepository.getRecentActivity(session.appUser.id);
+    const activity = await this.dashboardRepository.getRecentActivity(session.appUser.id, 30);
 
     return {
       activity

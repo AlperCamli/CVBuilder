@@ -8,6 +8,8 @@ import {
   updateBlockInCvContent
 } from "../../shared/cv-content/cv-content.utils";
 import type { MasterCvRecord } from "../../shared/types/domain";
+import type { RenderingService } from "../rendering/rendering.service";
+import type { TemplatesService } from "../templates/templates.service";
 import type { MasterCvRepository } from "./master-cv.repository";
 import type {
   CreateMasterCvInput,
@@ -22,7 +24,11 @@ import type {
 } from "./master-cv.types";
 
 export class MasterCvService {
-  constructor(private readonly masterCvRepository: MasterCvRepository) {}
+  constructor(
+    private readonly masterCvRepository: MasterCvRepository,
+    private readonly templatesService: TemplatesService,
+    private readonly renderingService: RenderingService
+  ) {}
 
   async listMasterCvs(session: SessionContext): Promise<MasterCvSummary[]> {
     const rows = await this.masterCvRepository.listByUser(session.appUser.id);
@@ -30,6 +36,11 @@ export class MasterCvService {
   }
 
   async createMasterCv(session: SessionContext, input: CreateMasterCvInput): Promise<MasterCvDetail> {
+    const templateId =
+      input.template_id !== undefined
+        ? await this.templatesService.validateAssignableTemplateId(input.template_id)
+        : null;
+
     const content = input.current_content
       ? normalizeCvContent(input.current_content, input.language)
       : createEmptyCvContent(input.language);
@@ -38,7 +49,7 @@ export class MasterCvService {
       user_id: session.appUser.id,
       title: input.title,
       language: content.language,
-      template_id: input.template_id ?? null,
+      template_id: templateId,
       current_content: content,
       summary_text: buildCvSummaryText(content),
       source_type: "scratch"
@@ -68,9 +79,14 @@ export class MasterCvService {
     } = {
       title: input.title,
       language: input.language,
-      template_id: input.template_id,
       summary_text: input.summary_text
     };
+
+    if (input.template_id !== undefined) {
+      updatePayload.template_id = await this.templatesService.validateAssignableTemplateId(
+        input.template_id
+      );
+    }
 
     if (input.language && input.language !== existing.current_content.language) {
       const nextContent = cloneCvContent(existing.current_content);
@@ -79,6 +95,25 @@ export class MasterCvService {
     }
 
     const updated = await this.masterCvRepository.updateById(session.appUser.id, masterCvId, updatePayload);
+
+    if (!updated) {
+      throw new NotFoundError("Master CV was not found");
+    }
+
+    return this.toDetail(updated);
+  }
+
+  async assignTemplate(
+    session: SessionContext,
+    masterCvId: string,
+    templateId: string | null
+  ): Promise<MasterCvDetail> {
+    await this.requireMasterCv(session.appUser.id, masterCvId);
+    const validatedTemplateId = await this.templatesService.validateAssignableTemplateId(templateId);
+
+    const updated = await this.masterCvRepository.updateById(session.appUser.id, masterCvId, {
+      template_id: validatedTemplateId
+    });
 
     if (!updated) {
       throw new NotFoundError("Master CV was not found");
@@ -165,7 +200,36 @@ export class MasterCvService {
 
   async getMasterCvPreview(session: SessionContext, masterCvId: string): Promise<MasterCvPreviewResponse> {
     const row = await this.requireMasterCv(session.appUser.id, masterCvId);
-    return this.toPreviewResponse(row);
+    const renderingResult = await this.renderingService.buildRendering({
+      cv_kind: "master",
+      current_content: row.current_content,
+      template_id: row.template_id,
+      language: row.language,
+      document: {
+        id: row.id,
+        title: row.title,
+        updated_at: row.updated_at
+      },
+      context: {
+        source_type: row.source_type
+      },
+      allow_inactive_selected_template: true
+    });
+
+    return {
+      cv: {
+        id: row.id,
+        title: row.title,
+        language: row.language,
+        source_type: row.source_type,
+        template_id: row.template_id,
+        updated_at: row.updated_at
+      },
+      current_content: row.current_content,
+      preview: buildCvPreview(row.current_content),
+      selected_template: renderingResult.resolved_template,
+      rendering: renderingResult.rendering
+    };
   }
 
   private async requireMasterCv(userId: string, masterCvId: string): Promise<MasterCvRecord> {
@@ -194,21 +258,6 @@ export class MasterCvService {
     return {
       ...this.toSummary(row),
       summary_text: row.summary_text,
-      current_content: row.current_content,
-      preview: buildCvPreview(row.current_content)
-    };
-  }
-
-  private toPreviewResponse(row: MasterCvRecord): MasterCvPreviewResponse {
-    return {
-      cv: {
-        id: row.id,
-        title: row.title,
-        language: row.language,
-        source_type: row.source_type,
-        template_id: row.template_id,
-        updated_at: row.updated_at
-      },
       current_content: row.current_content,
       preview: buildCvPreview(row.current_content)
     };

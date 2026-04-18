@@ -47,3 +47,9 @@ export const updateMasterCvSchema = z
 export const replaceMasterCvContentSchema = cvContentReplacementSchema;
 
 export const updateMasterCvBlockSchema = cvBlockPatchSchema;
+
+export const assignMasterCvTemplateSchema = z
+  .object({
+    template_id: uuidSchema.nullable()
+  })
+  .strict();

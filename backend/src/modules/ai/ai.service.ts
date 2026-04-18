@@ -25,6 +25,7 @@ import type {
 import type { JobsRepository } from "../jobs/jobs.repository";
 import type { MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository";
+import type { TemplatesService } from "../templates/templates.service";
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import type {
@@ -108,6 +109,7 @@ export class AiService {
     private readonly tailoredCvRepository: TailoredCvRepository,
     private readonly jobsRepository: JobsRepository,
     private readonly cvRevisionsService: CvRevisionsService,
+    private readonly templatesService: TemplatesService,
     private readonly promptProfile: string
   ) {}
 
@@ -164,7 +166,16 @@ export class AiService {
 
   async generateTailoredCvDraft(session: SessionContext, input: TailoredCvDraftInput) {
     const masterCv = await this.requireMasterCv(session.appUser.id, input.master_cv_id);
-    const { tailoredCv, job } = await this.prepareDraftTarget(session.appUser.id, masterCv, input);
+    const validatedTemplateId =
+      input.template_id !== undefined
+        ? await this.templatesService.validateAssignableTemplateId(input.template_id)
+        : undefined;
+    const { tailoredCv, job } = await this.prepareDraftTarget(
+      session.appUser.id,
+      masterCv,
+      input,
+      validatedTemplateId
+    );
 
     try {
       const flowInput = {
@@ -194,7 +205,7 @@ export class AiService {
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCv.id, {
         current_content: normalizedContent,
         language: normalizedContent.language,
-        template_id: input.template_id ?? tailoredCv.template_id,
+        template_id: validatedTemplateId !== undefined ? validatedTemplateId : tailoredCv.template_id,
         ai_generation_status: "completed",
         job_id: job.id
       });
@@ -605,7 +616,8 @@ export class AiService {
   private async prepareDraftTarget(
     userId: string,
     masterCv: MasterCvRecord,
-    input: TailoredCvDraftInput
+    input: TailoredCvDraftInput,
+    validatedTemplateId?: string | null
   ): Promise<{ tailoredCv: TailoredCvRecord; job: JobRecord }> {
     if (input.tailored_cv_id) {
       const existingTailored = await this.requireTailoredCv(userId, input.tailored_cv_id);
@@ -620,7 +632,7 @@ export class AiService {
       const updatedTailored = await this.tailoredCvRepository.updateById(userId, existingTailored.id, {
         ai_generation_status: "pending",
         template_id:
-          input.template_id !== undefined ? input.template_id : existingTailored.template_id,
+          validatedTemplateId !== undefined ? validatedTemplateId : existingTailored.template_id,
         language: input.language ?? existingTailored.language
       });
 
@@ -658,7 +670,7 @@ export class AiService {
       job_id: createdJob.id,
       title: `${masterCv.title} - ${input.job.company_name}`,
       language: clonedContent.language,
-      template_id: input.template_id ?? masterCv.template_id,
+      template_id: validatedTemplateId !== undefined ? validatedTemplateId : masterCv.template_id,
       current_content: clonedContent,
       status: "draft",
       ai_generation_status: "pending",

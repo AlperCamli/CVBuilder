@@ -15,6 +15,16 @@ const requireSession = (request: Request) => {
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
+  listJobs = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.jobsService.listJobs(requireSession(request), request.query);
+    sendSuccess(response, data);
+  });
+
+  getJobsBoard = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.jobsService.getJobsBoard(requireSession(request), request.query);
+    sendSuccess(response, data);
+  });
+
   getJob = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.jobsService.getJob(requireSession(request), request.params.jobId);
     sendSuccess(response, data);
@@ -26,6 +36,20 @@ export class JobsController {
       request.params.jobId,
       request.body
     );
+    sendSuccess(response, data);
+  });
+
+  patchJobStatus = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.jobsService.updateJobStatus(
+      requireSession(request),
+      request.params.jobId,
+      request.body
+    );
+    sendSuccess(response, data);
+  });
+
+  getJobHistory = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.jobsService.getJobHistory(requireSession(request), request.params.jobId);
     sendSuccess(response, data);
   });
 }

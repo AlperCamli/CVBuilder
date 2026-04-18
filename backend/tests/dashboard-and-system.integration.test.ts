@@ -104,12 +104,18 @@ describe("dashboard + system endpoints", () => {
     expect(dashboard.status).toBe(200);
     expect(dashboard.body.success).toBe(true);
     expect(dashboard.body.data.user_summary.email).toBe("tester@cvbuilder.dev");
-    expect(dashboard.body.data.counts).toEqual({
-      master_cvs: 0,
-      tailored_cvs: 0,
-      jobs: 0,
-      exports: 0
+    expect(dashboard.body.data.master_cv_summary.total_count).toBe(0);
+    expect(dashboard.body.data.tailored_cv_summary.total_count).toBe(0);
+    expect(dashboard.body.data.jobs_summary.total_count).toBe(0);
+    expect(dashboard.body.data.jobs_summary.counts_by_status).toEqual({
+      saved: 0,
+      applied: 0,
+      interview: 0,
+      offer: 0,
+      rejected: 0,
+      archived: 0
     });
+    expect(dashboard.body.data.recent_activity).toEqual([]);
 
     expect(activity.status).toBe(200);
     expect(activity.body.success).toBe(true);
