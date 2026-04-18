@@ -30,7 +30,10 @@ const hasCompleteServiceOverrides = (
       services?.cvRevisionsService &&
       services?.aiService &&
       services?.templatesService &&
-      services?.renderingService
+      services?.renderingService &&
+      services?.filesService &&
+      services?.exportsService &&
+      services?.billingService
   );
 };
 
@@ -55,13 +58,17 @@ export const createApp = (options?: CreateAppOptions): Express => {
       options?.services?.cvRevisionsService ?? defaultServices?.cvRevisionsService!,
     aiService: options?.services?.aiService ?? defaultServices?.aiService!,
     templatesService: options?.services?.templatesService ?? defaultServices?.templatesService!,
-    renderingService: options?.services?.renderingService ?? defaultServices?.renderingService!
+    renderingService: options?.services?.renderingService ?? defaultServices?.renderingService!,
+    filesService: options?.services?.filesService ?? defaultServices?.filesService!,
+    exportsService: options?.services?.exportsService ?? defaultServices?.exportsService!,
+    billingService: options?.services?.billingService ?? defaultServices?.billingService!
   };
 
   const app = express();
 
   app.disable("x-powered-by");
   app.use(createRequestLogger(logger));
+  app.use("/api/v1/billing/webhooks", express.raw({ type: "application/json" }));
   app.use(express.json());
 
   app.use(

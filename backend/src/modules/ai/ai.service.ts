@@ -27,6 +27,7 @@ import type { MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository";
 import type { TemplatesService } from "../templates/templates.service";
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
+import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import type {
   AiTailoredDraftJobPayload,
@@ -110,7 +111,8 @@ export class AiService {
     private readonly jobsRepository: JobsRepository,
     private readonly cvRevisionsService: CvRevisionsService,
     private readonly templatesService: TemplatesService,
-    private readonly promptProfile: string
+    private readonly promptProfile: string,
+    private readonly billingService: BillingService
   ) {}
 
   async analyzeJob(session: SessionContext, input: JobAnalysisInput) {
@@ -165,6 +167,8 @@ export class AiService {
   }
 
   async generateTailoredCvDraft(session: SessionContext, input: TailoredCvDraftInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "tailored_cv_generation");
+
     const masterCv = await this.requireMasterCv(session.appUser.id, input.master_cv_id);
     const validatedTemplateId =
       input.template_id !== undefined
@@ -176,6 +180,21 @@ export class AiService {
       input,
       validatedTemplateId
     );
+
+    let result: {
+      ai_run_id: string;
+      tailored_cv: TailoredCvDraftSummary;
+      job: TailoredCvDraftJobSummary;
+      generation_metadata: {
+        provider: string;
+        model_name: string;
+        flow_type: "tailored_draft";
+        prompt_key: string;
+        prompt_version: string;
+        changed_block_ids: string[];
+        generation_summary: string;
+      };
+    };
 
     try {
       const flowInput = {
@@ -216,7 +235,7 @@ export class AiService {
 
       const linkedJob = await this.ensureJobLinked(session.appUser.id, updatedTailoredCv.id, job);
 
-      return {
+      result = {
         ai_run_id: executed.ai_run.id,
         tailored_cv: this.toTailoredDraftSummary(updatedTailoredCv),
         job: this.toDraftJobSummary(linkedJob),
@@ -236,9 +255,15 @@ export class AiService {
       });
       throw error;
     }
+
+    await this.billingService.recordTailoredCvGenerationUsage(session.appUser.id);
+
+    return result;
   }
 
   async suggestBlock(session: SessionContext, input: BlockSuggestInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
     const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
     const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
     const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
@@ -279,6 +304,8 @@ export class AiService {
         option_group_key: optionGroupKey
       }))
     );
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
 
     return {
       ai_run_id: executed.ai_run.id,
@@ -331,6 +358,8 @@ export class AiService {
   }
 
   async generateBlockOptions(session: SessionContext, input: BlockOptionsInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
     const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
     const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
     const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
@@ -370,6 +399,8 @@ export class AiService {
         option_group_key: optionGroupKey
       }))
     );
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
 
     return {
       ai_run_id: executed.ai_run.id,

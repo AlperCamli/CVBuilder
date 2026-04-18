@@ -2,8 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../../src/shared/config/env";
 import { getCurrentPeriodMonthUtc } from "../../src/shared/utils/date";
 import type { AuthIdentity, AuthProvider } from "../../src/modules/auth/auth.types";
-import type { SubscriptionsRepository } from "../../src/modules/users/subscriptions.repository";
-import type { UsageRepository } from "../../src/modules/users/usage.repository";
+import type {
+  BillingSubscriptionsRepository,
+  SyncSubscriptionInput
+} from "../../src/modules/billing/subscriptions.repository";
+import type {
+  UsageCounterIncrementInput,
+  UsageRepository
+} from "../../src/modules/usage/usage.repository";
 import type { UsersRepository } from "../../src/modules/users/users.repository";
 import type {
   SubscriptionRecord,
@@ -108,7 +114,7 @@ export class InMemoryUsersRepository implements UsersRepository {
   }
 }
 
-export class InMemorySubscriptionsRepository implements SubscriptionsRepository {
+export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepository {
   private readonly subscriptionsByUser = new Map<string, SubscriptionRecord[]>();
 
   seed(subscription: SubscriptionRecord): void {
@@ -116,8 +122,16 @@ export class InMemorySubscriptionsRepository implements SubscriptionsRepository 
     this.subscriptionsByUser.set(subscription.user_id, [...existing, subscription]);
   }
 
+  private listByUser(userId: string): SubscriptionRecord[] {
+    return [...(this.subscriptionsByUser.get(userId) ?? [])];
+  }
+
+  private save(userId: string, subscriptions: SubscriptionRecord[]): void {
+    this.subscriptionsByUser.set(userId, subscriptions);
+  }
+
   async getCurrentForUser(userId: string): Promise<SubscriptionRecord | null> {
-    const subscriptions = this.subscriptionsByUser.get(userId) ?? [];
+    const subscriptions = this.listByUser(userId);
 
     const active = subscriptions
       .filter((item) => item.status === "active" || item.status === "trialing")
@@ -131,8 +145,162 @@ export class InMemorySubscriptionsRepository implements SubscriptionsRepository 
       return active[0];
     }
 
-    const latest = [...subscriptions].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    return this.getLatestForUser(userId);
+  }
+
+  async getLatestForUser(userId: string): Promise<SubscriptionRecord | null> {
+    const latest = this.listByUser(userId).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
     return latest[0] ?? null;
+  }
+
+  async getCustomerIdForUser(userId: string, provider: string): Promise<string | null> {
+    const subscriptions = this.listByUser(userId)
+      .filter((item) => item.provider === provider && item.provider_customer_id)
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+
+    return subscriptions[0]?.provider_customer_id ?? null;
+  }
+
+  async findByProviderSubscriptionId(
+    provider: string,
+    providerSubscriptionId: string
+  ): Promise<SubscriptionRecord | null> {
+    for (const subscriptions of this.subscriptionsByUser.values()) {
+      const found = subscriptions.find(
+        (item) =>
+          item.provider === provider && item.provider_subscription_id === providerSubscriptionId
+      );
+
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  }
+
+  async findByProviderCustomerId(provider: string, providerCustomerId: string): Promise<SubscriptionRecord | null> {
+    const matches: SubscriptionRecord[] = [];
+
+    for (const subscriptions of this.subscriptionsByUser.values()) {
+      for (const row of subscriptions) {
+        if (row.provider === provider && row.provider_customer_id === providerCustomerId) {
+          matches.push(row);
+        }
+      }
+    }
+
+    matches.sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    return matches[0] ?? null;
+  }
+
+  async ensureCustomerLink(input: {
+    user_id: string;
+    provider: string;
+    provider_customer_id: string;
+  }): Promise<SubscriptionRecord> {
+    const existing = this
+      .listByUser(input.user_id)
+      .find(
+        (row) =>
+          row.provider === input.provider && row.provider_customer_id === input.provider_customer_id
+      );
+
+    if (existing) {
+      return existing;
+    }
+
+    const created: SubscriptionRecord = {
+      id: randomUUID(),
+      user_id: input.user_id,
+      provider: input.provider,
+      provider_customer_id: input.provider_customer_id,
+      provider_subscription_id: null,
+      plan_code: "free",
+      status: "inactive",
+      current_period_start: null,
+      current_period_end: null,
+      cancel_at_period_end: false,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+
+    this.save(input.user_id, [...this.listByUser(input.user_id), created]);
+
+    return created;
+  }
+
+  async upsertProviderSubscription(input: SyncSubscriptionInput): Promise<SubscriptionRecord> {
+    const rows = this.listByUser(input.user_id);
+    const existingIndex = rows.findIndex(
+      (row) =>
+        row.provider === input.provider &&
+        row.provider_subscription_id === input.provider_subscription_id
+    );
+
+    if (existingIndex >= 0) {
+      const existing = rows[existingIndex];
+      const updated: SubscriptionRecord = {
+        ...existing,
+        provider_customer_id: input.provider_customer_id,
+        plan_code: input.plan_code,
+        status: input.status,
+        current_period_start: input.current_period_start,
+        current_period_end: input.current_period_end,
+        cancel_at_period_end: input.cancel_at_period_end,
+        updated_at: nowIso()
+      };
+
+      rows[existingIndex] = updated;
+      this.save(input.user_id, rows);
+      return updated;
+    }
+
+    const created: SubscriptionRecord = {
+      id: randomUUID(),
+      user_id: input.user_id,
+      provider: input.provider,
+      provider_customer_id: input.provider_customer_id,
+      provider_subscription_id: input.provider_subscription_id,
+      plan_code: input.plan_code,
+      status: input.status,
+      current_period_start: input.current_period_start,
+      current_period_end: input.current_period_end,
+      cancel_at_period_end: input.cancel_at_period_end,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+
+    this.save(input.user_id, [...rows, created]);
+    return created;
+  }
+
+  async deactivateOtherActiveSubscriptions(
+    userId: string,
+    provider: string,
+    keepProviderSubscriptionId: string | null
+  ): Promise<void> {
+    const updatedRows = this.listByUser(userId).map((row) => {
+      if (row.provider !== provider) {
+        return row;
+      }
+
+      if (row.status !== "active" && row.status !== "trialing") {
+        return row;
+      }
+
+      if (keepProviderSubscriptionId && row.provider_subscription_id === keepProviderSubscriptionId) {
+        return row;
+      }
+
+      return {
+        ...row,
+        status: "inactive",
+        updated_at: nowIso()
+      };
+    });
+
+    this.save(userId, updatedRows);
   }
 }
 
@@ -166,6 +334,26 @@ export class InMemoryUsageRepository implements UsageRepository {
 
     this.rows.set(key, created);
     return created;
+  }
+
+  async incrementCurrentMonth(
+    userId: string,
+    input: UsageCounterIncrementInput
+  ): Promise<UsageCounterRecord> {
+    const current = await this.getOrCreateCurrentMonth(userId);
+
+    const updated: UsageCounterRecord = {
+      ...current,
+      tailored_cv_generations_count:
+        current.tailored_cv_generations_count + (input.tailored_cv_generations_increment ?? 0),
+      exports_count: current.exports_count + (input.exports_increment ?? 0),
+      ai_actions_count: current.ai_actions_count + (input.ai_actions_increment ?? 0),
+      storage_bytes_used: current.storage_bytes_used + (input.storage_bytes_delta ?? 0),
+      updated_at: nowIso()
+    };
+
+    this.rows.set(`${updated.user_id}:${updated.period_month}`, updated);
+    return updated;
   }
 }
 
@@ -239,6 +427,19 @@ export const createTestConfig = (): AppConfig => {
       provider: "mock",
       defaultModel: "mock-cv-builder-v1",
       promptProfile: "phase3-v1"
+    },
+    exports: {
+      storageBucket: "exports",
+      downloadUrlTtlSeconds: 600
+    },
+    billing: {
+      provider: "stripe",
+      stripeSecretKey: null,
+      stripeWebhookSecret: null,
+      stripeProPriceId: "price_pro_monthly",
+      checkoutSuccessUrl: "http://localhost:5173/pricing?checkout=success",
+      checkoutCancelUrl: "http://localhost:5173/pricing?checkout=cancel",
+      portalReturnUrl: "http://localhost:5173/account/billing"
     },
     supabase: {
       url: "https://example.supabase.co",

@@ -1,4 +1,9 @@
-import type { CurrentPlanSummary, UsageSummary, UserRecord } from "../../shared/types/domain";
+import type {
+  CurrentPlanSummary,
+  EntitlementSummary,
+  UsageSummary,
+  UserRecord
+} from "../../shared/types/domain";
 import type { AuthenticatedRequestContext } from "../auth/auth.types";
 
 export interface UpdateMeInput {
@@ -16,6 +21,7 @@ export interface MeResponseData {
   user: UserRecord;
   current_plan: CurrentPlanSummary;
   usage_summary: UsageSummary;
+  entitlements: EntitlementSummary;
 }
 
 export interface SettingsResponseData {

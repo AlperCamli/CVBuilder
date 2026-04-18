@@ -1,18 +1,19 @@
-# CV Builder Backend (Phase 4A)
+# CV Builder Backend (Phase 4C)
 
-Phase 4A extends the existing modular-monolith backend with:
-- Job tracker backend integration (`jobs`)
-- Real dashboard aggregation (`dashboard`)
-- Template metadata + assignment support (`templates`, `master-cv`, `tailored-cv`)
-- Stable rendering contract for preview/export pipelines (`rendering`)
+Phase 4C extends the existing modular monolith with:
+- `billing` module (Stripe checkout, customer portal, webhook sync)
+- `entitlements` module (centralized plan/limit resolution)
+- `usage` module (atomic monthly usage counters)
+- backend freemium enforcement for tailored draft generation, AI suggestion actions, and exports
+- English-only backend contract assumptions (no multilingual infrastructure added)
 
-Frozen decisions preserved:
-- React + Vite frontend remains UI source of truth.
-- Backend remains TypeScript.
-- Supabase remains DB/auth/storage.
-- Vercel remains deployment target.
-- Architecture remains modular monolith.
-- Master CV and Tailored CV stay separate tables/objects.
+Frozen architecture decisions remain unchanged:
+- React + Vite frontend is the UI source of truth.
+- Backend is TypeScript.
+- Supabase is used for database/auth/storage.
+- Vercel is the deployment target.
+- Architecture is modular monolith.
+- Master CV and Tailored CV remain separate concepts/tables.
 
 ## Modules
 
@@ -27,8 +28,13 @@ Core modules:
 - `imports`
 - `ai`
 - `cv-revisions`
-- `templates` (Phase 4A)
-- `rendering` (Phase 4A)
+- `templates`
+- `rendering`
+- `files`
+- `exports`
+- `billing` (Phase 4C)
+- `entitlements` (Phase 4C)
+- `usage` (Phase 4C)
 
 Shared layers:
 - `shared/config`
@@ -39,14 +45,18 @@ Shared layers:
 - `shared/validation`
 - `shared/cv-content`
 
-## Architecture Layering
+## Billing + Entitlements + Usage Flow
 
-- Routes: endpoint wiring + auth/validation middleware.
-- Controllers: thin request/session adapters.
-- Services: business rules and orchestration.
-- Repositories: Supabase/Postgres data access boundaries.
-
-No business logic is placed in route files.
+- Stripe checkout creates/uses a Stripe customer and starts subscription purchase.
+- Stripe webhook events sync subscription lifecycle rows into `subscriptions`.
+- Effective plan is resolved from subscription state (`active`/`trialing` => paid plan, otherwise free).
+- Current-period usage is loaded from `usage_counters`.
+- Entitlements are resolved centrally from:
+  - effective plan
+  - plan limits
+  - current period usage
+- Protected actions enforce entitlements server-side before execution.
+- Usage counters are incremented only on successful limited actions.
 
 ## Setup
 
@@ -61,12 +71,21 @@ cp .env.example .env.local
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Optional AI config:
-- `AI_PROVIDER` (default: `mock`)
-- `AI_DEFAULT_MODEL`
-- `AI_PROMPT_PROFILE`
+3) Stripe billing env vars (required for billing runtime)
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRO_PRICE_ID`
 
-3) Install and run
+4) Optional billing URLs
+- `BILLING_CHECKOUT_SUCCESS_URL`
+- `BILLING_CHECKOUT_CANCEL_URL`
+- `BILLING_PORTAL_RETURN_URL`
+
+5) Optional exports config
+- `EXPORTS_STORAGE_BUCKET` (default: `exports`)
+- `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, bounds: `60..86400`)
+
+6) Install and run
 
 ```bash
 npm install
@@ -93,10 +112,10 @@ API base:
 Source-of-truth migrations are in:
 - `supabase/migrations`
 
-Phase 4A adds:
-- `20260418123000_phase4a_jobs_dashboard_rendering.sql`
-  - aligns job status vocabulary (`interview`, `offer`)
-  - adds `job_status_history`
+Phase 4C adds:
+- `20260418170000_phase4c_billing_entitlements.sql`
+  - provider linkage indexes on `subscriptions`
+  - atomic `increment_usage_counters(...)` function
 
 Apply:
 
@@ -105,35 +124,27 @@ supabase db push
 supabase db seed
 ```
 
-## Phase 4A API Surface (Added/Finalized)
+## Phase 4C API Surface
 
-- Jobs tracker:
-  - `GET /jobs`
-  - `GET /jobs/board`
-  - `GET /jobs/:jobId`
-  - `PATCH /jobs/:jobId`
-  - `PATCH /jobs/:jobId/status`
-  - `GET /jobs/:jobId/history`
+Billing:
+- `GET /billing/plan`
+- `GET /billing/usage`
+- `GET /billing/entitlements`
+- `POST /billing/checkout`
+- `POST /billing/portal`
+- `POST /billing/webhooks` (no auth; Stripe signature validated)
 
-- Dashboard:
-  - `GET /dashboard`
-  - `GET /dashboard/activity`
-
-- Templates:
-  - `GET /templates`
-  - `GET /templates/:templateId`
-  - `PATCH /master-cvs/:masterCvId/template`
-  - `PATCH /tailored-cvs/:tailoredCvId/template`
-
-- Rendering/preview:
-  - `GET /master-cvs/:masterCvId/preview` (finalized contract)
-  - `GET /tailored-cvs/:tailoredCvId/preview` (finalized contract)
-  - `POST /rendering/preview`
+Updated existing endpoints:
+- `GET /me`
+- `GET /me/usage`
+- `GET /dashboard`
 
 ## Docs
 
-- `docs/architecture.md` (Phase 4A architecture note)
-- `docs/database-schema.md` (Phase 4A schema note)
-- `docs/api.md` (Phase 4A endpoint contracts)
-- `docs/rendering-contract.md` (normalized rendering payload contract)
-- `docs/frontend-integration.md` (frontend binding flows)
+- `docs/phase4c-architecture.md`
+- `docs/database-schema.md`
+- `docs/api.md`
+- `docs/billing-entitlements.md`
+- `docs/frontend-integration.md`
+- `docs/environment.md`
+- `docs/export-system.md`

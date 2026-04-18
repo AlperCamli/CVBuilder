@@ -210,6 +210,23 @@ export interface FileRecord {
   created_at: string;
 }
 
+export type ExportFormat = "pdf" | "docx";
+
+export type ExportStatus = "processing" | "completed" | "failed";
+
+export interface ExportRecord {
+  id: string;
+  user_id: string;
+  tailored_cv_id: string;
+  file_id: string | null;
+  format: ExportFormat;
+  status: ExportStatus;
+  template_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export type ImportStatus = "uploaded" | "parsing" | "parsed" | "reviewed" | "converted" | "failed";
 
 export interface ImportRecord {
@@ -234,6 +251,20 @@ export interface CurrentPlanSummary {
   cancel_at_period_end: boolean;
 }
 
+export interface UsageLimits {
+  tailored_cv_generations: number | null;
+  exports: number | null;
+  ai_actions: number | null;
+  storage_bytes: number | null;
+}
+
+export interface UsageRemaining {
+  tailored_cv_generations: number | null;
+  exports: number | null;
+  ai_actions: number | null;
+  storage_bytes: number | null;
+}
+
 export interface UsageSummary {
   period_month: string;
   tailored_cv_generations_count: number;
@@ -241,10 +272,16 @@ export interface UsageSummary {
   ai_actions_count: number;
   storage_bytes_used: number;
   plan_code: string;
-  limits: {
-    tailored_cv_generations: number | null;
-    exports: number | null;
-    ai_actions: number | null;
-    storage_bytes: number | null;
-  };
+  limits: UsageLimits;
+  remaining: UsageRemaining;
+}
+
+export interface EntitlementSummary {
+  plan_code: string;
+  can_generate_tailored_cv: boolean;
+  can_export_pdf: boolean;
+  can_export_docx: boolean;
+  can_use_ai_actions: boolean;
+  limits: UsageLimits;
+  remaining: UsageRemaining;
 }

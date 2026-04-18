@@ -1,9 +1,13 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app/create-app";
+import { BillingService } from "../src/modules/billing/billing.service";
+import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
+import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
 import { AuthService } from "../src/modules/auth/auth.service";
 import { DashboardService } from "../src/modules/dashboard/dashboard.service";
 import { SystemService } from "../src/modules/system/system.service";
+import { UsageService } from "../src/modules/usage/usage.service";
 import { UsersService } from "../src/modules/users/users.service";
 import {
   FakeAuthProvider,
@@ -16,6 +20,7 @@ import {
 } from "./helpers/in-memory";
 
 const buildTestApp = () => {
+  const config = createTestConfig();
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
   const usageRepository = new InMemoryUsageRepository();
@@ -30,17 +35,35 @@ const buildTestApp = () => {
     }
   });
 
-  const usersService = new UsersService(usersRepository, subscriptionsRepository, usageRepository);
+  const entitlementsService = new EntitlementsService(
+    createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId })
+  );
+  const usageService = new UsageService(usageRepository);
+  const billingService = new BillingService(
+    usersRepository,
+    subscriptionsRepository,
+    usageService,
+    entitlementsService,
+    null,
+    {
+      provider: config.billing.provider,
+      checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
+      checkoutCancelUrl: config.billing.checkoutCancelUrl,
+      portalReturnUrl: config.billing.portalReturnUrl,
+      stripeWebhookSecret: config.billing.stripeWebhookSecret
+    }
+  );
+  const usersService = new UsersService(usersRepository, billingService);
 
   const services = {
     authService: new AuthService(authProvider, usersRepository),
     usersService,
     dashboardService: new DashboardService(usersService, dashboardRepository),
-    systemService: new SystemService(createTestConfig(), new FakeDatabaseHealthChecker({ connected: true }))
+    systemService: new SystemService(config, new FakeDatabaseHealthChecker({ connected: true }))
   };
 
   return createApp({
-    config: createTestConfig(),
+    config,
     services
   });
 };
@@ -84,6 +107,7 @@ describe("auth + users endpoints", () => {
     expect(firstResponse.body.data.user.email).toBe("tester@cvbuilder.dev");
     expect(firstResponse.body.data.current_plan.plan_code).toBe("free");
     expect(firstResponse.body.data.usage_summary.tailored_cv_generations_count).toBe(0);
+    expect(firstResponse.body.data.entitlements.plan_code).toBe("free");
 
     expect(secondResponse.status).toBe(200);
     expect(secondResponse.body.data.user.id).toBe(firstResponse.body.data.user.id);
@@ -145,10 +169,16 @@ describe("auth + users endpoints", () => {
     expect(response.body.data.plan_code).toBe("free");
     expect(response.body.data.storage_bytes_used).toBe(0);
     expect(response.body.data.limits).toEqual({
-      tailored_cv_generations: null,
-      exports: null,
-      ai_actions: null,
-      storage_bytes: null
+      tailored_cv_generations: 3,
+      exports: 5,
+      ai_actions: 20,
+      storage_bytes: 26214400
+    });
+    expect(response.body.data.remaining).toEqual({
+      tailored_cv_generations: 3,
+      exports: 5,
+      ai_actions: 20,
+      storage_bytes: 26214400
     });
   });
 });

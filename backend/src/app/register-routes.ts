@@ -22,6 +22,10 @@ import { UsersController } from "../modules/users/users.controller";
 import { createUsersRouter } from "../modules/users/users.routes";
 import { RenderingController } from "../modules/rendering/rendering.controller";
 import { createRenderingRouter } from "../modules/rendering/rendering.routes";
+import { ExportsController } from "../modules/exports/exports.controller";
+import { createExportsRouter } from "../modules/exports/exports.routes";
+import { BillingController } from "../modules/billing/billing.controller";
+import { createBillingRouter } from "../modules/billing/billing.routes";
 import type { AppServices } from "./build-services";
 
 export const registerV1Routes = (router: Router, services: AppServices): void => {
@@ -38,6 +42,8 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   const aiController = new AiController(services.aiService);
   const templatesController = new TemplatesController(services.templatesService);
   const renderingController = new RenderingController(services.renderingService);
+  const exportsController = new ExportsController(services.exportsService);
+  const billingController = new BillingController(services.billingService);
 
   router.use(createSystemRouter(systemController));
   router.use(createUsersRouter(usersController, authMiddleware));
@@ -50,4 +56,6 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   router.use(createAiRouter(aiController, authMiddleware));
   router.use(createTemplatesRouter(templatesController, authMiddleware));
   router.use(createRenderingRouter(renderingController, authMiddleware));
+  router.use(createExportsRouter(exportsController, authMiddleware));
+  router.use(createBillingRouter(billingController, authMiddleware));
 };

@@ -1,19 +1,20 @@
-# Database Schema Note (Phase 4A)
+# Database Schema Note (Phase 4C)
 
 Source migrations:
 - `supabase/migrations/20260417120000_base_extensions.sql`
 - `supabase/migrations/20260417121000_phase1_tables.sql`
 - `supabase/migrations/20260417133000_phase2_cv_domains.sql`
 - `supabase/migrations/20260418001000_phase3_ai_revisions.sql`
-- `supabase/migrations/20260418123000_phase4a_jobs_dashboard_rendering.sql` (new)
+- `supabase/migrations/20260418123000_phase4a_jobs_dashboard_rendering.sql`
+- `supabase/migrations/20260418150000_phase4b_exports.sql`
+- `supabase/migrations/20260418170000_phase4c_billing_entitlements.sql` (new)
 
-## Reused Tables (No Redesign)
+## Reused Tables for Phase 4C
 
-Phase 4A continues using existing tables:
+Phase 4C monetization and gating reuses existing tables as primary persistence:
 - `users`
 - `subscriptions`
 - `usage_counters`
-- `cv_templates`
 - `master_cvs`
 - `tailored_cvs`
 - `jobs`
@@ -22,63 +23,84 @@ Phase 4A continues using existing tables:
 - `ai_runs`
 - `ai_suggestions`
 - `cv_block_revisions`
+- `cv_templates`
+- `exports`
 
-No redesign of `master_cvs.current_content` or `tailored_cvs.current_content`.
+No new table is introduced in Phase 4C.
 
-## Phase 4A Changes
-
-## 1) Job Status Vocabulary Alignment
-
-`jobs.status` is aligned to:
-- `saved`
-- `applied`
-- `interview`
-- `offer`
-- `rejected`
-- `archived`
-
-Migration updates prior rows:
-- `interviewing -> interview`
-- `offered -> offer`
-
-Constraint updated:
-- `jobs_status_check`
-
-## 2) New Table: `job_status_history`
+## `subscriptions` (reused)
 
 Purpose:
-- lightweight persisted history of job status transitions for tracker and dashboard activity
+- persist Stripe-linked subscription state
+- support current plan resolution and webhook synchronization
 
-Columns:
+Key attributes:
 - `id uuid primary key`
-- `job_id uuid not null fk -> jobs.id`
-- `from_status text null`
-- `to_status text not null`
-- `changed_at timestamptz not null`
-- `changed_by_user_id uuid not null fk -> users.id`
-
-Checks:
-- `from_status` in allowed status set (or null)
-- `to_status` in allowed status set
-
-Indexes:
-- `(job_id, changed_at desc)`
-- `(changed_by_user_id, changed_at desc)`
+- `user_id uuid not null fk -> users.id`
+- `provider text not null`
+- `provider_customer_id text null`
+- `provider_subscription_id text null`
+- `plan_code text not null`
+- `status text not null`
+- `current_period_start timestamptz null`
+- `current_period_end timestamptz null`
+- `cancel_at_period_end boolean not null`
+- `created_at timestamptz not null`
+- `updated_at timestamptz not null`
 
 Cardinality:
-- one job -> many `job_status_history` rows
-- one user -> many status change rows
+- one user -> many historical subscription rows
+- at most one active/trialing row per user (existing partial unique index)
 
-RLS:
-- enabled on `job_status_history`
-- `select` policy scoped to rows whose `job_id` belongs to current user
-- `insert` policy requires:
-  - `changed_by_user_id` is current user
-  - referenced job belongs to current user
+Phase 4C index additions:
+- `subscriptions_provider_customer_id_idx` on `(provider, provider_customer_id)` when non-null
+- `subscriptions_provider_subscription_id_idx` on `(provider, provider_subscription_id)` when non-null
 
-## Migration Notes
+## `usage_counters` (reused)
 
-- Phase 4A migration is additive.
-- No destructive table drops.
-- No changes to export/file generation tables in this phase.
-- Rendering payloads are derived in application layer; no rendering table introduced.
+Purpose:
+- monthly counters for freemium-gated actions
+
+Key attributes:
+- `id uuid primary key`
+- `user_id uuid not null fk -> users.id`
+- `period_month date not null` (month-aligned)
+- `tailored_cv_generations_count integer not null default 0`
+- `exports_count integer not null default 0`
+- `ai_actions_count integer not null default 0`
+- `storage_bytes_used bigint not null default 0`
+- `updated_at timestamptz not null`
+
+Cardinality:
+- one user -> many monthly usage rows (`user_id`, `period_month` unique)
+
+## New DB Function in Phase 4C
+
+`public.increment_usage_counters(...)`
+
+Purpose:
+- atomically upsert and increment monthly usage counters
+- avoid race-prone read-modify-write patterns in application code
+
+Signature:
+- `p_user_id uuid`
+- `p_period_month date`
+- `p_tailored_cv_generations_increment integer default 0`
+- `p_exports_increment integer default 0`
+- `p_ai_actions_increment integer default 0`
+- `p_storage_bytes_delta bigint default 0`
+
+Behavior:
+- normalizes `period_month` to month start
+- creates monthly row if missing
+- increments counters on conflict
+- keeps counters non-negative with `greatest(..., 0)`
+- returns updated `usage_counters` row
+
+## Migration Notes (Phase 4C)
+
+- migration is additive
+- no table drops
+- no destructive data migration
+- no new RLS policy surface required
+- schema remains compatible with future observability/security hardening phases

@@ -1,137 +1,111 @@
-# Frontend Integration Note (Phase 4A)
+# Frontend Integration Note (Phase 4C)
 
-Frontend remains the UI source of truth (React + Vite).  
-Phase 4A adds tracker/dashboard/template/rendering contracts for direct binding.
+Frontend remains the UI source of truth (React + Vite).
+
+Phase 4C backend adds billing and entitlement contracts for pricing/account flows without requiring frontend architecture rewrite.
 
 ## Auth
 
-All Phase 4A endpoints require:
+All billing/account endpoints except webhooks require:
 
 ```http
 Authorization: Bearer <supabase_access_token>
 ```
 
-## Response Handling
+## Pricing Page Integration
 
-Branch on `success`:
+Load plan context with:
+- `GET /api/v1/billing/plan`
+- `GET /api/v1/billing/entitlements`
+- optional `GET /api/v1/billing/usage` for detailed meter cards
 
-```ts
-if (!json.success) {
-  // json.error.code / json.error.message / json.error.details
-}
-```
+Use:
+- `plan_code`
+- `subscription_status`
+- `limits`
+- `remaining`
+- capability booleans (`can_*`)
 
-## Dashboard Loading Flow
+## Upgrade Flow (Checkout)
 
-1) Call `GET /api/v1/dashboard`.
-2) Bind:
-- `master_cv_summary`
-- `tailored_cv_summary.recent_items`
-- `jobs_summary.counts_by_status`
-- `jobs_summary.recent_items`
-- `recent_activity`
-3) Optional full feed: `GET /api/v1/dashboard/activity`.
-
-## Job Tracker List + Board Flow
-
-List view:
-- `GET /api/v1/jobs`
-- use query params for filters/sort/search/pagination:
-  - `status`
-  - `search`
-  - `sort_by`
-  - `sort_order`
-  - `linked_tailored_cv`
-  - `page`, `limit`
-
-Board view:
-- `GET /api/v1/jobs/board`
-- response already grouped by status with counts.
-
-Job detail:
-- `GET /api/v1/jobs/:jobId`
-- includes linked tailored CV summary when available.
-
-History panel:
-- `GET /api/v1/jobs/:jobId/history`
-
-## Job Status Update Flow
-
-Use status-only endpoint:
-- `PATCH /api/v1/jobs/:jobId/status`
-
-Body:
+1. User selects paid plan.
+2. Frontend calls:
+   - `POST /api/v1/billing/checkout`
+3. Body:
 
 ```json
 {
-  "status": "saved|applied|interview|offer|rejected|archived"
+  "plan_code": "pro",
+  "success_url": "https://optional-success-url",
+  "cancel_url": "https://optional-cancel-url"
 }
 ```
 
-Response includes:
-- updated job detail
-- optional `status_history_entry`
+4. On success, redirect browser to `data.checkout_url`.
+5. On return, refresh billing state endpoints.
 
-Metadata edits (non-status):
-- `PATCH /api/v1/jobs/:jobId`
+## Customer Portal Flow
 
-## Template Listing + Selection Flow
+Call:
+- `POST /api/v1/billing/portal`
 
-Template gallery:
-- `GET /api/v1/templates` (active templates)
-
-Template detail:
-- `GET /api/v1/templates/:templateId`
-
-Assign to Master CV:
-- `PATCH /api/v1/master-cvs/:masterCvId/template`
-
-Assign to Tailored CV:
-- `PATCH /api/v1/tailored-cvs/:tailoredCvId/template`
-
-Body:
+Body is optional; can provide return URL:
 
 ```json
 {
-  "template_id": "uuid or null"
+  "return_url": "https://optional-return-url"
 }
 ```
 
-## Preview Loading Flow
+Open `data.portal_url`.
 
-Master preview:
-- `GET /api/v1/master-cvs/:masterCvId/preview`
+## Entitlement Loading Flow
 
-Tailored preview:
-- `GET /api/v1/tailored-cvs/:tailoredCvId/preview`
+Recommended startup sequence for account-aware pages:
+1. `GET /api/v1/me`
+2. `GET /api/v1/billing/entitlements` (or use `me.entitlements`)
+3. `GET /api/v1/billing/usage` when detailed counters are shown
 
-Both return:
-- canonical `current_content`
-- resolved template summary (`selected_template`)
-- normalized `rendering` payload
-- legacy `preview` payload (for compatibility)
+This supports:
+- button disabled states
+- upgrade prompts
+- remaining-usage badges
 
-Preferred frontend binding for preview screens:
-- use `rendering` as display contract
-- keep `current_content` as editor/source state
+## Usage Display Behavior
 
-## Unsaved Preview Flow
+Use `limits` + `remaining` from usage or entitlements payloads.
 
-For unsaved editor state:
-- `POST /api/v1/rendering/preview`
+Rules:
+- `null` limit => show "Unlimited"
+- numeric limit => show `used / limit` and `remaining`
 
-Body:
-- `cv_kind`
-- raw/unsaved `current_content`
-- optional `template_id`
-- optional `language`
-- optional `context`
+Counters returned:
+- `tailored_cv_generations_count`
+- `exports_count`
+- `ai_actions_count`
+- `storage_bytes_used`
 
-Behavior:
-- no persistence
-- returns normalized `current_content` + `resolved_template` + `rendering`
+## Handling Gated Action Failures
 
-## Deferred/Out-of-Scope Notes
+Protected action endpoints can return:
+- `ENTITLEMENT_EXCEEDED`
 
-- PDF/DOCX generation is not implemented in Phase 4A.
-- Rendering contract is finalized so export pipelines can be added without frontend contract redesign.
+Suggested frontend behavior:
+1. show clear upgrade/limit modal
+2. refresh `GET /billing/entitlements` and `GET /billing/usage`
+3. keep user on current screen (do not lose draft form state)
+
+## `/me` and `/dashboard` Integration
+
+Phase 4C updates these payloads with real billing data:
+- `/me` includes `current_plan`, `usage_summary`, `entitlements`
+- `/dashboard` includes `current_plan`, `usage_summary`, `entitlements`
+- `/me/usage` includes real limits + remaining
+
+## English-Only Assumptions
+
+Backend responses and docs are English-only in this phase.
+
+Compatibility note:
+- existing `locale` field can still appear in account payloads
+- no backend localization or translation behavior should be expected

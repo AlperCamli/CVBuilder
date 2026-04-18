@@ -1,13 +1,7 @@
-# API Documentation (Phase 4A)
+# API Documentation (Phase 4C)
 
 Base path:
 - `/api/v1`
-
-All Phase 4A endpoints are protected:
-
-```http
-Authorization: Bearer <supabase_access_token>
-```
 
 ## Response Envelope
 
@@ -41,306 +35,271 @@ Error:
 - `FORBIDDEN`
 - `NOT_FOUND`
 - `CONFLICT`
+- `BILLING_PLAN_INVALID`
+- `BILLING_NOT_CONFIGURED`
+- `BILLING_PROVIDER_ERROR`
+- `BILLING_WEBHOOK_SIGNATURE_INVALID`
+- `ENTITLEMENT_EXCEEDED`
+- `EXPORT_GENERATION_FAILED`
+- `EXPORT_STORAGE_FAILED`
+- `EXPORT_NOT_READY`
 - `INTERNAL_ERROR`
 
-Template/rule violations use normalized validation or not-found errors.
+## Auth Rules
 
-## Ownership Behavior
+Protected endpoints require:
 
-All reads/writes are user-scoped. Users only access their own:
-- jobs
-- master CVs
-- tailored CVs
-- preview data
-- dashboard activity derived from their entities
+```http
+Authorization: Bearer <supabase_access_token>
+```
+
+Only Stripe webhook endpoint is unprotected:
+- `POST /billing/webhooks`
 
 ---
 
-## Jobs / Tracker
+## Billing Endpoints (Phase 4C)
 
-### 1) `GET /jobs`
+### 1) `GET /billing/plan`
 
-Purpose:
-- list current user jobs for tracker
-
-Query:
-- `status?: saved|applied|interview|offer|rejected|archived`
-- `search?: string` (company/job title contains)
-- `sort_by?: created_at|updated_at|company_name|job_title|status|applied_at`
-- `sort_order?: asc|desc`
-- `linked_tailored_cv?: boolean`
-- `page?: number` (default `1`)
-- `limit?: number` (default `20`, max `100`)
-
-`data`:
-- `items[]` job summaries
-- `page`
-- `limit`
-- `total`
-
-Job summary fields:
-- `id`
-- `company_name`
-- `job_title`
-- `status`
-- `job_posting_url`
-- `location_text`
-- `tailored_cv_id`
-- `tailored_cv_title`
-- `created_at`
-- `updated_at`
-- `applied_at`
-
-### 2) `GET /jobs/:jobId`
+Auth:
+- required
 
 Purpose:
-- tracker detail screen payload
+- return effective current plan + subscription/provider summary + resolved entitlements
 
-`data`:
-- `job` (summary fields above)
-- `job_description`
-- `notes`
-- `linked_tailored_cv` (`id`, `title`, `status`, `updated_at`) or `null`
-- `status_last_changed_at`
-
-### 3) `PATCH /jobs/:jobId`
-
-Purpose:
-- update job metadata (non-status)
-
-Body:
+Response `200`:
 
 ```json
 {
-  "company_name": "optional",
-  "job_title": "optional",
-  "job_description": "optional",
-  "job_posting_url": "optional or null",
-  "location_text": "optional or null",
-  "notes": "optional or null"
+  "plan_code": "free|pro",
+  "subscription_status": "inactive|active|trialing|...",
+  "current_period_start": "iso|null",
+  "current_period_end": "iso|null",
+  "cancel_at_period_end": false,
+  "provider": {
+    "provider": "stripe",
+    "provider_customer_id": "string|null",
+    "provider_subscription_id": "string|null"
+  },
+  "entitlement_summary": {
+    "plan_code": "free|pro",
+    "can_generate_tailored_cv": true,
+    "can_export_pdf": true,
+    "can_export_docx": true,
+    "can_use_ai_actions": true,
+    "limits": {
+      "tailored_cv_generations": 3,
+      "exports": 5,
+      "ai_actions": 20,
+      "storage_bytes": 26214400
+    },
+    "remaining": {
+      "tailored_cv_generations": 3,
+      "exports": 5,
+      "ai_actions": 20,
+      "storage_bytes": 26214400
+    }
+  }
 }
 ```
 
-`data`:
-- same shape as `GET /jobs/:jobId`
+### 2) `GET /billing/usage`
 
-### 4) `PATCH /jobs/:jobId/status`
+Auth:
+- required
 
 Purpose:
-- status-only transition endpoint
+- return current month usage counters with resolved limits and remaining
+
+Response `200`:
+
+```json
+{
+  "period_month": "YYYY-MM-01",
+  "tailored_cv_generations_count": 0,
+  "exports_count": 0,
+  "ai_actions_count": 0,
+  "storage_bytes_used": 0,
+  "plan_code": "free|pro",
+  "limits": {
+    "tailored_cv_generations": 3,
+    "exports": 5,
+    "ai_actions": 20,
+    "storage_bytes": 26214400
+  },
+  "remaining": {
+    "tailored_cv_generations": 3,
+    "exports": 5,
+    "ai_actions": 20,
+    "storage_bytes": 26214400
+  }
+}
+```
+
+### 3) `GET /billing/entitlements`
+
+Auth:
+- required
+
+Purpose:
+- return resolved entitlement booleans + limits + remaining for frontend gating
+
+Response `200`:
+
+```json
+{
+  "plan_code": "free|pro",
+  "can_generate_tailored_cv": true,
+  "can_export_pdf": true,
+  "can_export_docx": true,
+  "can_use_ai_actions": true,
+  "limits": {
+    "tailored_cv_generations": 3,
+    "exports": 5,
+    "ai_actions": 20,
+    "storage_bytes": 26214400
+  },
+  "remaining": {
+    "tailored_cv_generations": 3,
+    "exports": 5,
+    "ai_actions": 20,
+    "storage_bytes": 26214400
+  }
+}
+```
+
+### 4) `POST /billing/checkout`
+
+Auth:
+- required
 
 Body:
 
 ```json
 {
-  "status": "saved|applied|interview|offer|rejected|archived"
+  "plan_code": "pro",
+  "success_url": "https://optional-success-url",
+  "cancel_url": "https://optional-cancel-url"
 }
 ```
 
 Behavior:
-- validates ownership
-- records status history row in `job_status_history` when status changes
-- sets `applied_at` if moving to `applied` and previously null
+- validates requested plan
+- ensures Stripe customer linkage
+- creates Stripe Checkout session for subscription mode
 
-`data`:
-- `job` (same as `GET /jobs/:jobId`)
-- `status_history_entry` or `null` when unchanged
+Response `200`:
 
-### 5) `GET /jobs/board`
+```json
+{
+  "checkout_url": "https://checkout.stripe.com/...",
+  "checkout_session_id": "cs_...",
+  "plan_code": "pro",
+  "plan_name": "Pro"
+}
+```
 
-Purpose:
-- kanban-friendly grouped job payload
+### 5) `POST /billing/portal`
 
-Query:
-- `search?`
-- `sort_by?`
-- `sort_order?`
-- `linked_tailored_cv?`
-
-`data`:
-- `groups[]` each item:
-  - `status`
-  - `count`
-  - `items[]` (job summaries)
-- `counts_by_status` object
-- `total`
-
-### 6) `GET /jobs/:jobId/history`
-
-Purpose:
-- return status transition history
-
-`data`:
-- `job_id`
-- `current_status`
-- `current_status_updated_at`
-- `history[]`:
-  - `id`
-  - `from_status`
-  - `to_status`
-  - `changed_at`
-  - `changed_by_user_id`
-
----
-
-## Dashboard
-
-### 7) `GET /dashboard`
-
-Purpose:
-- product-focused home dashboard payload
-
-`data`:
-- `user_summary` (`id`, `email`, `full_name`)
-- `current_plan`
-- `usage_summary`
-- `master_cv_summary`
-  - `total_count`
-  - `primary_master_cv` or `null`
-- `tailored_cv_summary`
-  - `total_count`
-  - `recent_items[]`
-- `jobs_summary`
-  - `total_count`
-  - `counts_by_status`
-  - `recent_items[]`
-- `recent_activity[]`
-- `locale`
-- `onboarding_completed`
-
-### 8) `GET /dashboard/activity`
-
-Purpose:
-- lightweight activity feed
-
-`data`:
-- `activity[]` items:
-  - `id`
-  - `type` (`tailored_cv_created|tailored_cv_updated|ai_suggestion_applied|revision_restored|job_status_changed`)
-  - `message`
-  - `timestamp`
-  - `related_entity` (`kind`, `id`, `title`)
-
----
-
-## Templates
-
-### 9) `GET /templates`
-
-Purpose:
-- list active templates for user-facing selection
-
-`data`:
-- `templates[]`:
-  - `id`
-  - `name`
-  - `slug`
-  - `status`
-  - `preview_config`
-  - `export_config`
-  - `created_at`
-  - `updated_at`
-
-### 10) `GET /templates/:templateId`
-
-Purpose:
-- get template detail metadata
-
-`data`:
-- `template` (same fields as list item)
-
-### 11) `PATCH /master-cvs/:masterCvId/template`
-
-Purpose:
-- assign/unassign template for a Master CV
+Auth:
+- required
 
 Body:
 
 ```json
 {
-  "template_id": "uuid or null"
+  "return_url": "https://optional-return-url"
 }
 ```
 
 Behavior:
-- ownership check on master CV
-- template existence and `active` status validation for non-null values
+- requires existing Stripe customer linkage
+- creates Stripe Billing Portal session
 
-`data`:
-- updated master CV detail
-
-### 12) `PATCH /tailored-cvs/:tailoredCvId/template`
-
-Purpose:
-- assign/unassign template for a Tailored CV
-
-Body:
+Response `200`:
 
 ```json
 {
-  "template_id": "uuid or null"
+  "portal_url": "https://billing.stripe.com/..."
 }
 ```
 
-Behavior:
-- ownership check on tailored CV
-- template existence and `active` status validation for non-null values
+### 6) `POST /billing/webhooks`
 
-`data`:
-- updated tailored CV detail
+Auth:
+- none
+
+Headers:
+- `stripe-signature: <signature>`
+
+Body:
+- raw Stripe JSON payload (signature is validated against webhook secret)
+
+Behavior:
+- processes relevant Stripe lifecycle events
+- syncs subscription state into `subscriptions`
+
+Response `200`:
+
+```json
+{
+  "received": true,
+  "event_id": "evt_...",
+  "event_type": "customer.subscription.updated",
+  "processed": true
+}
+```
+
+Possible errors:
+- `BILLING_WEBHOOK_SIGNATURE_INVALID`
+- `BILLING_NOT_CONFIGURED`
 
 ---
 
-## Rendering / Preview
+## Updated Existing Endpoints
 
-### 13) `GET /master-cvs/:masterCvId/preview`
+### 7) `GET /me`
 
-Purpose:
-- finalized master preview contract
+Auth:
+- required
 
-`data`:
-- `cv` metadata
-- `current_content` (canonical)
-- `preview` (legacy plain preview)
-- `selected_template` (resolved template summary with resolution mode)
-- `rendering` (normalized render payload)
+Phase 4C response additions:
+- `entitlements`
+- real `current_plan` and `usage_summary` from billing resolution
 
-### 14) `GET /tailored-cvs/:tailoredCvId/preview`
+### 8) `GET /me/usage`
 
-Purpose:
-- finalized tailored preview contract
+Auth:
+- required
 
-`data`:
-- `cv` metadata
-- `linked_job` summary or `null`
-- `current_content` (canonical)
-- `preview` (legacy plain preview)
-- `selected_template` (resolved template summary with resolution mode)
-- `rendering` (normalized render payload)
+Phase 4C behavior:
+- returns real usage + limits + remaining (not placeholder null limits)
 
-### 15) `POST /rendering/preview`
+### 9) `GET /dashboard`
 
-Purpose:
-- preview payload from unsaved/raw content without persistence
+Auth:
+- required
 
-Body:
+Phase 4C response additions:
+- real `current_plan`
+- real `usage_summary`
+- `entitlements`
 
-```json
-{
-  "cv_kind": "master|tailored",
-  "current_content": {},
-  "template_id": "uuid or null",
-  "language": "optional",
-  "context": {}
-}
-```
+---
 
-Behavior:
-- normalizes incoming content
-- resolves template (selected/default/none)
-- does not write to DB
+## Backend Enforcement Points
 
-`data`:
-- `current_content` (normalized canonical payload)
-- `resolved_template`
-- `rendering`
+Even if frontend pre-checks entitlements, backend remains source of truth.
+
+Protected action enforcement:
+- `POST /ai/tailored-cv-draft`
+- `POST /ai/blocks/suggest`
+- `POST /ai/blocks/options`
+- `POST /tailored-cvs/:tailoredCvId/exports/pdf`
+- `POST /tailored-cvs/:tailoredCvId/exports/docx`
+
+Exceeded access returns:
+- `ENTITLEMENT_EXCEEDED`
+
+Ownership behavior remains user-scoped for protected resources.

@@ -22,6 +22,7 @@ export class DashboardService {
       },
       current_plan: meData.current_plan,
       usage_summary: meData.usage_summary,
+      entitlements: meData.entitlements,
       master_cv_summary: {
         total_count: summary.master_total_count,
         primary_master_cv: summary.primary_master_cv

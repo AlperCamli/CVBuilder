@@ -16,6 +16,14 @@ const envSchema = z.object({
   AI_PROVIDER: aiProviderSchema.default("mock"),
   AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
   AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
+  EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
+  EXPORT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(600),
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
+  BILLING_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
+  BILLING_CHECKOUT_CANCEL_URL: z.string().url().optional(),
+  BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
   SUPABASE_URL: z.string().url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1)
@@ -34,6 +42,19 @@ export interface AppConfig {
     provider: z.infer<typeof aiProviderSchema>;
     defaultModel: string;
     promptProfile: string;
+  };
+  exports: {
+    storageBucket: string;
+    downloadUrlTtlSeconds: number;
+  };
+  billing: {
+    provider: "stripe";
+    stripeSecretKey: string | null;
+    stripeWebhookSecret: string | null;
+    stripeProPriceId: string | null;
+    checkoutSuccessUrl: string;
+    checkoutCancelUrl: string;
+    portalReturnUrl: string;
   };
   supabase: {
     url: string;
@@ -90,17 +111,38 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
     throw new Error(`Invalid environment configuration: ${message}`);
   }
 
+  const frontendAppUrl = parsed.data.FRONTEND_APP_URL;
+
   return {
     appName: parsed.data.APP_NAME,
     appEnv: parsed.data.APP_ENV,
     appVersion: parsed.data.APP_VERSION,
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
-    frontendAppUrl: parsed.data.FRONTEND_APP_URL,
+    frontendAppUrl,
     ai: {
       provider: parsed.data.AI_PROVIDER,
       defaultModel: parsed.data.AI_DEFAULT_MODEL,
       promptProfile: parsed.data.AI_PROMPT_PROFILE
+    },
+    exports: {
+      storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,
+      downloadUrlTtlSeconds: parsed.data.EXPORT_DOWNLOAD_URL_TTL_SECONDS
+    },
+    billing: {
+      provider: "stripe",
+      stripeSecretKey: parsed.data.STRIPE_SECRET_KEY ?? null,
+      stripeWebhookSecret: parsed.data.STRIPE_WEBHOOK_SECRET ?? null,
+      stripeProPriceId: parsed.data.STRIPE_PRO_PRICE_ID ?? null,
+      checkoutSuccessUrl:
+        parsed.data.BILLING_CHECKOUT_SUCCESS_URL ??
+        `${frontendAppUrl.replace(/\/$/, "")}/pricing?checkout=success`,
+      checkoutCancelUrl:
+        parsed.data.BILLING_CHECKOUT_CANCEL_URL ??
+        `${frontendAppUrl.replace(/\/$/, "")}/pricing?checkout=cancel`,
+      portalReturnUrl:
+        parsed.data.BILLING_PORTAL_RETURN_URL ??
+        `${frontendAppUrl.replace(/\/$/, "")}/account/billing`
     },
     supabase: {
       url: parsed.data.SUPABASE_URL,

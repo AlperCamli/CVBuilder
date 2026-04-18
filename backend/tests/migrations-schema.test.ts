@@ -95,4 +95,30 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/create policy job_status_history_select_own/i);
     expect(migration).toMatch(/create policy job_status_history_insert_own/i);
   });
+
+  it("contains phase 4B exports table with constraints, indexes, and ownership policies", () => {
+    const migration = readMigration("20260418150000_phase4b_exports.sql");
+
+    expect(migration).toMatch(/create table if not exists public\.exports/i);
+    expect(migration).toMatch(/exports_format_check/i);
+    expect(migration).toMatch(/exports_status_check/i);
+    expect(migration).toMatch(/exports_lifecycle_check/i);
+    expect(migration).toMatch(/exports_user_id_created_at_idx/i);
+    expect(migration).toMatch(/exports_tailored_cv_id_created_at_idx/i);
+    expect(migration).toMatch(/exports_status_created_at_idx/i);
+    expect(migration).toMatch(/alter table public\.exports enable row level security/i);
+    expect(migration).toMatch(/create policy exports_select_own/i);
+    expect(migration).toMatch(/create policy exports_insert_own/i);
+    expect(migration).toMatch(/create policy exports_update_own/i);
+  });
+
+  it("contains phase 4C billing linkage indexes and usage increment function", () => {
+    const migration = readMigration("20260418170000_phase4c_billing_entitlements.sql");
+
+    expect(migration).toMatch(/subscriptions_provider_customer_id_idx/i);
+    expect(migration).toMatch(/subscriptions_provider_subscription_id_idx/i);
+    expect(migration).toMatch(/create or replace function public\.increment_usage_counters/i);
+    expect(migration).toMatch(/on conflict \(user_id, period_month\)/i);
+    expect(migration).toMatch(/grant execute on function public\.increment_usage_counters/i);
+  });
 });

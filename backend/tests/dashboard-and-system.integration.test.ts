@@ -1,9 +1,13 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app/create-app";
+import { BillingService } from "../src/modules/billing/billing.service";
+import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
+import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
 import { AuthService } from "../src/modules/auth/auth.service";
 import { DashboardService } from "../src/modules/dashboard/dashboard.service";
 import { SystemService } from "../src/modules/system/system.service";
+import { UsageService } from "../src/modules/usage/usage.service";
 import { UsersService } from "../src/modules/users/users.service";
 import {
   FakeAuthProvider,
@@ -16,6 +20,7 @@ import {
 } from "./helpers/in-memory";
 
 const buildTestApp = (databaseConnected: boolean) => {
+  const config = createTestConfig();
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
   const usageRepository = new InMemoryUsageRepository();
@@ -30,20 +35,35 @@ const buildTestApp = (databaseConnected: boolean) => {
     }
   });
 
-  const usersService = new UsersService(usersRepository, subscriptionsRepository, usageRepository);
+  const entitlementsService = new EntitlementsService(
+    createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId })
+  );
+  const usageService = new UsageService(usageRepository);
+  const billingService = new BillingService(
+    usersRepository,
+    subscriptionsRepository,
+    usageService,
+    entitlementsService,
+    null,
+    {
+      provider: config.billing.provider,
+      checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
+      checkoutCancelUrl: config.billing.checkoutCancelUrl,
+      portalReturnUrl: config.billing.portalReturnUrl,
+      stripeWebhookSecret: config.billing.stripeWebhookSecret
+    }
+  );
+  const usersService = new UsersService(usersRepository, billingService);
 
   const services = {
     authService: new AuthService(authProvider, usersRepository),
     usersService,
     dashboardService: new DashboardService(usersService, dashboardRepository),
-    systemService: new SystemService(
-      createTestConfig(),
-      new FakeDatabaseHealthChecker({ connected: databaseConnected })
-    )
+    systemService: new SystemService(config, new FakeDatabaseHealthChecker({ connected: databaseConnected }))
   };
 
   return createApp({
-    config: createTestConfig(),
+    config,
     services
   });
 };
@@ -107,6 +127,7 @@ describe("dashboard + system endpoints", () => {
     expect(dashboard.body.data.master_cv_summary.total_count).toBe(0);
     expect(dashboard.body.data.tailored_cv_summary.total_count).toBe(0);
     expect(dashboard.body.data.jobs_summary.total_count).toBe(0);
+    expect(dashboard.body.data.entitlements.plan_code).toBe("free");
     expect(dashboard.body.data.jobs_summary.counts_by_status).toEqual({
       saved: 0,
       applied: 0,

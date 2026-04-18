@@ -32,11 +32,6 @@ import {
   SupabaseTailoredCvRepository,
   type TailoredCvRepository
 } from "../modules/tailored-cv/tailored-cv.repository";
-import {
-  SupabaseSubscriptionsRepository,
-  type SubscriptionsRepository
-} from "../modules/users/subscriptions.repository";
-import { SupabaseUsageRepository, type UsageRepository } from "../modules/users/usage.repository";
 import { UsersService } from "../modules/users/users.service";
 import { SupabaseUsersRepository, type UsersRepository } from "../modules/users/users.repository";
 import type { AuthProvider } from "../modules/auth/auth.types";
@@ -55,6 +50,30 @@ import {
   type TemplatesRepository
 } from "../modules/templates/templates.repository";
 import { RenderingService } from "../modules/rendering/rendering.service";
+import { FilesService } from "../modules/files/files.service";
+import { SupabaseFilesRepository, type FilesRepository } from "../modules/files/files.repository";
+import { ExportsService } from "../modules/exports/exports.service";
+import {
+  SupabaseExportsRepository,
+  type ExportsRepository
+} from "../modules/exports/exports.repository";
+import {
+  DefaultRenderingExportGenerator,
+  type RenderingExportGenerator
+} from "../modules/exports/generators/rendering-export-generator";
+import { BillingService } from "../modules/billing/billing.service";
+import {
+  SupabaseBillingSubscriptionsRepository,
+  type BillingSubscriptionsRepository
+} from "../modules/billing/subscriptions.repository";
+import {
+  StripeBillingGateway,
+  type StripeGateway
+} from "../modules/billing/stripe-gateway";
+import { createPlanCatalog } from "../modules/entitlements/plan-definitions";
+import { EntitlementsService } from "../modules/entitlements/entitlements.service";
+import { SupabaseUsageRepository, type UsageRepository } from "../modules/usage/usage.repository";
+import { UsageService } from "../modules/usage/usage.service";
 
 export interface AppServices {
   authService: AuthService;
@@ -69,12 +88,15 @@ export interface AppServices {
   aiService: AiService;
   templatesService: TemplatesService;
   renderingService: RenderingService;
+  filesService: FilesService;
+  exportsService: ExportsService;
+  billingService: BillingService;
 }
 
 export interface ServiceOverrides {
   authProvider?: AuthProvider;
   usersRepository?: UsersRepository;
-  subscriptionsRepository?: SubscriptionsRepository;
+  billingSubscriptionsRepository?: BillingSubscriptionsRepository;
   usageRepository?: UsageRepository;
   dashboardRepository?: DashboardRepository;
   databaseHealthChecker?: DatabaseHealthCheckerPort;
@@ -87,6 +109,13 @@ export interface ServiceOverrides {
   aiProvider?: AiProvider;
   cvParser?: CvParser;
   templatesRepository?: TemplatesRepository;
+  filesRepository?: FilesRepository;
+  exportsRepository?: ExportsRepository;
+  renderingExportGenerator?: RenderingExportGenerator;
+  stripeGateway?: StripeGateway | null;
+  entitlementsService?: EntitlementsService;
+  usageService?: UsageService;
+  billingService?: BillingService;
 }
 
 export const buildDefaultServices = (
@@ -98,9 +127,9 @@ export const buildDefaultServices = (
 
   const usersRepository =
     overrides?.usersRepository ?? new SupabaseUsersRepository(supabaseClients.serviceRoleClient);
-  const subscriptionsRepository =
-    overrides?.subscriptionsRepository ??
-    new SupabaseSubscriptionsRepository(supabaseClients.serviceRoleClient);
+  const billingSubscriptionsRepository =
+    overrides?.billingSubscriptionsRepository ??
+    new SupabaseBillingSubscriptionsRepository(supabaseClients.serviceRoleClient);
   const usageRepository =
     overrides?.usageRepository ?? new SupabaseUsageRepository(supabaseClients.serviceRoleClient);
 
@@ -125,14 +154,52 @@ export const buildDefaultServices = (
   const aiProvider = overrides?.aiProvider ?? createAiProvider(config);
   const templatesRepository =
     overrides?.templatesRepository ?? new SupabaseTemplatesRepository(supabaseClients.serviceRoleClient);
+  const filesRepository =
+    overrides?.filesRepository ?? new SupabaseFilesRepository(supabaseClients.serviceRoleClient);
+  const exportsRepository =
+    overrides?.exportsRepository ?? new SupabaseExportsRepository(supabaseClients.serviceRoleClient);
+  const renderingExportGenerator =
+    overrides?.renderingExportGenerator ?? new DefaultRenderingExportGenerator();
   const cvParser = overrides?.cvParser ?? new SimpleCvParser();
 
+  const entitlementsService =
+    overrides?.entitlementsService ??
+    new EntitlementsService(createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId }));
+  const usageService = overrides?.usageService ?? new UsageService(usageRepository);
+  const stripeGateway =
+    overrides?.stripeGateway === undefined
+      ? config.billing.stripeSecretKey
+        ? new StripeBillingGateway(config.billing.stripeSecretKey)
+        : null
+      : overrides.stripeGateway;
+
+  const billingService =
+    overrides?.billingService ??
+    new BillingService(
+      usersRepository,
+      billingSubscriptionsRepository,
+      usageService,
+      entitlementsService,
+      stripeGateway,
+      {
+        provider: config.billing.provider,
+        checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
+        checkoutCancelUrl: config.billing.checkoutCancelUrl,
+        portalReturnUrl: config.billing.portalReturnUrl,
+        stripeWebhookSecret: config.billing.stripeWebhookSecret
+      }
+    );
+
   const authService = new AuthService(authProvider, usersRepository);
-  const usersService = new UsersService(usersRepository, subscriptionsRepository, usageRepository);
+  const usersService = new UsersService(usersRepository, billingService);
   const dashboardService = new DashboardService(usersService, dashboardRepository);
   const systemService = new SystemService(config, databaseHealthChecker);
   const templatesService = new TemplatesService(templatesRepository);
   const renderingService = new RenderingService(templatesService);
+  const filesService = new FilesService(filesRepository, {
+    storageBucket: config.exports.storageBucket,
+    downloadUrlTtlSeconds: config.exports.downloadUrlTtlSeconds
+  });
   const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
   const importsService = new ImportsService(importsRepository, masterCvRepository, cvParser);
   const jobsService = new JobsService(jobsRepository);
@@ -153,7 +220,17 @@ export const buildDefaultServices = (
     jobsRepository,
     cvRevisionsService,
     templatesService,
-    config.ai.promptProfile
+    config.ai.promptProfile,
+    billingService
+  );
+  const exportsService = new ExportsService(
+    exportsRepository,
+    tailoredCvRepository,
+    templatesService,
+    renderingService,
+    filesService,
+    renderingExportGenerator,
+    billingService
   );
 
   return {
@@ -168,6 +245,9 @@ export const buildDefaultServices = (
     cvRevisionsService,
     aiService,
     templatesService,
-    renderingService
+    renderingService,
+    filesService,
+    exportsService,
+    billingService
   };
 };

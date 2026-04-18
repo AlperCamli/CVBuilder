@@ -20,6 +20,8 @@ describe("environment config", () => {
       PORT: "4100",
       LOG_LEVEL: "info",
       FRONTEND_APP_URL: "http://localhost:5173",
+      EXPORTS_STORAGE_BUCKET: "exports",
+      EXPORT_DOWNLOAD_URL_TTL_SECONDS: "900",
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_ANON_KEY: "anon",
       SUPABASE_SERVICE_ROLE_KEY: "service"
@@ -29,6 +31,50 @@ describe("environment config", () => {
     expect(config.port).toBe(4100);
     expect(config.ai.provider).toBe("mock");
     expect(config.ai.defaultModel).toBe("mock-cv-builder-v1");
+    expect(config.exports.storageBucket).toBe("exports");
+    expect(config.exports.downloadUrlTtlSeconds).toBe(900);
+    expect(config.billing.provider).toBe("stripe");
+    expect(config.billing.stripeSecretKey).toBeNull();
+    expect(config.billing.stripeWebhookSecret).toBeNull();
+    expect(config.billing.stripeProPriceId).toBeNull();
     expect(config.supabase.url).toBe("https://example.supabase.co");
+  });
+
+  it("applies export defaults when export env vars are omitted", () => {
+    const config = loadConfig({
+      APP_NAME: "cv-builder-backend",
+      APP_ENV: "test",
+      APP_VERSION: "1.0.0",
+      PORT: "4100",
+      LOG_LEVEL: "info",
+      FRONTEND_APP_URL: "http://localhost:5173",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "anon",
+      SUPABASE_SERVICE_ROLE_KEY: "service"
+    });
+
+    expect(config.exports.storageBucket).toBe("exports");
+    expect(config.exports.downloadUrlTtlSeconds).toBe(600);
+    expect(config.billing.checkoutSuccessUrl).toBe("http://localhost:5173/pricing?checkout=success");
+    expect(config.billing.checkoutCancelUrl).toBe("http://localhost:5173/pricing?checkout=cancel");
+    expect(config.billing.portalReturnUrl).toBe("http://localhost:5173/account/billing");
+  });
+
+  it("validates export signed URL ttl bounds", () => {
+    expect(() =>
+      loadConfig({
+        APP_NAME: "cv-builder-backend",
+        APP_ENV: "test",
+        APP_VERSION: "1.0.0",
+        PORT: "4100",
+        LOG_LEVEL: "info",
+        FRONTEND_APP_URL: "http://localhost:5173",
+        EXPORTS_STORAGE_BUCKET: "exports",
+        EXPORT_DOWNLOAD_URL_TTL_SECONDS: "10",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+        SUPABASE_SERVICE_ROLE_KEY: "service"
+      })
+    ).toThrow(/Invalid environment configuration/);
   });
 });

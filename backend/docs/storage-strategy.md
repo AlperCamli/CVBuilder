@@ -1,30 +1,39 @@
-# Storage Strategy Note (Phase 2)
+# Storage Strategy Note (Phase 4B)
 
-Storage is now integrated for import metadata + parser source reads.
+Phase 4B now includes generated export storage and secure download delivery.
 
 ## Buckets
 
 Expected buckets:
 - `source-uploads`
-- `exports` (future write path)
+- `exports`
 - `parsed-artifacts` (future write path)
 
-## What Phase 2 Implements
+## Implemented in Phase 4B
 
-- backend persists uploaded source file metadata in `files`
-- import sessions reference source files through `imports.source_file_id`
-- parse step downloads source file from Supabase Storage using stored `storage_bucket` + `storage_path`
+- generated export files are uploaded to Supabase Storage
+- storage path is deterministic:
+  - `users/{userId}/tailored-cvs/{tailoredCvId}/exports/{exportId}.{ext}`
+- generated metadata rows are persisted in `files`
+  - `file_type=export_pdf` / `file_type=export_docx`
+- export lifecycle rows are persisted in `exports`
+- download delivery uses signed URLs after ownership validation
 
-## What Phase 2 Does Not Implement Yet
+## Signed URL Behavior
 
-- upload binary proxy endpoint (frontend can upload directly)
-- generated exports storage flow (`export_pdf`, `export_docx` rows reserved only)
-- parsed-artifact file generation pipeline
-- signed-url lifecycle hardening
+- endpoint: `GET /api/v1/exports/:exportId/download`
+- response includes URL and expiration metadata
+- expiration controlled by `EXPORT_DOWNLOAD_URL_TTL_SECONDS`
 
-## Forward Compatibility
+## Ownership and Security
 
-`files.file_type` and linkage model are already compatible with:
-- export generation storage
-- parser artifacts
-- avatar/media ownership tracking
+- backend service-layer ownership checks gate all export operations
+- signed URL is never issued before ownership + completion checks
+- repositories continue user-scoped access patterns
+
+## Deferred
+
+- binary upload proxy endpoint for source files (frontend direct upload path remains valid)
+- distributed retry queue for failed exports
+- destructive export deletion lifecycle
+- signed URL hardening beyond current TTL + ownership checks

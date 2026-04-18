@@ -1,4 +1,4 @@
-import type { CurrentPlanSummary, UsageSummary } from "../../shared/types/domain";
+import type { CurrentPlanSummary, EntitlementSummary, UsageSummary } from "../../shared/types/domain";
 import type { JobStatus } from "../../shared/types/domain";
 
 export interface DashboardUserSummary {
@@ -78,6 +78,7 @@ export interface DashboardResponseData {
   user_summary: DashboardUserSummary;
   current_plan: CurrentPlanSummary;
   usage_summary: UsageSummary;
+  entitlements: EntitlementSummary;
   master_cv_summary: DashboardMasterCvSummary;
   tailored_cv_summary: DashboardTailoredCvSummary;
   jobs_summary: DashboardJobsSummary;
