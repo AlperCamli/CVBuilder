@@ -1,0 +1,11 @@
+.DS_Store
+
+# Workspace dependencies/builds
+**/node_modules
+**/dist
+**/coverage
+
+# Local env files
+**/.env
+**/.env.*
+!**/.env.example

@@ -1,0 +1,93 @@
+import { Router } from "express";
+import type { RequestHandler } from "express";
+import { validate } from "../../shared/validation/validate";
+import type { AiController } from "./ai.controller";
+import {
+  aiBlockCompareSchema,
+  aiBlockOptionsSchema,
+  aiBlockSuggestSchema,
+  aiFollowUpQuestionsSchema,
+  aiJobAnalysisSchema,
+  aiTailoredDraftSchema,
+  suggestionIdParamsSchema,
+  tailoredCvAiHistoryParamsSchema
+} from "./ai.schemas";
+
+export const createAiRouter = (
+  aiController: AiController,
+  authMiddleware: RequestHandler
+): Router => {
+  const router = Router();
+
+  router.post(
+    "/ai/job-analysis",
+    authMiddleware,
+    validate({ body: aiJobAnalysisSchema }),
+    aiController.postJobAnalysis
+  );
+
+  router.post(
+    "/ai/follow-up-questions",
+    authMiddleware,
+    validate({ body: aiFollowUpQuestionsSchema }),
+    aiController.postFollowUpQuestions
+  );
+
+  router.post(
+    "/ai/tailored-cv-draft",
+    authMiddleware,
+    validate({ body: aiTailoredDraftSchema }),
+    aiController.postTailoredCvDraft
+  );
+
+  router.post(
+    "/ai/blocks/suggest",
+    authMiddleware,
+    validate({ body: aiBlockSuggestSchema }),
+    aiController.postBlockSuggest
+  );
+
+  router.post(
+    "/ai/blocks/compare",
+    authMiddleware,
+    validate({ body: aiBlockCompareSchema }),
+    aiController.postBlockCompare
+  );
+
+  router.post(
+    "/ai/blocks/options",
+    authMiddleware,
+    validate({ body: aiBlockOptionsSchema }),
+    aiController.postBlockOptions
+  );
+
+  router.get(
+    "/ai/suggestions/:suggestionId",
+    authMiddleware,
+    validate({ params: suggestionIdParamsSchema }),
+    aiController.getSuggestion
+  );
+
+  router.post(
+    "/ai/suggestions/:suggestionId/apply",
+    authMiddleware,
+    validate({ params: suggestionIdParamsSchema }),
+    aiController.postApplySuggestion
+  );
+
+  router.post(
+    "/ai/suggestions/:suggestionId/reject",
+    authMiddleware,
+    validate({ params: suggestionIdParamsSchema }),
+    aiController.postRejectSuggestion
+  );
+
+  router.get(
+    "/tailored-cvs/:tailoredCvId/ai-history",
+    authMiddleware,
+    validate({ params: tailoredCvAiHistoryParamsSchema }),
+    aiController.getTailoredCvAiHistory
+  );
+
+  return router;
+};

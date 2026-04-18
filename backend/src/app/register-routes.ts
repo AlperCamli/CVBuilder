@@ -1,0 +1,45 @@
+import type { Router } from "express";
+import { createAuthMiddleware } from "../modules/auth/auth.middleware";
+import { AiController } from "../modules/ai/ai.controller";
+import { createAiRouter } from "../modules/ai/ai.routes";
+import { CvRevisionsController } from "../modules/cv-revisions/cv-revisions.controller";
+import { createCvRevisionsRouter } from "../modules/cv-revisions/cv-revisions.routes";
+import { DashboardController } from "../modules/dashboard/dashboard.controller";
+import { createDashboardRouter } from "../modules/dashboard/dashboard.routes";
+import { ImportsController } from "../modules/imports/imports.controller";
+import { createImportsRouter } from "../modules/imports/imports.routes";
+import { JobsController } from "../modules/jobs/jobs.controller";
+import { createJobsRouter } from "../modules/jobs/jobs.routes";
+import { MasterCvController } from "../modules/master-cv/master-cv.controller";
+import { createMasterCvRouter } from "../modules/master-cv/master-cv.routes";
+import { SystemController } from "../modules/system/system.controller";
+import { createSystemRouter } from "../modules/system/system.routes";
+import { TailoredCvController } from "../modules/tailored-cv/tailored-cv.controller";
+import { createTailoredCvRouter } from "../modules/tailored-cv/tailored-cv.routes";
+import { UsersController } from "../modules/users/users.controller";
+import { createUsersRouter } from "../modules/users/users.routes";
+import type { AppServices } from "./build-services";
+
+export const registerV1Routes = (router: Router, services: AppServices): void => {
+  const authMiddleware = createAuthMiddleware(services.authService);
+
+  const systemController = new SystemController(services.systemService);
+  const usersController = new UsersController(services.usersService);
+  const dashboardController = new DashboardController(services.dashboardService);
+  const masterCvController = new MasterCvController(services.masterCvService);
+  const importsController = new ImportsController(services.importsService);
+  const jobsController = new JobsController(services.jobsService);
+  const tailoredCvController = new TailoredCvController(services.tailoredCvService);
+  const cvRevisionsController = new CvRevisionsController(services.cvRevisionsService);
+  const aiController = new AiController(services.aiService);
+
+  router.use(createSystemRouter(systemController));
+  router.use(createUsersRouter(usersController, authMiddleware));
+  router.use(createDashboardRouter(dashboardController, authMiddleware));
+  router.use(createMasterCvRouter(masterCvController, authMiddleware));
+  router.use(createImportsRouter(importsController, authMiddleware));
+  router.use(createTailoredCvRouter(tailoredCvController, authMiddleware));
+  router.use(createJobsRouter(jobsController, authMiddleware));
+  router.use(createCvRevisionsRouter(cvRevisionsController, authMiddleware));
+  router.use(createAiRouter(aiController, authMiddleware));
+};
