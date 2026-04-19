@@ -119,7 +119,10 @@ export class StripeBillingGateway implements StripeGateway {
   private readonly stripe: Stripe;
 
   constructor(secretKey: string) {
-    this.stripe = new Stripe(secretKey);
+    this.stripe = new Stripe(secretKey, {
+      // Keep Stripe API behavior stable and explicit across environments.
+      apiVersion: "2026-03-25.dahlia" as unknown as Stripe.LatestApiVersion
+    });
   }
 
   async createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary> {

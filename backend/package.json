@@ -12,7 +12,9 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "inspect:import": "tsx scripts/inspect-import-parser.ts"
+    "inspect:import": "tsx scripts/inspect-import-parser.ts",
+    "stripe:webhook-secret": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks --print-secret",
+    "stripe:listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks"
   },
   "engines": {
     "node": ">=20.0.0"

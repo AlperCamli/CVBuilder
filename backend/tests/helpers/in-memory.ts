@@ -437,9 +437,9 @@ export const createTestConfig = (): AppConfig => {
       stripeSecretKey: null,
       stripeWebhookSecret: null,
       stripeProPriceId: "price_pro_monthly",
-      checkoutSuccessUrl: "http://localhost:5173/pricing?checkout=success",
-      checkoutCancelUrl: "http://localhost:5173/pricing?checkout=cancel",
-      portalReturnUrl: "http://localhost:5173/account/billing"
+      checkoutSuccessUrl: "http://localhost:5173/app/pricing?checkout=success",
+      checkoutCancelUrl: "http://localhost:5173/app/pricing?checkout=cancel",
+      portalReturnUrl: "http://localhost:5173/app/pricing"
     },
     supabase: {
       url: "https://example.supabase.co",

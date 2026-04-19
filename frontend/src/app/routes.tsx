@@ -19,8 +19,8 @@ import { CoverLetters } from "./pages/CoverLetters";
 import { CoverLetterEditor } from "./pages/CoverLetterEditor";
 import { Pricing } from "./pages/Pricing";
 import { Profile } from "./pages/Profile";
+import { RedirectIfAuthenticated, RequireAuth } from "./integration/auth-route-guards";
 
-// Wrapper component for Layout with SidebarProvider
 function LayoutWrapper() {
   return (
     <SidebarProvider>
@@ -32,23 +32,35 @@ function LayoutWrapper() {
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: Landing,
+    Component: Landing
   },
   {
     path: "/signin",
-    Component: SignIn,
+    element: (
+      <RedirectIfAuthenticated>
+        <SignIn />
+      </RedirectIfAuthenticated>
+    )
   },
   {
     path: "/signup",
-    Component: SignUp,
+    element: (
+      <RedirectIfAuthenticated>
+        <SignUp />
+      </RedirectIfAuthenticated>
+    )
   },
   {
     path: "/forgot-password",
-    Component: ForgotPassword,
+    Component: ForgotPassword
   },
   {
     path: "/app",
-    Component: LayoutWrapper,
+    element: (
+      <RequireAuth>
+        <LayoutWrapper />
+      </RequireAuth>
+    ),
     children: [
       { index: true, Component: Dashboard },
       { path: "create", Component: CreateOrUpload },
@@ -64,7 +76,7 @@ export const router = createBrowserRouter([
       { path: "cover-letters", Component: CoverLetters },
       { path: "cover-letter/:jobId", Component: CoverLetterEditor },
       { path: "pricing", Component: Pricing },
-      { path: "profile", Component: Profile },
-    ],
-  },
+      { path: "profile", Component: Profile }
+    ]
+  }
 ]);

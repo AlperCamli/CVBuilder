@@ -136,13 +136,13 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       stripeProPriceId: parsed.data.STRIPE_PRO_PRICE_ID ?? null,
       checkoutSuccessUrl:
         parsed.data.BILLING_CHECKOUT_SUCCESS_URL ??
-        `${frontendAppUrl.replace(/\/$/, "")}/pricing?checkout=success`,
+        `${frontendAppUrl.replace(/\/$/, "")}/app/pricing?checkout=success`,
       checkoutCancelUrl:
         parsed.data.BILLING_CHECKOUT_CANCEL_URL ??
-        `${frontendAppUrl.replace(/\/$/, "")}/pricing?checkout=cancel`,
+        `${frontendAppUrl.replace(/\/$/, "")}/app/pricing?checkout=cancel`,
       portalReturnUrl:
         parsed.data.BILLING_PORTAL_RETURN_URL ??
-        `${frontendAppUrl.replace(/\/$/, "")}/account/billing`
+        `${frontendAppUrl.replace(/\/$/, "")}/app/pricing`
     },
     supabase: {
       url: parsed.data.SUPABASE_URL,

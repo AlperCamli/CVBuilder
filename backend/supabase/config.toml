@@ -2,7 +2,7 @@ project_id = "cv-builder-backend"
 
 [db]
 port = 54322
-major_version = 15
+major_version = 17
 
 [api]
 enabled = true

@@ -55,9 +55,9 @@ describe("environment config", () => {
 
     expect(config.exports.storageBucket).toBe("exports");
     expect(config.exports.downloadUrlTtlSeconds).toBe(600);
-    expect(config.billing.checkoutSuccessUrl).toBe("http://localhost:5173/pricing?checkout=success");
-    expect(config.billing.checkoutCancelUrl).toBe("http://localhost:5173/pricing?checkout=cancel");
-    expect(config.billing.portalReturnUrl).toBe("http://localhost:5173/account/billing");
+    expect(config.billing.checkoutSuccessUrl).toBe("http://localhost:5173/app/pricing?checkout=success");
+    expect(config.billing.checkoutCancelUrl).toBe("http://localhost:5173/app/pricing?checkout=cancel");
+    expect(config.billing.portalReturnUrl).toBe("http://localhost:5173/app/pricing");
   });
 
   it("validates export signed URL ttl bounds", () => {

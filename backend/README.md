@@ -81,6 +81,11 @@ cp .env.example .env.local
 - `BILLING_CHECKOUT_CANCEL_URL`
 - `BILLING_PORTAL_RETURN_URL`
 
+Recommended local values (matching current frontend routes):
+- `BILLING_CHECKOUT_SUCCESS_URL=http://localhost:5173/app/pricing?checkout=success`
+- `BILLING_CHECKOUT_CANCEL_URL=http://localhost:5173/app/pricing?checkout=cancel`
+- `BILLING_PORTAL_RETURN_URL=http://localhost:5173/app/pricing`
+
 5) Optional exports config
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, bounds: `60..86400`)
@@ -91,6 +96,17 @@ cp .env.example .env.local
 npm install
 npm run dev
 ```
+
+7) Start Stripe webhook forwarding (required for subscription sync in local dev)
+
+```bash
+stripe listen --forward-to localhost:4000/api/v1/billing/webhooks
+```
+
+Copy the printed `whsec_...` value into:
+- `STRIPE_WEBHOOK_SECRET=<whsec_...>`
+
+Without webhook forwarding + `STRIPE_WEBHOOK_SECRET`, checkout can open, but subscription status/plan will not sync in backend state.
 
 Backend default URL:
 - `http://localhost:4000`
@@ -106,6 +122,8 @@ API base:
 - `npm run typecheck`
 - `npm run lint`
 - `npm run test`
+- `npm run stripe:webhook-secret`
+- `npm run stripe:listen`
 
 ## Migrations
 
@@ -121,7 +139,8 @@ Apply:
 
 ```bash
 supabase db push
-supabase db seed
+# For linked remote projects (current Supabase CLI):
+supabase db query --linked -f supabase/seed.sql
 ```
 
 ## Phase 4C API Surface

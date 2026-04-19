@@ -35,9 +35,9 @@
 - `AI_PROMPT_PROFILE` (default: `phase3-v1`)
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, min `60`, max `86400`)
-- `BILLING_CHECKOUT_SUCCESS_URL` (default: `${FRONTEND_APP_URL}/pricing?checkout=success`)
-- `BILLING_CHECKOUT_CANCEL_URL` (default: `${FRONTEND_APP_URL}/pricing?checkout=cancel`)
-- `BILLING_PORTAL_RETURN_URL` (default: `${FRONTEND_APP_URL}/account/billing`)
+- `BILLING_CHECKOUT_SUCCESS_URL` (default: `${FRONTEND_APP_URL}/app/pricing?checkout=success`)
+- `BILLING_CHECKOUT_CANCEL_URL` (default: `${FRONTEND_APP_URL}/app/pricing?checkout=cancel`)
+- `BILLING_PORTAL_RETURN_URL` (default: `${FRONTEND_APP_URL}/app/pricing`)
 
 ## Validation Behavior
 

@@ -36,8 +36,8 @@ Use:
 ```json
 {
   "plan_code": "pro",
-  "success_url": "https://optional-success-url",
-  "cancel_url": "https://optional-cancel-url"
+  "success_url": "http://localhost:5173/app/pricing?checkout=success",
+  "cancel_url": "http://localhost:5173/app/pricing?checkout=cancel"
 }
 ```
 
@@ -53,7 +53,7 @@ Body is optional; can provide return URL:
 
 ```json
 {
-  "return_url": "https://optional-return-url"
+  "return_url": "http://localhost:5173/app/pricing"
 }
 ```
 
