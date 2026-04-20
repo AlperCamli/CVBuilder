@@ -218,6 +218,14 @@ const envNumber = (key: string, defaultValue: number, min: number, max: number):
   return Math.max(min, Math.min(max, parsed));
 };
 
+type RuntimeImport = <T = unknown>(specifier: string) => Promise<T>;
+
+// Keep true dynamic import in CommonJS output; TS otherwise rewrites import() to require().
+const runtimeImport = new Function(
+  "specifier",
+  "return import(specifier)"
+) as RuntimeImport;
+
 const isPdfOcrEnabled = (): boolean => {
   // Keep OCR off by default during tests to avoid slow/non-deterministic network fetches.
   const defaultValue = process.env.NODE_ENV === "test" ? false : true;
@@ -828,7 +836,7 @@ const extractPdfTextHeuristic = (bytes: Uint8Array): string => {
 };
 
 const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
-  const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as {
+  const pdfjs = (await runtimeImport("pdfjs-dist/legacy/build/pdf.mjs")) as {
     getDocument: (params: Record<string, unknown>) => { promise: Promise<any> };
   };
 
@@ -898,7 +906,7 @@ const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
 const extractPdfTextWithOcr = async (bytes: Uint8Array): Promise<string> => {
   const [{ createCanvas }, pdfjsModule, tesseract] = await Promise.all([
     import("@napi-rs/canvas"),
-    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    runtimeImport("pdfjs-dist/legacy/build/pdf.mjs"),
     import("tesseract.js")
   ]);
   const pdfjs = pdfjsModule as {
