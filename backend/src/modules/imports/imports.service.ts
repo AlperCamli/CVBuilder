@@ -196,7 +196,8 @@ export class ImportsService {
           raw_text_length: parseResult.rawExtractedText.length,
           section_count: parseResult.parsedContent.sections.length,
           block_count: countBlocks(parseResult.parsedContent),
-          warnings: parseResult.warnings
+          warnings: parseResult.warnings,
+          diagnostics: parseResult.diagnostics ?? null
         }
       };
     } catch (error) {
@@ -226,7 +227,8 @@ export class ImportsService {
           raw_text_length: 0,
           section_count: 0,
           block_count: 0,
-          warnings: [message]
+          warnings: [message],
+          diagnostics: null
         }
       };
     }

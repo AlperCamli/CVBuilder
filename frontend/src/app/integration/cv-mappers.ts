@@ -74,6 +74,28 @@ const asStringArray = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const dedupe = (items: string[]): string[] => {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const item of items) {
+    const normalized = item.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+};
+
 const flattenText = (value: unknown): string[] => {
   if (value === null || value === undefined) {
     return [];
@@ -902,6 +924,42 @@ const detectSocialTypeFromUrl = (url: string): string => {
   return "portfolio";
 };
 
+const normalizeSocialUrl = (rawUrl: string): string => {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const slashless = trimmed.replace(/^\/+/, "");
+  const handleMatch = slashless.match(/^(?:linkedin|in)\/([A-Za-z0-9._-]{2,})$/i);
+  if (handleMatch) {
+    return `https://www.linkedin.com/in/${handleMatch[1]}`;
+  }
+
+  const githubHandleMatch = slashless.match(/^github\/([A-Za-z0-9._-]{2,})$/i);
+  if (githubHandleMatch) {
+    return `https://github.com/${githubHandleMatch[1]}`;
+  }
+
+  const candidate = /^(https?:\/\/)/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return "";
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    if (!host || host === "localhost" || !host.includes(".")) {
+      return "";
+    }
+
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
 const extractSocialLinks = (metadata: Record<string, CvJsonValue>): EditorHeaderData["socialLinks"] => {
   const linksFromSocial = Array.isArray(metadata.social_links)
     ? metadata.social_links
@@ -909,14 +967,14 @@ const extractSocialLinks = (metadata: Record<string, CvJsonValue>): EditorHeader
         .map((entry) => ({
           id: asString(entry.id) || randomId("social"),
           type: asString(entry.type) || detectSocialTypeFromUrl(asString(entry.url)),
-          url: asString(entry.url)
+          url: normalizeSocialUrl(asString(entry.url))
         }))
         .filter((entry) => entry.url.length > 0)
     : [];
 
   const linksFromUrls = Array.isArray(metadata.urls)
     ? metadata.urls
-        .map((entry) => asString(entry).trim())
+        .map((entry) => normalizeSocialUrl(asString(entry)))
         .filter((entry) => entry.length > 0)
         .map((url) => ({
           id: randomId("social"),
@@ -977,6 +1035,70 @@ const sectionFromItems = (
 
 export const cvContentToEditorSections = (content: CvContent): EditorSection[] => {
   const metadata = asRecord(content.metadata);
+  const sortedSections = [...content.sections].sort((a, b) => a.order - b.order);
+  const headerSection = sortedSections.find((section) => normalizeSectionType(section.type) === "header");
+  const headerBlock = headerSection
+    ? [...headerSection.blocks].sort((a, b) => a.order - b.order)[0]
+    : undefined;
+  const headerText = headerBlock ? getField(headerBlock, "text") : "";
+  const getHeaderField = (...keys: string[]): string => (headerBlock ? getField(headerBlock, ...keys) : "");
+
+  const inferHeaderNameFromText = (text: string): string => {
+    const lines = text
+      .split(/\n+/)
+      .map((line) => normalizeWhitespace(line))
+      .filter((line) => line.length > 0);
+
+    return (
+      lines.find((line) => {
+        if (line.length < 3 || line.length > 72) {
+          return false;
+        }
+
+        if (/\d/.test(line) || line.includes("@") || /https?:\/\//i.test(line)) {
+          return false;
+        }
+
+        const words = line.split(/\s+/).filter(Boolean);
+        return words.length >= 2 && words.length <= 6;
+      }) ?? ""
+    );
+  };
+
+  const inferEmailFromText = (text: string): string => {
+    const normalized = text.replace(/([A-Z0-9._%+-])\s*@\s*([A-Z0-9.-]+\.[A-Z]{2,})/gi, "$1@$2");
+    return normalized.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
+  };
+
+  const inferPhoneFromText = (text: string): string => text.match(/\+?\d[\d\s().-]{7,}\d/)?.[0] ?? "";
+  const extractUrlsFromText = (text: string): string[] => {
+    const direct = text.match(/(?:https?:\/\/|www\.)[^\s<>()]+/gi) ?? [];
+    const handles = text.match(/\b(?:linkedin|github|gitlab|in)\/[A-Za-z0-9._-]{2,}\b/gi) ?? [];
+    return [...direct, ...handles];
+  };
+
+  const metadataWithHeaderFallback: Record<string, CvJsonValue> = {
+    ...content.metadata,
+    full_name: toJsonValue(
+      firstNonEmpty(
+        asString(metadata.full_name),
+        getHeaderField("full_name", "name"),
+        inferHeaderNameFromText(headerText)
+      )
+    ),
+    headline: toJsonValue(firstNonEmpty(asString(metadata.headline), getHeaderField("headline", "title"))),
+    email: toJsonValue(firstNonEmpty(asString(metadata.email), getHeaderField("email"), inferEmailFromText(headerText))),
+    phone: toJsonValue(firstNonEmpty(asString(metadata.phone), getHeaderField("phone"), inferPhoneFromText(headerText))),
+    location: toJsonValue(firstNonEmpty(asString(metadata.location), getHeaderField("location"))),
+    urls: toJsonValue(
+      dedupe([
+        ...asStringArray(content.metadata.urls),
+        ...(headerBlock ? asStringArray(headerBlock.fields.urls) : []),
+        ...extractUrlsFromText(headerText)
+      ].map((url) => normalizeSocialUrl(url)).filter((url) => url.length > 0))
+    )
+  };
+  const normalizedMetadata = asRecord(metadataWithHeaderFallback);
 
   const sections: EditorSection[] = [
     {
@@ -985,17 +1107,15 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       hidden: false,
       order: -1,
       data: {
-        name: asString(metadata.full_name),
-        title: asString(metadata.headline),
-        email: asString(metadata.email),
-        phone: asString(metadata.phone),
-        location: asString(metadata.location),
-        socialLinks: extractSocialLinks(content.metadata)
+        name: asString(normalizedMetadata.full_name),
+        title: asString(normalizedMetadata.headline),
+        email: asString(normalizedMetadata.email),
+        phone: asString(normalizedMetadata.phone),
+        location: asString(normalizedMetadata.location),
+        socialLinks: extractSocialLinks(metadataWithHeaderFallback)
       }
     }
   ];
-
-  const sortedSections = [...content.sections].sort((a, b) => a.order - b.order);
 
   for (const section of sortedSections) {
     const sectionType = normalizeSectionType(section.type);
@@ -1004,10 +1124,14 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       asString(section.meta.visibility).toLowerCase() === "hidden" ||
       (sortedBlocks.length > 0 && sortedBlocks.every((block) => block.visibility === "hidden"));
 
+    if (sectionType === "header") {
+      continue;
+    }
+
     if (sectionType === "summary") {
       const block = sortedBlocks[0];
       const rawSummaryText = block ? getField(block, "text", "summary", "description") : "";
-      const fullName = asString(metadata.full_name);
+      const fullName = asString(normalizedMetadata.full_name);
       const summaryText = (() => {
         const lines = rawSummaryText
           .split(/\n+/)

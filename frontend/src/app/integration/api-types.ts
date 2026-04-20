@@ -435,6 +435,22 @@ export interface ParseSummary {
   section_count: number;
   block_count: number;
   warnings: string[];
+  diagnostics: {
+    mime_type: string;
+    attempted_stages: Array<
+      "text_decode" | "pdfjs_text" | "docx_xml_text" | "pdf_ocr_tesseract" | "pdf_token_heuristic" | "utf8_decode"
+    >;
+    final_stage: "text_decode" | "pdfjs_text" | "docx_xml_text" | "pdf_ocr_tesseract" | "pdf_token_heuristic" | "utf8_decode";
+    quality: {
+      score: number;
+      confidence: "high" | "medium" | "low";
+      low_confidence: boolean;
+      natural_language_ratio: number;
+      symbol_ratio: number;
+      repeated_token_ratio: number;
+      entropy_ratio: number;
+    };
+  } | null;
 }
 
 export interface ParseImportResponse {

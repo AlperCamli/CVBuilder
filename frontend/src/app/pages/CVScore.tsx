@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { TrendingUp, AlertCircle, Sparkles, ArrowRight, Loader2 } from "lucide-react";
-import type { CvContent } from "../integration/api-types";
+import type { CvContent, ParseSummary } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
 
@@ -61,6 +61,7 @@ export function CVScore() {
 
   const importId = location.state?.importId as string | undefined;
   const fileName = location.state?.fileName as string | undefined;
+  const parseSummary = location.state?.parseSummary as ParseSummary | undefined;
 
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
@@ -129,6 +130,21 @@ export function CVScore() {
     }
     return buildImprovements(parsedContent);
   }, [parsedContent]);
+
+  const parseNeedsManualReview = useMemo(() => {
+    if (!parseSummary?.diagnostics) {
+      return false;
+    }
+
+    const diagnostics = parseSummary.diagnostics;
+    const lowConfidence = diagnostics.quality.low_confidence;
+    const unsafeFallback = diagnostics.final_stage === "utf8_decode";
+    const nonPrimaryPdfStage =
+      diagnostics.mime_type.toLowerCase() === "application/pdf" &&
+      diagnostics.final_stage !== "pdfjs_text";
+
+    return lowConfidence || unsafeFallback || nonPrimaryPdfStage;
+  }, [parseSummary]);
 
   const convertImportToMasterCv = async (contentToSave: CvContent) => {
     if (!importId) {
@@ -257,6 +273,30 @@ export function CVScore() {
             </div>
           </div>
 
+          {parseNeedsManualReview ? (
+            <div
+              className="p-4 rounded-xl mb-6 border"
+              style={{
+                borderColor: "var(--color-yellow-200)",
+                background: "var(--color-yellow-50)",
+                color: "var(--color-yellow-900)"
+              }}
+            >
+              <p className="font-medium" style={{ fontSize: "13px" }}>
+                Parse quality needs manual review before conversion.
+              </p>
+              <p style={{ fontSize: "12px", marginTop: "6px", lineHeight: "1.5" }}>
+                Final stage: {parseSummary?.diagnostics?.final_stage ?? "-"} | Confidence:{" "}
+                {parseSummary?.diagnostics?.quality.confidence ?? "-"} (score {parseSummary?.diagnostics?.quality.score ?? "-"}).
+              </p>
+              {parseSummary?.warnings?.length ? (
+                <p style={{ fontSize: "12px", marginTop: "6px", lineHeight: "1.5" }}>
+                  {parseSummary.warnings[0]}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mb-8">
             <h3 className="font-medium mb-3 flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
               <AlertCircle size={16} style={{ color: "var(--color-text-secondary)" }} />
@@ -308,14 +348,14 @@ export function CVScore() {
 
             <button
               onClick={handleContinueWithoutAI}
-              disabled={converting || !parsedContent}
+              disabled={converting || !parsedContent || parseNeedsManualReview}
               className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-gray-50 inline-flex items-center justify-center gap-2"
               style={{
                 background: "transparent",
                 border: "1px solid var(--color-border-tertiary)",
                 color: "var(--color-text-secondary)",
                 fontSize: "14px",
-                opacity: converting ? 0.7 : 1
+                opacity: converting || parseNeedsManualReview ? 0.7 : 1
               }}
             >
               {converting ? <Loader2 size={16} className="animate-spin" /> : null}

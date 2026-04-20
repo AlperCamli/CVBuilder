@@ -6,6 +6,7 @@ import type {
   ImportStatus,
   MasterCvRecord
 } from "../../shared/types/domain";
+import type { ParseCvFileDiagnostics } from "./parsers/cv-parser";
 
 export type SessionContext = AuthenticatedRequestContext;
 
@@ -59,4 +60,5 @@ export interface ParseSummary {
   section_count: number;
   block_count: number;
   warnings: string[];
+  diagnostics: ParseCvFileDiagnostics | null;
 }

@@ -2271,6 +2271,63 @@ const selectBestCandidate = (candidates: ExtractedTextCandidate[]): ExtractedTex
   })[0];
 };
 
+const selectBestPdfCandidate = (candidates: ExtractedTextCandidate[]): ExtractedTextCandidate | null => {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const sorted = [...candidates].sort((left, right) => {
+    if (left.quality.score !== right.quality.score) {
+      return right.quality.score - left.quality.score;
+    }
+
+    return right.cleanedText.length - left.cleanedText.length;
+  });
+
+  const bestByStage = (stage: ParserExtractionStage): ExtractedTextCandidate | null =>
+    sorted.find((candidate) => candidate.stage === stage) ?? null;
+
+  const pdfJsCandidate = bestByStage("pdfjs_text");
+  if (pdfJsCandidate) {
+    const reliablePdfJs =
+      !pdfJsCandidate.quality.lowConfidence ||
+      (pdfJsCandidate.cleanedText.length >= 180 && pdfJsCandidate.quality.symbolRatio < 0.3);
+
+    if (reliablePdfJs) {
+      return pdfJsCandidate;
+    }
+  }
+
+  const ocrCandidate = bestByStage("pdf_ocr_tesseract");
+  if (ocrCandidate) {
+    const reliableOcr =
+      !ocrCandidate.quality.lowConfidence ||
+      (ocrCandidate.cleanedText.length >= 220 && ocrCandidate.quality.symbolRatio < 0.28);
+
+    if (reliableOcr) {
+      return ocrCandidate;
+    }
+  }
+
+  const tokenCandidate = bestByStage("pdf_token_heuristic");
+  if (tokenCandidate && !tokenCandidate.quality.lowConfidence && tokenCandidate.cleanedText.length >= 160) {
+    return tokenCandidate;
+  }
+
+  return pdfJsCandidate ?? ocrCandidate ?? tokenCandidate ?? sorted[0] ?? null;
+};
+
+const selectBestCandidateForKind = (
+  kind: InputFileKind,
+  candidates: ExtractedTextCandidate[]
+): ExtractedTextCandidate | null => {
+  if (kind === "pdf") {
+    return selectBestPdfCandidate(candidates);
+  }
+
+  return selectBestCandidate(candidates);
+};
+
 const buildDiagnostics = (
   mimeType: string,
   attemptedStages: ParserExtractionStage[],
@@ -2354,7 +2411,7 @@ const maybeExtractRawText = async (
       registerCandidate("pdf_token_heuristic", extractPdfTextHeuristic(new Uint8Array(safeBytes)));
     }
 
-    const bestSoFar = selectBestCandidate(candidates);
+    const bestSoFar = selectBestCandidateForKind("pdf", candidates);
     const shouldTryOcr =
       !bestSoFar ||
       bestSoFar.stage === "pdf_token_heuristic" ||
@@ -2381,7 +2438,7 @@ const maybeExtractRawText = async (
       warnings.push("PDF OCR fallback is disabled; scanned/image-only PDFs may parse with lower quality.");
     }
 
-    const bestAfterOcr = selectBestCandidate(candidates);
+    const bestAfterOcr = selectBestCandidateForKind("pdf", candidates);
     if (!bestAfterOcr || bestAfterOcr.quality.lowConfidence || bestAfterOcr.cleanedText.length < 120) {
       attemptedStages.push("utf8_decode");
       registerCandidate("utf8_decode", decodeUtf8(safeBytes));
@@ -2395,7 +2452,7 @@ const maybeExtractRawText = async (
   }
 
   const finalCandidate =
-    selectBestCandidate(candidates) ??
+    selectBestCandidateForKind(resolvedKind, candidates) ??
     createCandidate(
       attemptedStages[attemptedStages.length - 1] ?? "utf8_decode",
       decodeUtf8(safeBytes)

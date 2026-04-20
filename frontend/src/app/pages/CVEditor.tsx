@@ -238,6 +238,7 @@ export function CVEditor() {
   const { setSidebarVisible } = useSidebar();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
+  const isUploadedFlow = Boolean(location.state?.isUploaded);
   const [cvKind, setCvKind] = useState<"master" | "tailored">("master");
   const [cvId, setCvId] = useState<string | null>(null);
   const [title, setTitle] = useState("CV");
@@ -339,6 +340,17 @@ export function CVEditor() {
     return true;
   };
 
+  const restoreDraftIfAllowed = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
+    if (isUploadedFlow) {
+      clearDraft(nextCvKind, nextCvId);
+      setDirty(false);
+      setRestoredDraftAt(null);
+      return false;
+    }
+
+    return restoreDraftIfAvailable(nextCvKind, nextCvId);
+  };
+
   const loadCv = async () => {
     setLoading(true);
     setError(null);
@@ -366,14 +378,14 @@ export function CVEditor() {
             language: "en"
           });
           hydrateFromMaster(created);
-          restoreDraftIfAvailable("master", created.id);
+          restoreDraftIfAllowed("master", created.id);
           setLoading(false);
           return;
         }
 
         const master = await api.getMasterCv(targetMasterId);
         hydrateFromMaster(master);
-        restoreDraftIfAvailable("master", master.id);
+        restoreDraftIfAllowed("master", master.id);
         setLoading(false);
         return;
       }
@@ -385,7 +397,7 @@ export function CVEditor() {
       try {
         const tailored = await api.getTailoredCv(id);
         hydrateFromTailored(tailored);
-        restoreDraftIfAvailable("tailored", tailored.id);
+        restoreDraftIfAllowed("tailored", tailored.id);
 
         try {
           const source = await api.getTailoredCvSource(tailored.id);
@@ -409,7 +421,7 @@ export function CVEditor() {
         if (tailoredError instanceof ApiClientError && tailoredError.status === 404) {
           const master = await api.getMasterCv(id);
           hydrateFromMaster(master);
-          restoreDraftIfAvailable("master", master.id);
+          restoreDraftIfAllowed("master", master.id);
         } else {
           throw tailoredError;
         }
@@ -427,7 +439,7 @@ export function CVEditor() {
 
   useEffect(() => {
     void loadCv();
-  }, [id, routeCvKind]);
+  }, [id, isUploadedFlow, routeCvKind]);
 
   useEffect(() => {
     if (!cvId) {
