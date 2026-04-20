@@ -1064,6 +1064,8 @@ export function CVEditor() {
     return String(item.dates || item.date || "").trim();
   };
 
+  const hasTextValue = (value: unknown): boolean => String(value || "").trim().length > 0;
+
   const toPreviewLinkHref = (rawUrl: string): string => {
     const trimmed = rawUrl.trim();
     if (!trimmed) {
@@ -1139,6 +1141,9 @@ export function CVEditor() {
   ): { title: string; subtitle: string; dates: string; description: string } => {
     switch (sectionType) {
       case "languages":
+        if (!hasTextValue(item.language) && !hasTextValue(item.proficiency) && !hasTextValue(item.certificate) && !hasTextValue(item.notes)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.language || "").trim() || "Language",
           subtitle: [item.proficiency, item.certificate].filter(Boolean).join(" • "),
@@ -1146,6 +1151,9 @@ export function CVEditor() {
           description: String(item.notes || "").trim()
         };
       case "certifications":
+        if (!hasTextValue(item.name) && !hasTextValue(item.verificationId) && !hasTextValue(item.url)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.name || "").trim() || "Certification",
           subtitle: [item.verificationId, item.url].filter(Boolean).join(" • "),
@@ -1153,6 +1161,9 @@ export function CVEditor() {
           description: ""
         };
       case "courses":
+        if (!hasTextValue(item.title) && !hasTextValue(item.institution) && !hasTextValue(item.url) && !hasTextValue(item.description)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.title || "").trim() || "Course",
           subtitle: [item.institution, item.url].filter(Boolean).join(" • "),
@@ -1160,6 +1171,9 @@ export function CVEditor() {
           description: String(item.description || "").trim()
         };
       case "projects":
+        if (!hasTextValue(item.title) && !hasTextValue(item.subtitle) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.title || "").trim() || "Project",
           subtitle: String(item.subtitle || "").trim(),
@@ -1167,6 +1181,9 @@ export function CVEditor() {
           description: String(item.description || "").trim()
         };
       case "volunteer":
+        if (!hasTextValue(item.role) && !hasTextValue(item.organization) && !hasTextValue(item.country) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.role || "").trim() || "Volunteer Role",
           subtitle: [item.organization, item.country].filter(Boolean).join(" • "),
@@ -1174,6 +1191,9 @@ export function CVEditor() {
           description: String(item.description || "").trim()
         };
       case "awards":
+        if (!hasTextValue(item.name) && !hasTextValue(item.issuer) && !hasTextValue(item.date) && !hasTextValue(item.description)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.name || "").trim() || "Award",
           subtitle: String(item.issuer || "").trim(),
@@ -1181,6 +1201,9 @@ export function CVEditor() {
           description: String(item.description || "").trim()
         };
       case "publications":
+        if (!hasTextValue(item.title) && !hasTextValue(item.publisher) && !hasTextValue(item.date) && !hasTextValue(item.description)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.title || "").trim() || "Publication",
           subtitle: String(item.publisher || "").trim(),
@@ -1188,6 +1211,9 @@ export function CVEditor() {
           description: String(item.description || "").trim()
         };
       case "references":
+        if (!hasTextValue(item.name) && !hasTextValue(item.jobTitle) && !hasTextValue(item.organization) && !hasTextValue(item.email) && !hasTextValue(item.phone)) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.name || "").trim() || "Reference",
           subtitle: [item.jobTitle, item.organization].filter(Boolean).join(" • "),
@@ -1195,6 +1221,9 @@ export function CVEditor() {
           description: [item.email, item.phone].filter(Boolean).join(" • ")
         };
       default:
+        if (!hasTextValue(item.title) && !hasTextValue(item.subtitle) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
+          return { title: "", subtitle: "", dates: "", description: "" };
+        }
         return {
           title: String(item.title || "").trim() || "Title",
           subtitle: String(item.subtitle || "").trim(),
@@ -1460,7 +1489,13 @@ export function CVEditor() {
                               Work Experience
                             </h2>
                             {(section.data.items as any[])
-                              .filter((item) => !item.hidden)
+                              .filter(
+                                (item) =>
+                                  !item.hidden &&
+                                  [item.role, item.company, item.country, item.startDate, item.endDate, item.description]
+                                    .map((value) => String(value || "").trim())
+                                    .some((value) => value.length > 0)
+                              )
                               .map((item, idx) => (
                                 <div key={idx} className="mb-4">
                                   <div className="flex items-start justify-between mb-1">
@@ -1492,7 +1527,13 @@ export function CVEditor() {
                               Education
                             </h2>
                             {(section.data.items as any[])
-                              .filter((item) => !item.hidden)
+                              .filter(
+                                (item) =>
+                                  !item.hidden &&
+                                  [item.degree, item.institution, item.gpa, item.startDate, item.endDate, item.description]
+                                    .map((value) => String(value || "").trim())
+                                    .some((value) => value.length > 0)
+                              )
                               .map((item, idx) => (
                                 <div key={idx} className="mb-3">
                                   <div className="flex items-start justify-between mb-1">
@@ -1538,6 +1579,9 @@ export function CVEditor() {
                               .filter((item) => !item.hidden)
                               .map((item, idx) => {
                                 const itemParts = getPreviewItemParts(section.type, item);
+                                if (!itemParts.title && !itemParts.subtitle && !itemParts.dates && !itemParts.description) {
+                                  return null;
+                                }
 
                                 return (
                                   <div key={idx} className="mb-3">
@@ -1561,7 +1605,8 @@ export function CVEditor() {
                                     ) : null}
                                   </div>
                                 );
-                              })}
+                              })
+                              .filter(Boolean)}
                           </>
                         ) : null}
                       </div>

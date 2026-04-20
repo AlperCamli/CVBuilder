@@ -21,8 +21,31 @@ interface DrawWrappedTextOptions {
   leadingGap?: number;
 }
 
+const toPdfSafeText = (value: string): string => {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .replace(/İ/g, "I")
+    .replace(/ı/g, "i")
+    .replace(/Ş/g, "S")
+    .replace(/ş/g, "s")
+    .replace(/Ğ/g, "G")
+    .replace(/ğ/g, "g")
+    .replace(/Ü/g, "U")
+    .replace(/ü/g, "u")
+    .replace(/Ö/g, "O")
+    .replace(/ö/g, "o")
+    .replace(/Ç/g, "C")
+    .replace(/ç/g, "c")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
+};
+
 const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number): string[] => {
-  const normalized = text.replace(/\s+/g, " ").trim();
+  const normalized = toPdfSafeText(text).replace(/\s+/g, " ").trim();
   if (!normalized) {
     return [];
   }

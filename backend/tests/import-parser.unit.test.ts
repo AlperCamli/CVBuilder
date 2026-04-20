@@ -363,4 +363,48 @@ describe("simple-cv-parser (strong PDF path)", () => {
     expect(result.parserName).toBe("smart_pdf_parser_v2");
     expect(result.warnings.join("\n")).toMatch(/auto-resolved as 'pdf'/i);
   });
+
+  it("adds section-specific structured fields for text-based entries", async () => {
+    const parser = new SimpleCvParser();
+    const content = [
+      "Experience",
+      "Backend Engineer - Acme Corp Jan 2022 - Present Built internal services.",
+      "Education",
+      "B.Sc. Computer Engineering, Istanbul Technical University (Expected Jan 2026) GPA: 3.32/4.00",
+      "Certifications",
+      "AWS Certified Developer https://example.com/cert/123 verification id: ABC-123",
+      "Publications",
+      "Reliable APIs - Journal of Systems 2024"
+    ].join("\n");
+
+    const result = await parser.parse({
+      originalFilename: "structured.txt",
+      mimeType: "text/plain",
+      sizeBytes: content.length,
+      bytes: toBytes(content)
+    });
+
+    const sections = result.parsedContent.sections;
+    const experienceBlock = sections
+      .find((section) => section.type === "experience")
+      ?.blocks.find((block) => block.type.includes("experience"));
+    const educationBlock = sections
+      .find((section) => section.type === "education")
+      ?.blocks.find((block) => block.type.includes("education"));
+    const certificationBlock = sections
+      .find((section) => section.type === "certifications")
+      ?.blocks[0];
+    const publicationBlock = sections
+      .find((section) => section.type === "publications")
+      ?.blocks[0];
+
+    expect(experienceBlock?.fields.role).toBeDefined();
+    expect(experienceBlock?.fields.start_date).toBeDefined();
+    expect(experienceBlock?.fields.current_role).toBeDefined();
+    expect(educationBlock?.fields.gpa).toBeDefined();
+    expect(educationBlock?.fields.expected_graduation).toBeDefined();
+    expect(certificationBlock?.fields.name).toBeDefined();
+    expect(certificationBlock?.fields.verification_id).toBeDefined();
+    expect(publicationBlock?.fields.publisher).toBeDefined();
+  });
 });

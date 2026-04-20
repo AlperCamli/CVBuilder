@@ -137,6 +137,8 @@ const firstNonEmpty = (...values: string[]): string => {
   return "";
 };
 
+const isYearOnly = (value: string): boolean => /^(?:19|20)\d{2}$/.test(normalizeWhitespace(value));
+
 const monthPattern = [
   "jan(?:uary)?",
   "feb(?:ruary)?",
@@ -576,6 +578,129 @@ const parseReferenceItems = (rawText: string): Array<{
     .filter((item) => item.name || item.jobTitle || item.organization || item.email || item.phone);
 };
 
+const parseCertificationText = (rawText: string): {
+  name: string;
+  url: string;
+  verificationId: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { name: "", url: "", verificationId: "" };
+  }
+
+  const url = getUrlCandidates(text)[0] || "";
+  const verificationMatch = text.match(
+    /\b(?:verification(?:\s*id)?|credential(?:\s*id)?|certificate(?:\s*id)?|cert(?:\s*no)?)[:#\s-]*([A-Za-z0-9._-]+)/i
+  );
+  const cleaned = normalizeWhitespace(
+    text
+      .replace(url, " ")
+      .replace(verificationMatch?.[0] || "", " ")
+  );
+
+  return {
+    name: cleaned || text,
+    url,
+    verificationId: verificationMatch?.[1] || ""
+  };
+};
+
+const parseCourseText = (rawText: string): {
+  title: string;
+  institution: string;
+  url: string;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { title: "", institution: "", url: "", description: "" };
+  }
+
+  const url = getUrlCandidates(text)[0] || "";
+  const withoutUrl = normalizeWhitespace(text.replace(url, " "));
+  const parts = withoutUrl.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespace(part));
+
+  return {
+    title: parts[0] || withoutUrl,
+    institution: parts[1] || "",
+    url,
+    description: parts.slice(2).join(" ").trim()
+  };
+};
+
+const parseProjectText = (rawText: string): {
+  title: string;
+  subtitle: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { title: "", subtitle: "", startDate: "", endDate: "", description: "" };
+  }
+
+  const dateParts = extractDateRange(text);
+  const descriptor = dateParts.before || text;
+  const parts = descriptor.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespace(part));
+
+  return {
+    title: parts[0] || descriptor,
+    subtitle: parts[1] || "",
+    startDate: dateParts.startDate,
+    endDate: dateParts.endDate,
+    description: dateParts.after || text
+  };
+};
+
+const parseAwardText = (rawText: string): {
+  name: string;
+  issuer: string;
+  date: string;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { name: "", issuer: "", date: "", description: "" };
+  }
+
+  const issuerMatch = text.match(/(?:by|from|at)\s+([^,;]+)/i);
+  const dateParts = extractDateRange(text);
+  const dateMatch = text.match(/\b(?:19|20)\d{2}\b/);
+
+  return {
+    name: dateParts.before || text,
+    issuer: normalizeWhitespace(issuerMatch?.[1] || ""),
+    date: dateParts.endDate || dateParts.startDate || dateMatch?.[0] || "",
+    description: dateParts.after || ""
+  };
+};
+
+const parsePublicationText = (rawText: string): {
+  title: string;
+  publisher: string;
+  date: string;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { title: "", publisher: "", date: "", description: "" };
+  }
+
+  const dateParts = extractDateRange(text);
+  const dateMatch = text.match(/\b(?:19|20)\d{2}\b/);
+  const publisherMatch = text.match(/(?:published\s+by|publisher|journal|conference|in)\s+([^,;]+)/i);
+  const descriptor = normalizeWhitespace(dateParts.before || text);
+  const parts = descriptor.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespace(part));
+
+  return {
+    title: parts[0] || descriptor,
+    publisher: normalizeWhitespace(publisherMatch?.[1] || parts[1] || ""),
+    date: dateParts.endDate || dateParts.startDate || dateMatch?.[0] || "",
+    description: dateParts.after || ""
+  };
+};
+
 const toVisibility = (hidden: boolean): CvVisibility => (hidden ? "hidden" : "visible");
 
 const toJsonValue = (value: unknown): CvJsonValue => {
@@ -652,6 +777,44 @@ const normalizeIdPart = (value: string): string => {
     .slice(0, 48);
 };
 
+const normalizeSectionType = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  switch (normalized) {
+    case "contact":
+    case "contacts":
+    case "contact_info":
+      return "header";
+    case "profile":
+    case "objective":
+      return "summary";
+    case "work_experience":
+    case "employment":
+    case "professional_experience":
+      return "experience";
+    case "language":
+      return "languages";
+    case "certification":
+    case "certificate":
+      return "certifications";
+    case "course":
+      return "courses";
+    case "project":
+      return "projects";
+    case "volunteer_work":
+    case "volunteering":
+      return "volunteer";
+    case "award":
+      return "awards";
+    case "publication":
+      return "publications";
+    case "reference":
+      return "references";
+    default:
+      return normalized;
+  }
+};
+
 const deterministicSectionId = (sectionType: string, sectionOrder: number): string => {
   const typePart = normalizeIdPart(sectionType) || "section";
   return `${typePart}-${sectionOrder + 1}`;
@@ -696,6 +859,16 @@ const withBlockState = (block: CvBlock, index: number): Pick<EditorItem, "id" | 
   rawMeta: toJsonRecord(block.meta)
 });
 
+const blockTextCandidates = (block: CvBlock): string[] => {
+  const fromItems = asStringArray(block.fields.items);
+  const fromText = getField(block, "text")
+    .split(/\n+/)
+    .map((line) => normalizeWhitespace(line))
+    .filter((line) => line.length > 0);
+
+  return dedupe([...fromItems, ...fromText]);
+};
+
 const defaultSectionTitle = (sectionType: string): string => {
   if (!sectionType) {
     return "Section";
@@ -704,20 +877,63 @@ const defaultSectionTitle = (sectionType: string): string => {
   return `${sectionType.charAt(0).toUpperCase()}${sectionType.slice(1)}`;
 };
 
-const extractSocialLinks = (metadata: Record<string, CvJsonValue>): EditorHeaderData["socialLinks"] => {
-  const raw = metadata.social_links;
-  if (!Array.isArray(raw)) {
-    return [];
+const detectSocialTypeFromUrl = (url: string): string => {
+  const normalized = url.trim().toLowerCase();
+  if (!normalized) {
+    return "website";
   }
 
-  return raw
-    .map((entry) => asRecord(entry))
-    .map((entry) => ({
-      id: asString(entry.id) || randomId("social"),
-      type: asString(entry.type) || "website",
-      url: asString(entry.url)
-    }))
-    .filter((entry) => entry.url.length > 0);
+  if (normalized.includes("linkedin.com")) {
+    return "linkedin";
+  }
+  if (normalized.includes("github.com")) {
+    return "github";
+  }
+  if (normalized.includes("gitlab.com")) {
+    return "gitlab";
+  }
+  if (normalized.includes("behance.net")) {
+    return "behance";
+  }
+  if (normalized.includes("dribbble.com")) {
+    return "dribbble";
+  }
+
+  return "portfolio";
+};
+
+const extractSocialLinks = (metadata: Record<string, CvJsonValue>): EditorHeaderData["socialLinks"] => {
+  const linksFromSocial = Array.isArray(metadata.social_links)
+    ? metadata.social_links
+        .map((entry) => asRecord(entry))
+        .map((entry) => ({
+          id: asString(entry.id) || randomId("social"),
+          type: asString(entry.type) || detectSocialTypeFromUrl(asString(entry.url)),
+          url: asString(entry.url)
+        }))
+        .filter((entry) => entry.url.length > 0)
+    : [];
+
+  const linksFromUrls = Array.isArray(metadata.urls)
+    ? metadata.urls
+        .map((entry) => asString(entry).trim())
+        .filter((entry) => entry.length > 0)
+        .map((url) => ({
+          id: randomId("social"),
+          type: detectSocialTypeFromUrl(url),
+          url
+        }))
+    : [];
+
+  const deduped = new Map<string, { id: string; type: string; url: string }>();
+  for (const link of [...linksFromSocial, ...linksFromUrls]) {
+    const key = link.url.toLowerCase();
+    if (!deduped.has(key)) {
+      deduped.set(key, link);
+    }
+  }
+
+  return [...deduped.values()];
 };
 
 const sectionFromItems = (
@@ -782,12 +998,13 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
   const sortedSections = [...content.sections].sort((a, b) => a.order - b.order);
 
   for (const section of sortedSections) {
+    const sectionType = normalizeSectionType(section.type);
     const sortedBlocks = [...section.blocks].sort((a, b) => a.order - b.order);
     const sectionHidden =
       asString(section.meta.visibility).toLowerCase() === "hidden" ||
       (sortedBlocks.length > 0 && sortedBlocks.every((block) => block.visibility === "hidden"));
 
-    if (section.type === "summary") {
+    if (sectionType === "summary") {
       const block = sortedBlocks[0];
       const rawSummaryText = block ? getField(block, "text", "summary", "description") : "";
       const fullName = asString(metadata.full_name);
@@ -832,7 +1049,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "experience") {
+    if (sectionType === "experience") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
         const parsedFromText = parseExperienceText(getField(block, "text"));
         const startDate = getField(block, "start_date", "start");
@@ -877,7 +1094,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "education") {
+    if (sectionType === "education") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
         const parsedFromText = parseEducationText(getField(block, "text"));
         const startDate = getField(block, "start_date", "start");
@@ -916,7 +1133,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "skills") {
+    if (sectionType === "skills") {
       const skills = sortedBlocks
         .flatMap((block) => {
           const direct = [getField(block, "skill", "name", "text")].filter(Boolean);
@@ -937,7 +1154,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "languages") {
+    if (sectionType === "languages") {
       const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
         const structuredLanguage = getField(block, "language", "name", "title");
         const fallbackText = getField(block, "text");
@@ -988,13 +1205,36 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "certifications") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        name: getField(block, "name", "title", "certificate"),
-        url: getField(block, "url", "link"),
-        verificationId: getField(block, "verification_id", "verificationId", "credential_id")
-      }));
+    if (sectionType === "certifications") {
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredName = getField(block, "name", "title", "certificate");
+        if (structuredName) {
+          return [
+            {
+              ...withBlockState(block, index),
+              name: structuredName,
+              url: getField(block, "url", "link"),
+              verificationId: getField(block, "verification_id", "verificationId", "credential_id")
+            }
+          ];
+        }
+
+        const candidates = blockTextCandidates(block);
+        if (candidates.length === 0) {
+          return [];
+        }
+
+        return candidates.map((candidate, candidateIndex) => {
+          const parsed = parseCertificationText(candidate);
+          return {
+            ...withBlockState(block, index),
+            id: `${block.id || `block-${index + 1}`}-cert-${candidateIndex + 1}`,
+            name: parsed.name,
+            url: parsed.url,
+            verificationId: parsed.verificationId
+          };
+        });
+      });
 
       sections.push({
         id: `certifications-${section.id}`,
@@ -1002,19 +1242,47 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "certifications",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.name, item.url, item.verificationId].some((value) => asString(value).trim().length > 0)
+          )
+        }
       });
       continue;
     }
 
-    if (section.type === "courses") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        title: getField(block, "title", "name", "course"),
-        institution: getField(block, "institution", "provider", "organization"),
-        url: getField(block, "url", "link"),
-        description: getField(block, "description", "summary", "details")
-      }));
+    if (sectionType === "courses") {
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredTitle = getField(block, "title", "name", "course");
+        if (structuredTitle) {
+          return [
+            {
+              ...withBlockState(block, index),
+              title: structuredTitle,
+              institution: getField(block, "institution", "provider", "organization"),
+              url: getField(block, "url", "link"),
+              description: getField(block, "description", "summary", "details")
+            }
+          ];
+        }
+
+        const candidates = blockTextCandidates(block);
+        if (candidates.length === 0) {
+          return [];
+        }
+
+        return candidates.map((candidate, candidateIndex) => {
+          const parsed = parseCourseText(candidate);
+          return {
+            ...withBlockState(block, index),
+            id: `${block.id || `block-${index + 1}`}-course-${candidateIndex + 1}`,
+            title: parsed.title,
+            institution: parsed.institution,
+            url: parsed.url,
+            description: parsed.description
+          };
+        });
+      });
 
       sections.push({
         id: `courses-${section.id}`,
@@ -1022,20 +1290,51 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "courses",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.title, item.institution, item.url, item.description].some(
+              (value) => asString(value).trim().length > 0
+            )
+          )
+        }
       });
       continue;
     }
 
-    if (section.type === "projects") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        title: getField(block, "title", "name", "project"),
-        subtitle: getField(block, "subtitle", "role", "stack"),
-        startDate: getField(block, "start_date", "start"),
-        endDate: getField(block, "end_date", "end"),
-        description: getField(block, "description", "summary", "details")
-      }));
+    if (sectionType === "projects") {
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredTitle = getField(block, "title", "name", "project");
+        if (structuredTitle) {
+          return [
+            {
+              ...withBlockState(block, index),
+              title: structuredTitle,
+              subtitle: getField(block, "subtitle", "role", "stack"),
+              startDate: getField(block, "start_date", "start"),
+              endDate: getField(block, "end_date", "end"),
+              description: getField(block, "description", "summary", "details")
+            }
+          ];
+        }
+
+        const candidates = blockTextCandidates(block);
+        if (candidates.length === 0) {
+          return [];
+        }
+
+        return candidates.map((candidate, candidateIndex) => {
+          const parsed = parseProjectText(candidate);
+          return {
+            ...withBlockState(block, index),
+            id: `${block.id || `block-${index + 1}`}-project-${candidateIndex + 1}`,
+            title: parsed.title,
+            subtitle: parsed.subtitle,
+            startDate: parsed.startDate,
+            endDate: parsed.endDate,
+            description: parsed.description
+          };
+        });
+      });
 
       sections.push({
         id: `projects-${section.id}`,
@@ -1043,14 +1342,22 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "projects",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.title, item.subtitle, item.startDate, item.endDate, item.description].some(
+              (value) => asString(value).trim().length > 0
+            )
+          )
+        }
       });
       continue;
     }
 
-    if (section.type === "volunteer") {
+    if (sectionType === "volunteer") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
         const parsedFromText = parseVolunteerText(getField(block, "text"));
+        const structuredRole = getField(block, "role", "position", "title");
+        const normalizedStructuredRole = isYearOnly(structuredRole) ? "" : structuredRole;
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
         const normalizedStartDate = firstNonEmpty(startDate, parsedFromText.startDate);
@@ -1063,10 +1370,10 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         return {
           ...withBlockState(block, index),
           organization: firstNonEmpty(
-            getField(block, "organization", "company"),
-            parsedFromText.organization
+            parsedFromText.organization,
+            getField(block, "organization", "company")
           ),
-          role: firstNonEmpty(getField(block, "role", "position", "title"), parsedFromText.role),
+          role: firstNonEmpty(normalizedStructuredRole, parsedFromText.role),
           country: getField(block, "location", "country", "city"),
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
@@ -1089,14 +1396,38 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
-    if (section.type === "awards") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        name: getField(block, "name", "title", "award"),
-        issuer: getField(block, "issuer", "organization"),
-        date: getField(block, "date"),
-        description: getField(block, "description", "summary", "details")
-      }));
+    if (sectionType === "awards") {
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredName = getField(block, "name", "title", "award");
+        if (structuredName) {
+          return [
+            {
+              ...withBlockState(block, index),
+              name: structuredName,
+              issuer: getField(block, "issuer", "organization"),
+              date: getField(block, "date"),
+              description: getField(block, "description", "summary", "details")
+            }
+          ];
+        }
+
+        const candidates = blockTextCandidates(block);
+        if (candidates.length === 0) {
+          return [];
+        }
+
+        return candidates.map((candidate, candidateIndex) => {
+          const parsed = parseAwardText(candidate);
+          return {
+            ...withBlockState(block, index),
+            id: `${block.id || `block-${index + 1}`}-award-${candidateIndex + 1}`,
+            name: parsed.name,
+            issuer: parsed.issuer,
+            date: parsed.date,
+            description: parsed.description
+          };
+        });
+      });
 
       sections.push({
         id: `awards-${section.id}`,
@@ -1104,19 +1435,49 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "awards",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.name, item.issuer, item.date, item.description].some(
+              (value) => asString(value).trim().length > 0
+            )
+          )
+        }
       });
       continue;
     }
 
-    if (section.type === "publications") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        title: getField(block, "title", "name", "publication"),
-        publisher: getField(block, "publisher", "journal", "organization"),
-        date: getField(block, "date"),
-        description: getField(block, "description", "summary", "details")
-      }));
+    if (sectionType === "publications") {
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredTitle = getField(block, "title", "name", "publication");
+        if (structuredTitle) {
+          return [
+            {
+              ...withBlockState(block, index),
+              title: structuredTitle,
+              publisher: getField(block, "publisher", "journal", "organization"),
+              date: getField(block, "date"),
+              description: getField(block, "description", "summary", "details")
+            }
+          ];
+        }
+
+        const candidates = blockTextCandidates(block);
+        if (candidates.length === 0) {
+          return [];
+        }
+
+        return candidates.map((candidate, candidateIndex) => {
+          const parsed = parsePublicationText(candidate);
+          return {
+            ...withBlockState(block, index),
+            id: `${block.id || `block-${index + 1}`}-pub-${candidateIndex + 1}`,
+            title: parsed.title,
+            publisher: parsed.publisher,
+            date: parsed.date,
+            description: parsed.description
+          };
+        });
+      });
 
       sections.push({
         id: `publications-${section.id}`,
@@ -1124,12 +1485,18 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "publications",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.title, item.publisher, item.date, item.description].some(
+              (value) => asString(value).trim().length > 0
+            )
+          )
+        }
       });
       continue;
     }
 
-    if (section.type === "references") {
+    if (sectionType === "references") {
       const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
         const structuredName = getField(block, "name", "full_name");
         if (structuredName) {
@@ -1147,16 +1514,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
         const parsedItems = parseReferenceItems(getField(block, "text"));
         if (parsedItems.length === 0) {
-          return [
-            {
-              ...withBlockState(block, index),
-              name: "",
-              jobTitle: "",
-              organization: "",
-              email: "",
-              phone: ""
-            }
-          ];
+          return [];
         }
 
         return parsedItems.map((item, parsedIndex) => ({
@@ -1176,7 +1534,13 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "references",
         hidden: sectionHidden,
         order: section.order,
-        data: { items }
+        data: {
+          items: items.filter((item) =>
+            [item.name, item.jobTitle, item.organization, item.email, item.phone].some(
+              (value) => asString(value).trim().length > 0
+            )
+          )
+        }
       });
       continue;
     }
@@ -1204,7 +1568,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     sections.push({
       id: `${section.type}-${section.id}`,
       backendSectionId: section.id,
-      type: section.type,
+      type: sectionType,
       hidden: sectionHidden,
       order: section.order,
       data: { items }
@@ -1233,6 +1597,17 @@ export const editorSectionsToCvContent = (
       })
     : []) as CvJsonValue;
 
+  const urlList = (Array.isArray(headerData.socialLinks)
+    ? dedupe(
+        headerData.socialLinks
+          .map((entry) => {
+            const record = asRecord(entry);
+            return asString(record.url).trim();
+          })
+          .filter((url) => url.length > 0)
+      )
+    : []) as CvJsonValue;
+
   const metadata: Record<string, CvJsonValue> = {
     ...(existing?.metadata ?? {}),
     full_name: toJsonValue(asString(headerData.name)),
@@ -1240,14 +1615,19 @@ export const editorSectionsToCvContent = (
     email: toJsonValue(asString(headerData.email)),
     phone: toJsonValue(asString(headerData.phone)),
     location: toJsonValue(asString(headerData.location)),
-    social_links: socialLinks
+    social_links: socialLinks,
+    urls: urlList
   };
 
   const bodySections = sections
     .filter((section) => section.type !== "header")
     .sort((a, b) => a.order - b.order)
     .map((section, sectionIndex) => {
-      if (section.type === "summary") {
+      const sectionType = normalizeSectionType(section.type || "");
+      const normalizedSection =
+        sectionType === section.type ? section : { ...section, type: sectionType };
+
+      if (sectionType === "summary") {
         const summaryData = asRecord(section.data);
         const text = asString(summaryData.text);
         const rawFields = toJsonRecord(summaryData.rawFields);
@@ -1256,7 +1636,7 @@ export const editorSectionsToCvContent = (
         const blockId =
           asString(summaryData.blockId) ||
           deterministicBlockId(
-            section,
+            normalizedSection,
             "summary",
             { id: asString(summaryData.blockId) || "summary", blockId: asString(summaryData.blockId) },
             0
@@ -1283,8 +1663,8 @@ export const editorSectionsToCvContent = (
         } as CvSection;
       }
 
-      if (section.type === "experience") {
-        return sectionFromItems(section, sectionIndex, (item) => {
+      if (sectionType === "experience") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => {
           const isCurrentRole = Boolean(item.currentRole);
           return {
             type: "experience_item",
@@ -1301,8 +1681,8 @@ export const editorSectionsToCvContent = (
         });
       }
 
-      if (section.type === "education") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "education") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "education_item",
           fields: {
             institution: toJsonValue(asString(item.institution)),
@@ -1318,7 +1698,7 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "skills") {
+      if (sectionType === "skills") {
         const skillValues = asStringArray(asRecord(section.data).skills);
         const sectionId = section.backendSectionId || deterministicSectionId("skills", sectionIndex);
 
@@ -1344,8 +1724,8 @@ export const editorSectionsToCvContent = (
         };
       }
 
-      if (section.type === "languages") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "languages") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "language_item",
           fields: {
             language: toJsonValue(asString(item.language)),
@@ -1356,8 +1736,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "certifications") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "certifications") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "certification_item",
           fields: {
             name: toJsonValue(asString(item.name)),
@@ -1367,8 +1747,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "courses") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "courses") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "course_item",
           fields: {
             title: toJsonValue(asString(item.title)),
@@ -1379,8 +1759,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "projects") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "projects") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "project_item",
           fields: {
             title: toJsonValue(asString(item.title)),
@@ -1392,8 +1772,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "volunteer") {
-        return sectionFromItems(section, sectionIndex, (item) => {
+      if (sectionType === "volunteer") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => {
           const isCurrentRole = Boolean(item.currentRole);
           return {
             type: "volunteer_item",
@@ -1410,8 +1790,8 @@ export const editorSectionsToCvContent = (
         });
       }
 
-      if (section.type === "awards") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "awards") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "award_item",
           fields: {
             name: toJsonValue(asString(item.name)),
@@ -1422,8 +1802,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "publications") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "publications") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "publication_item",
           fields: {
             title: toJsonValue(asString(item.title)),
@@ -1434,8 +1814,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      if (section.type === "references") {
-        return sectionFromItems(section, sectionIndex, (item) => ({
+      if (sectionType === "references") {
+        return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
           type: "reference_item",
           fields: {
             name: toJsonValue(asString(item.name)),
@@ -1447,8 +1827,8 @@ export const editorSectionsToCvContent = (
         }));
       }
 
-      return sectionFromItems(section, sectionIndex, (item) => ({
-        type: `${section.type || "custom"}_item`,
+      return sectionFromItems(normalizedSection, sectionIndex, (item) => ({
+        type: `${sectionType || "custom"}_item`,
         fields: {
           title: toJsonValue(asString(item.title)),
           subtitle: toJsonValue(asString(item.subtitle)),

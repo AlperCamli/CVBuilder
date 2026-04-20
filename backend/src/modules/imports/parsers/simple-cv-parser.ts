@@ -1257,6 +1257,10 @@ const extractHeadline = (lines: string[], fullName: string | null): string | nul
       continue;
     }
 
+    if (/^(?:başlık|baslik|title|heading)$/i.test(line.trim())) {
+      continue;
+    }
+
     if (/\b(?:contact information|birth date|language skills|english|spanish|turkish)\b/i.test(line)) {
       continue;
     }
@@ -1401,6 +1405,375 @@ const splitSkillItems = (lines: string[]): string[] => {
   return dedupe(items);
 };
 
+const normalizeWhitespaceText = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+const monthTokenPattern = [
+  "jan(?:uary)?",
+  "feb(?:ruary)?",
+  "mar(?:ch)?",
+  "apr(?:il)?",
+  "may",
+  "jun(?:e)?",
+  "jul(?:y)?",
+  "aug(?:ust)?",
+  "sep(?:t(?:ember)?)?",
+  "oct(?:ober)?",
+  "nov(?:ember)?",
+  "dec(?:ember)?",
+  "ocak",
+  "şubat",
+  "subat",
+  "mart",
+  "nisan",
+  "mayıs",
+  "mayis",
+  "haziran",
+  "temmuz",
+  "ağustos",
+  "agustos",
+  "eyl[üu]l",
+  "ekim",
+  "kas[ıi]m",
+  "aral[ıi]k"
+].join("|");
+
+const dateTokenPattern = `(?:${monthTokenPattern})\\s+\\d{4}|\\d{1,2}[./-]\\d{4}|\\d{4}`;
+const dateRangePattern = new RegExp(
+  `(${dateTokenPattern})\\s*(?:-|–|—|to)\\s*(present|current|now|halen|devam|${dateTokenPattern})`,
+  "i"
+);
+
+const normalizeDateToken = (value: string): string => {
+  const normalized = normalizeWhitespaceText(value.replace(/[()]/g, ""));
+  if (/^(present|current|now|halen|devam)$/i.test(normalized)) {
+    return "Present";
+  }
+
+  return normalized;
+};
+
+const extractDateRangeFromText = (
+  rawText: string
+): { startDate: string; endDate: string; currentRole: boolean; before: string; after: string } => {
+  const text = normalizeWhitespaceText(rawText);
+  const match = dateRangePattern.exec(text);
+
+  if (!match || match.index === undefined) {
+    return {
+      startDate: "",
+      endDate: "",
+      currentRole: false,
+      before: text,
+      after: ""
+    };
+  }
+
+  const startDate = normalizeDateToken(match[1]);
+  const endDate = normalizeDateToken(match[2]);
+  const currentRole = endDate.toLowerCase() === "present";
+
+  return {
+    startDate,
+    endDate,
+    currentRole,
+    before: normalizeWhitespaceText(text.slice(0, match.index)),
+    after: normalizeWhitespaceText(text.slice(match.index + match[0].length))
+  };
+};
+
+const splitRoleCompanyText = (value: string): { role: string; company: string } => {
+  const text = normalizeWhitespaceText(value);
+  if (!text) {
+    return { role: "", company: "" };
+  }
+
+  const atMatch = text.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  if (atMatch) {
+    return {
+      role: normalizeWhitespaceText(atMatch[1]),
+      company: normalizeWhitespaceText(atMatch[2])
+    };
+  }
+
+  const separatorMatch = text.match(/^(.+?)\s*[-–—|/]\s*(.+)$/);
+  if (separatorMatch) {
+    return {
+      role: normalizeWhitespaceText(separatorMatch[1]),
+      company: normalizeWhitespaceText(separatorMatch[2])
+    };
+  }
+
+  return { role: text, company: "" };
+};
+
+const parseExperienceFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const dateParts = extractDateRangeFromText(text);
+  const roleCompany = splitRoleCompanyText(dateParts.before || text);
+  const description = normalizeWhitespaceText(dateParts.after || text);
+
+  return {
+    role: roleCompany.role,
+    company: roleCompany.company,
+    start_date: dateParts.startDate,
+    end_date: dateParts.endDate,
+    current_role: dateParts.currentRole,
+    description
+  };
+};
+
+const parseVolunteerFields = (rawText: string): Record<string, unknown> => {
+  const experience = parseExperienceFields(rawText);
+  const role = typeof experience.role === "string" ? experience.role : "";
+  const company = typeof experience.company === "string" ? experience.company : "";
+
+  return {
+    organization: company,
+    role,
+    location: "",
+    start_date: experience.start_date ?? "",
+    end_date: experience.end_date ?? "",
+    current_role: experience.current_role ?? false,
+    description: experience.description ?? rawText
+  };
+};
+
+const parseEducationFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const dateParts = extractDateRangeFromText(text);
+  const gpaMatch = text.match(/\bGPA[:\s]*([0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+(?:[.,][0-9]+)?)?)/i);
+  const expectedMatch = text.match(/(?:Expected|Beklenen)\s+([A-Za-zÇĞİÖŞÜçğıöşü0-9./-]+\s*\d{0,4})/i);
+  const institutionMatch = text.match(
+    /([A-Za-zÇĞİÖŞÜçğıöşü0-9&.\- ]+(?:University|Üniversite|Institute|College|School|Technical))/i
+  );
+  const degreeMatch = text.match(
+    /\b(?:B\.?Sc|M\.?Sc|Ph\.?D|Bachelor|Master|Lisans|Yüksek Lisans|Associate|Ön Lisans)\b[^|,;)]*/i
+  );
+  const fieldMatch = text.match(
+    /([A-Za-zÇĞİÖŞÜçğıöşü\s]+(?:Engineering|Mühendislik|Management|Yönetim|Design|Science|Business))/i
+  );
+
+  const expectedGraduation = /(?:expected|beklenen)/i.test(text);
+  const exchangeProgram = /(?:exchange|erasmus)/i.test(text);
+  const endDate = dateParts.endDate || (expectedMatch ? normalizeWhitespaceText(expectedMatch[1]) : "");
+
+  return {
+    institution: normalizeWhitespaceText(institutionMatch?.[1] ?? ""),
+    degree: normalizeWhitespaceText(degreeMatch?.[0] ?? ""),
+    field_of_study: normalizeWhitespaceText(fieldMatch?.[1] ?? ""),
+    gpa: normalizeWhitespaceText(gpaMatch?.[1] ?? ""),
+    start_date: dateParts.startDate,
+    end_date: endDate,
+    expected_graduation: expectedGraduation,
+    exchange_program: exchangeProgram,
+    description: text
+  };
+};
+
+const parseLanguageFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  if (splitDelimitedItems(text).length > 1) {
+    return {};
+  }
+
+  const bracketMatch = text.match(/^(.+?)\s*\(([^)]+)\)$/);
+  if (bracketMatch) {
+    return {
+      language: normalizeWhitespaceText(bracketMatch[1]),
+      proficiency: normalizeWhitespaceText(bracketMatch[2]),
+      certificate: "",
+      notes: ""
+    };
+  }
+
+  const separatorMatch = text.match(/^(.+?)\s*[-–—:]\s*(.+)$/);
+  if (separatorMatch) {
+    return {
+      language: normalizeWhitespaceText(separatorMatch[1]),
+      proficiency: normalizeWhitespaceText(separatorMatch[2]),
+      certificate: "",
+      notes: ""
+    };
+  }
+
+  return {
+    language: text,
+    proficiency: "",
+    certificate: "",
+    notes: ""
+  };
+};
+
+const parseCertificationFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const url = getUrlCandidates(text)[0] ?? "";
+  const verificationMatch = text.match(
+    /\b(?:verification(?:\s*id)?|credential(?:\s*id)?|certificate(?:\s*id)?|cert(?:\s*no)?)[:#\s-]*([A-Za-z0-9._-]+)/i
+  );
+  const withoutUrl = normalizeWhitespaceText(url ? text.replace(url, " ") : text);
+  const withoutVerification = normalizeWhitespaceText(
+    verificationMatch ? withoutUrl.replace(verificationMatch[0], " ") : withoutUrl
+  );
+
+  return {
+    name: withoutVerification || text,
+    url,
+    verification_id: verificationMatch?.[1] ?? ""
+  };
+};
+
+const parseCourseFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const url = getUrlCandidates(text)[0] ?? "";
+  const withoutUrl = normalizeWhitespaceText(url ? text.replace(url, " ") : text);
+  const parts = withoutUrl.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespaceText(part));
+
+  return {
+    title: parts[0] ?? withoutUrl,
+    institution: parts[1] ?? "",
+    url,
+    description: parts.slice(2).join(" ").trim()
+  };
+};
+
+const parseProjectFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const dateParts = extractDateRangeFromText(text);
+  const descriptor = dateParts.before || text;
+  const parts = descriptor.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespaceText(part));
+
+  return {
+    title: parts[0] ?? descriptor,
+    subtitle: parts[1] ?? "",
+    start_date: dateParts.startDate,
+    end_date: dateParts.endDate,
+    description: normalizeWhitespaceText(dateParts.after || text)
+  };
+};
+
+const parseAwardFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const dateParts = extractDateRangeFromText(text);
+  const dateMatch = text.match(/\b(?:19|20)\d{2}\b/);
+  const issuerMatch = text.match(/(?:by|from|at)\s+([^,;]+)/i);
+
+  return {
+    name: normalizeWhitespaceText(dateParts.before || text),
+    issuer: normalizeWhitespaceText(issuerMatch?.[1] ?? ""),
+    date: dateParts.endDate || dateParts.startDate || (dateMatch?.[0] ?? ""),
+    description: normalizeWhitespaceText(dateParts.after)
+  };
+};
+
+const parsePublicationFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText);
+  if (!text) {
+    return {};
+  }
+
+  const dateParts = extractDateRangeFromText(text);
+  const dateMatch = text.match(/\b(?:19|20)\d{2}\b/);
+  const publisherMatch = text.match(/(?:published\s+by|publisher|journal|conference|in)\s+([^,;]+)/i);
+  const descriptor = normalizeWhitespaceText(dateParts.before || text);
+  const splitDescriptor = descriptor.split(/\s*[-–—|]\s*/).map((part) => normalizeWhitespaceText(part));
+
+  return {
+    title: splitDescriptor[0] ?? descriptor,
+    publisher: normalizeWhitespaceText(publisherMatch?.[1] ?? splitDescriptor[1] ?? ""),
+    date: dateParts.endDate || dateParts.startDate || (dateMatch?.[0] ?? ""),
+    description: normalizeWhitespaceText(dateParts.after)
+  };
+};
+
+const parseReferenceFields = (rawText: string): Record<string, unknown> => {
+  const text = normalizeWhitespaceText(rawText.replace(/^(?:lar|references?)\s*/i, ""));
+  if (!text) {
+    return {};
+  }
+
+  const allPhoneMatches = [...text.matchAll(/\+?\d[\d\s().-]{7,}\d/g)];
+  const allEmailMatches = [...text.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)];
+  if (allPhoneMatches.length > 1 || allEmailMatches.length > 1) {
+    return {};
+  }
+
+  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const phoneMatch = text.match(/\+?\d[\d\s().-]{7,}\d/);
+  const withoutEmail = normalizeWhitespaceText(emailMatch ? text.replace(emailMatch[0], " ") : text);
+  const withoutPhone = normalizeWhitespaceText(phoneMatch ? withoutEmail.replace(phoneMatch[0], " ") : withoutEmail);
+  const slashParts = withoutPhone.split("/");
+  const name = normalizeWhitespaceText(slashParts[0] ?? "");
+  const roleOrg = normalizeWhitespaceText(slashParts.slice(1).join("/"));
+  const roleOrgMatch = roleOrg.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+
+  return {
+    name,
+    job_title: normalizeWhitespaceText(roleOrgMatch?.[1] ?? roleOrg),
+    organization: normalizeWhitespaceText(roleOrgMatch?.[2] ?? ""),
+    email: emailMatch?.[0] ?? "",
+    phone: phoneMatch?.[0] ?? ""
+  };
+};
+
+const inferStructuredFields = (sectionType: SectionType, text: string): Record<string, unknown> => {
+  if (!text.trim()) {
+    return {};
+  }
+
+  switch (sectionType) {
+    case "experience":
+      return parseExperienceFields(text);
+    case "education":
+      return parseEducationFields(text);
+    case "languages":
+      return parseLanguageFields(text);
+    case "certifications":
+      return parseCertificationFields(text);
+    case "courses":
+      return parseCourseFields(text);
+    case "projects":
+      return parseProjectFields(text);
+    case "volunteer":
+      return parseVolunteerFields(text);
+    case "awards":
+      return parseAwardFields(text);
+    case "publications":
+      return parsePublicationFields(text);
+    case "references":
+      return parseReferenceFields(text);
+    default:
+      return {};
+  }
+};
+
 const buildHeaderLines = (lines: string[], metadata: Record<string, unknown>): string[] => {
   const seedLines = [...lines];
 
@@ -1471,10 +1844,12 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
       return;
     }
 
+    const text = textBuffer.join("\n");
     blocks.push({
       type: sectionType,
       fields: {
-        text: textBuffer.join("\n")
+        text,
+        ...inferStructuredFields(sectionType, text)
       },
       meta: {
         source: "import_parser"
