@@ -1,4 +1,5 @@
 import { extname } from "node:path";
+import { pathToFileURL } from "node:url";
 import JSZip from "jszip";
 import { normalizeCvContent } from "../../../shared/cv-content/cv-content.utils";
 import type { CvContent } from "../../../shared/cv-content/cv-content.types";
@@ -225,6 +226,21 @@ const runtimeImport = new Function(
   "specifier",
   "return import(specifier)"
 ) as RuntimeImport;
+
+const PDFJS_MODULE_SPECIFIER = "pdfjs-dist/legacy/build/pdf.mjs";
+const PDFJS_MODULE_FILE_URL = (() => {
+  try {
+    // Keep a literal require.resolve() so Vercel file tracing includes pdfjs-dist in the lambda bundle.
+    const resolvedPath = require.resolve("pdfjs-dist/legacy/build/pdf.mjs");
+    return pathToFileURL(resolvedPath).href;
+  } catch {
+    return null;
+  }
+})();
+
+const resolvePdfJsModuleSpecifier = (): string => {
+  return PDFJS_MODULE_FILE_URL ?? PDFJS_MODULE_SPECIFIER;
+};
 
 const isPdfOcrEnabled = (): boolean => {
   // Keep OCR off by default during tests to avoid slow/non-deterministic network fetches.
@@ -836,7 +852,7 @@ const extractPdfTextHeuristic = (bytes: Uint8Array): string => {
 };
 
 const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
-  const pdfjs = (await runtimeImport("pdfjs-dist/legacy/build/pdf.mjs")) as {
+  const pdfjs = (await runtimeImport(resolvePdfJsModuleSpecifier())) as {
     getDocument: (params: Record<string, unknown>) => { promise: Promise<any> };
   };
 
@@ -906,7 +922,7 @@ const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
 const extractPdfTextWithOcr = async (bytes: Uint8Array): Promise<string> => {
   const [{ createCanvas }, pdfjsModule, tesseract] = await Promise.all([
     import("@napi-rs/canvas"),
-    runtimeImport("pdfjs-dist/legacy/build/pdf.mjs"),
+    runtimeImport(resolvePdfJsModuleSpecifier()),
     import("tesseract.js")
   ]);
   const pdfjs = pdfjsModule as {

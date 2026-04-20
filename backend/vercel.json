@@ -6,6 +6,13 @@
       "use": "@vercel/node"
     }
   ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": [
+        "node_modules/pdfjs-dist/**"
+      ]
+    }
+  },
   "routes": [
     {
       "src": "/api/(.*)",
