@@ -124,6 +124,458 @@ const buildDates = (start: string, end: string): string => {
   return start || end;
 };
 
+const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+const firstNonEmpty = (...values: string[]): string => {
+  for (const value of values) {
+    const normalized = normalizeWhitespace(value);
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return "";
+};
+
+const monthPattern = [
+  "jan(?:uary)?",
+  "feb(?:ruary)?",
+  "mar(?:ch)?",
+  "apr(?:il)?",
+  "may",
+  "jun(?:e)?",
+  "jul(?:y)?",
+  "aug(?:ust)?",
+  "sep(?:t(?:ember)?)?",
+  "oct(?:ober)?",
+  "nov(?:ember)?",
+  "dec(?:ember)?",
+  "ocak",
+  "şubat",
+  "subat",
+  "mart",
+  "nisan",
+  "mayıs",
+  "mayis",
+  "haziran",
+  "temmuz",
+  "ağustos",
+  "agustos",
+  "eyl[üu]l",
+  "ekim",
+  "kas[ıi]m",
+  "aral[ıi]k"
+].join("|");
+
+const dateTokenPattern = `(?:${monthPattern})\\s+\\d{4}|\\d{1,2}[./-]\\d{4}|\\d{4}`;
+const dateRangeRegex = new RegExp(
+  `(${dateTokenPattern})\\s*(?:-|–|—|to)\\s*(present|current|now|halen|devam|${dateTokenPattern})`,
+  "i"
+);
+
+const normalizeDateValue = (value: string): string => {
+  const normalized = normalizeWhitespace(value.replace(/[()]/g, ""));
+  if (/^(present|current|now|halen|devam)$/i.test(normalized)) {
+    return "Present";
+  }
+
+  return normalized;
+};
+
+const extractDateRange = (
+  rawText: string
+): { startDate: string; endDate: string; currentRole: boolean; before: string; after: string } => {
+  const text = normalizeWhitespace(rawText);
+  const match = dateRangeRegex.exec(text);
+
+  if (!match || match.index === undefined) {
+    return {
+      startDate: "",
+      endDate: "",
+      currentRole: false,
+      before: text,
+      after: ""
+    };
+  }
+
+  const startDate = normalizeDateValue(match[1]);
+  const endDate = normalizeDateValue(match[2]);
+  const currentRole = endDate.toLowerCase() === "present";
+
+  return {
+    startDate,
+    endDate,
+    currentRole,
+    before: normalizeWhitespace(text.slice(0, match.index)),
+    after: normalizeWhitespace(text.slice(match.index + match[0].length))
+  };
+};
+
+const parseRoleCompany = (rawText: string): { role: string; company: string } => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { role: "", company: "" };
+  }
+
+  const atMatch = text.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  if (atMatch) {
+    return {
+      role: normalizeWhitespace(atMatch[1]),
+      company: normalizeWhitespace(atMatch[2])
+    };
+  }
+
+  const separatorMatch = text.match(/^(.+?)\s*[-–—|/]\s*(.+)$/);
+  if (separatorMatch) {
+    return {
+      role: normalizeWhitespace(separatorMatch[1]),
+      company: normalizeWhitespace(separatorMatch[2])
+    };
+  }
+
+  return { role: text, company: "" };
+};
+
+const extractLeadPhrase = (rawText: string): string => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return "";
+  }
+
+  const words = text.split(" ");
+  const descriptionStartWords = new Set([
+    "Contributing",
+    "Learned",
+    "Working",
+    "Worked",
+    "Assisted",
+    "Produced",
+    "Actively",
+    "During",
+    "Managed",
+    "Responsible",
+    "Leading",
+    "Led",
+    "Supported",
+    "Supporting",
+    "Provided",
+    "Developed",
+    "Created",
+    "Improved"
+  ]);
+
+  for (let index = 1; index < words.length; index += 1) {
+    if (descriptionStartWords.has(words[index])) {
+      return words.slice(0, index).join(" ");
+    }
+  }
+
+  if (words.length > 8) {
+    return words.slice(0, 8).join(" ");
+  }
+
+  return text;
+};
+
+const parseExperienceText = (rawText: string): {
+  role: string;
+  company: string;
+  startDate: string;
+  endDate: string;
+  currentRole: boolean;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return {
+      role: "",
+      company: "",
+      startDate: "",
+      endDate: "",
+      currentRole: false,
+      description: ""
+    };
+  }
+
+  const dateParts = extractDateRange(text);
+  let descriptor = dateParts.before;
+  let description = dateParts.after;
+
+  if (!descriptor && description) {
+    const lead = extractLeadPhrase(description);
+    descriptor = lead;
+    if (lead && description.toLowerCase().startsWith(lead.toLowerCase())) {
+      description = normalizeWhitespace(description.slice(lead.length));
+    }
+  }
+
+  const roleCompany = parseRoleCompany(descriptor);
+
+  if (!description && descriptor && text.toLowerCase().startsWith(descriptor.toLowerCase())) {
+    description = normalizeWhitespace(text.slice(descriptor.length));
+  }
+
+  return {
+    role: roleCompany.role,
+    company: roleCompany.company,
+    startDate: dateParts.startDate,
+    endDate: dateParts.endDate,
+    currentRole: dateParts.currentRole,
+    description: description || text
+  };
+};
+
+const splitOrganizationRole = (rawText: string): { organization: string; role: string } => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return { organization: "", role: "" };
+  }
+
+  const atMatch = text.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  if (atMatch) {
+    return {
+      role: normalizeWhitespace(atMatch[1]),
+      organization: normalizeWhitespace(atMatch[2])
+    };
+  }
+
+  const words = text.split(" ");
+  if (words.length <= 3) {
+    return { organization: "", role: text };
+  }
+
+  const roleWordCount = words.length <= 5 ? 2 : 3;
+  return {
+    organization: words.slice(0, -roleWordCount).join(" "),
+    role: words.slice(-roleWordCount).join(" ")
+  };
+};
+
+const parseVolunteerText = (rawText: string): {
+  organization: string;
+  role: string;
+  startDate: string;
+  endDate: string;
+  currentRole: boolean;
+  description: string;
+} => {
+  const parsed = parseExperienceText(rawText);
+  if (parsed.company) {
+    return {
+      organization: parsed.company,
+      role: parsed.role,
+      startDate: parsed.startDate,
+      endDate: parsed.endDate,
+      currentRole: parsed.currentRole,
+      description: parsed.description
+    };
+  }
+
+  const split = splitOrganizationRole(parsed.role);
+  return {
+    organization: split.organization,
+    role: split.role || parsed.role,
+    startDate: parsed.startDate,
+    endDate: parsed.endDate,
+    currentRole: parsed.currentRole,
+    description: parsed.description
+  };
+};
+
+const parseEducationText = (rawText: string): {
+  institution: string;
+  degree: string;
+  fieldOfStudy: string;
+  gpa: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+} => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return {
+      institution: "",
+      degree: "",
+      fieldOfStudy: "",
+      gpa: "",
+      startDate: "",
+      endDate: "",
+      description: ""
+    };
+  }
+
+  const dateParts = extractDateRange(text);
+  const gpaMatch = text.match(/\bGPA[:\s]*([0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+(?:[.,][0-9]+)?)?)/i);
+  const expectedMatch = text.match(/(?:Expected|Beklenen)\s+([A-Za-zÇĞİÖŞÜçğıöşü0-9./-]+\s*\d{0,4})/i);
+  const atMatch = text.match(/(?:at|@)\s+([^|,()]+)/i);
+
+  const segments = text
+    .split("|")
+    .map((segment) =>
+      normalizeWhitespace(segment).replace(/^(başlık|title|heading)\s*/i, "").trim()
+    )
+    .filter((segment) => segment.length > 0);
+
+  const degree =
+    firstNonEmpty(
+      ...segments.filter((segment) =>
+        /(B\.?Sc|M\.?Sc|Ph\.?D|Bachelor|Master|Lisans|Yüksek)/i.test(
+          segment
+        )
+      ),
+      ...segments.filter((segment) => /(Candidate|Student|Öğrenci)/i.test(segment)),
+      segments[0] || ""
+    ) || "";
+
+  const institutionFromDegreeSegment = segments
+    .map((segment) => segment.match(/,\s*([^,(]+(?:University|Üniversite|Institute|College|School|Technical)[^,(]*)/i)?.[1] || "")
+    .find((segment) => segment.trim().length > 0);
+
+  const institution = firstNonEmpty(
+    institutionFromDegreeSegment || "",
+    atMatch?.[1] || "",
+    ...segments.filter((segment) =>
+      /(University|Üniversite|Institute|College|School|Technical)/i.test(segment)
+    )
+  );
+
+  const fieldOfStudy = firstNonEmpty(
+    ...segments.filter((segment) =>
+      /(Engineering|Management|Computer|Business|Science|Design|Mühendislik|Yönetim)/i.test(
+        segment
+      )
+    )
+  );
+
+  const endDate = firstNonEmpty(dateParts.endDate, expectedMatch?.[1] || "");
+  const fieldOfStudyMatch = text.match(
+    /([A-Za-zÇĞİÖŞÜçğıöşü\s]+(?:Engineering|Mühendislik|Management|Yönetim|Design|Science|Business))/i
+  );
+
+  return {
+    institution,
+    degree,
+    fieldOfStudy: firstNonEmpty(fieldOfStudy, fieldOfStudyMatch?.[1] || ""),
+    gpa: gpaMatch ? normalizeWhitespace(gpaMatch[1]) : "",
+    startDate: dateParts.startDate,
+    endDate,
+    description: text.replace(/^(başlık|title|heading)\s*/i, "").trim()
+  };
+};
+
+const parseLanguageItems = (
+  rawText: string
+): Array<{ language: string; proficiency: string; certificate: string; notes: string }> => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return [];
+  }
+
+  return text
+    .split(/[,;\n]+/)
+    .map((part) => normalizeWhitespace(part))
+    .filter((part) => part.length > 0)
+    .map((part) => {
+      const bracketMatch = part.match(/^(.+?)\s*\(([^)]+)\)$/);
+      if (bracketMatch) {
+        return {
+          language: normalizeWhitespace(bracketMatch[1]),
+          proficiency: normalizeWhitespace(bracketMatch[2]),
+          certificate: "",
+          notes: ""
+        };
+      }
+
+      const separatorMatch = part.match(/^(.+?)\s*[-–—:]\s*(.+)$/);
+      if (separatorMatch) {
+        return {
+          language: normalizeWhitespace(separatorMatch[1]),
+          proficiency: normalizeWhitespace(separatorMatch[2]),
+          certificate: "",
+          notes: ""
+        };
+      }
+
+      return {
+        language: part,
+        proficiency: "",
+        certificate: "",
+        notes: ""
+      };
+    });
+};
+
+const parseReferenceItems = (rawText: string): Array<{
+  name: string;
+  jobTitle: string;
+  organization: string;
+  email: string;
+  phone: string;
+}> => {
+  const text = normalizeWhitespace(rawText);
+  if (!text) {
+    return [];
+  }
+
+  const phoneRegex = /\+?\d[\d\s().-]{7,}\d/g;
+  const phoneMatches = [...text.matchAll(phoneRegex)];
+
+  const parseChunk = (chunkText: string): {
+    name: string;
+    jobTitle: string;
+    organization: string;
+    email: string;
+    phone: string;
+  } => {
+    const cleaned = normalizeWhitespace(chunkText.replace(/^(?:lar|references?)\s*/i, ""));
+    const emailMatch = cleaned.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    const email = emailMatch?.[0] || "";
+    const withoutEmail = normalizeWhitespace(cleaned.replace(email, "").trim());
+    const phoneMatch = withoutEmail.match(phoneRegex);
+    const phone = phoneMatch?.[0] || "";
+    const base = normalizeWhitespace(withoutEmail.replace(phone, "").trim());
+
+    const slashParts = base.split("/");
+    const name = normalizeWhitespace(slashParts[0] || "");
+    const rest = normalizeWhitespace(slashParts.slice(1).join("/") || "");
+    const atMatch = rest.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+
+    return {
+      name,
+      jobTitle: atMatch ? normalizeWhitespace(atMatch[1]) : rest,
+      organization: atMatch ? normalizeWhitespace(atMatch[2]) : "",
+      email,
+      phone
+    };
+  };
+
+  if (phoneMatches.length === 0) {
+    return [parseChunk(text)].filter((item) => item.name || item.jobTitle || item.organization);
+  }
+
+  const chunks: string[] = [];
+  let start = 0;
+
+  for (const match of phoneMatches) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    const end = match.index + match[0].length;
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+
+  const tail = normalizeWhitespace(text.slice(start));
+  if (tail) {
+    chunks.push(tail);
+  }
+
+  return chunks
+    .map((chunk) => parseChunk(chunk))
+    .filter((item) => item.name || item.jobTitle || item.organization || item.email || item.phone);
+};
+
 const toVisibility = (hidden: boolean): CvVisibility => (hidden ? "hidden" : "visible");
 
 const toJsonValue = (value: unknown): CvJsonValue => {
@@ -337,6 +789,31 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (section.type === "summary") {
       const block = sortedBlocks[0];
+      const rawSummaryText = block ? getField(block, "text", "summary", "description") : "";
+      const fullName = asString(metadata.full_name);
+      const summaryText = (() => {
+        const lines = rawSummaryText
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+
+        const dedupedLines: string[] = [];
+        for (const line of lines) {
+          if (dedupedLines[dedupedLines.length - 1] !== line) {
+            dedupedLines.push(line);
+          }
+        }
+
+        if (
+          dedupedLines.length > 1 &&
+          fullName &&
+          dedupedLines[0].toLowerCase() === fullName.trim().toLowerCase()
+        ) {
+          dedupedLines.shift();
+        }
+
+        return dedupedLines.join("\n").trim();
+      })();
 
       sections.push({
         id: `summary-${section.id}`,
@@ -345,7 +822,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         hidden: sectionHidden,
         order: section.order,
         data: {
-          text: block ? getField(block, "text", "summary", "description") : "",
+          text: summaryText,
           blockId: block?.id,
           blockType: block?.type,
           rawFields: block ? toJsonRecord(block.fields) : {},
@@ -357,19 +834,35 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (section.type === "experience") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
+        const parsedFromText = parseExperienceText(getField(block, "text"));
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
+        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText.startDate);
+        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText.endDate);
+        const currentRole =
+          asBoolean(block.fields.current_role) ||
+          normalizedEndDate.toLowerCase() === "present" ||
+          parsedFromText.currentRole;
 
         return {
           ...withBlockState(block, index),
-          company: getField(block, "company", "organization"),
-          role: getField(block, "role", "position", "title", "headline"),
+          company: firstNonEmpty(
+            getField(block, "company", "organization"),
+            parsedFromText.company
+          ),
+          role: firstNonEmpty(
+            getField(block, "role", "position", "title", "headline"),
+            parsedFromText.role
+          ),
           country: getField(block, "location", "country", "city"),
-          startDate,
-          endDate,
-          currentRole: asBoolean(block.fields.current_role) || endDate.toLowerCase() === "present",
-          dates: buildDates(startDate, endDate),
-          description: getField(block, "description", "summary", "highlights", "responsibilities")
+          startDate: normalizedStartDate,
+          endDate: normalizedEndDate,
+          currentRole,
+          dates: buildDates(normalizedStartDate, normalizedEndDate),
+          description: firstNonEmpty(
+            getField(block, "description", "summary", "highlights", "responsibilities"),
+            parsedFromText.description
+          )
         };
       });
 
@@ -386,22 +879,29 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (section.type === "education") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
+        const parsedFromText = parseEducationText(getField(block, "text"));
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
 
         return {
           ...withBlockState(block, index),
-          institution: getField(block, "institution", "school", "university"),
-          degree: getField(block, "degree", "title"),
-          fieldOfStudy: getField(block, "field_of_study", "major"),
-          gpa: getField(block, "gpa"),
-          startDate,
-          endDate,
+          institution: firstNonEmpty(
+            getField(block, "institution", "school", "university"),
+            parsedFromText.institution
+          ),
+          degree: firstNonEmpty(getField(block, "degree", "title"), parsedFromText.degree),
+          fieldOfStudy: firstNonEmpty(
+            getField(block, "field_of_study", "major"),
+            parsedFromText.fieldOfStudy
+          ),
+          gpa: firstNonEmpty(getField(block, "gpa"), parsedFromText.gpa),
+          startDate: firstNonEmpty(startDate, parsedFromText.startDate),
+          endDate: firstNonEmpty(endDate, parsedFromText.endDate),
           expectedGraduation:
             asBoolean(block.fields.expected_graduation) || asBoolean(block.fields.expectedGraduation),
           exchangeProgram:
             asBoolean(block.fields.exchange_program) || asBoolean(block.fields.exchangeProgram),
-          description: getField(block, "description", "notes")
+          description: firstNonEmpty(getField(block, "description", "notes"), parsedFromText.description)
         };
       });
 
@@ -438,13 +938,44 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     }
 
     if (section.type === "languages") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        language: getField(block, "language", "name", "title"),
-        proficiency: getField(block, "proficiency", "level", "fluency"),
-        certificate: getField(block, "certificate", "score", "certification"),
-        notes: getField(block, "notes", "description", "details")
-      }));
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredLanguage = getField(block, "language", "name", "title");
+        const fallbackText = getField(block, "text");
+
+        if (structuredLanguage) {
+          return [
+            {
+              ...withBlockState(block, index),
+              language: structuredLanguage,
+              proficiency: getField(block, "proficiency", "level", "fluency"),
+              certificate: getField(block, "certificate", "score", "certification"),
+              notes: getField(block, "notes", "description", "details")
+            }
+          ];
+        }
+
+        const parsedItems = parseLanguageItems(fallbackText);
+        if (parsedItems.length === 0) {
+          return [
+            {
+              ...withBlockState(block, index),
+              language: "",
+              proficiency: "",
+              certificate: "",
+              notes: fallbackText
+            }
+          ];
+        }
+
+        return parsedItems.map((item, parsedIndex) => ({
+          ...withBlockState(block, index),
+          id: `${block.id || `block-${index + 1}`}-lang-${parsedIndex + 1}`,
+          language: item.language,
+          proficiency: item.proficiency,
+          certificate: item.certificate,
+          notes: item.notes
+        }));
+      });
 
       sections.push({
         id: `languages-${section.id}`,
@@ -519,18 +1050,31 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (section.type === "volunteer") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
+        const parsedFromText = parseVolunteerText(getField(block, "text"));
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
+        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText.startDate);
+        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText.endDate);
+        const currentRole =
+          asBoolean(block.fields.current_role) ||
+          normalizedEndDate.toLowerCase() === "present" ||
+          parsedFromText.currentRole;
 
         return {
           ...withBlockState(block, index),
-          organization: getField(block, "organization", "company"),
-          role: getField(block, "role", "position", "title"),
+          organization: firstNonEmpty(
+            getField(block, "organization", "company"),
+            parsedFromText.organization
+          ),
+          role: firstNonEmpty(getField(block, "role", "position", "title"), parsedFromText.role),
           country: getField(block, "location", "country", "city"),
-          startDate,
-          endDate,
-          currentRole: asBoolean(block.fields.current_role) || endDate.toLowerCase() === "present",
-          description: getField(block, "description", "summary", "details")
+          startDate: normalizedStartDate,
+          endDate: normalizedEndDate,
+          currentRole,
+          description: firstNonEmpty(
+            getField(block, "description", "summary", "details"),
+            parsedFromText.description
+          )
         };
       });
 
@@ -586,14 +1130,45 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     }
 
     if (section.type === "references") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
-        ...withBlockState(block, index),
-        name: getField(block, "name", "full_name"),
-        jobTitle: getField(block, "job_title", "title", "role"),
-        organization: getField(block, "organization", "company"),
-        email: getField(block, "email"),
-        phone: getField(block, "phone", "phone_number")
-      }));
+      const items: EditorItem[] = sortedBlocks.flatMap((block, index) => {
+        const structuredName = getField(block, "name", "full_name");
+        if (structuredName) {
+          return [
+            {
+              ...withBlockState(block, index),
+              name: structuredName,
+              jobTitle: getField(block, "job_title", "title", "role"),
+              organization: getField(block, "organization", "company"),
+              email: getField(block, "email"),
+              phone: getField(block, "phone", "phone_number")
+            }
+          ];
+        }
+
+        const parsedItems = parseReferenceItems(getField(block, "text"));
+        if (parsedItems.length === 0) {
+          return [
+            {
+              ...withBlockState(block, index),
+              name: "",
+              jobTitle: "",
+              organization: "",
+              email: "",
+              phone: ""
+            }
+          ];
+        }
+
+        return parsedItems.map((item, parsedIndex) => ({
+          ...withBlockState(block, index),
+          id: `${block.id || `block-${index + 1}`}-ref-${parsedIndex + 1}`,
+          name: item.name,
+          jobTitle: item.jobTitle,
+          organization: item.organization,
+          email: item.email,
+          phone: item.phone
+        }));
+      });
 
       sections.push({
         id: `references-${section.id}`,
