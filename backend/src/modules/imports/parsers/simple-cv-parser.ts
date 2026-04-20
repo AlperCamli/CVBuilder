@@ -74,10 +74,15 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
       "experiences and programs",
       "work experience",
       "professional experience",
+      "professional background",
       "employment",
+      "employment history",
+      "work history",
+      "internship",
+      "internships",
       "career history"
     ],
-    keywords: ["experience", "employment", "worked", "position", "role"]
+    keywords: ["experience", "employment", "worked", "position", "role", "internship", "intern"]
   },
   {
     type: "education",
@@ -118,7 +123,17 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     type: "volunteer",
     title: "Volunteer",
-    aliases: ["volunteer", "volunteering", "volunteer experience", "community service"],
+    aliases: [
+      "volunteer",
+      "volunteering",
+      "volunteer experience",
+      "volunteer work",
+      "community service",
+      "extracurricular activities",
+      "extracurricular activity",
+      "leadership activities",
+      "leadership and activities"
+    ],
     keywords: ["volunteer", "community", "ngo", "mentorship"]
   },
   {
@@ -1020,8 +1035,41 @@ const headingAliasPattern = (alias: string): RegExp => {
   return new RegExp(`^${escapedAlias}(?:\\s+(?:section|details|history|highlights|overview|profile))?$`, "i");
 };
 
+const isLikelyHeadingFalsePositive = (line: string): boolean => {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  if (/[.!?]$/.test(trimmed)) {
+    return true;
+  }
+
+  if (/\b(?:19|20)\d{2}\b/.test(trimmed) || /\d{1,2}[./-]\d{4}/.test(trimmed)) {
+    return true;
+  }
+
+  if (hasContactSignal(trimmed)) {
+    return true;
+  }
+
+  if (trimmed.includes(",") && trimmed.split(/\s+/).length > 6) {
+    return true;
+  }
+
+  if (/\b(?:at|from|for)\b/i.test(trimmed) && trimmed.split(/\s+/).length > 6) {
+    return true;
+  }
+
+  return false;
+};
+
 const findSectionByHeading = (line: string): SectionDefinition | null => {
   if (!looksLikeHeading(line)) {
+    return null;
+  }
+
+  if (isLikelyHeadingFalsePositive(line)) {
     return null;
   }
 
@@ -1625,6 +1673,33 @@ const extractDateRangeFromText = (
   };
 };
 
+const looksLikeRoleOrCompanySegment = (value: string): boolean => {
+  const text = normalizeWhitespaceText(value);
+  if (!text) {
+    return false;
+  }
+
+  if (text.length > 80 || /[.;!?]/.test(text)) {
+    return false;
+  }
+
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 8) {
+    return false;
+  }
+
+  if (/^(?:and|or|with|including)$/i.test(words[0] ?? "")) {
+    return false;
+  }
+
+  const sentenceSignals = /\b(?:designed|developed|implemented|worked|contributed|supported|created|managed|responsible)\b/i;
+  if (sentenceSignals.test(text) && words.length > 5) {
+    return false;
+  }
+
+  return true;
+};
+
 const splitRoleCompanyText = (value: string): { role: string; company: string } => {
   const text = normalizeWhitespaceText(value);
   if (!text) {
@@ -1632,15 +1707,31 @@ const splitRoleCompanyText = (value: string): { role: string; company: string } 
   }
 
   const atMatch = text.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
-  if (atMatch) {
+  if (atMatch && looksLikeRoleOrCompanySegment(atMatch[1]) && looksLikeRoleOrCompanySegment(atMatch[2])) {
     return {
       role: normalizeWhitespaceText(atMatch[1]),
       company: normalizeWhitespaceText(atMatch[2])
     };
   }
 
-  const separatorMatch = text.match(/^(.+?)\s+[-–—|/]\s+(.+)$/);
-  if (separatorMatch) {
+  const commaParts = text.split(",").map((part) => normalizeWhitespaceText(part)).filter((part) => part.length > 0);
+  if (
+    commaParts.length === 2 &&
+    looksLikeRoleOrCompanySegment(commaParts[0]) &&
+    looksLikeRoleOrCompanySegment(commaParts[1])
+  ) {
+    return {
+      role: commaParts[0],
+      company: commaParts[1]
+    };
+  }
+
+  const separatorMatch = text.match(/^(.+?)\s(?:\||\/|-|–|—)\s(.+)$/);
+  if (
+    separatorMatch &&
+    looksLikeRoleOrCompanySegment(separatorMatch[1]) &&
+    looksLikeRoleOrCompanySegment(separatorMatch[2])
+  ) {
     return {
       role: normalizeWhitespaceText(separatorMatch[1]),
       company: normalizeWhitespaceText(separatorMatch[2])
@@ -1657,8 +1748,14 @@ const parseExperienceFields = (rawText: string): Record<string, unknown> => {
   }
 
   const dateParts = extractDateRangeFromText(text);
-  const roleCompany = splitRoleCompanyText(dateParts.before || text);
-  const description = normalizeWhitespaceText(dateParts.after || text);
+  const descriptor = normalizeWhitespaceText(dateParts.before || text);
+  const roleCompany = splitRoleCompanyText(descriptor);
+  const descriptionFromTail = normalizeWhitespaceText(dateParts.after);
+
+  let description = descriptionFromTail;
+  if (!description && !dateParts.startDate && !roleCompany.company && roleCompany.role === descriptor) {
+    description = text;
+  }
 
   return {
     role: roleCompany.role,
@@ -1674,6 +1771,7 @@ const parseVolunteerFields = (rawText: string): Record<string, unknown> => {
   const experience = parseExperienceFields(rawText);
   const role = typeof experience.role === "string" ? experience.role : "";
   const company = typeof experience.company === "string" ? experience.company : "";
+  const description = typeof experience.description === "string" ? experience.description : "";
 
   return {
     organization: company,
@@ -1682,7 +1780,7 @@ const parseVolunteerFields = (rawText: string): Record<string, unknown> => {
     start_date: experience.start_date ?? "",
     end_date: experience.end_date ?? "",
     current_role: experience.current_role ?? false,
-    description: experience.description ?? rawText
+    description
   };
 };
 
@@ -1966,30 +2064,220 @@ const buildHeaderLines = (lines: string[], metadata: Record<string, unknown>): s
   return dedupe(seedLines);
 };
 
-const isLikelySectionEntryBoundary = (sectionType: SectionType, line: string): boolean => {
-  if (findSectionByHeading(line)) {
+type ExperienceStyleSection = "experience" | "volunteer" | "education" | "projects";
+
+interface EntryDraft {
+  headerLine: string;
+  bodyLines: string[];
+}
+
+const isExperienceStyleSection = (sectionType: SectionType): sectionType is ExperienceStyleSection => {
+  return sectionType === "experience" || sectionType === "volunteer" || sectionType === "education" || sectionType === "projects";
+};
+
+const hasStrongDateSignal = (line: string): boolean => {
+  const dateRange = extractDateRangeFromText(line);
+  return Boolean(dateRange.startDate && (dateRange.endDate || dateRange.currentRole));
+};
+
+const isHighConfidenceEntryHeader = (sectionType: ExperienceStyleSection, line: string): boolean => {
+  if (findSectionByHeading(line) || hasContactSignal(line)) {
     return false;
   }
 
-  if (sectionType === "experience" || sectionType === "volunteer" || sectionType === "education" || sectionType === "projects") {
-    const dateRange = extractDateRangeFromText(line);
-    if (dateRange.startDate && (dateRange.endDate || dateRange.currentRole)) {
+  if (/[.!?]$/.test(line)) {
+    return false;
+  }
+
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 12) {
+    return false;
+  }
+
+  if (sectionType === "experience" || sectionType === "volunteer") {
+    const descriptor = normalizeWhitespaceText(extractDateRangeFromText(line).before || line);
+    const split = splitRoleCompanyText(descriptor);
+    if (split.role && split.company) {
       return true;
     }
+
+    return /\b(?:intern|engineer|developer|analyst|manager|consultant|assistant|specialist|researcher|designer)\b/i.test(
+      descriptor
+    );
   }
 
-  if (sectionType === "references") {
-    return /,\s*[^,]+,\s*[^,]+/.test(line);
+  if (sectionType === "education") {
+    return /(?:University|Institute|College|School|B\.?Sc|M\.?Sc|Bachelor|Master|Ph\.?D)/i.test(line);
   }
 
-  if (sectionType === "awards" || sectionType === "publications") {
-    return /\b(?:19|20)\d{2}\b/.test(line);
+  return /\b(?:project|capstone|thesis|platform|system)\b/i.test(line) || /\s(?:\||\/|-|–|—)\s/.test(line);
+};
+
+const isStrongEntryBoundary = (sectionType: ExperienceStyleSection, line: string): boolean => {
+  return hasStrongDateSignal(line) || isHighConfidenceEntryHeader(sectionType, line);
+};
+
+const inferEntryFields = (
+  sectionType: ExperienceStyleSection,
+  headerLine: string,
+  bodyLines: string[]
+): Record<string, unknown> => {
+  const normalizedHeader = normalizeWhitespaceText(headerLine);
+  const normalizedBody = normalizeWhitespaceText(bodyLines.join(" "));
+  const combinedText = normalizeWhitespaceText([normalizedHeader, normalizedBody].filter(Boolean).join(" "));
+
+  if (sectionType === "experience") {
+    const headerDateParts = extractDateRangeFromText(normalizedHeader);
+    const descriptor = normalizeWhitespaceText(headerDateParts.before || normalizedHeader);
+    const split = splitRoleCompanyText(descriptor);
+    const description = normalizeWhitespaceText([headerDateParts.after, normalizedBody].filter(Boolean).join(" "));
+
+    return {
+      role: split.role,
+      company: split.company,
+      start_date: headerDateParts.startDate,
+      end_date: headerDateParts.endDate,
+      current_role: headerDateParts.currentRole,
+      description
+    };
   }
 
-  return false;
+  if (sectionType === "volunteer") {
+    const experienceFields = inferEntryFields("experience", headerLine, bodyLines);
+    const role = typeof experienceFields.role === "string" ? experienceFields.role : "";
+    const company = typeof experienceFields.company === "string" ? experienceFields.company : "";
+    const description = typeof experienceFields.description === "string" ? experienceFields.description : "";
+
+    return {
+      organization: company,
+      role,
+      location: "",
+      start_date: experienceFields.start_date ?? "",
+      end_date: experienceFields.end_date ?? "",
+      current_role: experienceFields.current_role ?? false,
+      description
+    };
+  }
+
+  if (sectionType === "education") {
+    return parseEducationFields(combinedText);
+  }
+
+  return parseProjectFields(combinedText);
+};
+
+const buildExperienceStyleBlocks = (sectionType: ExperienceStyleSection, lines: string[]): Array<Record<string, unknown>> => {
+  const entries: EntryDraft[] = [];
+  let current: EntryDraft | null = null;
+  let bufferedBullets: string[] = [];
+  let bufferedAmbiguous: string[] = [];
+
+  const appendToCurrent = (line: string): void => {
+    if (!current) {
+      bufferedAmbiguous.push(line);
+      return;
+    }
+
+    current.bodyLines.push(line);
+  };
+
+  const startNewEntry = (headerLine: string): void => {
+    if (current) {
+      entries.push(current);
+    }
+
+    current = {
+      headerLine,
+      bodyLines: [...bufferedAmbiguous, ...bufferedBullets]
+    };
+
+    bufferedAmbiguous = [];
+    bufferedBullets = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = normalizeWhitespaceText(rawLine);
+    if (!line) {
+      continue;
+    }
+
+    const bullet = parseBulletItem(line);
+    const normalizedLine = normalizeWhitespaceText(bullet ?? line);
+
+    if (!normalizedLine) {
+      continue;
+    }
+
+    if (isStrongEntryBoundary(sectionType, normalizedLine)) {
+      startNewEntry(normalizedLine);
+      continue;
+    }
+
+    if (bullet) {
+      if (current) {
+        const activeEntry = current as EntryDraft;
+        activeEntry.bodyLines.push(normalizedLine);
+      } else {
+        bufferedBullets.push(normalizedLine);
+      }
+      continue;
+    }
+
+    appendToCurrent(normalizedLine);
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  if (entries.length === 0) {
+    const mergedText = normalizeWhitespaceText([...bufferedAmbiguous, ...bufferedBullets].join(" "));
+    if (!mergedText) {
+      return [];
+    }
+
+    return [
+      {
+        type: sectionType,
+        fields: {
+          text: mergedText,
+          ...inferStructuredFields(sectionType, mergedText)
+        },
+        meta: {
+          source: "import_parser"
+        }
+      }
+    ];
+  }
+
+  if ((bufferedAmbiguous.length > 0 || bufferedBullets.length > 0) && entries.length > 0) {
+    entries[entries.length - 1].bodyLines.push(...bufferedAmbiguous, ...bufferedBullets);
+  }
+
+  return entries.map((entry) => {
+    const text = [entry.headerLine, ...entry.bodyLines]
+      .map((line) => normalizeWhitespaceText(line))
+      .filter((line) => line.length > 0)
+      .join("\n");
+
+    return {
+      type: sectionType,
+      fields: {
+        text,
+        ...inferEntryFields(sectionType, entry.headerLine, entry.bodyLines)
+      },
+      meta: {
+        source: "import_parser"
+      }
+    };
+  });
 };
 
 const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Record<string, unknown>> => {
+  if (isExperienceStyleSection(sectionType)) {
+    return buildExperienceStyleBlocks(sectionType, lines);
+  }
+
   if (sectionType === "references" && lines.length > 0 && lines.length <= 4) {
     const mergedText = normalizeWhitespaceText(lines.join(" "));
     if (mergedText) {
@@ -2009,7 +2297,6 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
   }
 
   const blocks: Array<Record<string, unknown>> = [];
-
   let itemBuffer: string[] = [];
   let textBuffer: string[] = [];
 
@@ -2029,7 +2316,6 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
         source: "import_parser"
       }
     });
-
     itemBuffer = [];
   };
 
@@ -2049,7 +2335,6 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
         source: "import_parser"
       }
     });
-
     textBuffer = [];
   };
 
@@ -2068,7 +2353,7 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
       continue;
     }
 
-    if (textBuffer.length > 0 && isLikelySectionEntryBoundary(sectionType, line)) {
+    if (textBuffer.length > 0 && /(?:\b(?:19|20)\d{2}\b)/.test(line) && (sectionType === "awards" || sectionType === "publications")) {
       flushItems();
       flushText();
     }
@@ -2541,18 +2826,80 @@ const parserNameForResolvedKind = (kind: InputFileKind): string => {
   return "simple_cv_parser_v1";
 };
 
+const asFieldText = (value: unknown): string => {
+  if (typeof value === "string") {
+    return normalizeWhitespaceText(value);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return "";
+};
+
+const collectStructuredMappingWarnings = (parsedContent: CvContent): string[] => {
+  const warnings: string[] = [];
+  let partialExperienceCount = 0;
+  let partialVolunteerCount = 0;
+
+  for (const section of parsedContent.sections) {
+    if (section.type !== "experience" && section.type !== "volunteer") {
+      continue;
+    }
+
+    for (const block of section.blocks) {
+      const role =
+        section.type === "experience"
+          ? asFieldText(block.fields.role)
+          : asFieldText(block.fields.role);
+      const organization =
+        section.type === "experience"
+          ? asFieldText(block.fields.company)
+          : asFieldText(block.fields.organization);
+      const hasDateSignal =
+        asFieldText(block.fields.start_date).length > 0 ||
+        asFieldText(block.fields.end_date).length > 0 ||
+        block.fields.current_role === true;
+
+      if (hasDateSignal && role && !organization) {
+        if (section.type === "experience") {
+          partialExperienceCount += 1;
+        } else {
+          partialVolunteerCount += 1;
+        }
+      }
+    }
+  }
+
+  if (partialExperienceCount > 0) {
+    warnings.push(
+      `Some experience entries were only partially mapped (${partialExperienceCount} missing company values). Review Work Experience before conversion.`
+    );
+  }
+
+  if (partialVolunteerCount > 0) {
+    warnings.push(
+      `Some volunteer entries were only partially mapped (${partialVolunteerCount} missing organization values). Review Volunteer Work before conversion.`
+    );
+  }
+
+  return warnings;
+};
+
 export class SimpleCvParser implements CvParser {
   async parse(input: ParseCvFileInput): Promise<ParseCvFileResult> {
     const extracted = await maybeExtractRawText(input);
 
     const fallbackRaw = extracted.rawText || `${input.originalFilename}\n${input.mimeType}\n${input.sizeBytes}`;
     const parsedContent = toStructuredContent(fallbackRaw);
+    const structuredWarnings = collectStructuredMappingWarnings(parsedContent);
 
     return {
       parserName: parserNameForResolvedKind(extracted.resolvedKind),
       rawExtractedText: fallbackRaw,
       parsedContent,
-      warnings: extracted.warnings,
+      warnings: dedupe([...extracted.warnings, ...structuredWarnings]),
       diagnostics: extracted.diagnostics
     };
   }

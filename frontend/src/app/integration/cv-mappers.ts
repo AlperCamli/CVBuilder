@@ -249,8 +249,28 @@ const parseRoleCompany = (rawText: string): { role: string; company: string } =>
     };
   }
 
-  const separatorMatch = text.match(/^(.+?)\s*[-–—|/]\s*(.+)$/);
-  if (separatorMatch) {
+  const commaParts = text.split(",").map((part) => normalizeWhitespace(part)).filter((part) => part.length > 0);
+  if (
+    commaParts.length === 2 &&
+    commaParts[0].split(/\s+/).length <= 8 &&
+    commaParts[1].split(/\s+/).length <= 8 &&
+    !/[.;!?]/.test(commaParts[0]) &&
+    !/[.;!?]/.test(commaParts[1])
+  ) {
+    return {
+      role: commaParts[0],
+      company: commaParts[1]
+    };
+  }
+
+  const separatorMatch = text.match(/^(.+?)\s(?:\||\/|-|–|—)\s(.+)$/);
+  if (
+    separatorMatch &&
+    !/[.;!?]/.test(separatorMatch[1]) &&
+    !/[.;!?]/.test(separatorMatch[2]) &&
+    separatorMatch[1].split(/\s+/).length <= 8 &&
+    separatorMatch[2].split(/\s+/).length <= 8
+  ) {
     return {
       role: normalizeWhitespace(separatorMatch[1]),
       company: normalizeWhitespace(separatorMatch[2])
@@ -891,6 +911,31 @@ const blockTextCandidates = (block: CvBlock): string[] => {
   return dedupe([...fromItems, ...fromText]);
 };
 
+const isLegacyItemsBlock = (sectionType: string, block: CvBlock): boolean => {
+  const blockType = block.type.trim().toLowerCase();
+  if (blockType === `${sectionType}_items`) {
+    return true;
+  }
+
+  if (blockType.endsWith("_items") && Array.isArray(block.fields.items)) {
+    return true;
+  }
+
+  return false;
+};
+
+const mergeDescriptionText = (currentValue: string, addition: string): string => {
+  const left = normalizeWhitespace(currentValue);
+  const right = normalizeWhitespace(addition);
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  return `${left}\n${right}`;
+};
+
 const defaultSectionTitle = (sectionType: string): string => {
   if (!sectionType) {
     return "Section";
@@ -1174,38 +1219,78 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     }
 
     if (sectionType === "experience") {
-      const items: EditorItem[] = sortedBlocks.map((block, index) => {
-        const parsedFromText = parseExperienceText(getField(block, "text"));
+      const items: EditorItem[] = [];
+      let pendingLegacyDescriptions: string[] = [];
+
+      for (const [index, block] of sortedBlocks.entries()) {
+        if (isLegacyItemsBlock("experience", block)) {
+          const legacyText = blockTextCandidates(block).join("\n");
+          if (!legacyText) {
+            continue;
+          }
+
+          if (items.length > 0) {
+            const lastItem = items[items.length - 1];
+            lastItem.description = mergeDescriptionText(asString(lastItem.description), legacyText);
+          } else {
+            pendingLegacyDescriptions.push(legacyText);
+          }
+          continue;
+        }
+
+        const structuredCompany = getField(block, "company", "organization");
+        const structuredRole = getField(block, "role", "position", "title", "headline");
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
-        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText.startDate);
-        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText.endDate);
+        const structuredDescription = getField(block, "description", "summary", "highlights", "responsibilities");
+
+        const shouldUseTextFallback =
+          !structuredRole ||
+          !structuredCompany ||
+          (!startDate && !endDate && !asBoolean(block.fields.current_role)) ||
+          !structuredDescription;
+        const parsedFromText = shouldUseTextFallback ? parseExperienceText(getField(block, "text")) : null;
+        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText?.startDate ?? "");
+        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText?.endDate ?? "");
         const currentRole =
           asBoolean(block.fields.current_role) ||
           normalizedEndDate.toLowerCase() === "present" ||
-          parsedFromText.currentRole;
+          Boolean(parsedFromText?.currentRole);
 
-        return {
+        let role = firstNonEmpty(structuredRole, parsedFromText?.role ?? "");
+        let company = firstNonEmpty(structuredCompany, parsedFromText?.company ?? "");
+
+        if (!company && role) {
+          const recovered = parseRoleCompany(role);
+          if (recovered.company) {
+            role = recovered.role;
+            company = recovered.company;
+          }
+        }
+
+        let description = firstNonEmpty(structuredDescription, parsedFromText?.description ?? "");
+        if (pendingLegacyDescriptions.length > 0) {
+          description = mergeDescriptionText(pendingLegacyDescriptions.join("\n"), description);
+          pendingLegacyDescriptions = [];
+        }
+
+        items.push({
           ...withBlockState(block, index),
-          company: firstNonEmpty(
-            getField(block, "company", "organization"),
-            parsedFromText.company
-          ),
-          role: firstNonEmpty(
-            getField(block, "role", "position", "title", "headline"),
-            parsedFromText.role
-          ),
+          company,
+          role,
           country: getField(block, "location", "country", "city"),
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
           currentRole,
           dates: buildDates(normalizedStartDate, normalizedEndDate),
-          description: firstNonEmpty(
-            getField(block, "description", "summary", "highlights", "responsibilities"),
-            parsedFromText.description
-          )
-        };
-      });
+          description
+        });
+      }
+
+      if (pendingLegacyDescriptions.length > 0 && items.length > 0) {
+        const lastItem = items[items.length - 1];
+        lastItem.description = mergeDescriptionText(asString(lastItem.description), pendingLegacyDescriptions.join("\n"));
+      }
 
       sections.push({
         id: `experience-${section.id}`,

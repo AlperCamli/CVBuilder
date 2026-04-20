@@ -213,6 +213,88 @@ describe("simple-cv-parser (strong PDF path)", () => {
     expect(referencesSection?.blocks[0]?.fields.email).toBe("sefa.hakyemez@vakifbank.com.tr");
   });
 
+  it("splits role/company with comma while preserving hyphenated description text", () => {
+    const content = __private.toStructuredContent(
+      [
+        "Work Experience",
+        "Business Intelligence Intern, Vakıfbank 07/2025 - 09/2025",
+        "Designed and implemented an end-to-end analytics pipeline for e-commerce operations."
+      ].join("\n")
+    );
+
+    const experienceSection = content.sections.find((section) => section.type === "experience");
+    const firstBlock = experienceSection?.blocks[0];
+
+    expect(firstBlock?.fields.role).toBe("Business Intelligence Intern");
+    expect(firstBlock?.fields.company).toBe("Vakıfbank");
+    expect(String(firstBlock?.fields.description ?? "")).toContain("end-to-end analytics pipeline");
+    expect(String(firstBlock?.fields.description ?? "")).toContain("e-commerce operations");
+  });
+
+  it("attaches ambiguous and bullet continuation lines to the active experience entry", () => {
+    const content = __private.toStructuredContent(
+      [
+        "Experience",
+        "Business Intelligence Intern, Vakıfbank 07/2025 - 09/2025",
+        "Designed and implemented an end-to-end Business Intelligence pipeline",
+        "• Built ETL jobs and datamarts",
+        "SAP Consulting Intern, Prodea Consulting 11/2025 - 12/2025",
+        "• Assisted consultants with requirement analysis"
+      ].join("\n")
+    );
+
+    const experienceSection = content.sections.find((section) => section.type === "experience");
+    expect(experienceSection?.blocks.length).toBe(2);
+    expect(experienceSection?.blocks.some((block) => block.type === "experience_items")).toBe(false);
+
+    const firstBlockDescription = String(experienceSection?.blocks[0]?.fields.description ?? "");
+    expect(firstBlockDescription).toContain("Designed and implemented");
+    expect(firstBlockDescription).toContain("Built ETL jobs");
+  });
+
+  it("detects volunteer aliases such as Volunteer Work and Extracurricular Activities", () => {
+    const volunteerContent = __private.toStructuredContent(
+      [
+        "Volunteer Work",
+        "Mentor, Code Club 01/2024 - Present",
+        "Guided junior developers."
+      ].join("\n")
+    );
+    const extracurricularContent = __private.toStructuredContent(
+      [
+        "Extracurricular Activities",
+        "Board Member, Game Developers Club 09/2023 - 06/2024",
+        "Organized events."
+      ].join("\n")
+    );
+
+    expect(volunteerContent.sections.map((section) => section.type)).toContain("volunteer");
+    expect(extracurricularContent.sections.map((section) => section.type)).toContain("volunteer");
+  });
+
+  it("keeps Alper CV experience entries as real jobs without synthetic *_items blocks", () => {
+    const extractedText = [
+      "Work Experience",
+      "Business Intelligence Intern , Vakıfbank 07/2025 – 09/2025",
+      "• Designed and implemented an end-to-end Business Intelligence pipeline.",
+      "SAP Consulting Intern , Prodea Consulting 11/2025 – 12/2025",
+      "• Assisted SAP consultants with business requirement analysis.",
+      "E-commerce Intern , Adil Işık Group 08/2024 – 09/2024",
+      "• Contributed to online store and digital marketing operations.",
+      "Undergraduate Research Assistant , Sabancı University 10/2023 – 01/2024",
+      "• Interviewed Turkish gaming startups and reported insights."
+    ].join("\n");
+
+    const content = __private.toStructuredContent(extractedText);
+    const experienceSection = content.sections.find((section) => section.type === "experience");
+    const experienceBlocks = experienceSection?.blocks ?? [];
+
+    expect(experienceBlocks.length).toBe(4);
+    expect(experienceBlocks.some((block) => block.type === "experience_items")).toBe(false);
+    expect(experienceBlocks.every((block) => String(block.fields.company ?? "").trim().length > 0)).toBe(true);
+    expect(experienceBlocks.every((block) => String(block.fields.role ?? "").trim().length > 0)).toBe(true);
+  });
+
   it("parses noisy FlowCV-like PDF text into multiple sections instead of one noisy summary", async () => {
     const parser = new SimpleCvParser();
 
