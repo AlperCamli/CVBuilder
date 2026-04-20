@@ -98,6 +98,64 @@ const sectionDefaultData = (type: string): Record<string, unknown> => {
   }
 };
 
+interface CvEditorDraft {
+  version: 1;
+  cvKind: "master" | "tailored";
+  cvId: string;
+  title: string;
+  language: string;
+  templateId: string | null;
+  sections: EditorSection[];
+  updatedAt: string;
+}
+
+const getDraftStorageKey = (cvKind: "master" | "tailored", cvId: string): string =>
+  `cv-editor:draft:${cvKind}:${cvId}`;
+
+const readDraft = (cvKind: "master" | "tailored", cvId: string): CvEditorDraft | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(getDraftStorageKey(cvKind, cvId));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as CvEditorDraft;
+    if (
+      parsed &&
+      parsed.version === 1 &&
+      parsed.cvKind === cvKind &&
+      parsed.cvId === cvId &&
+      Array.isArray(parsed.sections)
+    ) {
+      return parsed;
+    }
+  } catch {
+    // ignore malformed drafts
+  }
+
+  return null;
+};
+
+const writeDraft = (draft: CvEditorDraft): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(getDraftStorageKey(draft.cvKind, draft.cvId), JSON.stringify(draft));
+};
+
+const clearDraft = (cvKind: "master" | "tailored", cvId: string): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(getDraftStorageKey(cvKind, cvId));
+};
+
 const DraggableSection = ({ section, index, moveSection, children }: any) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -186,8 +244,11 @@ export function CVEditor() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [restoredDraftAt, setRestoredDraftAt] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [selectedTemplateDetail, setSelectedTemplateDetail] = useState<TemplateDetail | null>(null);
@@ -253,9 +314,33 @@ export function CVEditor() {
     );
   };
 
+  const markDirty = () => {
+    setDirty(true);
+    setRestoredDraftAt(null);
+  };
+
+  const restoreDraftIfAvailable = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
+    const draft = readDraft(nextCvKind, nextCvId);
+    if (!draft) {
+      setDirty(false);
+      setRestoredDraftAt(null);
+      return false;
+    }
+
+    setTitle(draft.title);
+    setLanguage(draft.language);
+    setTemplateId(draft.templateId);
+    setSections(draft.sections);
+    setDirty(true);
+    setRestoredDraftAt(draft.updatedAt);
+    return true;
+  };
+
   const loadCv = async () => {
     setLoading(true);
     setError(null);
+    setDirty(false);
+    setRestoredDraftAt(null);
 
     try {
       await loadTemplates();
@@ -278,12 +363,14 @@ export function CVEditor() {
             language: "en"
           });
           hydrateFromMaster(created);
+          restoreDraftIfAvailable("master", created.id);
           setLoading(false);
           return;
         }
 
         const master = await api.getMasterCv(targetMasterId);
         hydrateFromMaster(master);
+        restoreDraftIfAvailable("master", master.id);
         setLoading(false);
         return;
       }
@@ -295,6 +382,7 @@ export function CVEditor() {
       try {
         const tailored = await api.getTailoredCv(id);
         hydrateFromTailored(tailored);
+        restoreDraftIfAvailable("tailored", tailored.id);
 
         try {
           const source = await api.getTailoredCvSource(tailored.id);
@@ -318,6 +406,7 @@ export function CVEditor() {
         if (tailoredError instanceof ApiClientError && tailoredError.status === 404) {
           const master = await api.getMasterCv(id);
           hydrateFromMaster(master);
+          restoreDraftIfAvailable("master", master.id);
         } else {
           throw tailoredError;
         }
@@ -393,6 +482,23 @@ export function CVEditor() {
     };
   }, [api, templateId]);
 
+  useEffect(() => {
+    if (!cvId || !dirty) {
+      return;
+    }
+
+    writeDraft({
+      version: 1,
+      cvKind,
+      cvId,
+      title,
+      language,
+      templateId,
+      sections,
+      updatedAt: new Date().toISOString()
+    });
+  }, [cvId, cvKind, dirty, language, sections, templateId, title]);
+
   const addSection = (sectionType: string) => {
     setSections((prev) => {
       const maxOrder = prev.filter((section) => section.type !== "header").reduce((max, section) => Math.max(max, section.order), -1);
@@ -407,10 +513,12 @@ export function CVEditor() {
         }
       ];
     });
+    markDirty();
   };
 
   const updateSection = (sectionId: string, data: Record<string, unknown>) => {
     setSections((prev) => prev.map((section) => (section.id === sectionId ? { ...section, data } : section)));
+    markDirty();
   };
 
   const toggleSectionVisibility = (sectionId: string) => {
@@ -419,10 +527,12 @@ export function CVEditor() {
         section.id === sectionId ? { ...section, hidden: !section.hidden } : section
       )
     );
+    markDirty();
   };
 
   const removeSection = (sectionId: string) => {
     setSections((prev) => prev.filter((section) => section.id !== sectionId));
+    markDirty();
   };
 
   const moveSection = (fromIndex: number, toIndex: number) => {
@@ -439,36 +549,90 @@ export function CVEditor() {
       const orderedBody = next.map((section, index) => ({ ...section, order: index }));
       return header ? [header, ...orderedBody] : orderedBody;
     });
+    markDirty();
   };
 
-  const saveCv = async () => {
+  const persistCv = async (trigger: "manual" | "auto"): Promise<boolean> => {
     if (!cvId) {
-      return;
+      return false;
     }
 
-    setSaving(true);
-    setError(null);
+    const targetCvId = cvId;
+    const targetCvKind = cvKind;
+
+    if (trigger === "manual") {
+      setSaving(true);
+      setError(null);
+    } else {
+      setAutoSaving(true);
+    }
 
     try {
       const content = editorSectionsToCvContent(sections, language);
 
-      if (cvKind === "master") {
-        const updated = await api.putMasterCvContent(cvId, content);
-        hydrateFromMaster(updated);
+      if (targetCvKind === "master") {
+        const updated = await api.putMasterCvContent(targetCvId, content);
+        setCvKind("master");
+        setCvId(updated.id);
+        setTitle(updated.title);
+        setLanguage(updated.language);
+        setTemplateId(updated.template_id);
+        setLastSavedAt(updated.updated_at);
       } else {
-        const updated = await api.putTailoredCvContent(cvId, content);
-        hydrateFromTailored(updated);
+        const updated = await api.putTailoredCvContent(targetCvId, content);
+        setCvKind("tailored");
+        setCvId(updated.id);
+        setTitle(updated.title);
+        setLanguage(updated.language);
+        setTemplateId(updated.template_id);
+        setLastSavedAt(updated.updated_at);
+        setTailoredJobData(
+          updated.job
+            ? {
+                role: updated.job.job_title,
+                company: updated.job.company_name
+              }
+            : null
+        );
       }
+
+      clearDraft(targetCvKind, targetCvId);
+      setDirty(false);
+      setRestoredDraftAt(null);
+      return true;
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Failed to save CV.");
       }
+      return false;
     } finally {
-      setSaving(false);
+      if (trigger === "manual") {
+        setSaving(false);
+      } else {
+        setAutoSaving(false);
+      }
     }
   };
+
+  const saveCv = async () => {
+    await persistCv("manual");
+  };
+
+  useEffect(() => {
+    if (!cvId || !dirty || loading || saving || autoSaving) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void persistCv("auto");
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [autoSaving, cvId, cvKind, dirty, language, loading, saving, sections]);
 
   const assignTemplate = async (nextTemplateId: string | null) => {
     if (!cvId) {
@@ -852,6 +1016,25 @@ export function CVEditor() {
     renderingPreview?.resolved_template.template?.name ??
     "Default";
 
+  const saveStatusText = (() => {
+    if (saving) {
+      return "Saving...";
+    }
+
+    if (autoSaving) {
+      return "Autosaving...";
+    }
+
+    if (dirty) {
+      if (restoredDraftAt) {
+        return `Unsaved draft restored ${formatDateTime(restoredDraftAt)}`;
+      }
+      return "Unsaved changes";
+    }
+
+    return lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet";
+  })();
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center" style={{ background: "var(--color-background-secondary)" }}>
@@ -887,7 +1070,7 @@ export function CVEditor() {
                   </span>
                 </div>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  {lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet"}
+                  {saveStatusText}
                 </p>
               </div>
             </div>
@@ -936,12 +1119,12 @@ export function CVEditor() {
 
               <button
                 onClick={() => void saveCv()}
-                disabled={saving}
+                disabled={saving || autoSaving}
                 className="px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
                 style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Saving..." : "Save"}
+                {saving || autoSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {saving ? "Saving..." : autoSaving ? "Autosaving..." : "Save"}
               </button>
 
               {cvKind === "master" && cvId && (

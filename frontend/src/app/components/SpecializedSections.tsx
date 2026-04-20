@@ -1580,7 +1580,17 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
             <input
               type="checkbox"
               checked={item.currentRole || false}
-              onChange={(e) => updateItem(index, { ...item, currentRole: e.target.checked, endDate: e.target.checked ? "Present" : item.endDate })}
+              onChange={(e) =>
+                updateItem(index, {
+                  ...item,
+                  currentRole: e.target.checked,
+                  endDate: e.target.checked
+                    ? "Present"
+                    : item.endDate === "Present"
+                      ? ""
+                      : item.endDate
+                })
+              }
               className="w-4 h-4 rounded"
               style={{
                 accentColor: "var(--color-teal-600)",

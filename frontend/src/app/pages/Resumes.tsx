@@ -237,7 +237,7 @@ export function Resumes() {
 
                 <div className="flex gap-2 flex-wrap">
                   <Link
-                    to="/app/cv/master"
+                    to={`/app/cv/${primaryMaster.id}`}
                     state={{ cvKind: "master", masterCvId: primaryMaster.id }}
                     className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                     style={{
