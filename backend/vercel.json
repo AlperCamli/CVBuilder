@@ -8,9 +8,7 @@
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "node_modules/pdfjs-dist/**"
-      ]
+      "includeFiles": "node_modules/pdfjs-dist/**"
     }
   },
   "routes": [
