@@ -1005,6 +1005,15 @@ export function CVEditor() {
   };
 
   const headerSection = sections.find((section) => section.type === "header");
+  const headerSocialLinks = Array.isArray(headerSection?.data?.socialLinks)
+    ? (headerSection.data.socialLinks as Array<Record<string, unknown>>)
+        .map((entry) => ({
+          id: String(entry.id || ""),
+          type: String(entry.type || "link").trim(),
+          url: String(entry.url || "").trim()
+        }))
+        .filter((entry) => entry.url.length > 0)
+    : [];
   const bodySections = sections
     .filter((section) => section.type !== "header")
     .sort((a, b) => a.order - b.order);
@@ -1050,6 +1059,19 @@ export function CVEditor() {
     }
 
     return String(item.dates || item.date || "").trim();
+  };
+
+  const toPreviewLinkHref = (rawUrl: string): string => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    if (/^(https?:\/\/|mailto:|tel:)/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    return `https://${trimmed}`;
   };
 
   const getPreviewSectionTitle = (sectionType: string): string => {
@@ -1355,6 +1377,23 @@ export function CVEditor() {
                         {headerSection.data.email ? <div>{String(headerSection.data.email)}</div> : null}
                         {headerSection.data.phone ? <div>{String(headerSection.data.phone)}</div> : null}
                         {headerSection.data.location ? <div>{String(headerSection.data.location)}</div> : null}
+                        {headerSocialLinks.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                            {headerSocialLinks.map((link) => (
+                              <a
+                                key={link.id || `${link.type}-${link.url}`}
+                                href={toPreviewLinkHref(link.url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ textDecoration: "underline" }}
+                              >
+                                {link.type
+                                  ? `${link.type.charAt(0).toUpperCase()}${link.type.slice(1)}`
+                                  : "Link"}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </>
                   )}
@@ -1426,6 +1465,11 @@ export function CVEditor() {
                                     </span>
                                   </div>
                                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{item.institution}</p>
+                                  {item.gpa ? (
+                                    <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                                      GPA: {item.gpa}
+                                    </p>
+                                  ) : null}
                                 </div>
                               ))}
                           </>

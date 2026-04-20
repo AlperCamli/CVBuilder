@@ -1,6 +1,7 @@
 import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles, Linkedin, Github, Globe, X as XIcon, Upload, Camera, ChevronDown, ChevronUp } from "lucide-react";
 import { useState, useRef } from "react";
 import { useDrag, useDrop } from "react-dnd";
+import { DateInputHelper } from "./DateInputHelper";
 
 interface HeaderSectionProps {
   data: any;
@@ -29,7 +30,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
     if (newSocialType && newSocialUrl) {
       onChange({
         ...data,
-        socialLinks: [...socialLinks, { type: newSocialType, url: newSocialUrl, id: Date.now() }],
+        socialLinks: [...socialLinks, { type: newSocialType, url: newSocialUrl, id: String(Date.now()) }],
       });
       setNewSocialType("");
       setNewSocialUrl("");
@@ -37,10 +38,19 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
     }
   };
 
-  const removeSocialLink = (id: number) => {
+  const updateSocialLink = (id: string | number, patch: Record<string, unknown>) => {
     onChange({
       ...data,
-      socialLinks: socialLinks.filter((link: any) => link.id !== id),
+      socialLinks: socialLinks.map((link: any) =>
+        String(link.id) === String(id) ? { ...link, ...patch } : link
+      )
+    });
+  };
+
+  const removeSocialLink = (id: string | number) => {
+    onChange({
+      ...data,
+      socialLinks: socialLinks.filter((link: any) => String(link.id) !== String(id)),
     });
   };
 
@@ -203,19 +213,49 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                   return (
                     <div
                       key={link.id}
-                      className="flex items-center gap-2 p-2 rounded-lg border"
+                      className="p-2 rounded-lg border space-y-2"
                       style={{ borderColor: "var(--color-border-tertiary)" }}
                     >
-                      <Icon size={14} style={{ color: "var(--color-text-secondary)" }} />
-                      <span style={{ fontSize: "13px", color: "var(--color-text-primary)", flex: 1 }}>
-                        {platform?.label || link.type}
-                      </span>
-                      <button
-                        onClick={() => removeSocialLink(link.id)}
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} style={{ color: "var(--color-text-secondary)" }} />
+                        <select
+                          value={link.type || "website"}
+                          onChange={(event) => updateSocialLink(link.id, { type: event.target.value })}
+                          className="px-2 py-1 rounded border"
+                          style={{
+                            fontSize: "12px",
+                            borderColor: "var(--color-border-secondary)",
+                            background: "var(--color-background-primary)",
+                            color: "var(--color-text-primary)",
+                            flex: 1
+                          }}
+                        >
+                          {socialPlatforms.map((item) => (
+                            <option key={item.type} value={item.type}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => removeSocialLink(link.id)}
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <input
+                        type="url"
+                        placeholder="https://example.com"
+                        value={link.url || ""}
+                        onChange={(event) => updateSocialLink(link.id, { url: event.target.value })}
+                        className="w-full px-2 py-1.5 rounded border"
+                        style={{
+                          fontSize: "12px",
+                          borderColor: "var(--color-border-secondary)",
+                          background: "var(--color-background-primary)",
+                          color: "var(--color-text-primary)"
+                        }}
+                      />
                     </div>
                   );
                 })}
@@ -480,29 +520,16 @@ function ExperienceItem({ item, index, updateItem, removeItem, toggleItemVisibil
             }}
           />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Start Date (e.g. Jan 2020)"
+            <DateInputHelper
               value={item.startDate || ""}
-              onChange={(e) => updateItem(index, { ...item, startDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder="Start Date (e.g. Jan 2020)"
+              onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
-            <input
-              type="text"
-              placeholder="End Date (e.g. Dec 2023)"
+            <DateInputHelper
               value={item.endDate || ""}
-              onChange={(e) => updateItem(index, { ...item, endDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
+              placeholder="End Date (e.g. Dec 2023)"
               disabled={item.currentRole}
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-                opacity: item.currentRole ? 0.5 : 1,
-              }}
+              onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
@@ -798,27 +825,15 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
             }}
           />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Start Date (e.g. 2015)"
+            <DateInputHelper
               value={item.startDate || ""}
-              onChange={(e) => updateItem(index, { ...item, startDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder="Start Date (e.g. 2015)"
+              onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
-            <input
-              type="text"
-              placeholder={item.expectedGraduation ? "Expected Graduation" : "End Date (e.g. 2019)"}
+            <DateInputHelper
               value={item.endDate || ""}
-              onChange={(e) => updateItem(index, { ...item, endDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder={item.expectedGraduation ? "Expected Graduation" : "End Date (e.g. 2019)"}
+              onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
           <div className="flex gap-4">
@@ -1427,16 +1442,10 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                           borderColor: "var(--color-border-secondary)",
                         }}
                       />
-                      <input
-                        type="text"
+                      <DateInputHelper
+                        value={item.dates || ""}
                         placeholder="Dates (optional)"
-                        value={item.dates}
-                        onChange={(e) => updateItem(index, { ...item, dates: e.target.value })}
-                        className="w-full px-2 py-1.5 rounded border"
-                        style={{
-                          fontSize: "13px",
-                          borderColor: "var(--color-border-secondary)",
-                        }}
+                        onChange={(nextValue) => updateItem(index, { ...item, dates: nextValue })}
                       />
                       <textarea
                         rows={2}

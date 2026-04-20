@@ -1,5 +1,6 @@
 import { GripVertical, Eye, EyeOff, Trash2, Plus, ChevronUp, ChevronDown } from "lucide-react";
 import { CollapsibleItem } from "./CollapsibleItem";
+import { DateInputHelper } from "./DateInputHelper";
 import { useRef } from "react";
 import { useDrag, useDrop } from "react-dnd";
 
@@ -573,27 +574,15 @@ function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility
             }}
           />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Start Date"
+            <DateInputHelper
               value={item.startDate || ""}
-              onChange={(e) => updateItem(index, { ...item, startDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder="Start Date"
+              onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
-            <input
-              type="text"
-              placeholder="End Date"
+            <DateInputHelper
               value={item.endDate || ""}
-              onChange={(e) => updateItem(index, { ...item, endDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder="End Date"
+              onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
           <textarea
@@ -820,16 +809,10 @@ function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, 
               borderColor: "var(--color-border-secondary)",
             }}
           />
-          <input
-            type="text"
-            placeholder="Date (e.g. 2023)"
+          <DateInputHelper
             value={item.date || ""}
-            onChange={(e) => updateItem(index, { ...item, date: e.target.value })}
-            className="w-full px-2 py-1.5 rounded border"
-            style={{
-              fontSize: "13px",
-              borderColor: "var(--color-border-secondary)",
-            }}
+            placeholder="Date (e.g. 2023)"
+            onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
           <textarea
             rows={2}
@@ -1055,16 +1038,10 @@ function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibi
               borderColor: "var(--color-border-secondary)",
             }}
           />
-          <input
-            type="text"
-            placeholder="Date (e.g. 2023)"
+          <DateInputHelper
             value={item.date || ""}
-            onChange={(e) => updateItem(index, { ...item, date: e.target.value })}
-            className="w-full px-2 py-1.5 rounded border"
-            style={{
-              fontSize: "13px",
-              borderColor: "var(--color-border-secondary)",
-            }}
+            placeholder="Date (e.g. 2023)"
+            onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
           <textarea
             rows={2}
@@ -1551,29 +1528,16 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
             }}
           />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Start Date (e.g. Jan 2020)"
+            <DateInputHelper
               value={item.startDate || ""}
-              onChange={(e) => updateItem(index, { ...item, startDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
+              placeholder="Start Date (e.g. Jan 2020)"
+              onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
-            <input
-              type="text"
-              placeholder="End Date (e.g. Dec 2023)"
+            <DateInputHelper
               value={item.endDate || ""}
-              onChange={(e) => updateItem(index, { ...item, endDate: e.target.value })}
-              className="px-2 py-1.5 rounded border"
+              placeholder="End Date (e.g. Dec 2023)"
               disabled={item.currentRole}
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-                opacity: item.currentRole ? 0.5 : 1,
-              }}
+              onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
