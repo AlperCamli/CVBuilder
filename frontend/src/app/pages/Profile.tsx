@@ -21,7 +21,7 @@ export function Profile() {
 
   const [fullName, setFullName] = useState("");
   const [defaultCvLanguage, setDefaultCvLanguage] = useState("en");
-  const [locale, setLocale] = useState<"en" | "tr">("en");
+  const [locale] = useState<"en">("en");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [applicationReminders, setApplicationReminders] = useState(true);
 
@@ -48,7 +48,6 @@ export function Profile() {
 
       setFullName(me.user.full_name ?? "");
       setDefaultCvLanguage(settingsResponse.settings.default_cv_language ?? "en");
-      setLocale(settingsResponse.settings.locale);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -78,7 +77,7 @@ export function Profile() {
           default_cv_language: defaultCvLanguage
         }),
         api.patchSettings({
-          locale,
+          locale: "en",
           default_cv_language: defaultCvLanguage,
           onboarding_completed: settings?.onboarding_completed ?? true
         })
@@ -372,16 +371,16 @@ export function Profile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <select
                 value={locale}
-                onChange={(event) => setLocale(event.target.value as "en" | "tr")}
                 className="w-full px-3 py-2 rounded-lg border"
+                disabled
                 style={{
                   fontSize: "13px",
                   borderColor: "var(--color-border-secondary)",
-                  background: "var(--color-background-primary)"
+                  background: "var(--color-background-secondary)",
+                  color: "var(--color-text-secondary)"
                 }}
               >
                 <option value="en">English</option>
-                <option value="tr">Turkish</option>
               </select>
 
               <input

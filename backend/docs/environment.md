@@ -36,7 +36,7 @@
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, min `60`, max `86400`)
 - `PDF_OCR_ENABLED` (default: `true`, defaults to `false` in `test` runtime)
-- `PDF_OCR_LANGUAGES` (default: `eng+tur`, passed to Tesseract OCR)
+- `PDF_OCR_LANGUAGES` (default: `eng`, passed to Tesseract OCR)
 - `PDF_OCR_MAX_PAGES` (default: `2`, min `1`, max `10`)
 - `PDF_OCR_RENDER_SCALE` (default: `2`, min `1`, max `4`)
 - `PDF_OCR_CACHE_PATH` (default: `/tmp/cv-builder-ocr-cache`)

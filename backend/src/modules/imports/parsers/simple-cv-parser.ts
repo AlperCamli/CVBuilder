@@ -28,8 +28,7 @@ type SectionType =
 
 interface SectionDefinition {
   type: SectionType;
-  titleEn: string;
-  titleTr: string;
+  title: string;
   aliases: string[];
   keywords: string[];
 }
@@ -55,55 +54,19 @@ interface ExtractedTextCandidate {
 const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     type: "header",
-    titleEn: "Header",
-    titleTr: "Başlık",
-    aliases: [
-      "header",
-      "contact",
-      "contact info",
-      "contact information",
-      "personal information",
-      "iletişim",
-      "iletişim bilgileri",
-      "kişisel bilgiler",
-      "profil bilgileri"
-    ],
-    keywords: [
-      "contact",
-      "email",
-      "phone",
-      "linkedin",
-      "github",
-      "portfolio",
-      "address",
-      "iletisim",
-      "eposta",
-      "telefon",
-      "adres"
-    ]
+    title: "Header",
+    aliases: ["header", "contact", "contact info", "contact information", "personal information"],
+    keywords: ["contact", "email", "phone", "linkedin", "github", "portfolio", "address"]
   },
   {
     type: "summary",
-    titleEn: "Summary",
-    titleTr: "Özet",
-    aliases: [
-      "summary",
-      "profile",
-      "professional summary",
-      "objective",
-      "about",
-      "about me",
-      "özet",
-      "profil",
-      "hakkımda",
-      "kariyer özeti"
-    ],
-    keywords: ["summary", "profile", "objective", "about", "ozet", "hakkimda"]
+    title: "Summary",
+    aliases: ["summary", "profile", "professional summary", "objective", "about", "about me"],
+    keywords: ["summary", "profile", "objective", "about"]
   },
   {
     type: "experience",
-    titleEn: "Experience",
-    titleTr: "Deneyim",
+    title: "Experience",
     aliases: [
       "experience",
       "experiences",
@@ -111,150 +74,69 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
       "work experience",
       "professional experience",
       "employment",
-      "career history",
-      "deneyim",
-      "iş deneyimi",
-      "çalışma deneyimi",
-      "tecrübe"
+      "career history"
     ],
-    keywords: [
-      "experience",
-      "employment",
-      "worked",
-      "position",
-      "role",
-      "deneyim",
-      "calistim",
-      "gorev"
-    ]
+    keywords: ["experience", "employment", "worked", "position", "role"]
   },
   {
     type: "education",
-    titleEn: "Education",
-    titleTr: "Eğitim",
-    aliases: [
-      "education",
-      "academic background",
-      "academics",
-      "education background",
-      "eğitim",
-      "öğrenim",
-      "akademik geçmiş"
-    ],
-    keywords: [
-      "education",
-      "university",
-      "college",
-      "bachelor",
-      "master",
-      "phd",
-      "egitim",
-      "universite",
-      "lisans",
-      "yuksek lisans"
-    ]
+    title: "Education",
+    aliases: ["education", "academic background", "academics", "education background"],
+    keywords: ["education", "university", "college", "bachelor", "master", "phd"]
   },
   {
     type: "skills",
-    titleEn: "Skills",
-    titleTr: "Yetenekler",
-    aliases: [
-      "skills",
-      "technical skills",
-      "core skills",
-      "competencies",
-      "technologies",
-      "yetenekler",
-      "beceriler",
-      "teknik yetkinlikler",
-      "uzmanlıklar"
-    ],
-    keywords: [
-      "skills",
-      "competencies",
-      "technology",
-      "tech stack",
-      "tools",
-      "yetenek",
-      "beceri",
-      "teknoloji",
-      "yetkinlik"
-    ]
+    title: "Skills",
+    aliases: ["skills", "technical skills", "core skills", "competencies", "technologies"],
+    keywords: ["skills", "competencies", "technology", "tech stack", "tools"]
   },
   {
     type: "languages",
-    titleEn: "Languages",
-    titleTr: "Diller",
-    aliases: ["languages", "language skills", "language", "diller", "dil becerileri", "yabancı diller"],
-    keywords: [
-      "language",
-      "languages",
-      "english",
-      "turkish",
-      "native",
-      "fluent",
-      "dil",
-      "ingilizce",
-      "turkce",
-      "ana dil"
-    ]
+    title: "Languages",
+    aliases: ["languages", "language skills", "language"],
+    keywords: ["language", "languages", "english", "native", "fluent", "proficient"]
   },
   {
     type: "certifications",
-    titleEn: "Certifications",
-    titleTr: "Sertifikalar",
-    aliases: ["certifications", "certificates", "licenses", "sertifikalar", "sertifika", "belgeler"],
-    keywords: [
-      "certification",
-      "certificate",
-      "licensed",
-      "credential",
-      "sertifika",
-      "belge",
-      "lisans"
-    ]
+    title: "Certifications",
+    aliases: ["certifications", "certificates", "licenses"],
+    keywords: ["certification", "certificate", "licensed", "credential"]
   },
   {
     type: "courses",
-    titleEn: "Courses",
-    titleTr: "Kurslar",
-    aliases: ["courses", "coursework", "trainings", "training", "kurslar", "eğitimler", "dersler"],
-    keywords: ["course", "training", "bootcamp", "kurs", "egitim", "ders"]
+    title: "Courses",
+    aliases: ["courses", "coursework", "trainings", "training"],
+    keywords: ["course", "training", "bootcamp"]
   },
   {
     type: "projects",
-    titleEn: "Projects",
-    titleTr: "Projeler",
-    aliases: ["projects", "project experience", "selected projects", "projeler", "proje deneyimi"],
-    keywords: ["project", "portfolio", "github", "repo", "proje"]
+    title: "Projects",
+    aliases: ["projects", "project experience", "selected projects"],
+    keywords: ["project", "portfolio", "github", "repo"]
   },
   {
     type: "volunteer",
-    titleEn: "Volunteer",
-    titleTr: "Gönüllülük",
-    aliases: ["volunteer", "volunteering", "volunteer experience", "community service", "gönüllülük", "gönüllü çalışmalar"],
-    keywords: ["volunteer", "community", "ngo", "mentorship", "gonullu", "topluluk", "sivil toplum"]
+    title: "Volunteer",
+    aliases: ["volunteer", "volunteering", "volunteer experience", "community service"],
+    keywords: ["volunteer", "community", "ngo", "mentorship"]
   },
   {
     type: "awards",
-    titleEn: "Awards",
-    titleTr: "Ödüller",
-    aliases: ["awards", "honors", "achievements", "ödüller", "başarılar", "onur ödülleri"],
-    keywords: ["award", "honor", "achievement", "odul", "basari", "onur"]
+    title: "Awards",
+    aliases: ["awards", "honors", "achievements"],
+    keywords: ["award", "honor", "achievement"]
   },
   {
     type: "publications",
-    titleEn: "Publications",
-    titleTr: "Yayınlar",
-    aliases: ["publications", "papers", "research", "yayınlar", "makaleler", "bildiriler"],
-    keywords: ["publication", "paper", "journal", "conference", "yayin", "makale", "bildiri"]
+    title: "Publications",
+    aliases: ["publications", "research publications", "papers"],
+    keywords: ["publication", "paper", "journal", "conference", "doi"]
   },
   {
     type: "references",
-    titleEn: "References",
-    titleTr: "Referanslar",
-    aliases: ["references", "referees", "referanslar", "referans"],
-    keywords: ["reference", "referee", "referans"]
+    title: "References",
+    aliases: ["references", "referees"],
+    keywords: ["reference", "referee"]
   }
 ];
 
@@ -269,7 +151,6 @@ const LOCATION_KEYWORDS = [
   "bursa",
   "antalya",
   "turkey",
-  "turkiye",
   "united states",
   "usa",
   "uk",
@@ -346,7 +227,7 @@ const isPdfOcrEnabled = (): boolean => {
 const getPdfOcrLanguages = (): string => {
   const rawValue = process.env.PDF_OCR_LANGUAGES;
   if (!rawValue || rawValue.trim().length === 0) {
-    return "eng+tur";
+    return "eng";
   }
 
   return rawValue.trim();
@@ -550,8 +431,27 @@ const getUrlCandidates = (value: string): string[] => {
   return dedupe([...normalizedDirect, ...normalizedHandles]);
 };
 
+const normalizeEmailSpacing = (value: string): string => {
+  return value.replace(/([A-Z0-9._%+-])\s*@\s*([A-Z0-9.-]+\.[A-Z]{2,})/gi, "$1@$2");
+};
+
+const extractEmailCandidates = (value: string): string[] => {
+  const normalized = normalizeEmailSpacing(value);
+  const matches = normalized.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [];
+  const unique = new Map<string, string>();
+
+  for (const email of matches) {
+    const key = email.toLowerCase();
+    if (!unique.has(key)) {
+      unique.set(key, key);
+    }
+  }
+
+  return [...unique.values()];
+};
+
 const hasContactSignal = (line: string): boolean => {
-  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(line)) {
+  if (extractEmailCandidates(line).length > 0) {
     return true;
   }
 
@@ -1091,6 +991,11 @@ const looksLikeHeading = (line: string): boolean => {
   return true;
 };
 
+const headingAliasPattern = (alias: string): RegExp => {
+  const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escapedAlias}(?:\\s+(?:section|details|history|highlights|overview|profile))?$`, "i");
+};
+
 const findSectionByHeading = (line: string): SectionDefinition | null => {
   if (!looksLikeHeading(line)) {
     return null;
@@ -1109,7 +1014,11 @@ const findSectionByHeading = (line: string): SectionDefinition | null => {
   for (const definition of SECTION_DEFINITIONS) {
     for (const alias of definition.aliases) {
       const aliasFolded = normalizeFolded(alias);
-      if (aliasFolded && normalized.includes(aliasFolded) && normalized.split(" ").length <= 6) {
+      if (!aliasFolded) {
+        continue;
+      }
+
+      if (headingAliasPattern(aliasFolded).test(normalized)) {
         return definition;
       }
     }
@@ -1166,9 +1075,7 @@ const isLikelyEducationLine = (line: string): boolean => {
     return true;
   }
 
-  return /\b(?:bsc|msc|ba|ma|phd|associate|yüksek lisans|lisans|ön lisans|universite|üniversite)\b/i.test(
-    line
-  );
+  return /\b(?:bsc|msc|ba|ma|phd|associate|bachelor|master|university|college)\b/i.test(line);
 };
 
 const isLikelyExperienceLine = (line: string): boolean => {
@@ -1177,12 +1084,16 @@ const isLikelyExperienceLine = (line: string): boolean => {
   }
 
   const hasYear = /\b(?:19|20)\d{2}\b/.test(line);
-  const hasRangeConnector = /(?:-|–|—|to|present|halen|devam)/i.test(line);
+  const hasRangeConnector = /(?:-|–|—|to|present|current|now)/i.test(line);
 
   return hasYear && hasRangeConnector;
 };
 
 const classifyUnheadedLine = (line: string): SectionType => {
+  if (isLikelyNameLine(line)) {
+    return "header";
+  }
+
   if (hasContactSignal(line) || containsAnyKeyword(line, SECTION_DEFINITION_BY_TYPE.get("header")?.keywords ?? [])) {
     return "header";
   }
@@ -1304,48 +1215,100 @@ const segmentByHeadings = (lines: string[]): { buckets: Map<SectionType, string[
   };
 };
 
-const detectLanguage = (text: string): "tr" | "en" => {
-  if (/[ığüşöçİĞÜŞÖÇ]/.test(text)) {
-    return "tr";
+const isLikelyNameLine = (line: string): boolean => {
+  if (hasContactSignal(line) || findSectionByHeading(line)) {
+    return false;
   }
 
-  const folded = normalizeFolded(text);
-  const trSignals =
-    folded.match(/\b(deneyim|egitim|yetenek|beceri|hakkimda|ozet|gonullu|referans|sertifika)\b/g)
-      ?.length ?? 0;
-  const enSignals =
-    folded.match(/\b(experience|education|skills|summary|profile|projects|references|certifications)\b/g)
-      ?.length ?? 0;
+  if (line.length < 3 || line.length > 80) {
+    return false;
+  }
 
-  return trSignals > enSignals ? "tr" : "en";
+  if (/\d/.test(line)) {
+    return false;
+  }
+
+  if (/[.,;:!?]/.test(line)) {
+    return false;
+  }
+
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 6) {
+    return false;
+  }
+
+  if (words.some((word) => word.length <= 1)) {
+    return false;
+  }
+
+  const looksLikeNameToken = (word: string): boolean => {
+    return /^(?:\p{Lu}[\p{L}'’.-]*|[\p{Lu}]{2,})$/u.test(word);
+  };
+
+  if (!words.every(looksLikeNameToken)) {
+    return false;
+  }
+
+  return true;
+};
+
+const foldWrappedLines = (lines: string[]): string[] => {
+  const folded: string[] = [];
+  const bulletPattern = /^(?:[-*•·▪◦]+)\s*/;
+
+  const appendToLast = (line: string): void => {
+    const lastIndex = folded.length - 1;
+    const current = folded[lastIndex] ?? "";
+    const connector = /[-\u2013\u2014]$/.test(current) ? "" : " ";
+    folded[lastIndex] = `${current}${connector}${line}`.replace(/\s+/g, " ").trim();
+  };
+
+  for (const line of lines) {
+    if (folded.length === 0) {
+      folded.push(line);
+      continue;
+    }
+
+    const previous = folded[folded.length - 1];
+    const previousIsHeading = Boolean(findSectionByHeading(previous));
+    const currentIsHeading = Boolean(findSectionByHeading(line));
+    const previousIsBullet = bulletPattern.test(previous);
+    const currentIsBullet = bulletPattern.test(line);
+    const startsLowercase = /^[a-z(]/.test(line);
+    const dateRange = extractDateRangeFromText(line);
+    const looksLikeEntryStart = Boolean(dateRange.startDate && (dateRange.endDate || dateRange.currentRole));
+    const previousEndsSoftly = /[,;:/-]$/.test(previous) || !/[.!?]$/.test(previous);
+    const mergeAfterBullet =
+      previousIsBullet &&
+      !currentIsBullet &&
+      !currentIsHeading &&
+      !looksLikeEntryStart &&
+      (startsLowercase || previousEndsSoftly);
+    const mergeByContinuation =
+      !previousIsHeading &&
+      !currentIsHeading &&
+      !currentIsBullet &&
+      !hasContactSignal(line) &&
+      (startsLowercase || previousEndsSoftly);
+
+    if (mergeAfterBullet || mergeByContinuation) {
+      appendToLast(line);
+      continue;
+    }
+
+    folded.push(line);
+  }
+
+  return folded;
 };
 
 const extractName = (lines: string[]): string | null => {
   const topLines = lines.slice(0, 12);
 
   for (const line of topLines) {
-    if (hasContactSignal(line) || findSectionByHeading(line)) {
-      continue;
+    if (isLikelyNameLine(line)) {
+      return line;
     }
-
-    if (line.length < 3 || line.length > 80) {
-      continue;
-    }
-
-    if (/\d/.test(line)) {
-      continue;
-    }
-
-    const words = line.split(/\s+/).filter(Boolean);
-    if (words.length < 2 || words.length > 6) {
-      continue;
-    }
-
-    if (words.some((word) => word.length <= 1)) {
-      continue;
-    }
-
-    return line;
   }
 
   return null;
@@ -1379,15 +1342,15 @@ const extractHeadline = (lines: string[], fullName: string | null): string | nul
       continue;
     }
 
-    if (/\b(?:summary|experience|education|skills|projects|özet|deneyim|eğitim|yetenekler)\b/i.test(line)) {
+    if (/\b(?:summary|experience|education|skills|projects)\b/i.test(line)) {
       continue;
     }
 
-    if (/^(?:başlık|baslik|title|heading)$/i.test(line.trim())) {
+    if (/^(?:title|heading)$/i.test(line.trim())) {
       continue;
     }
 
-    if (/\b(?:contact information|birth date|language skills|english|spanish|turkish)\b/i.test(line)) {
+    if (/\b(?:contact information|birth date|language skills|english|spanish)\b/i.test(line)) {
       continue;
     }
 
@@ -1404,9 +1367,55 @@ const extractHeadline = (lines: string[], fullName: string | null): string | nul
   return null;
 };
 
-const extractEmail = (text: string): string | null => {
-  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  return match ? match[0] : null;
+const extractEmail = (text: string, lines: string[]): string | null => {
+  const candidates = extractEmailCandidates(text);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const normalizedLines = lines.map((line) => normalizeEmailSpacing(line).toLowerCase());
+  const normalizedText = normalizeEmailSpacing(text).toLowerCase();
+  const topWindow = normalizedLines.slice(0, 10).join(" ");
+
+  const scored = candidates
+    .map((candidate) => {
+      const lowerCandidate = candidate.toLowerCase();
+      const lineIndex = normalizedLines.findIndex((line) => line.includes(lowerCandidate));
+      const textIndex = normalizedText.indexOf(lowerCandidate);
+      const lineValue = lineIndex >= 0 ? normalizedLines[lineIndex] : "";
+      let score = 0;
+
+      if (topWindow.includes(lowerCandidate)) {
+        score += 8;
+      }
+
+      if (lineIndex >= 0) {
+        score += Math.max(0, 6 - lineIndex);
+      }
+
+      if (textIndex >= 0) {
+        score += Math.max(0, 5 - Math.floor(textIndex / 240));
+      }
+
+      if (/(gmail|outlook|hotmail|icloud|yahoo|proton|pm\.me)\./i.test(candidate)) {
+        score += 2;
+      }
+
+      if (/(reference|referee)/i.test(lineValue)) {
+        score -= 3;
+      }
+
+      return { candidate, score, textIndex };
+    })
+    .sort((left, right) => {
+      if (left.score !== right.score) {
+        return right.score - left.score;
+      }
+
+      return left.textIndex - right.textIndex;
+    });
+
+  return scored[0]?.candidate ?? null;
 };
 
 const extractPhone = (text: string): string | null => {
@@ -1494,15 +1503,15 @@ const extractLocation = (lines: string[]): string | null => {
       continue;
     }
 
-    if (/\b(member|intern|engineer|consultant|assistant|advisor|stajyer|muhendis|uzman)\b/i.test(line)) {
+    if (/\b(member|intern|engineer|consultant|assistant|advisor)\b/i.test(line)) {
       continue;
     }
 
-    if (/\b(university|universite|üniversite|student|öğrenci|engineering|muhendis)\b/i.test(line)) {
+    if (/\b(university|college|student|engineering)\b/i.test(line)) {
       continue;
     }
 
-    if (/\b(language|english|spanish|turkish|native|advanced|beginner)\b/i.test(line)) {
+    if (/\b(language|english|spanish|native|advanced|beginner)\b/i.test(line)) {
       continue;
     }
 
@@ -1545,33 +1554,18 @@ const monthTokenPattern = [
   "sep(?:t(?:ember)?)?",
   "oct(?:ober)?",
   "nov(?:ember)?",
-  "dec(?:ember)?",
-  "ocak",
-  "şubat",
-  "subat",
-  "mart",
-  "nisan",
-  "mayıs",
-  "mayis",
-  "haziran",
-  "temmuz",
-  "ağustos",
-  "agustos",
-  "eyl[üu]l",
-  "ekim",
-  "kas[ıi]m",
-  "aral[ıi]k"
+  "dec(?:ember)?"
 ].join("|");
 
 const dateTokenPattern = `(?:${monthTokenPattern})\\s+\\d{4}|\\d{1,2}[./-]\\d{4}|\\d{4}`;
 const dateRangePattern = new RegExp(
-  `(${dateTokenPattern})\\s*(?:-|–|—|to)\\s*(present|current|now|halen|devam|${dateTokenPattern})`,
+  `(${dateTokenPattern})\\s*(?:-|–|—|to)\\s*(present|current|now|${dateTokenPattern})`,
   "i"
 );
 
 const normalizeDateToken = (value: string): string => {
   const normalized = normalizeWhitespaceText(value.replace(/[()]/g, ""));
-  if (/^(present|current|now|halen|devam)$/i.test(normalized)) {
+  if (/^(present|current|now)$/i.test(normalized)) {
     return "Present";
   }
 
@@ -1621,7 +1615,7 @@ const splitRoleCompanyText = (value: string): { role: string; company: string } 
     };
   }
 
-  const separatorMatch = text.match(/^(.+?)\s*[-–—|/]\s*(.+)$/);
+  const separatorMatch = text.match(/^(.+?)\s+[-–—|/]\s+(.+)$/);
   if (separatorMatch) {
     return {
       role: normalizeWhitespaceText(separatorMatch[1]),
@@ -1676,18 +1670,12 @@ const parseEducationFields = (rawText: string): Record<string, unknown> => {
 
   const dateParts = extractDateRangeFromText(text);
   const gpaMatch = text.match(/\bGPA[:\s]*([0-9]+(?:[.,][0-9]+)?(?:\s*\/\s*[0-9]+(?:[.,][0-9]+)?)?)/i);
-  const expectedMatch = text.match(/(?:Expected|Beklenen)\s+([A-Za-zÇĞİÖŞÜçğıöşü0-9./-]+\s*\d{0,4})/i);
-  const institutionMatch = text.match(
-    /([A-Za-zÇĞİÖŞÜçğıöşü0-9&.\- ]+(?:University|Üniversite|Institute|College|School|Technical))/i
-  );
-  const degreeMatch = text.match(
-    /\b(?:B\.?Sc|M\.?Sc|Ph\.?D|Bachelor|Master|Lisans|Yüksek Lisans|Associate|Ön Lisans)\b[^|,;)]*/i
-  );
-  const fieldMatch = text.match(
-    /([A-Za-zÇĞİÖŞÜçğıöşü\s]+(?:Engineering|Mühendislik|Management|Yönetim|Design|Science|Business))/i
-  );
+  const expectedMatch = text.match(/(?:Expected)\s+([\p{L}0-9./-]+\s*\d{0,4})/iu);
+  const institutionMatch = text.match(/([\p{L}0-9&.\- ]+(?:University|Institute|College|School|Technical))/iu);
+  const degreeMatch = text.match(/\b(?:B\.?Sc|M\.?Sc|Ph\.?D|Bachelor|Master|Associate)\b[^|,;)]*/i);
+  const fieldMatch = text.match(/([\p{L}\s]+(?:Engineering|Management|Design|Science|Business))/iu);
 
-  const expectedGraduation = /(?:expected|beklenen)/i.test(text);
+  const expectedGraduation = /(?:expected)/i.test(text);
   const exchangeProgram = /(?:exchange|erasmus)/i.test(text);
   const endDate = dateParts.endDate || (expectedMatch ? normalizeWhitespaceText(expectedMatch[1]) : "");
 
@@ -1840,21 +1828,36 @@ const parsePublicationFields = (rawText: string): Record<string, unknown> => {
 };
 
 const parseReferenceFields = (rawText: string): Record<string, unknown> => {
-  const text = normalizeWhitespaceText(rawText.replace(/^(?:lar|references?)\s*/i, ""));
+  const text = normalizeWhitespaceText(rawText.replace(/^references?\s*/i, ""));
   if (!text) {
     return {};
   }
 
   const allPhoneMatches = [...text.matchAll(/\+?\d[\d\s().-]{7,}\d/g)];
-  const allEmailMatches = [...text.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)];
+  const allEmailMatches = extractEmailCandidates(text);
   if (allPhoneMatches.length > 1 || allEmailMatches.length > 1) {
     return {};
   }
 
-  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const emailMatch = allEmailMatches[0] ?? "";
   const phoneMatch = text.match(/\+?\d[\d\s().-]{7,}\d/);
-  const withoutEmail = normalizeWhitespaceText(emailMatch ? text.replace(emailMatch[0], " ") : text);
+  const withoutEmail = normalizeWhitespaceText(emailMatch ? normalizeEmailSpacing(text).replace(emailMatch, " ") : text);
   const withoutPhone = normalizeWhitespaceText(phoneMatch ? withoutEmail.replace(phoneMatch[0], " ") : withoutEmail);
+  const commaParts = withoutPhone
+    .split(",")
+    .map((part) => normalizeWhitespaceText(part))
+    .filter((part) => part.length > 0);
+
+  if (commaParts.length >= 3) {
+    return {
+      name: commaParts[0],
+      job_title: commaParts[1],
+      organization: commaParts.slice(2).join(", "),
+      email: emailMatch,
+      phone: phoneMatch?.[0] ?? ""
+    };
+  }
+
   const slashParts = withoutPhone.split("/");
   const name = normalizeWhitespaceText(slashParts[0] ?? "");
   const roleOrg = normalizeWhitespaceText(slashParts.slice(1).join("/"));
@@ -1864,7 +1867,7 @@ const parseReferenceFields = (rawText: string): Record<string, unknown> => {
     name,
     job_title: normalizeWhitespaceText(roleOrgMatch?.[1] ?? roleOrg),
     organization: normalizeWhitespaceText(roleOrgMatch?.[2] ?? ""),
-    email: emailMatch?.[0] ?? "",
+    email: emailMatch,
     phone: phoneMatch?.[0] ?? ""
   };
 };
@@ -1939,7 +1942,48 @@ const buildHeaderLines = (lines: string[], metadata: Record<string, unknown>): s
   return dedupe(seedLines);
 };
 
+const isLikelySectionEntryBoundary = (sectionType: SectionType, line: string): boolean => {
+  if (findSectionByHeading(line)) {
+    return false;
+  }
+
+  if (sectionType === "experience" || sectionType === "volunteer" || sectionType === "education" || sectionType === "projects") {
+    const dateRange = extractDateRangeFromText(line);
+    if (dateRange.startDate && (dateRange.endDate || dateRange.currentRole)) {
+      return true;
+    }
+  }
+
+  if (sectionType === "references") {
+    return /,\s*[^,]+,\s*[^,]+/.test(line);
+  }
+
+  if (sectionType === "awards" || sectionType === "publications") {
+    return /\b(?:19|20)\d{2}\b/.test(line);
+  }
+
+  return false;
+};
+
 const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Record<string, unknown>> => {
+  if (sectionType === "references" && lines.length > 0 && lines.length <= 4) {
+    const mergedText = normalizeWhitespaceText(lines.join(" "));
+    if (mergedText) {
+      return [
+        {
+          type: sectionType,
+          fields: {
+            text: mergedText,
+            ...inferStructuredFields(sectionType, mergedText)
+          },
+          meta: {
+            source: "import_parser"
+          }
+        }
+      ];
+    }
+  }
+
   const blocks: Array<Record<string, unknown>> = [];
 
   let itemBuffer: string[] = [];
@@ -2000,12 +2044,13 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
       continue;
     }
 
-    flushItems();
-    textBuffer.push(line);
-
-    if (line.length > 140 || /[.!?]$/.test(line)) {
+    if (textBuffer.length > 0 && isLikelySectionEntryBoundary(sectionType, line)) {
+      flushItems();
       flushText();
     }
+
+    flushItems();
+    textBuffer.push(line);
   }
 
   flushItems();
@@ -2027,18 +2072,19 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
 };
 
 const toStructuredContent = (text: string): CvContent => {
-  const language = detectLanguage(text);
-  const lines = toLines(text);
+  const language = "en" as const;
+  const normalizedText = normalizeEmailSpacing(text);
+  const lines = foldWrappedLines(toLines(normalizedText));
 
   const { buckets, headingCount } = segmentByHeadings(lines);
 
   const metadata = {
     full_name: extractName(lines) ?? "",
     headline: "",
-    email: extractEmail(text) ?? "",
-    phone: extractPhone(text) ?? "",
+    email: extractEmail(normalizedText, lines) ?? "",
+    phone: extractPhone(normalizedText) ?? "",
     location: "",
-    urls: getUrlCandidates(text)
+    urls: getUrlCandidates(normalizedText)
   } as Record<string, unknown>;
 
   metadata.headline = extractHeadline(lines, (metadata.full_name as string) || null) ?? "";
@@ -2068,7 +2114,7 @@ const toStructuredContent = (text: string): CvContent => {
 
       sections.push({
         type: definition.type,
-        title: language === "tr" ? definition.titleTr : definition.titleEn,
+        title: definition.title,
         blocks: [
           {
             type: "header",
@@ -2099,14 +2145,22 @@ const toStructuredContent = (text: string): CvContent => {
     }
 
     if (definition.type === "summary") {
+      const summaryText = sectionLines.join("\n");
+      const summaryNormalized = normalizeWhitespaceText(summaryText).toLowerCase();
+      const fullNameNormalized = normalizeWhitespaceText(String(metadata.full_name ?? "")).toLowerCase();
+
+      if (summaryNormalized && fullNameNormalized && summaryNormalized === fullNameNormalized) {
+        continue;
+      }
+
       sections.push({
         type: definition.type,
-        title: language === "tr" ? definition.titleTr : definition.titleEn,
+        title: definition.title,
         blocks: [
           {
             type: "summary",
             fields: {
-              text: sectionLines.join("\n")
+              text: summaryText
             },
             meta: {
               source: "import_parser"
@@ -2126,7 +2180,7 @@ const toStructuredContent = (text: string): CvContent => {
 
       sections.push({
         type: definition.type,
-        title: language === "tr" ? definition.titleTr : definition.titleEn,
+        title: definition.title,
         blocks: [
           {
             type: "skills",
@@ -2151,7 +2205,7 @@ const toStructuredContent = (text: string): CvContent => {
 
     sections.push({
       type: definition.type,
-      title: language === "tr" ? definition.titleTr : definition.titleEn,
+      title: definition.title,
       blocks,
       meta: {
         detection: headingCount > 0 ? "heading" : "fallback"
@@ -2162,7 +2216,7 @@ const toStructuredContent = (text: string): CvContent => {
   if (sections.length === 0 && lines.length > 0) {
     sections.push({
       type: "summary",
-      title: language === "tr" ? "Özet" : "Summary",
+      title: "Summary",
       blocks: [
         {
           type: "summary",

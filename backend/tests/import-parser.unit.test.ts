@@ -135,65 +135,82 @@ describe("simple-cv-parser (strong PDF path)", () => {
     );
   });
 
-  it("detects all major section headings for Turkish content", async () => {
+  it("keeps parsed content language pinned to English", async () => {
     const parser = new SimpleCvParser();
-
-    const turkish = [
-      "İletişim Bilgileri",
-      "Alper Çamlı",
-      "alper@example.com",
-      "Özet",
-      "Backend geliştirme ve ürün odaklı teslimat.",
-      "İş Deneyimi",
-      "Şirket A - Kıdemli Yazılım Mühendisi",
-      "Eğitim",
-      "Bilgisayar Mühendisliği Lisans",
-      "Yetenekler",
-      "TypeScript, Node.js, PostgreSQL",
-      "Diller",
-      "Türkçe (Ana Dil), İngilizce (İleri)",
-      "Sertifikalar",
-      "AWS Certified Developer",
-      "Kurslar",
-      "Dağıtık Sistemler",
-      "Projeler",
-      "CV Builder",
-      "Gönüllülük",
-      "Mentorluk",
-      "Ödüller",
-      "Yılın Çalışanı",
-      "Yayınlar",
-      "Teknik makale",
-      "Referanslar",
-      "Talep üzerine paylaşılabilir"
-    ].join("\n");
+    const mixedContent = ["Summary", "Experienced engineer.", "Languages", "English (Fluent)"].join("\n");
 
     const result = await parser.parse({
-      originalFilename: "tr.txt",
+      originalFilename: "language-lock.txt",
       mimeType: "text/plain",
-      sizeBytes: turkish.length,
-      bytes: toBytes(turkish)
+      sizeBytes: mixedContent.length,
+      bytes: toBytes(mixedContent)
     });
 
-    const sectionTypes = result.parsedContent.sections.map((section) => section.type);
+    expect(result.parsedContent.language).toBe("en");
+  });
 
+  it("parses Alper CV-style extracted PDF text without false publications and with correct header email", () => {
+    const extractedText = [
+      "Alper Çamlı",
+      "camlialper03 @gmail.com +90 542 592 3911 Istanbul, Turkey github/AlperCamli",
+      "in/alpercamli",
+      "Education",
+      "Computer Science , Sabancı University 02/2022 – 01/2026",
+      "• Board Member, Game Developers Club",
+      "Work Experience",
+      "Business Intelligence Intern , Vakıfbank 07/2025 – 09/2025",
+      "• Designed and implemented an end-to-end Business Intelligence pipeline, including İstanbul",
+      "data modelling, data generation, ETL, DataMart creation and Data Visualization, using",
+      "PostgreSQL, Clickhouse and Spark.",
+      "• Developed a synthetic banking transaction dataset reflecting realistic customer",
+      "behaviors.",
+      "• Applied ETL operations on Informatica Power Center and Spark for daily analytical",
+      "data, Created DataMarts for analytical reporting.",
+      "SAP Consulting Intern , Prodea Consulting 11/2025 – 12/2025",
+      "• Assisted SAP consultants with business requirement analysis and SAP system support. Istanbul",
+      "• Gained hands-on experience with SAP GUI, ABAP basics, and ERP business processes.",
+      "E-commerce Intern , Adil Işık Group 08/2024 – 09/2024",
+      "• Contributed to the management of the online store, digital marketing campaigns, and Istanbul, Turkey",
+      "data analysis to improve user experience and drive sales. Collaborated with cross-",
+      "functional teams to streamline e-commerce operations and support business growth.",
+      "Undergraduate Research Assistant , Sabancı University 10/2023 – 01/2024",
+      "Advisor: Berna Beyhan",
+      "• Involved in the project \"Understanding Team Building Skills in Entrepreneurship: The",
+      "Case of Turkish Gaming Startups\" within the scope of the Program for Undergraduate",
+      "Research (PURE) at Sabancı University.",
+      "• Interviewed with 10 Turkish Gaming Start-ups to report challenges and insights from",
+      "the industry.",
+      "Awards",
+      "National 2nd Prize in Physics - TUBITAK 2204-C Polar Research Projects Competition 11/2021",
+      "for High School Students , Tubitak (The Scientific and Research Council of Turkey)",
+      "• Earned 2nd place among 90 finalist teams with the project \"Measurement of the Effect",
+      "of UV Light on Ozone Concentration in the Atmosphere of Antartica\".",
+      "References",
+      "Sefa Hakyemez , Data Engineer , Vakıfbank",
+      "sefa.hakyemez@vakifbank.com.tr, +90 536 822 38 68",
+      "Languages",
+      "Turkish English",
+      "(Native) (IELTS; 7.5/ C1)"
+    ].join("\n");
+
+    const content = __private.toStructuredContent(extractedText);
+    const sectionTypes = content.sections.map((section) => section.type);
+    const experienceSection = content.sections.find((section) => section.type === "experience");
+    const referencesSection = content.sections.find((section) => section.type === "references");
+
+    expect(content.language).toBe("en");
+    expect(content.metadata.email).toBe("camlialper03@gmail.com");
     expect(sectionTypes).toEqual(
-      expect.arrayContaining([
-        "header",
-        "summary",
-        "experience",
-        "education",
-        "skills",
-        "languages",
-        "certifications",
-        "courses",
-        "projects",
-        "volunteer",
-        "awards",
-        "publications",
-        "references"
-      ])
+      expect.arrayContaining(["header", "education", "experience", "awards", "references", "languages"])
     );
+    expect(sectionTypes).not.toContain("publications");
+    expect(experienceSection?.blocks.length).toBeGreaterThan(1);
+    expect(
+      experienceSection?.blocks.some((block) =>
+        String(block.fields.role ?? "").toLowerCase().includes("business intelligence intern")
+      )
+    ).toBe(true);
+    expect(referencesSection?.blocks[0]?.fields.email).toBe("sefa.hakyemez@vakifbank.com.tr");
   });
 
   it("parses noisy FlowCV-like PDF text into multiple sections instead of one noisy summary", async () => {

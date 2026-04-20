@@ -66,7 +66,7 @@ The parser always returns `parsed` content when technically possible; extraction
 
 OCR runtime controls:
 - `PDF_OCR_ENABLED`
-- `PDF_OCR_LANGUAGES` (default `eng+tur`)
+- `PDF_OCR_LANGUAGES` (default `eng`)
 - `PDF_OCR_MAX_PAGES` (default `2`)
 - `PDF_OCR_RENDER_SCALE` (default `2`)
 - `PDF_OCR_CACHE_PATH` (default `/tmp/cv-builder-ocr-cache`)
@@ -98,7 +98,7 @@ Policy:
 - low confidence does **not** fail parsing
 - parser returns `parsed` + strong warnings for manual review
 
-## Section Detection Taxonomy (TR/EN)
+## Section Detection Taxonomy (English)
 
 Heading dictionaries and aliases cover:
 - `header`

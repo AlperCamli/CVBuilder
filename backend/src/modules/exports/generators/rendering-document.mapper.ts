@@ -85,6 +85,30 @@ const resolveTheme = (template: TemplateSummary | null): ExportDocumentTheme => 
   return DEFAULT_THEME;
 };
 
+const pickBodyText = (block: RenderingPayload["sections"][number]["blocks"][number]): string | null => {
+  const preferredKeys = [
+    "description",
+    "summary",
+    "details",
+    "notes",
+    "responsibilities",
+    "highlights",
+    "text"
+  ];
+
+  for (const key of preferredKeys) {
+    const value = block.normalized_fields[key]?.text;
+    const normalized = normalizeLine(value ?? null);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return normalizeLine(block.plain_text);
+};
+
+const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim().toLowerCase();
+
 export const mapRenderingPayloadToExportDocument = (
   rendering: RenderingPayload,
   template: TemplateSummary | null
@@ -114,13 +138,46 @@ export const mapRenderingPayloadToExportDocument = (
       const blocks: ExportDocumentBlock[] = section.blocks
         .filter((block) => block.visibility === "visible")
         .map((block) => {
-          const body = normalizeLine(block.plain_text);
+          const rawHeadline = normalizeLine(block.derived.headline);
+          const rawSubheadline = normalizeLine(block.derived.subheadline);
+          const metadataLine = buildMetadataLine(block.derived.date_range, block.derived.location);
+          const bullets = block.derived.bullets.filter((item) => item.trim().length > 0);
+          let body = pickBodyText(block);
+
+          const isSummaryLikeSection = section.type === "summary";
+          const mergedHeading = [rawHeadline, rawSubheadline].filter(Boolean).join(" ");
+
+          if (
+            body &&
+            !isSummaryLikeSection &&
+            rawHeadline &&
+            !rawSubheadline &&
+            !metadataLine &&
+            bullets.length === 0 &&
+            collapseWhitespace(body) === collapseWhitespace(rawHeadline)
+          ) {
+            body = null;
+          }
+
+          const headline = isSummaryLikeSection ? null : rawHeadline;
+          const subheadline = isSummaryLikeSection ? null : rawSubheadline;
+
+          if (
+            body &&
+            !isSummaryLikeSection &&
+            mergedHeading &&
+            !metadataLine &&
+            bullets.length === 0 &&
+            collapseWhitespace(body) === collapseWhitespace(mergedHeading)
+          ) {
+            body = null;
+          }
 
           return {
-            headline: normalizeLine(block.derived.headline),
-            subheadline: normalizeLine(block.derived.subheadline),
-            metadata_line: buildMetadataLine(block.derived.date_range, block.derived.location),
-            bullets: block.derived.bullets.filter((item) => item.trim().length > 0),
+            headline,
+            subheadline,
+            metadata_line: metadataLine,
+            bullets,
             body
           };
         })
