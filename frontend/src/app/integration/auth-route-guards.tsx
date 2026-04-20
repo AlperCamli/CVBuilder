@@ -19,9 +19,9 @@ const AuthLoadingScreen = () => (
 );
 
 export const RequireAuth = ({ children }: { children: ReactNode }) => {
-  const { initialized, loadingMe, isAuthenticated } = useAuth();
+  const { initialized, isAuthenticated } = useAuth();
 
-  if (!initialized || (isAuthenticated && loadingMe)) {
+  if (!initialized) {
     return <AuthLoadingScreen />;
   }
 
@@ -33,9 +33,9 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
 };
 
 export const RedirectIfAuthenticated = ({ children }: { children: ReactNode }) => {
-  const { initialized, loadingMe, isAuthenticated } = useAuth();
+  const { initialized, isAuthenticated } = useAuth();
 
-  if (!initialized || loadingMe) {
+  if (!initialized) {
     return <AuthLoadingScreen />;
   }
 

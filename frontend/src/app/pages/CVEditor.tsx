@@ -1035,6 +1035,117 @@ export function CVEditor() {
     return lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet";
   })();
 
+  const formatItemDateRange = (item: any): string => {
+    const start = String(item.startDate || "").trim();
+    const end = item.currentRole ? "Present" : String(item.endDate || "").trim();
+
+    if (start && end) {
+      return `${start} - ${end}`;
+    }
+    if (start) {
+      return start;
+    }
+    if (end) {
+      return end;
+    }
+
+    return String(item.dates || item.date || "").trim();
+  };
+
+  const getPreviewSectionTitle = (sectionType: string): string => {
+    switch (sectionType) {
+      case "languages":
+        return "Languages";
+      case "certifications":
+        return "Certifications";
+      case "courses":
+        return "Courses";
+      case "projects":
+        return "Projects";
+      case "volunteer":
+        return "Volunteer Work";
+      case "awards":
+        return "Awards";
+      case "publications":
+        return "Publications";
+      case "references":
+        return "References";
+      default:
+        return sectionType.charAt(0).toUpperCase() + sectionType.slice(1);
+    }
+  };
+
+  const getPreviewItemParts = (
+    sectionType: string,
+    item: any
+  ): { title: string; subtitle: string; dates: string; description: string } => {
+    switch (sectionType) {
+      case "languages":
+        return {
+          title: String(item.language || "").trim() || "Language",
+          subtitle: [item.proficiency, item.certificate].filter(Boolean).join(" • "),
+          dates: "",
+          description: String(item.notes || "").trim()
+        };
+      case "certifications":
+        return {
+          title: String(item.name || "").trim() || "Certification",
+          subtitle: [item.verificationId, item.url].filter(Boolean).join(" • "),
+          dates: "",
+          description: ""
+        };
+      case "courses":
+        return {
+          title: String(item.title || "").trim() || "Course",
+          subtitle: [item.institution, item.url].filter(Boolean).join(" • "),
+          dates: "",
+          description: String(item.description || "").trim()
+        };
+      case "projects":
+        return {
+          title: String(item.title || "").trim() || "Project",
+          subtitle: String(item.subtitle || "").trim(),
+          dates: formatItemDateRange(item),
+          description: String(item.description || "").trim()
+        };
+      case "volunteer":
+        return {
+          title: String(item.role || "").trim() || "Volunteer Role",
+          subtitle: [item.organization, item.country].filter(Boolean).join(" • "),
+          dates: formatItemDateRange(item),
+          description: String(item.description || "").trim()
+        };
+      case "awards":
+        return {
+          title: String(item.name || "").trim() || "Award",
+          subtitle: String(item.issuer || "").trim(),
+          dates: String(item.date || "").trim(),
+          description: String(item.description || "").trim()
+        };
+      case "publications":
+        return {
+          title: String(item.title || "").trim() || "Publication",
+          subtitle: String(item.publisher || "").trim(),
+          dates: String(item.date || "").trim(),
+          description: String(item.description || "").trim()
+        };
+      case "references":
+        return {
+          title: String(item.name || "").trim() || "Reference",
+          subtitle: [item.jobTitle, item.organization].filter(Boolean).join(" • "),
+          dates: "",
+          description: [item.email, item.phone].filter(Boolean).join(" • ")
+        };
+      default:
+        return {
+          title: String(item.title || "").trim() || "Title",
+          subtitle: String(item.subtitle || "").trim(),
+          dates: formatItemDateRange(item),
+          description: String(item.description || "").trim()
+        };
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center" style={{ background: "var(--color-background-secondary)" }}>
@@ -1336,26 +1447,36 @@ export function CVEditor() {
                         section.data.items.length > 0 ? (
                           <>
                             <h2 className="font-medium mb-3" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              {section.type.charAt(0).toUpperCase() + section.type.slice(1)}
+                              {getPreviewSectionTitle(section.type)}
                             </h2>
                             {(section.data.items as any[])
                               .filter((item) => !item.hidden)
-                              .map((item, idx) => (
-                                <div key={idx} className="mb-3">
-                                  <div className="flex items-start justify-between mb-1">
-                                    <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                                      {item.title || "Title"}
-                                    </h3>
-                                    {item.dates ? <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{item.dates}</span> : null}
+                              .map((item, idx) => {
+                                const itemParts = getPreviewItemParts(section.type, item);
+
+                                return (
+                                  <div key={idx} className="mb-3">
+                                    <div className="flex items-start justify-between mb-1">
+                                      <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
+                                        {itemParts.title}
+                                      </h3>
+                                      {itemParts.dates ? (
+                                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                                          {itemParts.dates}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {itemParts.subtitle ? (
+                                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{itemParts.subtitle}</p>
+                                    ) : null}
+                                    {itemParts.description ? (
+                                      <p style={{ fontSize: "12px", lineHeight: "1.6", color: "var(--color-text-secondary)", marginTop: "4px" }}>
+                                        {itemParts.description}
+                                      </p>
+                                    ) : null}
                                   </div>
-                                  {item.subtitle ? <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{item.subtitle}</p> : null}
-                                  {item.description ? (
-                                    <p style={{ fontSize: "12px", lineHeight: "1.6", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-                                      {item.description}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))}
+                                );
+                              })}
                           </>
                         ) : null}
                       </div>
