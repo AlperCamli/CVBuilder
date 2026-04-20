@@ -11,7 +11,10 @@ import {
   FileText,
   Loader2,
   History,
-  RefreshCw
+  RefreshCw,
+  Github,
+  Linkedin,
+  Globe
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -1074,6 +1077,39 @@ export function CVEditor() {
     return `https://${trimmed}`;
   };
 
+  const toPreviewSocialLabel = (rawUrl: string): string => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const normalized = toPreviewLinkHref(trimmed);
+
+    try {
+      const parsed = new URL(normalized);
+      const cleanedPath = parsed.pathname.replace(/\/+$/, "");
+
+      if (cleanedPath && cleanedPath !== "/") {
+        return cleanedPath;
+      }
+
+      return parsed.hostname.replace(/^www\./i, "");
+    } catch {
+      return trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+    }
+  };
+
+  const getPreviewSocialIcon = (type: string) => {
+    switch (type.trim().toLowerCase()) {
+      case "github":
+        return Github;
+      case "linkedin":
+        return Linkedin;
+      default:
+        return Globe;
+    }
+  };
+
   const getPreviewSectionTitle = (sectionType: string): string => {
     switch (sectionType) {
       case "languages":
@@ -1379,19 +1415,24 @@ export function CVEditor() {
                         {headerSection.data.location ? <div>{String(headerSection.data.location)}</div> : null}
                         {headerSocialLinks.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                            {headerSocialLinks.map((link) => (
-                              <a
-                                key={link.id || `${link.type}-${link.url}`}
-                                href={toPreviewLinkHref(link.url)}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{ textDecoration: "underline" }}
-                              >
-                                {link.type
-                                  ? `${link.type.charAt(0).toUpperCase()}${link.type.slice(1)}`
-                                  : "Link"}
-                              </a>
-                            ))}
+                            {headerSocialLinks.map((link) => {
+                              const Icon = getPreviewSocialIcon(link.type);
+                              const label = toPreviewSocialLabel(link.url);
+
+                              return (
+                                <a
+                                  key={link.id || `${link.type}-${link.url}`}
+                                  href={toPreviewLinkHref(link.url)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5"
+                                  style={{ textDecoration: "underline" }}
+                                >
+                                  <Icon size={11} />
+                                  <span>{label || "Link"}</span>
+                                </a>
+                              );
+                            })}
                           </div>
                         ) : null}
                       </div>
