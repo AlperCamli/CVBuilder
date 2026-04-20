@@ -35,11 +35,17 @@ export interface ImportDetailRow {
   targetMasterCv: Pick<MasterCvRecord, "id" | "title" | "language" | "template_id" | "created_at"> | null;
 }
 
+export interface SignedUploadTarget {
+  storage_path: string;
+  token: string;
+}
+
 export interface ImportsRepository {
   createFile(payload: CreateFilePayload): Promise<FileRecord>;
   createImport(payload: CreateImportPayload): Promise<ImportRecord>;
   findImportDetailById(userId: string, importId: string): Promise<ImportDetailRow | null>;
   updateImport(userId: string, importId: string, payload: ImportUpdatePayload): Promise<ImportRecord | null>;
+  createSignedUploadUrl(storageBucket: string, storagePath: string): Promise<SignedUploadTarget>;
   downloadStorageObject(storageBucket: string, storagePath: string): Promise<Uint8Array>;
 }
 
@@ -225,6 +231,28 @@ export class SupabaseImportsRepository implements ImportsRepository {
     }
 
     return toImportRecord(data as Record<string, unknown>);
+  }
+
+  async createSignedUploadUrl(
+    storageBucket: string,
+    storagePath: string
+  ): Promise<SignedUploadTarget> {
+    const { data, error } = await this.supabaseClient.storage
+      .from(storageBucket)
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.token) {
+      throw new InternalServerError("Failed to create signed upload URL", {
+        reason: error?.message ?? "missing_upload_token",
+        storage_bucket: storageBucket,
+        storage_path: storagePath
+      });
+    }
+
+    return {
+      storage_path: storagePath,
+      token: data.token
+    };
   }
 
   async downloadStorageObject(storageBucket: string, storagePath: string): Promise<Uint8Array> {

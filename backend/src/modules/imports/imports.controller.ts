@@ -15,6 +15,11 @@ const requireSession = (request: Request) => {
 export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}
 
+  createImportUploadUrl = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.importsService.createImportUploadUrl(requireSession(request), request.body);
+    sendSuccess(response, data);
+  });
+
   createImportSession = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.importsService.createImportSession(requireSession(request), request.body);
     sendSuccess(response, data, {

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { FileText, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
-import { integrationConfig } from "../integration/config";
 import { supabase } from "../integration/supabase-client";
 
 interface UploadStep {
@@ -21,7 +20,7 @@ export function UploadProcessing() {
   const navigate = useNavigate();
   const location = useLocation();
   const file = location.state?.file as File | undefined;
-  const { api, me } = useAuth();
+  const { api } = useAuth();
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -43,16 +42,13 @@ export function UploadProcessing() {
         setCurrentStep(0);
         setProgress(steps[0].progress);
 
-        const storageBucket = integrationConfig.importsStorageBucket;
-        const userId = me?.user.id ?? "anonymous";
-        const storagePath = `users/${userId}/imports/${Date.now()}-${file.name}`;
+        const uploadTarget = await api.createImportUploadUrl({
+          original_filename: file.name
+        });
 
         const { error: uploadError } = await supabase.storage
-          .from(storageBucket)
-          .upload(storagePath, file, {
-            contentType: file.type || "application/octet-stream",
-            upsert: false
-          });
+          .from(uploadTarget.storage_bucket)
+          .uploadToSignedUrl(uploadTarget.storage_path, uploadTarget.token, file);
 
         if (uploadError) {
           throw new Error(uploadError.message);
@@ -69,8 +65,8 @@ export function UploadProcessing() {
           original_filename: file.name,
           mime_type: file.type || "application/octet-stream",
           size_bytes: file.size,
-          storage_bucket: storageBucket,
-          storage_path: storagePath,
+          storage_bucket: uploadTarget.storage_bucket,
+          storage_path: uploadTarget.storage_path,
           checksum: null
         });
 
@@ -122,7 +118,7 @@ export function UploadProcessing() {
     return () => {
       cancelled = true;
     };
-  }, [api, file, navigate, me?.user.id]);
+  }, [api, file, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>

@@ -4,6 +4,7 @@ import { validate } from "../../shared/validation/validate";
 import type { ImportsController } from "./imports.controller";
 import {
   createImportSessionSchema,
+  createImportUploadUrlSchema,
   createMasterCvFromImportSchema,
   importIdParamSchema,
   updateImportResultSchema
@@ -14,6 +15,13 @@ export const createImportsRouter = (
   authMiddleware: RequestHandler
 ): Router => {
   const router = Router();
+
+  router.post(
+    "/imports/upload-url",
+    authMiddleware,
+    validate({ body: createImportUploadUrlSchema }),
+    importsController.createImportUploadUrl
+  );
 
   router.post(
     "/imports",

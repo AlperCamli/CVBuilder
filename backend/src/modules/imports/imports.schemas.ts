@@ -26,6 +26,12 @@ export const createImportSessionSchema = z
   })
   .strict();
 
+export const createImportUploadUrlSchema = z
+  .object({
+    original_filename: z.string().trim().min(1).max(260)
+  })
+  .strict();
+
 export const updateImportResultSchema = z
   .object({
     parsed_content: cvContentInputSchema

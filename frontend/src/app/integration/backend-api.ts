@@ -92,6 +92,16 @@ export interface CreateImportSessionInput {
   checksum?: string | null;
 }
 
+export interface CreateImportUploadUrlInput {
+  original_filename: string;
+}
+
+export interface ImportUploadUrlTarget {
+  storage_bucket: string;
+  storage_path: string;
+  token: string;
+}
+
 export interface CreateMasterCvFromImportInput {
   title?: string;
   language?: string;
@@ -308,6 +318,13 @@ export class BackendApi {
 
   createImportSession(payload: CreateImportSessionInput): Promise<ImportDetail> {
     return this.client.post<ImportDetail, CreateImportSessionInput>("/imports", payload);
+  }
+
+  createImportUploadUrl(payload: CreateImportUploadUrlInput): Promise<ImportUploadUrlTarget> {
+    return this.client.post<ImportUploadUrlTarget, CreateImportUploadUrlInput>(
+      "/imports/upload-url",
+      payload
+    );
   }
 
   getImport(importId: string): Promise<ImportDetail> {

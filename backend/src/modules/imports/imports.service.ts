@@ -3,7 +3,17 @@ import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../sh
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
 import type { CreateMasterCvPayload, MasterCvRepository } from "../master-cv/master-cv.repository";
-import type { CreateMasterCvFromImportInput, CreateImportSessionInput, ImportDetail, ImportResultView, ParseSummary, SessionContext, UpdateImportResultInput } from "./imports.types";
+import type {
+  CreateMasterCvFromImportInput,
+  CreateImportSessionInput,
+  CreateImportUploadUrlInput,
+  ImportDetail,
+  ImportResultView,
+  ImportUploadUrlTarget,
+  ParseSummary,
+  SessionContext,
+  UpdateImportResultInput
+} from "./imports.types";
 import type { ImportsRepository } from "./imports.repository";
 import type { CvParser } from "./parsers/cv-parser";
 
@@ -24,6 +34,23 @@ const toMasterCvDetail = (row: MasterCvRecord) => {
 
 const countBlocks = (content: CvContent): number => {
   return content.sections.reduce((sum, section) => sum + section.blocks.length, 0);
+};
+
+const DEFAULT_IMPORTS_STORAGE_BUCKET = "imports";
+
+const sanitizeFilename = (value: string): string => {
+  const normalized = value
+    .trim()
+    .replace(/[/\\]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .replace(/-+/g, "-");
+
+  if (!normalized) {
+    return "upload.bin";
+  }
+
+  return normalized.slice(0, 180);
 };
 
 export class ImportsService {
@@ -58,6 +85,23 @@ export class ImportsService {
       import: importRow,
       source_file: sourceFile,
       target_master_cv: null
+    };
+  }
+
+  async createImportUploadUrl(
+    session: SessionContext,
+    input: CreateImportUploadUrlInput
+  ): Promise<ImportUploadUrlTarget> {
+    const storageBucket = DEFAULT_IMPORTS_STORAGE_BUCKET;
+    const fileName = sanitizeFilename(input.original_filename);
+    const storagePath = `users/${session.appUser.id}/imports/${Date.now()}-${fileName}`;
+
+    const target = await this.importsRepository.createSignedUploadUrl(storageBucket, storagePath);
+
+    return {
+      storage_bucket: storageBucket,
+      storage_path: target.storage_path,
+      token: target.token
     };
   }
 

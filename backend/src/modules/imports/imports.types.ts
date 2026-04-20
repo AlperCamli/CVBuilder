@@ -18,6 +18,16 @@ export interface CreateImportSessionInput {
   checksum?: string | null;
 }
 
+export interface CreateImportUploadUrlInput {
+  original_filename: string;
+}
+
+export interface ImportUploadUrlTarget {
+  storage_bucket: string;
+  storage_path: string;
+  token: string;
+}
+
 export interface UpdateImportResultInput {
   parsed_content: unknown;
 }

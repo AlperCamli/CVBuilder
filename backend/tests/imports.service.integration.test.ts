@@ -118,6 +118,16 @@ class InMemoryImportsRepository implements ImportsRepository {
     return this.importRow;
   }
 
+  async createSignedUploadUrl(storageBucket: string, storagePath: string): Promise<{
+    storage_path: string;
+    token: string;
+  }> {
+    return {
+      storage_path: storagePath,
+      token: `${storageBucket}-token`
+    };
+  }
+
   async downloadStorageObject(_storageBucket: string, _storagePath: string): Promise<Uint8Array> {
     return this.bytes;
   }
