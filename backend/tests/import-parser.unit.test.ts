@@ -407,4 +407,28 @@ describe("simple-cv-parser (strong PDF path)", () => {
     expect(certificationBlock?.fields.verification_id).toBeDefined();
     expect(publicationBlock?.fields.publisher).toBeDefined();
   });
+
+  it("keeps OCR fallback disabled by default in test runtime", async () => {
+    const parser = new SimpleCvParser();
+    const noisyPdf = [
+      "%PDF-1.7",
+      "1 0 obj",
+      "stream",
+      "@@@@ #### $$$$ %%%%",
+      "ABCD ABCD ABCD ABCD",
+      "endstream",
+      "endobj",
+      "%%EOF"
+    ].join("\n");
+
+    const result = await parser.parse({
+      originalFilename: "ocr-disabled.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: noisyPdf.length,
+      bytes: toBytes(noisyPdf)
+    });
+
+    expect(result.diagnostics?.attempted_stages).not.toContain("pdf_ocr_tesseract");
+    expect(result.warnings.join("\n")).toMatch(/PDF OCR fallback is disabled/i);
+  });
 });

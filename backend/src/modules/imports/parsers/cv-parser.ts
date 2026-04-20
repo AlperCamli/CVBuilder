@@ -4,6 +4,7 @@ export type ParserExtractionStage =
   | "text_decode"
   | "pdfjs_text"
   | "docx_xml_text"
+  | "pdf_ocr_tesseract"
   | "pdf_token_heuristic"
   | "utf8_decode";
 

@@ -54,14 +54,22 @@ The parser auto-resolves parsing strategy from multiple signals:
 
 This keeps frontend UX simple with one import button while backend decides parser path reliably.
 
-### PDF Extraction Strategy (text-based PDFs)
+### PDF Extraction Strategy (text + scanned PDFs)
 
 For `application/pdf`, extraction is layered:
 1. `pdfjs_text` (primary, PDF.js)
 2. `pdf_token_heuristic` fallback (token-based extraction from PDF text operators)
-3. `utf8_decode` fallback (best-effort final fallback)
+3. `pdf_ocr_tesseract` fallback (OCR for scanned/image-only pages, configurable)
+4. `utf8_decode` fallback (best-effort final fallback)
 
 The parser always returns `parsed` content when technically possible; extraction quality issues are returned as warnings instead of hard failures.
+
+OCR runtime controls:
+- `PDF_OCR_ENABLED`
+- `PDF_OCR_LANGUAGES` (default `eng+tur`)
+- `PDF_OCR_MAX_PAGES` (default `2`)
+- `PDF_OCR_RENDER_SCALE` (default `2`)
+- `PDF_OCR_CACHE_PATH` (default `/tmp/cv-builder-ocr-cache`)
 
 ### DOCX Extraction Strategy
 
@@ -140,7 +148,6 @@ Current scope:
 - best-effort fallback for other binary MIME types
 
 Still deferred:
-- OCR for scanned PDFs/images
 - high-fidelity layout reconstruction
 - full semantic DOCX parser
 - async job orchestration/retries for parsing

@@ -302,6 +302,67 @@ const textLikeExtensions = new Set([".txt", ".md", ".csv", ".json", ".xml", ".ht
 
 type InputFileKind = "pdf" | "docx" | "text" | "unknown";
 
+const FALSE_ENV_VALUES = new Set(["0", "false", "off", "no"]);
+const TRUE_ENV_VALUES = new Set(["1", "true", "on", "yes"]);
+
+const envFlag = (key: string, defaultValue: boolean): boolean => {
+  const rawValue = process.env[key];
+  if (!rawValue || rawValue.trim().length === 0) {
+    return defaultValue;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (FALSE_ENV_VALUES.has(normalized)) {
+    return false;
+  }
+
+  if (TRUE_ENV_VALUES.has(normalized)) {
+    return true;
+  }
+
+  return defaultValue;
+};
+
+const envNumber = (key: string, defaultValue: number, min: number, max: number): number => {
+  const rawValue = process.env[key];
+  if (!rawValue || rawValue.trim().length === 0) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed)) {
+    return defaultValue;
+  }
+
+  return Math.max(min, Math.min(max, parsed));
+};
+
+const isPdfOcrEnabled = (): boolean => {
+  // Keep OCR off by default during tests to avoid slow/non-deterministic network fetches.
+  const defaultValue = process.env.NODE_ENV === "test" ? false : true;
+  return envFlag("PDF_OCR_ENABLED", defaultValue);
+};
+
+const getPdfOcrLanguages = (): string => {
+  const rawValue = process.env.PDF_OCR_LANGUAGES;
+  if (!rawValue || rawValue.trim().length === 0) {
+    return "eng+tur";
+  }
+
+  return rawValue.trim();
+};
+
+const getPdfOcrMaxPages = (): number => envNumber("PDF_OCR_MAX_PAGES", 2, 1, 10);
+const getPdfOcrRenderScale = (): number => envNumber("PDF_OCR_RENDER_SCALE", 2, 1, 4);
+const getPdfOcrCachePath = (): string => {
+  const rawValue = process.env.PDF_OCR_CACHE_PATH;
+  if (!rawValue || rawValue.trim().length === 0) {
+    return "/tmp/cv-builder-ocr-cache";
+  }
+
+  return rawValue.trim();
+};
+
 const decodeUtf8 = (bytes: Uint8Array): string => {
   const decoder = new TextDecoder("utf-8", { fatal: false });
   return decoder.decode(bytes);
@@ -932,6 +993,71 @@ const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
   }
 
   return pages.join("\n\n").trim();
+};
+
+const extractPdfTextWithOcr = async (bytes: Uint8Array): Promise<string> => {
+  const [{ createCanvas }, pdfjsModule, tesseract] = await Promise.all([
+    import("@napi-rs/canvas"),
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("tesseract.js")
+  ]);
+  const pdfjs = pdfjsModule as {
+    getDocument: (params: Record<string, unknown>) => { promise: Promise<any> };
+  };
+
+  const loadingTask = pdfjs.getDocument({
+    data: bytes,
+    disableWorker: true,
+    isEvalSupported: false,
+    useSystemFonts: false
+  });
+
+  const document = await loadingTask.promise;
+  const pageTexts: string[] = [];
+  const maxPages = Math.min(document.numPages, getPdfOcrMaxPages());
+  const renderScale = getPdfOcrRenderScale();
+  const languages = getPdfOcrLanguages();
+
+  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: renderScale });
+    const width = Math.max(1, Math.ceil(viewport.width));
+    const height = Math.max(1, Math.ceil(viewport.height));
+
+    const canvas = createCanvas(width, height);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      continue;
+    }
+
+    await page
+      .render({
+        canvasContext: context as any,
+        viewport
+      })
+      .promise;
+
+    const imageBytes = canvas.toBuffer("image/png");
+    const result = await tesseract.recognize(imageBytes, languages, {
+      logger: () => undefined,
+      cachePath: getPdfOcrCachePath()
+    });
+
+    const text = typeof result?.data?.text === "string" ? result.data.text : "";
+    if (text.trim().length > 0) {
+      pageTexts.push(text.trim());
+    }
+
+    if (typeof page.cleanup === "function") {
+      page.cleanup();
+    }
+  }
+
+  if (typeof document.destroy === "function") {
+    await document.destroy();
+  }
+
+  return pageTexts.join("\n\n").trim();
 };
 
 const toLines = (text: string): string[] => {
@@ -2175,7 +2301,34 @@ const maybeExtractRawText = async (
     }
 
     const bestSoFar = selectBestCandidate(candidates);
-    if (!bestSoFar || bestSoFar.quality.lowConfidence || bestSoFar.cleanedText.length < 120) {
+    const shouldTryOcr =
+      !bestSoFar ||
+      bestSoFar.stage === "pdf_token_heuristic" ||
+      bestSoFar.quality.lowConfidence ||
+      bestSoFar.cleanedText.length < 180 ||
+      bestSoFar.quality.symbolRatio > 0.25 ||
+      bestSoFar.quality.naturalLanguageRatio < 0.55;
+
+    if (shouldTryOcr && isPdfOcrEnabled()) {
+      attemptedStages.push("pdf_ocr_tesseract");
+
+      try {
+        const ocrText = await extractPdfTextWithOcr(new Uint8Array(safeBytes));
+        if (!ocrText.trim()) {
+          warnings.push("PDF OCR completed but returned no readable text.");
+        }
+        registerCandidate("pdf_ocr_tesseract", ocrText);
+      } catch (error) {
+        warnings.push(
+          `PDF OCR extraction failed (${error instanceof Error ? error.message : "unknown error"}); continuing with non-OCR fallbacks.`
+        );
+      }
+    } else if (shouldTryOcr) {
+      warnings.push("PDF OCR fallback is disabled; scanned/image-only PDFs may parse with lower quality.");
+    }
+
+    const bestAfterOcr = selectBestCandidate(candidates);
+    if (!bestAfterOcr || bestAfterOcr.quality.lowConfidence || bestAfterOcr.cleanedText.length < 120) {
       attemptedStages.push("utf8_decode");
       registerCandidate("utf8_decode", decodeUtf8(safeBytes));
     }
