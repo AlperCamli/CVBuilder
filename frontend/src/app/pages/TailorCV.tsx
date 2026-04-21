@@ -1,23 +1,37 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import type { JobAnalysisResult, FollowUpQuestion } from "../integration/api-types";
 
+interface TailorCvLocationState {
+  prefillJob?: {
+    role?: string;
+    company?: string;
+    jobDescription?: string;
+    jobPostingUrl?: string;
+    locationText?: string;
+    notes?: string;
+  };
+}
+
 export function TailorCV() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const { api } = useAuth();
+  const state = (location.state ?? {}) as TailorCvLocationState;
+  const prefillJob = state.prefillJob;
 
   const [masterCvId, setMasterCvId] = useState<string | null>(null);
   const [masterCvTitle, setMasterCvTitle] = useState<string>("Master CV");
   const [formData, setFormData] = useState({
-    role: "",
-    company: "",
-    jobDescription: "",
-    jobPostingUrl: "",
-    locationText: "",
-    notes: ""
+    role: prefillJob?.role ?? "",
+    company: prefillJob?.company ?? "",
+    jobDescription: prefillJob?.jobDescription ?? "",
+    jobPostingUrl: prefillJob?.jobPostingUrl ?? "",
+    locationText: prefillJob?.locationText ?? "",
+    notes: prefillJob?.notes ?? ""
   });
   const [loadingMaster, setLoadingMaster] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -73,6 +87,21 @@ export function TailorCV() {
       cancelled = true;
     };
   }, [api, id]);
+
+  useEffect(() => {
+    if (!prefillJob) {
+      return;
+    }
+
+    setFormData((prev) => ({
+      role: prefillJob.role ?? prev.role,
+      company: prefillJob.company ?? prev.company,
+      jobDescription: prefillJob.jobDescription ?? prev.jobDescription,
+      jobPostingUrl: prefillJob.jobPostingUrl ?? prev.jobPostingUrl,
+      locationText: prefillJob.locationText ?? prev.locationText,
+      notes: prefillJob.notes ?? prev.notes
+    }));
+  }, [prefillJob]);
 
   const handleSubmit = async () => {
     if (!masterCvId) {

@@ -211,6 +211,7 @@ export class JobsService {
       job_posting_url: row.job_posting_url ?? null,
       location_text: row.location_text ?? null,
       tailored_cv_id: row.tailored_cv_id,
+      cover_letter_id: row.cover_letter_id,
       tailored_cv_title: row.tailored_cv_title,
       created_at: row.created_at,
       updated_at: row.updated_at,

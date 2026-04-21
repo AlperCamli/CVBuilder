@@ -21,6 +21,11 @@ import { SimpleCvParser } from "../modules/imports/parsers/simple-cv-parser";
 import type { CvParser } from "../modules/imports/parsers/cv-parser";
 import { JobsService } from "../modules/jobs/jobs.service";
 import { SupabaseJobsRepository, type JobsRepository } from "../modules/jobs/jobs.repository";
+import { CoverLettersService } from "../modules/cover-letters/cover-letters.service";
+import {
+  SupabaseCoverLettersRepository,
+  type CoverLettersRepository
+} from "../modules/cover-letters/cover-letters.repository";
 import { MasterCvService } from "../modules/master-cv/master-cv.service";
 import {
   SupabaseMasterCvRepository,
@@ -88,6 +93,7 @@ export interface AppServices {
   masterCvService: MasterCvService;
   importsService: ImportsService;
   jobsService: JobsService;
+  coverLettersService: CoverLettersService;
   tailoredCvService: TailoredCvService;
   cvRevisionsService: CvRevisionsService;
   aiService: AiService;
@@ -108,6 +114,7 @@ export interface ServiceOverrides {
   masterCvRepository?: MasterCvRepository;
   importsRepository?: ImportsRepository;
   jobsRepository?: JobsRepository;
+  coverLettersRepository?: CoverLettersRepository;
   tailoredCvRepository?: TailoredCvRepository;
   cvRevisionsRepository?: CvRevisionsRepository;
   aiRepository?: AiRepository;
@@ -151,6 +158,9 @@ export const buildDefaultServices = (
     overrides?.importsRepository ?? new SupabaseImportsRepository(supabaseClients.serviceRoleClient);
   const jobsRepository =
     overrides?.jobsRepository ?? new SupabaseJobsRepository(supabaseClients.serviceRoleClient);
+  const coverLettersRepository =
+    overrides?.coverLettersRepository ??
+    new SupabaseCoverLettersRepository(supabaseClients.serviceRoleClient);
   const tailoredCvRepository =
     overrides?.tailoredCvRepository ?? new SupabaseTailoredCvRepository(supabaseClients.serviceRoleClient);
   const cvRevisionsRepository =
@@ -216,6 +226,12 @@ export const buildDefaultServices = (
   const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
   const importsService = new ImportsService(importsRepository, masterCvRepository, cvParser);
   const jobsService = new JobsService(jobsRepository);
+  const coverLettersService = new CoverLettersService(
+    coverLettersRepository,
+    jobsRepository,
+    filesService,
+    billingService
+  );
   const cvRevisionsService = new CvRevisionsService(cvRevisionsRepository, tailoredCvRepository);
   const tailoredCvService = new TailoredCvService(
     tailoredCvRepository,
@@ -254,6 +270,7 @@ export const buildDefaultServices = (
     masterCvService,
     importsService,
     jobsService,
+    coverLettersService,
     tailoredCvService,
     cvRevisionsService,
     aiService,

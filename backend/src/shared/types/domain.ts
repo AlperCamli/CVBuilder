@@ -169,6 +169,7 @@ export interface JobRecord {
   id: string;
   user_id: string;
   tailored_cv_id: string | null;
+  cover_letter_id: string | null;
   company_name: string;
   job_title: string;
   job_description: string;
@@ -224,6 +225,33 @@ export interface ExportRecord {
   format: ExportFormat;
   status: ExportStatus;
   template_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export type CoverLetterStatus = "draft" | "ready" | "archived";
+
+export interface CoverLetterRecord {
+  id: string;
+  user_id: string;
+  job_id: string;
+  tailored_cv_id: string | null;
+  title: string;
+  content: string;
+  status: CoverLetterStatus;
+  last_exported_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoverLetterExportRecord {
+  id: string;
+  user_id: string;
+  cover_letter_id: string;
+  file_id: string | null;
+  format: ExportFormat;
+  status: ExportStatus;
   error_message: string | null;
   created_at: string;
   completed_at: string | null;

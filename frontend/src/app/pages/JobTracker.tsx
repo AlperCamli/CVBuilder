@@ -1,6 +1,6 @@
-import { MoreVertical, Plus, Info, X, Sparkles } from "lucide-react";
+import { MoreVertical, Plus, Info, X, Sparkles, FileText, Mail, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useSidebar } from "../contexts/SidebarContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -8,13 +8,7 @@ import { TutorialGuide } from "../components/TutorialGuide";
 import { useAuth } from "../integration/auth-context";
 import type { JobBoardResponse, JobDetail, JobHistoryResponse, JobStatus } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle
-} from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
 interface Job {
   id: string;
@@ -22,6 +16,8 @@ interface Job {
   company: string;
   status: JobStatus;
   date: string;
+  tailoredCvId: string | null;
+  coverLetterId: string | null;
   isNew?: boolean;
 }
 
@@ -41,16 +37,124 @@ const formatDate = (value: string): string =>
     year: "numeric"
   });
 
+const formatDateTime = (value: string | null): string => {
+  if (!value) {
+    return "-";
+  }
+
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
+const applyBoardMove = (
+  board: JobBoardResponse,
+  jobId: string,
+  nextStatus: JobStatus
+): JobBoardResponse => {
+  let movedItem: JobBoardResponse["groups"][number]["items"][number] | null = null;
+
+  const groupsWithoutOriginal = board.groups.map((group) => {
+    const index = group.items.findIndex((item) => item.id === jobId);
+    if (index === -1) {
+      return group;
+    }
+
+    const found = group.items[index];
+    movedItem = {
+      ...found,
+      status: nextStatus,
+      updated_at: new Date().toISOString()
+    };
+
+    const nextItems = [...group.items.slice(0, index), ...group.items.slice(index + 1)];
+    return {
+      ...group,
+      count: nextItems.length,
+      items: nextItems
+    };
+  });
+
+  if (!movedItem) {
+    return board;
+  }
+
+  const groupsWithTarget = groupsWithoutOriginal.map((group) => {
+    if (group.status !== nextStatus) {
+      return group;
+    }
+
+    const nextItems = [movedItem!, ...group.items];
+    return {
+      ...group,
+      count: nextItems.length,
+      items: nextItems
+    };
+  });
+
+  const countsByStatus = groupsWithTarget.reduce(
+    (acc, group) => {
+      acc[group.status] = group.items.length;
+      return acc;
+    },
+    {
+      saved: 0,
+      applied: 0,
+      interview: 0,
+      offer: 0,
+      rejected: 0,
+      archived: 0
+    } as JobBoardResponse["counts_by_status"]
+  );
+
+  return {
+    ...board,
+    groups: groupsWithTarget,
+    counts_by_status: countsByStatus,
+    total: groupsWithTarget.reduce((acc, group) => acc + group.items.length, 0)
+  };
+};
+
+const updateBoardCoverLetterId = (
+  board: JobBoardResponse,
+  jobId: string,
+  coverLetterId: string
+): JobBoardResponse => {
+  return {
+    ...board,
+    groups: board.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) =>
+        item.id === jobId
+          ? {
+              ...item,
+              cover_letter_id: coverLetterId,
+              updated_at: new Date().toISOString()
+            }
+          : item
+      )
+    }))
+  };
+};
+
 const DraggableJobCard = ({
   job,
-  moveJob,
   disabled,
-  onOpenDetails
+  actionLoading,
+  onOpenDetails,
+  onOpenTailoredCv,
+  onOpenCoverLetter
 }: {
   job: Job;
-  moveJob: (jobId: string, newStatus: JobStatus) => void;
   disabled: boolean;
+  actionLoading: boolean;
   onOpenDetails: (jobId: string) => void;
+  onOpenTailoredCv: (job: Job) => void;
+  onOpenCoverLetter: (job: Job) => void;
 }) => {
   const [{ isDragging }, drag] = useDrag({
     type: "JOB",
@@ -64,9 +168,7 @@ const DraggableJobCard = ({
   return (
     <div
       ref={drag}
-      className={`p-3 rounded-lg border cursor-move hover:shadow-sm transition-all ${
-        job.isNew ? "animate-pulse-slow" : ""
-      }`}
+      className={`p-3 rounded-lg border cursor-move hover:shadow-sm transition-all ${job.isNew ? "animate-pulse-slow" : ""}`}
       style={{
         background: job.isNew ? "var(--color-teal-50)" : "var(--color-background-primary)",
         borderColor: job.isNew ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
@@ -77,13 +179,7 @@ const DraggableJobCard = ({
     >
       {job.isNew && (
         <div className="flex items-center gap-1 mb-2">
-          <div
-            className="px-2 py-0.5 rounded-full flex items-center gap-1"
-            style={{
-              background: "var(--color-teal-600)",
-              color: "white"
-            }}
-          >
+          <div className="px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: "var(--color-teal-600)", color: "white" }}>
             <Sparkles size={10} />
             <span style={{ fontSize: "10px", fontWeight: 600 }}>NEW</span>
           </div>
@@ -108,6 +204,54 @@ const DraggableJobCard = ({
           <MoreVertical size={14} />
         </button>
       </div>
+
+      <div className="grid grid-cols-1 gap-2 mt-3">
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenTailoredCv(job);
+          }}
+          className="w-full px-2 py-1.5 rounded-md border text-left"
+          style={{
+            borderColor: "var(--color-border-tertiary)",
+            color: "var(--color-text-primary)",
+            fontSize: "11px",
+            opacity: actionLoading ? 0.7 : 1
+          }}
+        >
+          <span className="inline-flex items-center gap-1">
+            <FileText size={12} />
+            {job.tailoredCvId ? "View Tailored CV" : "Create a Customized CV for this job"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenCoverLetter(job);
+          }}
+          className="w-full px-2 py-1.5 rounded-md border text-left"
+          style={{
+            borderColor: job.coverLetterId ? "var(--color-teal-200)" : "var(--color-border-tertiary)",
+            color: job.coverLetterId ? "var(--color-teal-700)" : "var(--color-text-primary)",
+            background: job.coverLetterId ? "var(--color-teal-50)" : "transparent",
+            fontSize: "11px",
+            opacity: actionLoading ? 0.7 : 1
+          }}
+        >
+          <span className="inline-flex items-center gap-1">
+            {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+            {job.coverLetterId ? "View Cover Letter" : "Create Cover Letter"}
+          </span>
+        </button>
+      </div>
+
       <div className="flex items-center justify-between mt-3">
         <span
           className="px-2 py-0.5 rounded-full text-xs"
@@ -129,13 +273,19 @@ const DroppableColumn = ({
   jobs,
   moveJob,
   disabled,
-  onOpenDetails
+  actionLoadingJobId,
+  onOpenDetails,
+  onOpenTailoredCv,
+  onOpenCoverLetter
 }: {
   columnId: JobStatus;
   jobs: Job[];
   moveJob: (jobId: string, newStatus: JobStatus) => void;
   disabled: boolean;
+  actionLoadingJobId: string | null;
   onOpenDetails: (jobId: string) => void;
+  onOpenTailoredCv: (job: Job) => void;
+  onOpenCoverLetter: (job: Job) => void;
 }) => {
   const [{ isOver }, drop] = useDrop({
     accept: "JOB",
@@ -162,20 +312,17 @@ const DroppableColumn = ({
         <DraggableJobCard
           key={job.id}
           job={job}
-          moveJob={moveJob}
           disabled={disabled}
+          actionLoading={actionLoadingJobId === job.id}
           onOpenDetails={onOpenDetails}
+          onOpenTailoredCv={onOpenTailoredCv}
+          onOpenCoverLetter={onOpenCoverLetter}
         />
       ))}
 
       {jobs.length === 0 && (
-        <div
-          className="p-4 rounded-lg border-2 border-dashed text-center"
-          style={{ borderColor: "var(--color-border-tertiary)" }}
-        >
-          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            {isOver ? "Drop here" : "No applications"}
-          </p>
+        <div className="p-4 rounded-lg border-2 border-dashed text-center" style={{ borderColor: "var(--color-border-tertiary)" }}>
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{isOver ? "Drop here" : "No applications"}</p>
         </div>
       )}
     </div>
@@ -185,14 +332,22 @@ const DroppableColumn = ({
 export function JobTracker() {
   const { setSidebarVisible } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
   const { api } = useAuth();
+
   const [showInstructions, setShowInstructions] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+
   const [loading, setLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [board, setBoard] = useState<JobBoardResponse | null>(null);
-  const [jobsListTotal, setJobsListTotal] = useState<number>(0);
+  const [pendingStatusByJob, setPendingStatusByJob] = useState<Record<string, JobStatus>>({});
+  const [autoSavingStatuses, setAutoSavingStatuses] = useState(false);
+  const [lastStatusSavedAt, setLastStatusSavedAt] = useState<string | null>(null);
+
+  const [actionLoadingJobId, setActionLoadingJobId] = useState<string | null>(null);
+
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
@@ -217,7 +372,9 @@ export function JobTracker() {
         title: job.job_title,
         company: job.company_name,
         status: group.status,
-        date: formatDate(job.updated_at)
+        date: formatDate(job.updated_at),
+        tailoredCvId: job.tailored_cv_id,
+        coverLetterId: job.cover_letter_id
       }))
     );
   }, [board]);
@@ -225,13 +382,12 @@ export function JobTracker() {
   const loadBoard = async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const [boardData, listData] = await Promise.all([
-        api.getJobsBoard(),
-        api.listJobs({ page: 1, limit: 100, sort_by: "updated_at", sort_order: "desc" })
-      ]);
+      const boardData = await api.getJobsBoard();
       setBoard(boardData);
-      setJobsListTotal(listData.total);
+      setPendingStatusByJob({});
+      setLastStatusSavedAt(new Date().toISOString());
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.message);
@@ -276,26 +432,68 @@ export function JobTracker() {
     return undefined;
   }, [location.state]);
 
-  const moveJob = async (jobId: string, newStatus: JobStatus) => {
-    if (!board) {
+  const flushPendingStatuses = async () => {
+    if (autoSavingStatuses) {
       return;
     }
 
-    setIsUpdating(true);
+    const queuedEntries = Object.entries(pendingStatusByJob);
+    if (queuedEntries.length === 0) {
+      return;
+    }
+
+    setAutoSavingStatuses(true);
+    setPendingStatusByJob({});
+
+    const failed: Record<string, JobStatus> = {};
+
+    for (const [jobId, status] of queuedEntries) {
+      try {
+        await api.patchJobStatus(jobId, status);
+      } catch {
+        failed[jobId] = status;
+      }
+    }
+
+    if (Object.keys(failed).length > 0) {
+      setPendingStatusByJob((prev) => ({ ...failed, ...prev }));
+      setError("Some status updates failed. Retrying in background.");
+    } else {
+      setLastStatusSavedAt(new Date().toISOString());
+    }
+
+    setAutoSavingStatuses(false);
+  };
+
+  useEffect(() => {
+    if (loading || autoSavingStatuses || Object.keys(pendingStatusByJob).length === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void flushPendingStatuses();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [autoSavingStatuses, loading, pendingStatusByJob]);
+
+  const moveJob = (jobId: string, newStatus: JobStatus) => {
     setError(null);
 
-    try {
-      await api.patchJobStatus(jobId, newStatus);
-      await loadBoard();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to update job status.");
+    setBoard((prev) => {
+      if (!prev) {
+        return prev;
       }
-    } finally {
-      setIsUpdating(false);
-    }
+
+      return applyBoardMove(prev, jobId, newStatus);
+    });
+
+    setPendingStatusByJob((prev) => ({
+      ...prev,
+      [jobId]: newStatus
+    }));
   };
 
   const openJobDetails = async (jobId: string) => {
@@ -306,10 +504,7 @@ export function JobTracker() {
     setJobHistory(null);
 
     try {
-      const [detail, history] = await Promise.all([
-        api.getJob(jobId),
-        api.getJobHistory(jobId)
-      ]);
+      const [detail, history] = await Promise.all([api.getJob(jobId), api.getJobHistory(jobId)]);
       setJobDetail(detail);
       setJobHistory(history);
     } catch (err) {
@@ -322,6 +517,84 @@ export function JobTracker() {
       setDetailLoading(false);
     }
   };
+
+  const openTailoredCv = async (job: Job) => {
+    if (job.tailoredCvId) {
+      navigate(`/app/cv/${job.tailoredCvId}`, {
+        state: {
+          cvKind: "tailored"
+        }
+      });
+      return;
+    }
+
+    setActionLoadingJobId(job.id);
+    try {
+      const detail = await api.getJob(job.id);
+      navigate("/app/tailor/master", {
+        state: {
+          prefillJob: {
+            role: detail.job.job_title,
+            company: detail.job.company_name,
+            jobDescription: detail.job_description,
+            jobPostingUrl: detail.job.job_posting_url ?? "",
+            locationText: detail.job.location_text ?? "",
+            notes: detail.notes ?? ""
+          }
+        }
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to open tailored CV flow.");
+      }
+    } finally {
+      setActionLoadingJobId(null);
+    }
+  };
+
+  const openCoverLetter = async (job: Job) => {
+    setActionLoadingJobId(job.id);
+    setError(null);
+
+    try {
+      const detail = await api.upsertCoverLetterByJob(job.id);
+      setBoard((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        return updateBoardCoverLetterId(prev, job.id, detail.id);
+      });
+
+      navigate(`/app/cover-letter/${job.id}`, {
+        state: {
+          coverLetterId: detail.id
+        }
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to open cover letter.");
+      }
+    } finally {
+      setActionLoadingJobId(null);
+    }
+  };
+
+  const saveStatusText = (() => {
+    if (autoSavingStatuses) {
+      return "Saving status changes...";
+    }
+
+    if (Object.keys(pendingStatusByJob).length > 0) {
+      return "Unsaved status changes";
+    }
+
+    return `Last synced ${formatDateTime(lastStatusSavedAt)}`;
+  })();
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -393,7 +666,10 @@ export function JobTracker() {
             Track your job applications and their status. Drag and drop cards between columns to update status.
           </p>
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-            Total tracked jobs: {jobsListTotal}
+            Total tracked jobs: {board?.total ?? 0}
+          </p>
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "2px" }}>
+            {saveStatusText}
           </p>
         </div>
 
@@ -424,8 +700,11 @@ export function JobTracker() {
                   columnId={column.id}
                   jobs={jobs.filter((job) => job.status === column.id)}
                   moveJob={moveJob}
-                  disabled={isUpdating}
+                  disabled={false}
+                  actionLoadingJobId={actionLoadingJobId}
                   onOpenDetails={openJobDetails}
+                  onOpenTailoredCv={openTailoredCv}
+                  onOpenCoverLetter={openCoverLetter}
                 />
               </div>
             ))}
@@ -452,9 +731,7 @@ export function JobTracker() {
         >
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Job details
-              </DialogTitle>
+              <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>Job details</DialogTitle>
               <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
                 Current job record and status history from backend.
               </DialogDescription>
@@ -465,12 +742,8 @@ export function JobTracker() {
             ) : jobDetail ? (
               <div className="space-y-3">
                 <div className="p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
-                  <p style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                    {jobDetail.job.job_title}
-                  </p>
-                  <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                    {jobDetail.job.company_name}
-                  </p>
+                  <p style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>{jobDetail.job.job_title}</p>
+                  <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{jobDetail.job.company_name}</p>
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "6px" }}>
                     Status: {statusToLabel[jobDetail.job.status]}
                   </p>
@@ -491,22 +764,14 @@ export function JobTracker() {
                   </p>
                   <div className="space-y-2 max-h-[180px] overflow-auto pr-1">
                     {!jobHistory || jobHistory.history.length === 0 ? (
-                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        No history yet.
-                      </p>
+                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>No history yet.</p>
                     ) : (
                       jobHistory.history.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="p-2 rounded-lg border"
-                          style={{ borderColor: "var(--color-border-tertiary)" }}
-                        >
+                        <div key={entry.id} className="p-2 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
                           <p style={{ fontSize: "12px", color: "var(--color-text-primary)" }}>
                             {entry.from_status ? statusToLabel[entry.from_status] : "N/A"} {"->"} {statusToLabel[entry.to_status]}
                           </p>
-                          <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                            {formatDate(entry.changed_at)}
-                          </p>
+                          <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{formatDate(entry.changed_at)}</p>
                         </div>
                       ))
                     )}
@@ -514,9 +779,7 @@ export function JobTracker() {
                 </div>
               </div>
             ) : (
-              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Job detail is not available.
-              </p>
+              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Job detail is not available.</p>
             )}
           </DialogContent>
         </Dialog>

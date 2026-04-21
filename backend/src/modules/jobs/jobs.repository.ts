@@ -6,6 +6,7 @@ import type { JobsSortBy } from "./jobs.types";
 export interface CreateJobPayload {
   user_id: string;
   tailored_cv_id?: string | null;
+  cover_letter_id?: string | null;
   company_name: string;
   job_title: string;
   job_description: string;
@@ -18,6 +19,7 @@ export interface CreateJobPayload {
 
 export interface UpdateJobPayload {
   tailored_cv_id?: string | null;
+  cover_letter_id?: string | null;
   company_name?: string;
   job_title?: string;
   job_description?: string;
@@ -73,6 +75,7 @@ export interface JobsRepository {
   create(payload: CreateJobPayload): Promise<JobRecord>;
   updateById(userId: string, jobId: string, payload: UpdateJobPayload): Promise<JobRecord | null>;
   linkTailoredCv(userId: string, jobId: string, tailoredCvId: string): Promise<JobRecord | null>;
+  linkCoverLetter(userId: string, jobId: string, coverLetterId: string): Promise<JobRecord | null>;
   createStatusHistory(payload: CreateJobStatusHistoryPayload): Promise<JobStatusHistoryRecord>;
   listStatusHistory(jobId: string, limit: number): Promise<JobStatusHistoryRecord[]>;
 }
@@ -82,6 +85,7 @@ const toJobRecord = (row: Record<string, unknown>): JobRecord => {
     id: String(row.id),
     user_id: String(row.user_id),
     tailored_cv_id: row.tailored_cv_id ? String(row.tailored_cv_id) : null,
+    cover_letter_id: row.cover_letter_id ? String(row.cover_letter_id) : null,
     company_name: String(row.company_name),
     job_title: String(row.job_title),
     job_description: String(row.job_description),
@@ -319,6 +323,12 @@ export class SupabaseJobsRepository implements JobsRepository {
   async linkTailoredCv(userId: string, jobId: string, tailoredCvId: string): Promise<JobRecord | null> {
     return this.updateById(userId, jobId, {
       tailored_cv_id: tailoredCvId
+    });
+  }
+
+  async linkCoverLetter(userId: string, jobId: string, coverLetterId: string): Promise<JobRecord | null> {
+    return this.updateById(userId, jobId, {
+      cover_letter_id: coverLetterId
     });
   }
 

@@ -10,6 +10,8 @@ import { ImportsController } from "../modules/imports/imports.controller";
 import { createImportsRouter } from "../modules/imports/imports.routes";
 import { JobsController } from "../modules/jobs/jobs.controller";
 import { createJobsRouter } from "../modules/jobs/jobs.routes";
+import { CoverLettersController } from "../modules/cover-letters/cover-letters.controller";
+import { createCoverLettersRouter } from "../modules/cover-letters/cover-letters.routes";
 import { MasterCvController } from "../modules/master-cv/master-cv.controller";
 import { createMasterCvRouter } from "../modules/master-cv/master-cv.routes";
 import { SystemController } from "../modules/system/system.controller";
@@ -37,6 +39,7 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   const masterCvController = new MasterCvController(services.masterCvService);
   const importsController = new ImportsController(services.importsService);
   const jobsController = new JobsController(services.jobsService);
+  const coverLettersController = new CoverLettersController(services.coverLettersService);
   const tailoredCvController = new TailoredCvController(services.tailoredCvService);
   const cvRevisionsController = new CvRevisionsController(services.cvRevisionsService);
   const aiController = new AiController(services.aiService);
@@ -52,6 +55,7 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   router.use(createImportsRouter(importsController, authMiddleware));
   router.use(createTailoredCvRouter(tailoredCvController, authMiddleware));
   router.use(createJobsRouter(jobsController, authMiddleware));
+  router.use(createCoverLettersRouter(coverLettersController, authMiddleware));
   router.use(createCvRevisionsRouter(cvRevisionsController, authMiddleware));
   router.use(createAiRouter(aiController, authMiddleware));
   router.use(createTemplatesRouter(templatesController, authMiddleware));

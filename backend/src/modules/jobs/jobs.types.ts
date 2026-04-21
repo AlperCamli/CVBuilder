@@ -18,6 +18,7 @@ export interface JobSummary {
   job_posting_url: string | null;
   location_text: string | null;
   tailored_cv_id: string | null;
+  cover_letter_id: string | null;
   tailored_cv_title: string | null;
   created_at: string;
   updated_at: string;

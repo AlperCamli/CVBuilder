@@ -749,6 +749,7 @@ export interface JobSummary {
   job_posting_url: string | null;
   location_text: string | null;
   tailored_cv_id: string | null;
+  cover_letter_id: string | null;
   tailored_cv_title: string | null;
   created_at: string;
   updated_at: string;
@@ -880,6 +881,73 @@ export interface ExportDetailResponse {
 
 export interface ExportDownloadResponse extends DownloadAccess {
   export_id: string;
+  format: ExportFormat;
+}
+
+export type CoverLetterStatus = "draft" | "ready" | "archived";
+
+export interface CoverLetterJobSummary {
+  id: string;
+  company_name: string;
+  job_title: string;
+  status: JobStatus;
+  tailored_cv_id: string | null;
+  tailored_cv_title: string | null;
+  cover_letter_id: string | null;
+}
+
+export interface CoverLetterSummary {
+  id: string;
+  job_id: string;
+  tailored_cv_id: string | null;
+  title: string;
+  status: CoverLetterStatus;
+  last_exported_at: string | null;
+  created_at: string;
+  updated_at: string;
+  job: CoverLetterJobSummary | null;
+}
+
+export interface CoverLetterDetail extends CoverLetterSummary {
+  content: string;
+}
+
+export interface ListCoverLettersResponse {
+  items: CoverLetterSummary[];
+}
+
+export interface CoverLetterExportSummaryItem {
+  id: string;
+  format: ExportFormat;
+  status: ExportStatus;
+  file_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+  download_available: boolean;
+}
+
+export interface ListCoverLetterExportsResponse {
+  cover_letter_id: string;
+  exports: CoverLetterExportSummaryItem[];
+}
+
+export interface CoverLetterExportDetailResponse {
+  export: CoverLetterExportSummaryItem;
+  cover_letter: CoverLetterSummary | null;
+  file: {
+    id: string;
+    file_type: FileRecord["file_type"];
+    original_filename: string;
+    mime_type: string;
+    size_bytes: number;
+    created_at: string;
+  } | null;
+  download: DownloadAccess | null;
+}
+
+export interface CoverLetterExportDownloadResponse extends DownloadAccess {
+  cover_letter_export_id: string;
   format: ExportFormat;
 }
 

@@ -9,6 +9,9 @@ import type {
   BlockRevisionListResponse,
   BillingPlanResponseData,
   CreateCheckoutResponseData,
+  CoverLetterDetail,
+  CoverLetterExportDetailResponse,
+  CoverLetterExportDownloadResponse,
   CreateMasterCvFromImportResponse,
   CvBlockRevisionDetail,
   DashboardActivityResponseData,
@@ -23,6 +26,8 @@ import type {
   JobDetail,
   JobHistoryResponse,
   ListJobsResponse,
+  ListCoverLetterExportsResponse,
+  ListCoverLettersResponse,
   ListTailoredCvExportsResponse,
   ListTemplatesResponse,
   MasterCvBlockUpdateResponse,
@@ -229,6 +234,12 @@ export interface ImportImproveInput {
 
 export interface CreateExportInput {
   template_id?: string | null;
+}
+
+export interface UpdateCoverLetterContentInput {
+  title?: string;
+  content: string;
+  status?: "draft" | "ready" | "archived";
 }
 
 export interface BillingCheckoutInput {
@@ -565,6 +576,58 @@ export class BackendApi {
 
   getJobHistory(jobId: string): Promise<JobHistoryResponse> {
     return this.client.get<JobHistoryResponse>(`/jobs/${jobId}/history`);
+  }
+
+  listCoverLetters(): Promise<ListCoverLettersResponse> {
+    return this.client.get<ListCoverLettersResponse>("/cover-letters");
+  }
+
+  upsertCoverLetterByJob(jobId: string): Promise<CoverLetterDetail> {
+    return this.client.post<CoverLetterDetail>(`/jobs/${jobId}/cover-letter`);
+  }
+
+  getCoverLetter(coverLetterId: string): Promise<CoverLetterDetail> {
+    return this.client.get<CoverLetterDetail>(`/cover-letters/${coverLetterId}`);
+  }
+
+  putCoverLetterContent(
+    coverLetterId: string,
+    payload: UpdateCoverLetterContentInput
+  ): Promise<CoverLetterDetail> {
+    return this.client.put<CoverLetterDetail, UpdateCoverLetterContentInput>(
+      `/cover-letters/${coverLetterId}/content`,
+      payload
+    );
+  }
+
+  createCoverLetterPdfExport(coverLetterId: string): Promise<CoverLetterExportDetailResponse> {
+    return this.client.post<CoverLetterExportDetailResponse>(
+      `/cover-letters/${coverLetterId}/exports/pdf`
+    );
+  }
+
+  createCoverLetterDocxExport(coverLetterId: string): Promise<CoverLetterExportDetailResponse> {
+    return this.client.post<CoverLetterExportDetailResponse>(
+      `/cover-letters/${coverLetterId}/exports/docx`
+    );
+  }
+
+  listCoverLetterExports(coverLetterId: string): Promise<ListCoverLetterExportsResponse> {
+    return this.client.get<ListCoverLetterExportsResponse>(`/cover-letters/${coverLetterId}/exports`);
+  }
+
+  getCoverLetterExport(coverLetterExportId: string): Promise<CoverLetterExportDetailResponse> {
+    return this.client.get<CoverLetterExportDetailResponse>(
+      `/cover-letter-exports/${coverLetterExportId}`
+    );
+  }
+
+  getCoverLetterExportDownload(
+    coverLetterExportId: string
+  ): Promise<CoverLetterExportDownloadResponse> {
+    return this.client.get<CoverLetterExportDownloadResponse>(
+      `/cover-letter-exports/${coverLetterExportId}/download`
+    );
   }
 
   listTemplates(): Promise<ListTemplatesResponse> {

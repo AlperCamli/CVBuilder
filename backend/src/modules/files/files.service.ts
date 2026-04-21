@@ -19,6 +19,17 @@ interface UploadExportObjectInput extends BuildExportStoragePathInput {
   bytes: Uint8Array;
 }
 
+interface BuildCoverLetterExportStoragePathInput {
+  userId: string;
+  coverLetterId: string;
+  exportId: string;
+  format: ExportFormat;
+}
+
+interface UploadCoverLetterExportObjectInput extends BuildCoverLetterExportStoragePathInput {
+  bytes: Uint8Array;
+}
+
 interface CreateExportFileMetadataInput {
   userId: string;
   format: ExportFormat;
@@ -71,6 +82,11 @@ export class FilesService {
     return `users/${input.userId}/tailored-cvs/${input.tailoredCvId}/exports/${input.exportId}.${extension}`;
   }
 
+  buildCoverLetterExportStoragePath(input: BuildCoverLetterExportStoragePathInput): string {
+    const extension = EXTENSION_BY_FORMAT[input.format];
+    return `users/${input.userId}/cover-letters/${input.coverLetterId}/exports/${input.exportId}.${extension}`;
+  }
+
   async uploadExportObject(input: UploadExportObjectInput): Promise<UploadedExportObject> {
     const storagePath = this.buildExportStoragePath(input);
     const mimeType = MIME_TYPE_BY_FORMAT[input.format];
@@ -99,6 +115,36 @@ export class FilesService {
     };
   }
 
+  async uploadCoverLetterExportObject(
+    input: UploadCoverLetterExportObjectInput
+  ): Promise<UploadedExportObject> {
+    const storagePath = this.buildCoverLetterExportStoragePath(input);
+    const mimeType = MIME_TYPE_BY_FORMAT[input.format];
+
+    try {
+      await this.filesRepository.uploadStorageObject({
+        storage_bucket: this.options.storageBucket,
+        storage_path: storagePath,
+        content: input.bytes,
+        mime_type: mimeType
+      });
+    } catch (error) {
+      throw new ExportStorageFailedError("Failed to upload export file", {
+        format: input.format,
+        reason: error instanceof Error ? error.message : "storage_upload_failed"
+      });
+    }
+
+    return {
+      storage_bucket: this.options.storageBucket,
+      storage_path: storagePath,
+      mime_type: mimeType,
+      size_bytes: input.bytes.byteLength,
+      checksum: createHash("sha256").update(input.bytes).digest("hex"),
+      original_filename: `cover-letter-export-${input.exportId}.${EXTENSION_BY_FORMAT[input.format]}`
+    };
+  }
+
   async createExportFileMetadata(input: CreateExportFileMetadataInput): Promise<FileRecord> {
     const payload: CreateFilePayload = {
       user_id: input.userId,
@@ -119,6 +165,10 @@ export class FilesService {
         reason: error instanceof Error ? error.message : "file_metadata_persist_failed"
       });
     }
+  }
+
+  async createCoverLetterExportFileMetadata(input: CreateExportFileMetadataInput): Promise<FileRecord> {
+    return this.createExportFileMetadata(input);
   }
 
   async findOwnedFileById(userId: string, fileId: string): Promise<FileRecord | null> {
