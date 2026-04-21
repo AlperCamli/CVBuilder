@@ -96,6 +96,39 @@ const snapshotsEqual = (left: unknown, right: unknown): boolean => {
   return stableStringify(left) === stableStringify(right);
 };
 
+const toPersistableAiRunError = (error: unknown): string => {
+  if (error instanceof AiProviderError) {
+    const details = asRecord(error.details);
+    const diagnostics: string[] = [];
+
+    if (typeof details.provider_status === "number") {
+      diagnostics.push(`provider_status=${details.provider_status}`);
+    } else if (typeof details.provider_status === "string" && details.provider_status.trim()) {
+      diagnostics.push(`provider_status=${details.provider_status.trim()}`);
+    }
+
+    if (typeof details.provider_error_name === "string" && details.provider_error_name.trim()) {
+      diagnostics.push(`provider_error=${details.provider_error_name.trim()}`);
+    }
+
+    if (typeof details.reason === "string" && details.reason.trim()) {
+      diagnostics.push(`reason=${details.reason.trim()}`);
+    }
+
+    if (diagnostics.length > 0) {
+      return `${error.message} (${diagnostics.join("; ")})`;
+    }
+
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unknown AI flow error";
+};
+
 interface ExecuteFlowOptions {
   flow_type: keyof typeof AI_FLOW_REGISTRY;
   user_id: string;
@@ -785,7 +818,7 @@ export class AiService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : "Unknown AI flow error";
+      const message = toPersistableAiRunError(error);
       await this.aiRepository.failRun(options.user_id, aiRun.id, message.slice(0, 2000));
 
       if (error instanceof AiProviderError) {

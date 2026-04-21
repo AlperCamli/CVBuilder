@@ -4,10 +4,47 @@ import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
 
+const GEMINI_SCHEMA_DROPPED_KEYS = new Set([
+  "$schema",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "format",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minItems",
+  "maxItems",
+  "minProperties",
+  "maxProperties"
+]);
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+};
+
+export const sanitizeGeminiResponseJsonSchema = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeGeminiResponseJsonSchema(item));
+  }
+
+  if (value && typeof value === "object") {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (GEMINI_SCHEMA_DROPPED_KEYS.has(key)) {
+        continue;
+      }
+      sanitized[key] = sanitizeGeminiResponseJsonSchema(item);
+    }
+
+    return sanitized;
+  }
+
+  return value;
 };
 
 const toPromptText = (request: AiProviderRequest): string => {
@@ -38,10 +75,11 @@ export class GeminiAiProvider implements AiProvider {
   }
 
   async generate(request: AiProviderRequest): Promise<AiProviderResult> {
-    const schema = zodToJsonSchema(request.output_schema as never, {
+    const rawSchema = zodToJsonSchema(request.output_schema as never, {
       target: "jsonSchema7",
       $refStrategy: "none"
     }) as Record<string, unknown>;
+    const schema = sanitizeGeminiResponseJsonSchema(rawSchema) as Record<string, unknown>;
 
     try {
       const response = await this.client.models.generateContent({
@@ -84,8 +122,16 @@ export class GeminiAiProvider implements AiProvider {
         throw error;
       }
 
+      const providerStatus =
+        typeof (error as { status?: unknown })?.status === "number"
+          ? ((error as { status: number }).status as number)
+          : null;
+      const providerErrorName = error instanceof Error ? error.name : null;
+
       throw new AiProviderError("Gemini provider request failed", {
-        reason: error instanceof Error ? error.message : "Unknown provider error"
+        reason: error instanceof Error ? error.message : "Unknown provider error",
+        provider_status: providerStatus,
+        provider_error_name: providerErrorName
       });
     }
   }

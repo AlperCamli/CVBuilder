@@ -145,3 +145,67 @@ Excluded:
 
 Result:
 - fast preloaded block chains for instant client prev/next navigation
+
+## Where AI Flows Run (Code Map)
+
+HTTP routes:
+- `src/modules/ai/ai.routes.ts`
+
+Controller boundary:
+- `src/modules/ai/ai.controller.ts`
+
+Flow orchestration and persistence:
+- `src/modules/ai/ai.service.ts`
+
+Provider runtime:
+- `src/modules/ai/provider/gemini-ai-provider.ts`
+- `src/modules/ai/provider/mock-ai-provider.ts`
+- `src/modules/ai/provider/create-ai-provider.ts`
+
+Flow definitions and strict output contracts:
+- `src/modules/ai/flows/flow-registry.ts`
+- `src/modules/ai/flows/flow-contracts.ts`
+
+Prompt resolution:
+- `src/modules/ai/prompts/prompt-resolver.ts`
+- `src/modules/ai/prompts/prompt-config.repository.ts`
+
+Prompt seed source:
+- `supabase/seed.sql`
+
+## Prompt Ops Runbook (No Admin UI)
+
+Check active prompt rows for current profile:
+
+```sql
+select profile, flow_type, action_type, provider, model_name, prompt_key, prompt_version
+from public.ai_prompt_configs
+where profile = 'phase3-v1'
+  and is_active = true
+order by flow_type, action_type nulls first;
+```
+
+If this returns zero rows, runtime falls back to `flow-registry.ts` defaults.
+
+Apply migrations and seed prompts to linked environment:
+
+```bash
+supabase db push
+supabase db query --linked -f supabase/seed.sql
+```
+
+Update prompts via SQL (example pattern):
+
+```sql
+update public.ai_prompt_configs
+set system_prompt = '...new prompt...',
+    prompt_version = 'phase5-v2',
+    updated_at = now()
+where profile = 'phase3-v1'
+  and flow_type = 'follow_up_questions'
+  and action_type is null
+  and provider = 'gemini'
+  and is_active = true;
+```
+
+Prompt changes are picked up by `AiPromptResolver` cache after TTL (30s) or process restart.
