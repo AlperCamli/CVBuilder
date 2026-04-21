@@ -96,6 +96,38 @@ const dedupe = (items: string[]): string[] => {
   return output;
 };
 
+const getUrlCandidates = (value: string): string[] => {
+  const directMatches = value.match(/(?:https?:\/\/|www\.)[^\s<>()]+/gi) ?? [];
+  const handleMatches = value.match(/\b(?:linkedin|github|gitlab|behance|dribbble|medium|in)\/[A-Za-z0-9._-]{2,}\b/gi) ?? [];
+
+  const normalizedDirect = directMatches.map((candidate) =>
+    candidate
+      .replace(/[),.;!?]+$/, "")
+      .replace(/^www\./i, "https://www.")
+  );
+
+  const normalizedHandles = handleMatches.map((handle) => {
+    const [platformRaw, handleValue] = handle.split("/");
+    const platform = platformRaw.toLowerCase();
+
+    if (platform === "in" || platform === "linkedin") {
+      return `https://www.linkedin.com/in/${handleValue}`;
+    }
+
+    if (platform === "github") {
+      return `https://github.com/${handleValue}`;
+    }
+
+    if (platform === "gitlab") {
+      return `https://gitlab.com/${handleValue}`;
+    }
+
+    return `https://${platform}.com/${handleValue}`;
+  });
+
+  return dedupe([...normalizedDirect, ...normalizedHandles]);
+};
+
 const flattenText = (value: unknown): string[] => {
   if (value === null || value === undefined) {
     return [];
@@ -1358,7 +1390,10 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         type: "skills",
         hidden: sectionHidden,
         order: section.order,
-        data: { skills }
+        data: {
+          skills,
+          blockId: sortedBlocks[0]?.id ?? ""
+        }
       });
       continue;
     }
@@ -1909,7 +1944,9 @@ export const editorSectionsToCvContent = (
 
       if (sectionType === "skills") {
         const skillValues = asStringArray(asRecord(section.data).skills);
+        const preferredBlockId = asString(asRecord(section.data).blockId);
         const sectionId = section.backendSectionId || deterministicSectionId("skills", sectionIndex);
+        const blockId = preferredBlockId || `${normalizeIdPart(sectionId) || "skills"}-skills`;
 
         return {
           id: sectionId,
@@ -1917,19 +1954,18 @@ export const editorSectionsToCvContent = (
           title: "Skills",
           order: sectionIndex,
           meta: section.hidden ? { visibility: "hidden" } : {},
-          blocks: skillValues.map((skill, index) => {
-            const fallbackId = `${normalizeIdPart(sectionId) || "skills"}-skill-${index + 1}`;
-            return {
-              id: fallbackId,
-              type: "skill",
-              order: index,
+          blocks: [
+            {
+              id: blockId,
+              type: "skills",
+              order: 0,
               visibility: toVisibility(section.hidden),
               fields: {
-                name: toJsonValue(skill)
+                skills: toJsonValue(skillValues)
               },
               meta: {}
-            };
-          })
+            }
+          ]
         };
       }
 
@@ -2062,7 +2098,8 @@ export const getSectionFirstBlockId = (section: EditorSection): string | null =>
   }
 
   if (section.type === "skills") {
-    return null;
+    const blockId = asString(asRecord(section.data).blockId);
+    return blockId || null;
   }
 
   const items = normalizeItems(section.data.items, section.type || "section");

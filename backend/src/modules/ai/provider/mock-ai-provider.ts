@@ -412,6 +412,41 @@ const generateTailoredDraft = (input: Record<string, unknown>): Record<string, u
   };
 };
 
+const generateImportImprove = (input: Record<string, unknown>): Record<string, unknown> => {
+  const parsedContent = asRecord(input.parsed_content);
+  const language = asString(input.language) || asString(parsedContent.language) || "en";
+  const content = ensureTailoredContent(parsedContent, language);
+  const sections = asArray(content.sections).map((section) => asRecord(section));
+  const changedBlockIds: string[] = [];
+
+  for (const section of sections) {
+    const blocks = asArray(section.blocks).map((block) => asRecord(block));
+
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      const primary = extractPrimaryTextField(block);
+      const nextText = buildSuggestionText(primary.text, "improve", [], "", index);
+      const updated = setPrimaryTextField(block, primary.key, nextText);
+      blocks[index] = updated;
+
+      const blockId = asString(updated.id);
+      if (blockId) {
+        changedBlockIds.push(blockId);
+      }
+    }
+
+    section.blocks = blocks;
+  }
+
+  content.sections = sections;
+
+  return {
+    improved_content: content,
+    generation_summary: "Improved imported CV content for clarity and impact.",
+    changed_block_ids: [...new Set(changedBlockIds)]
+  };
+};
+
 const generateBlockSuggestions = (
   input: Record<string, unknown>,
   fallbackCount = 1
@@ -505,6 +540,9 @@ export class MockAiProvider implements AiProvider {
         break;
       case "multi_option":
         outputPayload = generateBlockSuggestions(request.input_payload, 3);
+        break;
+      case "import_improve":
+        outputPayload = generateImportImprove(request.input_payload);
         break;
       case "block_compare":
         outputPayload = generateBlockCompare(request.input_payload);

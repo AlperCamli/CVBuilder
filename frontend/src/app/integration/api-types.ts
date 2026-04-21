@@ -490,7 +490,8 @@ export type AiSuggestionStatus = "pending" | "applied" | "rejected" | "expired";
 export interface AiSuggestionSummary {
   id: string;
   ai_run_id: string;
-  tailored_cv_id: string;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   block_id: string | null;
   action_type: AiSuggestionActionType;
   option_group_key: string | null;
@@ -513,6 +514,7 @@ export interface AiRunSummary {
     | "block_suggest"
     | "block_compare"
     | "multi_option"
+    | "import_improve"
     | "summary"
     | "improve";
   provider: string;
@@ -523,10 +525,37 @@ export interface AiRunSummary {
   completed_at: string | null;
 }
 
-export interface TailoredCvAiHistoryResponse {
-  tailored_cv_id: string;
+export interface CvAiHistoryResponse {
+  cv_kind: "master" | "tailored";
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   ai_runs: AiRunSummary[];
   suggestions: AiSuggestionSummary[];
+}
+
+export type TailoredCvAiHistoryResponse = CvAiHistoryResponse;
+
+export interface AiBlockVersionEntry {
+  source: "original" | "manual_pre_ai" | "ai_applied";
+  label: string;
+  index: number;
+  created_at: string | null;
+  ai_suggestion_id: string | null;
+  ai_run_id: string | null;
+  content_snapshot: Record<string, unknown>;
+}
+
+export interface AiBlockVersionChain {
+  block_id: string;
+  current_version_index: number;
+  versions: AiBlockVersionEntry[];
+}
+
+export interface CvAiBlockVersionsResponse {
+  cv_kind: "master" | "tailored";
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
+  blocks: AiBlockVersionChain[];
 }
 
 export interface JobAnalysisResult {
@@ -596,6 +625,20 @@ export interface TailoredCvDraftResult {
   };
 }
 
+export interface ImportImproveResponse {
+  ai_run_id: string;
+  improved_content: CvContent;
+  generation_summary: string;
+  changed_block_ids: string[];
+  generation_metadata: {
+    provider: string;
+    model_name: string;
+    flow_type: "import_improve";
+    prompt_key: string;
+    prompt_version: string;
+  };
+}
+
 export interface AiSuggestResponse {
   ai_run_id: string;
   suggestion_ids: string[];
@@ -631,7 +674,9 @@ export interface AiBlockOptionsResult {
 
 export interface SuggestionApplyResponse {
   suggestion: AiSuggestionSummary;
-  tailored_cv_id: string;
+  cv_kind: "master" | "tailored";
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   updated_block: CvBlock;
   section_id: string;
 }

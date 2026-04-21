@@ -121,4 +121,15 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/on conflict \(user_id, period_month\)/i);
     expect(migration).toMatch(/grant execute on function public\.increment_usage_counters/i);
   });
+
+  it("contains phase 5 AI prompt table and master/tailored suggestion scope updates", () => {
+    const migration = readMigration("20260421130000_phase5_ai_gemini_prompts.sql");
+
+    expect(migration).toMatch(/create table if not exists public\.ai_prompt_configs/i);
+    expect(migration).toMatch(/ai_prompt_configs_flow_type_check/i);
+    expect(migration).toMatch(/ai_prompt_configs_action_type_check/i);
+    expect(migration).toMatch(/alter table public\.ai_suggestions[\s\S]*add column if not exists master_cv_id/i);
+    expect(migration).toMatch(/ai_suggestions_target_scope_check/i);
+    expect(migration).toMatch(/import_improve/i);
+  });
 });

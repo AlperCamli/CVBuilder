@@ -46,13 +46,15 @@ import {
 } from "../components/CVSections";
 import { useAuth } from "../integration/auth-context";
 import type {
+  AiBlockVersionChain,
+  CvAiHistoryResponse,
   AiBlockCompareResult,
   AiSuggestionSummary,
+  CvAiBlockVersionsResponse,
   CvBlockRevisionSummary,
   ExportSummaryItem,
   MasterCvDetail,
   RenderingPreviewResponse,
-  TailoredCvAiHistoryResponse,
   TailoredCvDetail,
   TemplateDetail,
   TemplateSummary
@@ -260,10 +262,12 @@ export function CVEditor() {
 
   const [showAIPopup, setShowAIPopup] = useState(false);
   const [aiTargetSectionId, setAiTargetSectionId] = useState<string | null>(null);
+  const [aiTargetBlockId, setAiTargetBlockId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiCompareResult, setAiCompareResult] = useState<AiBlockCompareResult | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<SuggestionCard[]>([]);
-  const [aiHistory, setAiHistory] = useState<TailoredCvAiHistoryResponse | null>(null);
+  const [aiHistory, setAiHistory] = useState<CvAiHistoryResponse | null>(null);
+  const [aiBlockVersions, setAiBlockVersions] = useState<Record<string, AiBlockVersionChain>>({});
 
   const [showAddContentModal, setShowAddContentModal] = useState(false);
   const [showTipsDrawer, setShowTipsDrawer] = useState(false);
@@ -316,6 +320,34 @@ export function CVEditor() {
           }
         : null
     );
+  };
+
+  const mapAiBlockVersions = (response: CvAiBlockVersionsResponse): Record<string, AiBlockVersionChain> => {
+    return response.blocks.reduce<Record<string, AiBlockVersionChain>>((acc, item) => {
+      acc[item.block_id] = item;
+      return acc;
+    }, {});
+  };
+
+  const loadAiData = async (targetKind: "master" | "tailored", targetId: string) => {
+    try {
+      const [history, versions] =
+        targetKind === "tailored"
+          ? await Promise.all([
+              api.getTailoredCvAiHistory(targetId),
+              api.getTailoredCvAiBlockVersions(targetId)
+            ])
+          : await Promise.all([
+              api.getMasterCvAiHistory(targetId),
+              api.getMasterCvAiBlockVersions(targetId)
+            ]);
+
+      setAiHistory(history);
+      setAiBlockVersions(mapAiBlockVersions(versions));
+    } catch {
+      setAiHistory(null);
+      setAiBlockVersions({});
+    }
   };
 
   const markDirty = () => {
@@ -379,6 +411,7 @@ export function CVEditor() {
           });
           hydrateFromMaster(created);
           restoreDraftIfAllowed("master", created.id);
+          void loadAiData("master", created.id);
           setLoading(false);
           return;
         }
@@ -386,6 +419,7 @@ export function CVEditor() {
         const master = await api.getMasterCv(targetMasterId);
         hydrateFromMaster(master);
         restoreDraftIfAllowed("master", master.id);
+        void loadAiData("master", master.id);
         setLoading(false);
         return;
       }
@@ -410,18 +444,13 @@ export function CVEditor() {
         } catch {
           // keep optional source unresolved
         }
-
-        try {
-          const history = await api.getTailoredCvAiHistory(tailored.id);
-          setAiHistory(history);
-        } catch {
-          setAiHistory(null);
-        }
+        void loadAiData("tailored", tailored.id);
       } catch (tailoredError) {
         if (tailoredError instanceof ApiClientError && tailoredError.status === 404) {
           const master = await api.getMasterCv(id);
           hydrateFromMaster(master);
           restoreDraftIfAllowed("master", master.id);
+          void loadAiData("master", master.id);
         } else {
           throw tailoredError;
         }
@@ -798,23 +827,23 @@ export function CVEditor() {
     }
   };
 
-  const openAiForSection = async (sectionId: string) => {
+  const openAiForSection = async (sectionId: string, blockId?: string) => {
     setAiTargetSectionId(sectionId);
+    setAiTargetBlockId(blockId ?? null);
     setAiCompareResult(null);
     setAiSuggestions([]);
     setShowAIPopup(true);
 
-    if (cvId && cvKind === "tailored") {
-      try {
-        const history = await api.getTailoredCvAiHistory(cvId);
-        setAiHistory(history);
-      } catch {
-        setAiHistory(null);
-      }
+    if (cvId) {
+      await loadAiData(cvKind, cvId);
     }
   };
 
   const resolveAiBlockId = (): string | null => {
+    if (aiTargetBlockId) {
+      return aiTargetBlockId;
+    }
+
     if (!aiTargetSectionId) {
       return null;
     }
@@ -838,8 +867,8 @@ export function CVEditor() {
       | "options"
       | "compare"
   ) => {
-    if (!cvId || cvKind !== "tailored") {
-      setError("AI block actions are available only for tailored CVs.");
+    if (!cvId) {
+      setError("CV id is missing.");
       return;
     }
 
@@ -854,7 +883,23 @@ export function CVEditor() {
     setAiSuggestions([]);
 
     try {
+      if (dirty) {
+        const persisted = await persistCv("auto");
+        if (!persisted) {
+          setError("Failed to save current edits before running AI action.");
+          return;
+        }
+      }
+
+      const targetPayload =
+        cvKind === "tailored" ? { tailored_cv_id: cvId } : { master_cv_id: cvId };
+
       if (action === "compare") {
+        if (cvKind !== "tailored") {
+          setError("Compare to job is available only for tailored CVs.");
+          return;
+        }
+
         const compared = await api.postBlockCompare({
           tailored_cv_id: cvId,
           block_id: blockId
@@ -862,7 +907,7 @@ export function CVEditor() {
         setAiCompareResult(compared);
       } else if (action === "options") {
         const options = await api.postBlockOptions({
-          tailored_cv_id: cvId,
+          ...targetPayload,
           block_id: blockId,
           option_count: 3
         });
@@ -877,7 +922,7 @@ export function CVEditor() {
         );
       } else {
         const suggested = await api.postBlockSuggest({
-          tailored_cv_id: cvId,
+          ...targetPayload,
           block_id: blockId,
           action_type: action
         });
@@ -890,12 +935,6 @@ export function CVEditor() {
             suggested_content: suggestion.suggested_content
           }))
         );
-      }
-
-      try {
-        await api.listBlockRevisions(cvId, blockId);
-      } catch {
-        // optional call to wire block-level revisions endpoint
       }
     } catch (err) {
       if (err instanceof Error) {
@@ -913,9 +952,8 @@ export function CVEditor() {
       await api.getSuggestion(suggestionId);
       await api.applySuggestion(suggestionId);
       await loadCv();
-      if (cvId && cvKind === "tailored") {
-        const history = await api.getTailoredCvAiHistory(cvId);
-        setAiHistory(history);
+      if (cvId) {
+        await loadAiData(cvKind, cvId);
       }
       setShowAIPopup(false);
     } catch (err) {
@@ -929,11 +967,94 @@ export function CVEditor() {
     try {
       await api.rejectSuggestion(suggestionId);
       setAiSuggestions((prev) => prev.filter((suggestion) => suggestion.id !== suggestionId));
+      if (cvId) {
+        await loadAiData(cvKind, cvId);
+      }
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
       }
     }
+  };
+
+  const replaceBlockFromSnapshot = (blockId: string, snapshot: Record<string, unknown>): boolean => {
+    const currentContent = editorSectionsToCvContent(sections, language);
+    const nextSections = currentContent.sections.map((section) => {
+      const nextBlocks = section.blocks.map((block) => {
+        if (block.id !== blockId) {
+          return block;
+        }
+
+        return {
+          ...block,
+          ...snapshot,
+          id: block.id
+        };
+      });
+
+      return {
+        ...section,
+        blocks: nextBlocks
+      };
+    });
+
+    const didReplace = nextSections.some((section) => section.blocks.some((block) => block.id === blockId));
+    if (!didReplace) {
+      return false;
+    }
+
+    setSections(
+      cvContentToEditorSections({
+        ...currentContent,
+        sections: nextSections
+      })
+    );
+    markDirty();
+    return true;
+  };
+
+  const changeAiBlockVersion = (blockId: string, direction: -1 | 1) => {
+    const chain = aiBlockVersions[blockId];
+    if (!chain || chain.versions.length <= 1) {
+      return;
+    }
+
+    const nextIndex = Math.max(0, Math.min(chain.current_version_index + direction, chain.versions.length - 1));
+    if (nextIndex === chain.current_version_index) {
+      return;
+    }
+
+    const nextVersion = chain.versions[nextIndex];
+    const replaced = replaceBlockFromSnapshot(blockId, nextVersion.content_snapshot);
+    if (!replaced) {
+      return;
+    }
+
+    setAiBlockVersions((prev) => ({
+      ...prev,
+      [blockId]: {
+        ...chain,
+        current_version_index: nextIndex
+      }
+    }));
+  };
+
+  const getAiVersionNavigator = (blockId?: string) => {
+    if (!blockId) {
+      return undefined;
+    }
+
+    const chain = aiBlockVersions[blockId];
+    if (!chain || chain.versions.length <= 1) {
+      return undefined;
+    }
+
+    return {
+      current: chain.current_version_index,
+      total: chain.versions.length,
+      onPrev: () => changeAiBlockVersion(blockId, -1),
+      onNext: () => changeAiBlockVersion(blockId, 1)
+    };
   };
 
   const handlePostExportNavigation = () => {
@@ -964,8 +1085,8 @@ export function CVEditor() {
       onToggleVisibility: () => toggleSectionVisibility(section.id),
       onRemove: () => removeSection(section.id),
       onChange: (data: Record<string, unknown>) => updateSection(section.id, data),
-      onAIAssist: () => {
-        void openAiForSection(section.id);
+      onAIAssist: (blockId?: string) => {
+        void openAiForSection(section.id, blockId);
       }
     };
 
@@ -984,13 +1105,35 @@ export function CVEditor() {
     const content = (() => {
       switch (section.type) {
         case "summary":
-          return <SummarySection {...commonProps} />;
+          return (
+            <SummarySection
+              {...commonProps}
+              aiVersionNavigator={getAiVersionNavigator(
+                ((section.data as Record<string, unknown>)?.blockId as string | undefined) ?? undefined
+              )}
+            />
+          );
         case "experience":
-          return <ExperienceSection {...commonProps} />;
+          return (
+            <ExperienceSection
+              {...commonProps}
+              getAiVersionNavigator={getAiVersionNavigator}
+            />
+          );
         case "education":
-          return <EducationSection {...commonProps} />;
+          return (
+            <EducationSection
+              {...commonProps}
+              aiVersionNavigator={getAiVersionNavigator(getSectionFirstBlockId(section) ?? undefined)}
+            />
+          );
         case "skills":
-          return <SkillsSection {...commonProps} />;
+          return (
+            <SkillsSection
+              {...commonProps}
+              aiVersionNavigator={getAiVersionNavigator(getSectionFirstBlockId(section) ?? undefined)}
+            />
+          );
         case "languages":
           return <LanguageSection {...commonProps} />;
         case "certifications":
@@ -1645,6 +1788,7 @@ export function CVEditor() {
             if (!open) {
               setAiCompareResult(null);
               setAiSuggestions([]);
+              setAiTargetBlockId(null);
             }
           }}
         >
@@ -1660,14 +1804,27 @@ export function CVEditor() {
 
             <div className="space-y-3 mt-2">
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Improve writing", action: "improve" },
-                  { label: "Summarize", action: "summarize" },
-                  { label: "Rewrite", action: "rewrite" },
-                  { label: "ATS optimize", action: "ats_optimize" },
-                  { label: "Generate options", action: "options" },
-                  { label: "Compare to job", action: "compare" }
-                ].map((item) => (
+                {(
+                  cvKind === "tailored"
+                    ? [
+                        { label: "Improve writing", action: "improve" },
+                        { label: "Summarize", action: "summarize" },
+                        { label: "Rewrite", action: "rewrite" },
+                        { label: "Shorten", action: "shorten" },
+                        { label: "Expand", action: "expand" },
+                        { label: "ATS optimize", action: "ats_optimize" },
+                        { label: "Generate options", action: "options" },
+                        { label: "Compare to job", action: "compare" }
+                      ]
+                    : [
+                        { label: "Improve writing", action: "improve" },
+                        { label: "Summarize", action: "summarize" },
+                        { label: "Rewrite", action: "rewrite" },
+                        { label: "Shorten", action: "shorten" },
+                        { label: "Expand", action: "expand" },
+                        { label: "Generate options", action: "options" }
+                      ]
+                ).map((item) => (
                   <button
                     key={item.label}
                     onClick={() => void runAiAction(item.action as any)}

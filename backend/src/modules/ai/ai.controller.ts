@@ -30,6 +30,11 @@ export class AiController {
     sendSuccess(response, data);
   });
 
+  postImportImprove = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.improveImportedContent(requireSession(request), request.body);
+    sendSuccess(response, data);
+  });
+
   postBlockSuggest = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.aiService.suggestBlock(requireSession(request), request.body);
     sendSuccess(response, data);
@@ -64,6 +69,30 @@ export class AiController {
     const data = await this.aiService.getTailoredCvAiHistory(
       requireSession(request),
       request.params.tailoredCvId
+    );
+    sendSuccess(response, data);
+  });
+
+  getMasterCvAiHistory = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.getMasterCvAiHistory(
+      requireSession(request),
+      request.params.masterCvId
+    );
+    sendSuccess(response, data);
+  });
+
+  getTailoredCvAiBlockVersions = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.getTailoredCvAiBlockVersions(
+      requireSession(request),
+      request.params.tailoredCvId
+    );
+    sendSuccess(response, data);
+  });
+
+  getMasterCvAiBlockVersions = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.getMasterCvAiBlockVersions(
+      requireSession(request),
+      request.params.masterCvId
     );
     sendSuccess(response, data);
   });

@@ -4,11 +4,13 @@ import { validate } from "../../shared/validation/validate";
 import type { AiController } from "./ai.controller";
 import {
   aiBlockCompareSchema,
+  aiImportImproveSchema,
   aiBlockOptionsSchema,
   aiBlockSuggestSchema,
   aiFollowUpQuestionsSchema,
   aiJobAnalysisSchema,
   aiTailoredDraftSchema,
+  masterCvAiHistoryParamsSchema,
   suggestionIdParamsSchema,
   tailoredCvAiHistoryParamsSchema
 } from "./ai.schemas";
@@ -38,6 +40,13 @@ export const createAiRouter = (
     authMiddleware,
     validate({ body: aiTailoredDraftSchema }),
     aiController.postTailoredCvDraft
+  );
+
+  router.post(
+    "/ai/import-improve",
+    authMiddleware,
+    validate({ body: aiImportImproveSchema }),
+    aiController.postImportImprove
   );
 
   router.post(
@@ -87,6 +96,27 @@ export const createAiRouter = (
     authMiddleware,
     validate({ params: tailoredCvAiHistoryParamsSchema }),
     aiController.getTailoredCvAiHistory
+  );
+
+  router.get(
+    "/master-cvs/:masterCvId/ai-history",
+    authMiddleware,
+    validate({ params: masterCvAiHistoryParamsSchema }),
+    aiController.getMasterCvAiHistory
+  );
+
+  router.get(
+    "/tailored-cvs/:tailoredCvId/ai-block-versions",
+    authMiddleware,
+    validate({ params: tailoredCvAiHistoryParamsSchema }),
+    aiController.getTailoredCvAiBlockVersions
+  );
+
+  router.get(
+    "/master-cvs/:masterCvId/ai-block-versions",
+    authMiddleware,
+    validate({ params: masterCvAiHistoryParamsSchema }),
+    aiController.getMasterCvAiBlockVersions
   );
 
   return router;

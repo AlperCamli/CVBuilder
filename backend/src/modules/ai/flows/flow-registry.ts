@@ -4,6 +4,7 @@ import {
   blockCompareOutputSchema,
   blockSuggestOutputSchema,
   followUpQuestionsOutputSchema,
+  importImproveOutputSchema,
   jobAnalysisOutputSchema,
   tailoredDraftOutputSchema
 } from "./flow-contracts";
@@ -63,6 +64,14 @@ const definitions: AiFlowDefinition[] = [
     prompt_version: "phase3-v1",
     system_prompt: "Generate multiple alternative rewrite options for one CV block.",
     output_schema: blockSuggestOutputSchema
+  },
+  {
+    flow_type: "import_improve",
+    prompt_key: "import-improve",
+    prompt_version: "phase5-v1",
+    system_prompt:
+      "Improve imported CV content and return full improved content with changed block identifiers.",
+    output_schema: importImproveOutputSchema
   },
   {
     flow_type: "summary",

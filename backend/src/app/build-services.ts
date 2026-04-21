@@ -39,6 +39,11 @@ import { AiService } from "../modules/ai/ai.service";
 import { SupabaseAiRepository, type AiRepository } from "../modules/ai/ai.repository";
 import { createAiProvider } from "../modules/ai/provider/create-ai-provider";
 import type { AiProvider } from "../modules/ai/provider/ai-provider";
+import {
+  SupabaseAiPromptConfigRepository,
+  type AiPromptConfigRepository
+} from "../modules/ai/prompts/prompt-config.repository";
+import { AiPromptResolver } from "../modules/ai/prompts/prompt-resolver";
 import { CvRevisionsService } from "../modules/cv-revisions/cv-revisions.service";
 import {
   SupabaseCvRevisionsRepository,
@@ -107,6 +112,7 @@ export interface ServiceOverrides {
   cvRevisionsRepository?: CvRevisionsRepository;
   aiRepository?: AiRepository;
   aiProvider?: AiProvider;
+  aiPromptConfigRepository?: AiPromptConfigRepository;
   cvParser?: CvParser;
   templatesRepository?: TemplatesRepository;
   filesRepository?: FilesRepository;
@@ -151,7 +157,14 @@ export const buildDefaultServices = (
     overrides?.cvRevisionsRepository ??
     new SupabaseCvRevisionsRepository(supabaseClients.serviceRoleClient);
   const aiRepository = overrides?.aiRepository ?? new SupabaseAiRepository(supabaseClients.serviceRoleClient);
+  const aiPromptConfigRepository =
+    overrides?.aiPromptConfigRepository ??
+    new SupabaseAiPromptConfigRepository(supabaseClients.serviceRoleClient);
   const aiProvider = overrides?.aiProvider ?? createAiProvider(config);
+  const aiPromptResolver = new AiPromptResolver(
+    aiPromptConfigRepository,
+    config.ai.promptProfile
+  );
   const templatesRepository =
     overrides?.templatesRepository ?? new SupabaseTemplatesRepository(supabaseClients.serviceRoleClient);
   const filesRepository =
@@ -220,7 +233,7 @@ export const buildDefaultServices = (
     jobsRepository,
     cvRevisionsService,
     templatesService,
-    config.ai.promptProfile,
+    aiPromptResolver,
     billingService
   );
   const exportsService = new ExportsService(

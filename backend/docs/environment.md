@@ -31,8 +31,11 @@
 - `LOG_LEVEL` (default: `info`)
 - `FRONTEND_APP_URL` (default: `http://localhost:5173`)
 - `AI_PROVIDER` (default: `mock`)
+- supported values: `mock`, `gemini`
+- Phase 5 production target is `gemini` (no silent fallback to other providers)
 - `AI_DEFAULT_MODEL` (default: `mock-cv-builder-v1`)
 - `AI_PROMPT_PROFILE` (default: `phase3-v1`)
+- `GEMINI_API_KEY` (required when `AI_PROVIDER=gemini`)
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, min `60`, max `86400`)
 - `PDF_OCR_ENABLED` (default: `true`, defaults to `false` in `test` runtime)

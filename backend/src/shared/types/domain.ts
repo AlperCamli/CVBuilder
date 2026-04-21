@@ -93,6 +93,7 @@ export type AiFlowType =
   | "block_suggest"
   | "block_compare"
   | "multi_option"
+  | "import_improve"
   | "summary"
   | "improve";
 
@@ -130,7 +131,8 @@ export interface AiSuggestionRecord {
   id: string;
   ai_run_id: string;
   user_id: string;
-  tailored_cv_id: string;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   block_id: string | null;
   action_type: AiSuggestionActionType;
   before_content: Record<string, unknown> | null;

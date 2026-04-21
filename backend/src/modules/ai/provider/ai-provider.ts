@@ -1,4 +1,5 @@
 import type { AiFlowType } from "../../../shared/types/domain";
+import type { ZodTypeAny } from "zod";
 
 export interface AiPromptContext {
   prompt_key: string;
@@ -11,6 +12,7 @@ export interface AiProviderRequest {
   flow_type: AiFlowType;
   model_name: string;
   prompt: AiPromptContext;
+  output_schema: ZodTypeAny;
   input_payload: Record<string, unknown>;
 }
 

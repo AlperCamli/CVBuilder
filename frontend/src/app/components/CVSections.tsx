@@ -1,4 +1,21 @@
-import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles, Linkedin, Github, Globe, X as XIcon, Upload, Camera, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  GripVertical,
+  Eye,
+  EyeOff,
+  Trash2,
+  Plus,
+  Sparkles,
+  Linkedin,
+  Github,
+  Globe,
+  X as XIcon,
+  Upload,
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight
+} from "lucide-react";
 import { useState, useRef } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { DateInputHelper } from "./DateInputHelper";
@@ -345,10 +362,66 @@ interface SummarySectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist: () => void;
+  onAIAssist: (blockId?: string) => void;
+  aiVersionNavigator?: AiVersionNavigatorState;
 }
 
-export function SummarySection({ data, isHidden, onToggleVisibility, onRemove, onChange, onAIAssist }: SummarySectionProps) {
+interface AiVersionNavigatorState {
+  current: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+}
+
+function AIVersionNavigator({ state }: { state: AiVersionNavigatorState | undefined }) {
+  if (!state || state.total <= 1) {
+    return null;
+  }
+
+  const canPrev = state.current > 0;
+  const canNext = state.current < state.total - 1;
+
+  return (
+    <div
+      className="px-1.5 py-1 rounded-lg border flex items-center gap-1"
+      style={{
+        borderColor: "var(--color-border-secondary)",
+        color: "var(--color-text-secondary)",
+        fontSize: "11px"
+      }}
+    >
+      <button
+        onClick={state.onPrev}
+        disabled={!canPrev}
+        className="p-0.5 rounded"
+        style={{ opacity: canPrev ? 1 : 0.35 }}
+        aria-label="Previous AI version"
+      >
+        <ChevronLeft size={12} />
+      </button>
+      <span>{state.current + 1} / {state.total}</span>
+      <button
+        onClick={state.onNext}
+        disabled={!canNext}
+        className="p-0.5 rounded"
+        style={{ opacity: canNext ? 1 : 0.35 }}
+        aria-label="Next AI version"
+      >
+        <ChevronRight size={12} />
+      </button>
+    </div>
+  );
+}
+
+export function SummarySection({
+  data,
+  isHidden,
+  onToggleVisibility,
+  onRemove,
+  onChange,
+  onAIAssist,
+  aiVersionNavigator
+}: SummarySectionProps) {
   return (
     <div
       className="p-4 rounded-xl border"
@@ -364,8 +437,9 @@ export function SummarySection({ data, isHidden, onToggleVisibility, onRemove, o
           Professional Summary
         </h3>
         <div className="flex items-center gap-2">
+          <AIVersionNavigator state={aiVersionNavigator} />
           <button
-            onClick={onAIAssist}
+            onClick={() => onAIAssist(data?.blockId)}
             className="px-3 py-1 rounded-lg flex items-center gap-1.5"
             style={{
               fontSize: "12px",
@@ -411,10 +485,21 @@ interface ExperienceItemProps {
   toggleItemVisibility: (index: number) => void;
   toggleItemCollapsed: (index: number) => void;
   moveItem: (dragIndex: number, hoverIndex: number) => void;
-  onAIAssist: () => void;
+  onAIAssist: (blockId?: string) => void;
+  aiVersionNavigator?: AiVersionNavigatorState;
 }
 
-function ExperienceItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem, onAIAssist }: ExperienceItemProps) {
+function ExperienceItem({
+  item,
+  index,
+  updateItem,
+  removeItem,
+  toggleItemVisibility,
+  toggleItemCollapsed,
+  moveItem,
+  onAIAssist,
+  aiVersionNavigator
+}: ExperienceItemProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -568,18 +653,21 @@ function ExperienceItem({ item, index, updateItem, removeItem, toggleItemVisibil
               borderColor: "var(--color-border-secondary)",
             }}
           />
-          <button
-            onClick={onAIAssist}
-            className="px-3 py-1 rounded-lg flex items-center gap-1.5"
-            style={{
-              fontSize: "12px",
-              background: "var(--color-teal-50)",
-              color: "var(--color-teal-800)",
-            }}
-          >
-            <Sparkles size={12} />
-            Improve with AI
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onAIAssist(item.blockId)}
+              className="px-3 py-1 rounded-lg flex items-center gap-1.5"
+              style={{
+                fontSize: "12px",
+                background: "var(--color-teal-50)",
+                color: "var(--color-teal-800)",
+              }}
+            >
+              <Sparkles size={12} />
+              Improve with AI
+            </button>
+            <AIVersionNavigator state={aiVersionNavigator} />
+          </div>
         </div>
       )}
     </div>
@@ -592,10 +680,19 @@ interface ExperienceSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist: () => void;
+  onAIAssist: (blockId?: string) => void;
+  getAiVersionNavigator?: (blockId?: string) => AiVersionNavigatorState | undefined;
 }
 
-export function ExperienceSection({ data, isHidden, onToggleVisibility, onRemove, onChange, onAIAssist }: ExperienceSectionProps) {
+export function ExperienceSection({
+  data,
+  isHidden,
+  onToggleVisibility,
+  onRemove,
+  onChange,
+  onAIAssist,
+  getAiVersionNavigator
+}: ExperienceSectionProps) {
   const items = data.items || [];
 
   const addItem = () => {
@@ -672,6 +769,7 @@ export function ExperienceSection({ data, isHidden, onToggleVisibility, onRemove
               toggleItemCollapsed={toggleItemCollapsed}
               moveItem={moveItem}
               onAIAssist={onAIAssist}
+              aiVersionNavigator={getAiVersionNavigator?.(item.blockId)}
             />
           ))}
 
@@ -695,7 +793,8 @@ interface EducationSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist?: () => void;
+  onAIAssist?: (blockId?: string) => void;
+  aiVersionNavigator?: AiVersionNavigatorState;
 }
 
 interface EducationItemProps {
@@ -884,7 +983,15 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
   );
 }
 
-export function EducationSection({ data, isHidden, onToggleVisibility, onRemove, onChange, onAIAssist }: EducationSectionProps) {
+export function EducationSection({
+  data,
+  isHidden,
+  onToggleVisibility,
+  onRemove,
+  onChange,
+  onAIAssist,
+  aiVersionNavigator
+}: EducationSectionProps) {
   const items = data.items || [];
 
   const addItem = () => {
@@ -939,9 +1046,10 @@ export function EducationSection({ data, isHidden, onToggleVisibility, onRemove,
           Education
         </h3>
         <div className="flex items-center gap-2">
+          <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
             <button
-              onClick={onAIAssist}
+              onClick={() => onAIAssist((data.items || [])[0]?.blockId)}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",
@@ -997,10 +1105,19 @@ interface SkillsSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist?: () => void;
+  onAIAssist?: (blockId?: string) => void;
+  aiVersionNavigator?: AiVersionNavigatorState;
 }
 
-export function SkillsSection({ data, isHidden, onToggleVisibility, onRemove, onChange, onAIAssist }: SkillsSectionProps) {
+export function SkillsSection({
+  data,
+  isHidden,
+  onToggleVisibility,
+  onRemove,
+  onChange,
+  onAIAssist,
+  aiVersionNavigator
+}: SkillsSectionProps) {
   const skills = data.skills || [];
 
   const addSkill = (skill: string) => {
@@ -1036,9 +1153,10 @@ export function SkillsSection({ data, isHidden, onToggleVisibility, onRemove, on
           Skills
         </h3>
         <div className="flex items-center gap-2">
+          <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
             <button
-              onClick={onAIAssist}
+              onClick={() => onAIAssist(data.blockId)}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",

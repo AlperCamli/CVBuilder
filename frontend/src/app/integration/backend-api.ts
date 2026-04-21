@@ -1,6 +1,8 @@
 import type { ApiClient } from "./api-client";
 import type {
   AiBlockCompareResult,
+  CvAiBlockVersionsResponse,
+  CvAiHistoryResponse,
   AiBlockOptionsResult,
   AiSuggestResponse,
   AiSuggestionDetail,
@@ -30,6 +32,7 @@ import type {
   MeResponseData,
   ParseImportResponse,
   RenderingPreviewResponse,
+  ImportImproveResponse,
   RestoreRevisionResponse,
   RevisionCompareResponse,
   SettingsResponseData,
@@ -196,8 +199,12 @@ export interface TailoredDraftInput {
   answers: FollowUpAnswer[];
 }
 
-export interface BlockSuggestInput {
-  tailored_cv_id: string;
+export interface AiBlockTargetInput {
+  tailored_cv_id?: string;
+  master_cv_id?: string;
+}
+
+export interface BlockSuggestInput extends AiBlockTargetInput {
   block_id: string;
   action_type: "improve" | "summarize" | "rewrite" | "ats_optimize" | "shorten" | "expand" | "options";
   user_instruction?: string | null;
@@ -208,11 +215,16 @@ export interface BlockCompareInput {
   block_id: string;
 }
 
-export interface BlockOptionsInput {
-  tailored_cv_id: string;
+export interface BlockOptionsInput extends AiBlockTargetInput {
   block_id: string;
   user_instruction?: string | null;
   option_count?: number;
+}
+
+export interface ImportImproveInput {
+  parsed_content: Record<string, unknown>;
+  language?: string;
+  improvement_guidance?: string[];
 }
 
 export interface CreateExportInput {
@@ -426,6 +438,20 @@ export class BackendApi {
     return this.client.get<TailoredCvAiHistoryResponse>(`/tailored-cvs/${tailoredCvId}/ai-history`);
   }
 
+  getMasterCvAiHistory(masterCvId: string): Promise<CvAiHistoryResponse> {
+    return this.client.get<CvAiHistoryResponse>(`/master-cvs/${masterCvId}/ai-history`);
+  }
+
+  getTailoredCvAiBlockVersions(tailoredCvId: string): Promise<CvAiBlockVersionsResponse> {
+    return this.client.get<CvAiBlockVersionsResponse>(
+      `/tailored-cvs/${tailoredCvId}/ai-block-versions`
+    );
+  }
+
+  getMasterCvAiBlockVersions(masterCvId: string): Promise<CvAiBlockVersionsResponse> {
+    return this.client.get<CvAiBlockVersionsResponse>(`/master-cvs/${masterCvId}/ai-block-versions`);
+  }
+
   postJobAnalysis(payload: JobAnalysisInput): Promise<JobAnalysisResult> {
     return this.client.post<JobAnalysisResult, JobAnalysisInput>("/ai/job-analysis", payload);
   }
@@ -439,6 +465,10 @@ export class BackendApi {
 
   postTailoredCvDraft(payload: TailoredDraftInput): Promise<TailoredCvDraftResult> {
     return this.client.post<TailoredCvDraftResult, TailoredDraftInput>("/ai/tailored-cv-draft", payload);
+  }
+
+  postImportImprove(payload: ImportImproveInput): Promise<ImportImproveResponse> {
+    return this.client.post<ImportImproveResponse, ImportImproveInput>("/ai/import-improve", payload);
   }
 
   postBlockSuggest(payload: BlockSuggestInput): Promise<AiSuggestResponse> {

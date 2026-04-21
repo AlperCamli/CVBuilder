@@ -11,11 +11,14 @@ import {
 } from "../../shared/cv-content/cv-content.utils";
 import {
   AiFlowFailedError,
+  AiProviderError,
   ConflictError,
   NotFoundError,
   SuggestionNotApplicableError
 } from "../../shared/errors/app-error";
 import type {
+  CvKind,
+  AiSuggestionActionType,
   AiRunRecord,
   AiSuggestionRecord,
   JobRecord,
@@ -30,7 +33,11 @@ import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import type {
+  AiBlockVersionChain,
+  AiBlockVersionEntry,
   AiTailoredDraftJobPayload,
+  CvAiBlockVersionsResponse,
+  CvAiHistoryResponse,
   AiRunSummary,
   AiSuggestionDetail,
   AiSuggestionSummary,
@@ -39,16 +46,18 @@ import type {
   BlockOptionsInput,
   BlockSuggestInput,
   FollowUpQuestionsInput,
+  ImportImproveInput,
+  ImportImproveResponse,
   JobAnalysisInput,
   SessionContext,
   SuggestionApplyResponse,
   SuggestionRejectResponse,
-  TailoredCvAiHistoryResponse,
   TailoredCvDraftInput,
   TailoredCvDraftJobSummary,
   TailoredCvDraftSummary
 } from "./ai.types";
 import type { AiRepository } from "./ai.repository";
+import type { AiPromptResolver } from "./prompts/prompt-resolver";
 import type { AiProvider } from "./provider/ai-provider";
 
 const asRecord = (value: unknown): Record<string, unknown> => {
@@ -83,11 +92,16 @@ const stableStringify = (value: unknown): string => {
   return `{${entries.join(",")}}`;
 };
 
+const snapshotsEqual = (left: unknown, right: unknown): boolean => {
+  return stableStringify(left) === stableStringify(right);
+};
+
 interface ExecuteFlowOptions {
   flow_type: keyof typeof AI_FLOW_REGISTRY;
   user_id: string;
   input_payload: Record<string, unknown>;
   user_prompt: string;
+  action_type?: AiSuggestionActionType | null;
   master_cv_id?: string | null;
   tailored_cv_id?: string | null;
   job_id?: string | null;
@@ -102,6 +116,13 @@ interface ExecuteFlowResult<TOutput> {
   prompt_version: string;
 }
 
+interface AiBlockTargetContext {
+  cv_kind: CvKind;
+  cv_id: string;
+  current_content: TailoredCvRecord["current_content"] | MasterCvRecord["current_content"];
+  linked_job: JobRecord | null;
+}
+
 export class AiService {
   constructor(
     private readonly aiRepository: AiRepository,
@@ -111,7 +132,7 @@ export class AiService {
     private readonly jobsRepository: JobsRepository,
     private readonly cvRevisionsService: CvRevisionsService,
     private readonly templatesService: TemplatesService,
-    private readonly promptProfile: string,
+    private readonly promptResolver: AiPromptResolver,
     private readonly billingService: BillingService
   ) {}
 
@@ -261,25 +282,72 @@ export class AiService {
     return result;
   }
 
+  async improveImportedContent(
+    session: SessionContext,
+    input: ImportImproveInput
+  ): Promise<ImportImproveResponse> {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
+    const normalizedContent = normalizeCvContent(
+      asRecord(input.parsed_content),
+      input.language ?? "en"
+    );
+
+    const flowInput = {
+      parsed_content: normalizedContent,
+      language: normalizedContent.language,
+      improvement_guidance: input.improvement_guidance ?? []
+    };
+
+    const executed = await this.executeFlow({
+      flow_type: "import_improve",
+      user_id: session.appUser.id,
+      input_payload: flowInput,
+      user_prompt: "Improve imported CV content while preserving factual accuracy."
+    });
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
+
+    const improvedContent = normalizeCvContent(
+      asRecord(asRecord(executed.output).improved_content),
+      normalizedContent.language
+    );
+
+    return {
+      ai_run_id: executed.ai_run.id,
+      improved_content: improvedContent,
+      generation_summary: String(asRecord(executed.output).generation_summary ?? ""),
+      changed_block_ids: asStringArray(asRecord(executed.output).changed_block_ids),
+      generation_metadata: {
+        provider: executed.provider,
+        model_name: executed.model_name,
+        flow_type: "import_improve",
+        prompt_key: executed.prompt_key,
+        prompt_version: executed.prompt_version
+      }
+    };
+  }
+
   async suggestBlock(session: SessionContext, input: BlockSuggestInput) {
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
 
-    const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
-    const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
-    const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
+    const target = await this.resolveAiBlockTarget(session.appUser.id, input);
+    const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
 
     const optionCount = input.action_type === "options" ? 3 : 1;
 
     const executed = await this.executeFlow({
       flow_type: "block_suggest",
+      action_type: input.action_type,
       user_id: session.appUser.id,
-      tailored_cv_id: tailoredCv.id,
-      job_id: linkedJob?.id ?? null,
+      master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+      tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+      job_id: target.linked_job?.id ?? null,
       input_payload: {
         action_type: input.action_type,
         block: currentBlock.block,
         user_instruction: input.user_instruction ?? "",
-        job_description: linkedJob?.job_description ?? "",
+        job_description: target.linked_job?.job_description ?? "",
         option_count: optionCount
       },
       user_prompt: `Suggest a ${input.action_type} update for block ${input.block_id}.`
@@ -296,7 +364,8 @@ export class AiService {
       outputSuggestions.map((variant) => ({
         ai_run_id: executed.ai_run.id,
         user_id: session.appUser.id,
-        tailored_cv_id: tailoredCv.id,
+        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
         block_id: input.block_id,
         action_type: input.action_type,
         before_content: asRecord(currentBlock.block),
@@ -360,22 +429,23 @@ export class AiService {
   async generateBlockOptions(session: SessionContext, input: BlockOptionsInput) {
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
 
-    const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
-    const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
-    const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
+    const target = await this.resolveAiBlockTarget(session.appUser.id, input);
+    const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
     const optionCount = input.option_count ?? 3;
 
     const executed = await this.executeFlow({
       flow_type: "multi_option",
+      action_type: "options",
       user_id: session.appUser.id,
-      tailored_cv_id: tailoredCv.id,
-      job_id: linkedJob?.id ?? null,
+      master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+      tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+      job_id: target.linked_job?.id ?? null,
       input_payload: {
         action_type: "options",
         option_count: optionCount,
         block: currentBlock.block,
         user_instruction: input.user_instruction ?? "",
-        job_description: linkedJob?.job_description ?? ""
+        job_description: target.linked_job?.job_description ?? ""
       },
       user_prompt: `Generate ${optionCount} options for block ${input.block_id}.`
     });
@@ -391,7 +461,8 @@ export class AiService {
       outputSuggestions.map((variant) => ({
         ai_run_id: executed.ai_run.id,
         user_id: session.appUser.id,
-        tailored_cv_id: tailoredCv.id,
+        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
         block_id: input.block_id,
         action_type: "options",
         before_content: asRecord(currentBlock.block),
@@ -438,9 +509,8 @@ export class AiService {
       });
     }
 
-    const tailoredCv = await this.requireTailoredCv(session.appUser.id, suggestion.tailored_cv_id);
-
-    const current = findBlockInCvContent(tailoredCv.current_content, suggestion.block_id);
+    const target = await this.resolveSuggestionTargetCv(session.appUser.id, suggestion);
+    const current = findBlockInCvContent(target.current_content, suggestion.block_id);
 
     if (suggestion.before_content) {
       const normalizedBefore = normalizeCvBlock(suggestion.before_content, current.block);
@@ -457,31 +527,41 @@ export class AiService {
 
     const suggestedBlock = normalizeCvBlock(suggestion.suggested_content, current.block);
     const replacement = replaceBlockInCvContent(
-      tailoredCv.current_content,
+      target.current_content,
       suggestion.block_id,
       suggestedBlock
     );
+    if (target.cv_kind === "tailored") {
+      const updatedTailoredCv = await this.tailoredCvRepository.updateById(
+        session.appUser.id,
+        target.cv_id,
+        {
+          current_content: replacement.content
+        }
+      );
 
-    const updatedTailoredCv = await this.tailoredCvRepository.updateById(
-      session.appUser.id,
-      tailoredCv.id,
-      {
-        current_content: replacement.content
+      if (!updatedTailoredCv) {
+        throw new NotFoundError("Tailored CV was not found");
       }
-    );
 
-    if (!updatedTailoredCv) {
-      throw new NotFoundError("Tailored CV was not found");
+      await this.cvRevisionsService.createTailoredBlockRevision({
+        user_id: session.appUser.id,
+        tailored_cv_id: updatedTailoredCv.id,
+        block: replacement.updated_block,
+        change_source: "ai",
+        ai_suggestion_id: suggestion.id,
+        created_by_user_id: session.appUser.id
+      });
+    } else {
+      const updatedMasterCv = await this.masterCvRepository.updateById(session.appUser.id, target.cv_id, {
+        current_content: replacement.content,
+        summary_text: buildCvSummaryText(replacement.content)
+      });
+
+      if (!updatedMasterCv) {
+        throw new NotFoundError("Master CV was not found");
+      }
     }
-
-    await this.cvRevisionsService.createTailoredBlockRevision({
-      user_id: session.appUser.id,
-      tailored_cv_id: updatedTailoredCv.id,
-      block: replacement.updated_block,
-      change_source: "ai",
-      ai_suggestion_id: suggestion.id,
-      created_by_user_id: session.appUser.id
-    });
 
     const applied = await this.aiRepository.updateSuggestionById(
       session.appUser.id,
@@ -503,7 +583,9 @@ export class AiService {
 
     return {
       suggestion: this.toSuggestionSummary(applied),
-      tailored_cv_id: updatedTailoredCv.id,
+      cv_kind: target.cv_kind,
+      master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+      tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
       updated_block: replacement.updated_block,
       section_id: replacement.section_id
     };
@@ -546,7 +628,7 @@ export class AiService {
   async getTailoredCvAiHistory(
     session: SessionContext,
     tailoredCvId: string
-  ): Promise<TailoredCvAiHistoryResponse> {
+  ): Promise<CvAiHistoryResponse> {
     await this.requireTailoredCv(session.appUser.id, tailoredCvId);
 
     const [runs, suggestions] = await Promise.all([
@@ -555,9 +637,64 @@ export class AiService {
     ]);
 
     return {
+      cv_kind: "tailored",
+      master_cv_id: null,
       tailored_cv_id: tailoredCvId,
       ai_runs: runs.map((row) => this.toRunSummary(row)),
       suggestions: suggestions.map((row) => this.toSuggestionSummary(row))
+    };
+  }
+
+  async getMasterCvAiHistory(session: SessionContext, masterCvId: string): Promise<CvAiHistoryResponse> {
+    await this.requireMasterCv(session.appUser.id, masterCvId);
+
+    const [runs, suggestions] = await Promise.all([
+      this.aiRepository.listRunsByMasterCv(session.appUser.id, masterCvId, 40),
+      this.aiRepository.listSuggestionsByMasterCv(session.appUser.id, masterCvId, 60)
+    ]);
+
+    return {
+      cv_kind: "master",
+      master_cv_id: masterCvId,
+      tailored_cv_id: null,
+      ai_runs: runs.map((row) => this.toRunSummary(row)),
+      suggestions: suggestions.map((row) => this.toSuggestionSummary(row))
+    };
+  }
+
+  async getTailoredCvAiBlockVersions(
+    session: SessionContext,
+    tailoredCvId: string
+  ): Promise<CvAiBlockVersionsResponse> {
+    const tailoredCv = await this.requireTailoredCv(session.appUser.id, tailoredCvId);
+    const suggestions = await this.aiRepository.listAppliedSuggestionsByTailoredCv(
+      session.appUser.id,
+      tailoredCvId
+    );
+
+    return {
+      cv_kind: "tailored",
+      master_cv_id: null,
+      tailored_cv_id: tailoredCvId,
+      blocks: this.buildBlockVersionChains(suggestions, tailoredCv.current_content)
+    };
+  }
+
+  async getMasterCvAiBlockVersions(
+    session: SessionContext,
+    masterCvId: string
+  ): Promise<CvAiBlockVersionsResponse> {
+    const masterCv = await this.requireMasterCv(session.appUser.id, masterCvId);
+    const suggestions = await this.aiRepository.listAppliedSuggestionsByMasterCv(
+      session.appUser.id,
+      masterCvId
+    );
+
+    return {
+      cv_kind: "master",
+      master_cv_id: masterCvId,
+      tailored_cv_id: null,
+      blocks: this.buildBlockVersionChains(suggestions, masterCv.current_content)
     };
   }
 
@@ -565,24 +702,36 @@ export class AiService {
     options: ExecuteFlowOptions
   ): Promise<ExecuteFlowResult<TOutput>> {
     const definition = AI_FLOW_REGISTRY[options.flow_type];
-    const modelName = this.aiProvider.resolveModelName(options.flow_type);
-    const promptVersion = this.promptProfile || definition.prompt_version;
+    const resolvedPrompt = await this.promptResolver.resolve({
+      flow_type: options.flow_type,
+      provider: this.aiProvider.providerName,
+      action_type: options.action_type ?? null,
+      fallback: {
+        prompt_key: definition.prompt_key,
+        prompt_version: definition.prompt_version,
+        system_prompt: definition.system_prompt,
+        model_name: this.aiProvider.resolveModelName(options.flow_type)
+      }
+    });
+    const resolvedUserPrompt = resolvedPrompt.user_prompt_template?.trim() || options.user_prompt;
 
     const aiRun = await this.aiRepository.createRun({
       user_id: options.user_id,
       flow_type: options.flow_type,
       provider: this.aiProvider.providerName,
-      model_name: modelName,
+      model_name: resolvedPrompt.model_name,
       master_cv_id: options.master_cv_id ?? null,
       tailored_cv_id: options.tailored_cv_id ?? null,
       job_id: options.job_id ?? null,
       input_payload: {
         flow_input: options.input_payload,
         prompt: {
-          prompt_key: definition.prompt_key,
-          prompt_version: promptVersion,
-          user_prompt: options.user_prompt,
-          system_prompt: definition.system_prompt
+          prompt_key: resolvedPrompt.prompt_key,
+          prompt_version: resolvedPrompt.prompt_version,
+          provider: this.aiProvider.providerName,
+          model_name: resolvedPrompt.model_name,
+          user_prompt: resolvedUserPrompt,
+          system_prompt: resolvedPrompt.system_prompt
         }
       }
     });
@@ -590,13 +739,14 @@ export class AiService {
     try {
       const providerResult = await this.aiProvider.generate({
         flow_type: options.flow_type,
-        model_name: modelName,
+        model_name: resolvedPrompt.model_name,
         prompt: {
-          prompt_key: definition.prompt_key,
-          prompt_version: promptVersion,
-          user_prompt: options.user_prompt,
-          system_prompt: definition.system_prompt
+          prompt_key: resolvedPrompt.prompt_key,
+          prompt_version: resolvedPrompt.prompt_version,
+          user_prompt: resolvedUserPrompt,
+          system_prompt: resolvedPrompt.system_prompt
         },
+        output_schema: definition.output_schema,
         input_payload: options.input_payload
       });
 
@@ -627,8 +777,8 @@ export class AiService {
         output: serializedOutput as TOutput,
         provider: providerResult.provider,
         model_name: providerResult.model_name,
-        prompt_key: definition.prompt_key,
-        prompt_version: promptVersion
+        prompt_key: resolvedPrompt.prompt_key,
+        prompt_version: resolvedPrompt.prompt_version
       };
     } catch (error) {
       if (error instanceof AiFlowFailedError) {
@@ -638,10 +788,167 @@ export class AiService {
       const message = error instanceof Error ? error.message : "Unknown AI flow error";
       await this.aiRepository.failRun(options.user_id, aiRun.id, message.slice(0, 2000));
 
-      throw new AiFlowFailedError("AI flow execution failed", {
-        flow_type: options.flow_type
+      if (error instanceof AiProviderError) {
+        throw error;
+      }
+
+      throw new AiFlowFailedError("AI flow execution failed", { flow_type: options.flow_type });
+    }
+  }
+
+  private async resolveAiBlockTarget(
+    userId: string,
+    input: Pick<BlockSuggestInput, "master_cv_id" | "tailored_cv_id">
+  ): Promise<AiBlockTargetContext> {
+    if (input.master_cv_id) {
+      const masterCv = await this.requireMasterCv(userId, input.master_cv_id);
+      return {
+        cv_kind: "master",
+        cv_id: masterCv.id,
+        current_content: masterCv.current_content,
+        linked_job: null
+      };
+    }
+
+    if (input.tailored_cv_id) {
+      const tailoredCv = await this.requireTailoredCv(userId, input.tailored_cv_id);
+      const linkedJob = await this.loadLinkedJob(userId, tailoredCv);
+      return {
+        cv_kind: "tailored",
+        cv_id: tailoredCv.id,
+        current_content: tailoredCv.current_content,
+        linked_job: linkedJob
+      };
+    }
+
+    throw new ConflictError("AI block target is missing");
+  }
+
+  private async resolveSuggestionTargetCv(
+    userId: string,
+    suggestion: AiSuggestionRecord
+  ): Promise<AiBlockTargetContext> {
+    if (suggestion.master_cv_id) {
+      const masterCv = await this.requireMasterCv(userId, suggestion.master_cv_id);
+      return {
+        cv_kind: "master",
+        cv_id: masterCv.id,
+        current_content: masterCv.current_content,
+        linked_job: null
+      };
+    }
+
+    if (suggestion.tailored_cv_id) {
+      const tailoredCv = await this.requireTailoredCv(userId, suggestion.tailored_cv_id);
+      const linkedJob = await this.loadLinkedJob(userId, tailoredCv);
+      return {
+        cv_kind: "tailored",
+        cv_id: tailoredCv.id,
+        current_content: tailoredCv.current_content,
+        linked_job: linkedJob
+      };
+    }
+
+    throw new SuggestionNotApplicableError("Suggestion target CV is missing", {
+      suggestion_id: suggestion.id
+    });
+  }
+
+  private buildBlockVersionChains(
+    appliedSuggestions: AiSuggestionRecord[],
+    currentContent: TailoredCvRecord["current_content"] | MasterCvRecord["current_content"]
+  ): AiBlockVersionChain[] {
+    const byBlock = new Map<string, AiSuggestionRecord[]>();
+
+    for (const suggestion of appliedSuggestions) {
+      if (!suggestion.block_id) {
+        continue;
+      }
+
+      const list = byBlock.get(suggestion.block_id) ?? [];
+      list.push(suggestion);
+      byBlock.set(suggestion.block_id, list);
+    }
+
+    const result: AiBlockVersionChain[] = [];
+
+    for (const [blockId, suggestions] of byBlock.entries()) {
+      const versions: AiBlockVersionEntry[] = [];
+      let aiVersionCount = 0;
+
+      for (const suggestion of suggestions) {
+        const before = suggestion.before_content ? asRecord(suggestion.before_content) : null;
+        if (before) {
+          if (versions.length === 0) {
+            versions.push({
+              source: "original",
+              label: "Original",
+              index: 0,
+              created_at: suggestion.created_at,
+              ai_suggestion_id: null,
+              ai_run_id: null,
+              content_snapshot: before
+            });
+          } else {
+            const previous = versions[versions.length - 1];
+            if (!snapshotsEqual(previous.content_snapshot, before)) {
+              versions.push({
+                source: "manual_pre_ai",
+                label: "Manual edit",
+                index: versions.length,
+                created_at: suggestion.created_at,
+                ai_suggestion_id: null,
+                ai_run_id: null,
+                content_snapshot: before
+              });
+            }
+          }
+        }
+
+        const suggested = asRecord(suggestion.suggested_content);
+        const previous = versions[versions.length - 1];
+        if (!previous || !snapshotsEqual(previous.content_snapshot, suggested)) {
+          aiVersionCount += 1;
+          versions.push({
+            source: "ai_applied",
+            label: `AI v${aiVersionCount}`,
+            index: versions.length,
+            created_at: suggestion.created_at,
+            ai_suggestion_id: suggestion.id,
+            ai_run_id: suggestion.ai_run_id,
+            content_snapshot: suggested
+          });
+        }
+      }
+
+      if (versions.length === 0) {
+        continue;
+      }
+
+      let currentVersionIndex = versions.length - 1;
+      try {
+        const currentBlock = findBlockInCvContent(currentContent, blockId);
+        const resolvedIndex = versions.findIndex((entry) =>
+          snapshotsEqual(entry.content_snapshot, currentBlock.block)
+        );
+        if (resolvedIndex >= 0) {
+          currentVersionIndex = resolvedIndex;
+        }
+      } catch {
+        // Keep fallback index when block was removed.
+      }
+
+      result.push({
+        block_id: blockId,
+        current_version_index: currentVersionIndex,
+        versions: versions.map((entry, index) => ({
+          ...entry,
+          index
+        }))
       });
     }
+
+    return result.sort((a, b) => a.block_id.localeCompare(b.block_id));
   }
 
   private async prepareDraftTarget(
@@ -826,6 +1133,7 @@ export class AiService {
     return {
       id: row.id,
       ai_run_id: row.ai_run_id,
+      master_cv_id: row.master_cv_id,
       tailored_cv_id: row.tailored_cv_id,
       block_id: row.block_id,
       action_type: row.action_type,

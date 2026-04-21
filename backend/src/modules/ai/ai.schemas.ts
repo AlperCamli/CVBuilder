@@ -36,6 +36,25 @@ const actionTypeSchema = z.enum([
   "options"
 ]);
 
+const aiBlockTargetBaseSchema = z
+  .object({
+    tailored_cv_id: uuidSchema.optional(),
+    master_cv_id: uuidSchema.optional()
+  })
+  .strict();
+
+const hasExactlyOneTarget = (value: {
+  tailored_cv_id?: string;
+  master_cv_id?: string;
+}): boolean => {
+  return (value.tailored_cv_id ? 1 : 0) + (value.master_cv_id ? 1 : 0) === 1;
+};
+
+const aiBlockTargetSchema = aiBlockTargetBaseSchema.refine(hasExactlyOneTarget, {
+  message: "Exactly one of tailored_cv_id or master_cv_id is required",
+  path: ["tailored_cv_id"]
+});
+
 export const aiJobAnalysisSchema = z
   .object({
     master_cv_id: uuidSchema,
@@ -64,12 +83,16 @@ export const aiTailoredDraftSchema = z
 
 export const aiBlockSuggestSchema = z
   .object({
-    tailored_cv_id: uuidSchema,
     block_id: z.string().trim().min(1).max(128),
     action_type: actionTypeSchema,
     user_instruction: z.string().trim().max(3000).nullable().optional()
   })
-  .strict();
+  .merge(aiBlockTargetBaseSchema)
+  .strict()
+  .refine(hasExactlyOneTarget, {
+    message: "Exactly one of tailored_cv_id or master_cv_id is required",
+    path: ["tailored_cv_id"]
+  });
 
 export const aiBlockCompareSchema = z
   .object({
@@ -80,10 +103,22 @@ export const aiBlockCompareSchema = z
 
 export const aiBlockOptionsSchema = z
   .object({
-    tailored_cv_id: uuidSchema,
     block_id: z.string().trim().min(1).max(128),
     user_instruction: z.string().trim().max(3000).nullable().optional(),
     option_count: z.number().int().min(2).max(6).optional()
+  })
+  .merge(aiBlockTargetBaseSchema)
+  .strict()
+  .refine(hasExactlyOneTarget, {
+    message: "Exactly one of tailored_cv_id or master_cv_id is required",
+    path: ["tailored_cv_id"]
+  });
+
+export const aiImportImproveSchema = z
+  .object({
+    parsed_content: z.record(z.unknown()),
+    language: z.string().trim().min(2).max(16).optional(),
+    improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20).optional()
   })
   .strict();
 
@@ -96,5 +131,11 @@ export const suggestionIdParamsSchema = z
 export const tailoredCvAiHistoryParamsSchema = z
   .object({
     tailoredCvId: uuidSchema
+  })
+  .strict();
+
+export const masterCvAiHistoryParamsSchema = z
+  .object({
+    masterCvId: uuidSchema
   })
   .strict();

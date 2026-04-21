@@ -1,63 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { Sparkles, Zap, Target, TrendingUp, Loader2 } from "lucide-react";
-import type { CvContent, CvSection } from "../integration/api-types";
+import type { CvContent } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
-
-const cloneContent = (content: CvContent): CvContent =>
-  JSON.parse(JSON.stringify(content)) as CvContent;
-
-const buildSummarySection = (order: number): CvSection => ({
-  id: `summary-${Date.now()}`,
-  type: "summary",
-  title: "Summary",
-  order,
-  meta: {},
-  blocks: [
-    {
-      id: `summary-block-${Date.now()}`,
-      type: "summary",
-      order: 0,
-      visibility: "visible",
-      fields: {
-        text: "Results-driven professional with strong ownership, communication, and delivery focus."
-      },
-      meta: {}
-    }
-  ]
-});
-
-const improveParsedContent = (content: CvContent): CvContent => {
-  const next = cloneContent(content);
-
-  const summarySection = next.sections.find((section) => section.type === "summary");
-
-  if (summarySection && summarySection.blocks[0]) {
-    const block = summarySection.blocks[0];
-    const baseText = typeof block.fields.text === "string" ? block.fields.text : "";
-    const improvedText = baseText.trim().length
-      ? `${baseText.trim()} Focused on measurable outcomes and role-specific impact.`
-      : "Results-driven professional with measurable achievements and role-specific impact.";
-
-    block.fields.text = improvedText;
-  } else {
-    next.sections.unshift(buildSummarySection(0));
-    next.sections = next.sections.map((section, index) => ({ ...section, order: index }));
-  }
-
-  const experienceSection = next.sections.find((section) => section.type === "experience");
-  if (experienceSection) {
-    experienceSection.blocks = experienceSection.blocks.map((block) => {
-      const description = typeof block.fields.description === "string" ? block.fields.description : "";
-      if (description.trim().length > 0) {
-        block.fields.description = `${description.trim()}\n• Delivered improvements with clear business impact.`;
-      }
-      return block;
-    });
-  }
-
-  return next;
-};
 
 export function AIImproving() {
   const navigate = useNavigate();
@@ -66,6 +11,7 @@ export function AIImproving() {
 
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
+  const improvementGuidance = (location.state?.improvements as string[] | undefined) ?? [];
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -115,11 +61,16 @@ export function AIImproving() {
           }
 
           setIsFinalizing(true);
-          const improved = improveParsedContent(parsedContent);
 
           void (async () => {
             try {
-              await api.patchImportResult(importId, improved);
+              const improved = await api.postImportImprove({
+                parsed_content: parsedContent as unknown as Record<string, unknown>,
+                language: parsedContent.language,
+                improvement_guidance: improvementGuidance
+              });
+
+              await api.patchImportResult(importId, improved.improved_content);
               const converted = await api.createMasterCvFromImport(importId, {});
 
               navigate(`/app/cv/${converted.master_cv.id}`, {
@@ -147,7 +98,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, importId, navigate, parsedContent, steps]);
+  }, [api, improvementGuidance, importId, navigate, parsedContent, steps]);
 
   const currentStepData = steps[currentStep];
   const Icon = currentStepData.icon;

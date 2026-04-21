@@ -4,30 +4,41 @@ import { config as loadDotEnvFile } from "dotenv";
 import { z } from "zod";
 
 const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
-const aiProviderSchema = z.enum(["mock"]);
+const aiProviderSchema = z.enum(["mock", "gemini"]);
 
-const envSchema = z.object({
-  APP_NAME: z.string().min(1).default("cv-builder-backend"),
-  APP_ENV: appEnvSchema.default("development"),
-  APP_VERSION: z.string().min(1).default("0.1.0"),
-  PORT: z.coerce.number().int().positive().default(4000),
-  LOG_LEVEL: z.string().min(1).default("info"),
-  FRONTEND_APP_URL: z.string().url().default("http://localhost:5173"),
-  AI_PROVIDER: aiProviderSchema.default("mock"),
-  AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
-  AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
-  EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
-  EXPORT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(600),
-  STRIPE_SECRET_KEY: z.string().min(1).optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
-  STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
-  BILLING_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
-  BILLING_CHECKOUT_CANCEL_URL: z.string().url().optional(),
-  BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1)
-});
+const envSchema = z
+  .object({
+    APP_NAME: z.string().min(1).default("cv-builder-backend"),
+    APP_ENV: appEnvSchema.default("development"),
+    APP_VERSION: z.string().min(1).default("0.1.0"),
+    PORT: z.coerce.number().int().positive().default(4000),
+    LOG_LEVEL: z.string().min(1).default("info"),
+    FRONTEND_APP_URL: z.string().url().default("http://localhost:5173"),
+    AI_PROVIDER: aiProviderSchema.default("mock"),
+    AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
+    AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
+    EXPORT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(600),
+    STRIPE_SECRET_KEY: z.string().min(1).optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+    STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
+    BILLING_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
+    BILLING_CHECKOUT_CANCEL_URL: z.string().url().optional(),
+    BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
+    SUPABASE_URL: z.string().url(),
+    SUPABASE_ANON_KEY: z.string().min(1),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1)
+  })
+  .superRefine((value, context) => {
+    if (value.AI_PROVIDER === "gemini" && !value.GEMINI_API_KEY) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GEMINI_API_KEY"],
+        message: "GEMINI_API_KEY is required when AI_PROVIDER=gemini"
+      });
+    }
+  });
 
 export type AppEnv = z.infer<typeof appEnvSchema>;
 
@@ -42,6 +53,7 @@ export interface AppConfig {
     provider: z.infer<typeof aiProviderSchema>;
     defaultModel: string;
     promptProfile: string;
+    geminiApiKey: string | null;
   };
   exports: {
     storageBucket: string;
@@ -123,7 +135,8 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
     ai: {
       provider: parsed.data.AI_PROVIDER,
       defaultModel: parsed.data.AI_DEFAULT_MODEL,
-      promptProfile: parsed.data.AI_PROMPT_PROFILE
+      promptProfile: parsed.data.AI_PROMPT_PROFILE,
+      geminiApiKey: parsed.data.GEMINI_API_KEY ?? null
     },
     exports: {
       storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,

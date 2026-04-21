@@ -1,6 +1,7 @@
 import type { AuthenticatedRequestContext } from "../auth/auth.types";
 import type { CvBlock, CvContent, CvPreview } from "../../shared/cv-content/cv-content.types";
 import type {
+  CvKind,
   AiFlowType,
   AiRunStatus,
   AiSuggestionActionType,
@@ -63,8 +64,12 @@ export interface TailoredDraftInput {
 
 export type TailoredCvDraftInput = TailoredDraftInput;
 
-export interface BlockSuggestInput {
-  tailored_cv_id: string;
+export interface AiBlockTargetInput {
+  tailored_cv_id?: string;
+  master_cv_id?: string;
+}
+
+export interface BlockSuggestInput extends AiBlockTargetInput {
   block_id: string;
   action_type: AiSuggestionActionType;
   user_instruction?: string | null;
@@ -75,11 +80,16 @@ export interface BlockCompareInput {
   block_id: string;
 }
 
-export interface BlockOptionsInput {
-  tailored_cv_id: string;
+export interface BlockOptionsInput extends AiBlockTargetInput {
   block_id: string;
   user_instruction?: string | null;
   option_count?: number;
+}
+
+export interface ImportImproveInput {
+  parsed_content: Record<string, unknown>;
+  language?: string;
+  improvement_guidance?: string[];
 }
 
 export interface JobAnalysisResult {
@@ -133,7 +143,8 @@ export interface AiRunSummary {
 export interface AiSuggestionSummary {
   id: string;
   ai_run_id: string;
-  tailored_cv_id: string;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   block_id: string | null;
   action_type: AiSuggestionActionType;
   option_group_key: string | null;
@@ -171,7 +182,9 @@ export interface TailoredCvDraftSummary {
 
 export interface SuggestionApplyResponse {
   suggestion: AiSuggestionSummary;
-  tailored_cv_id: string;
+  cv_kind: CvKind;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   updated_block: CvBlock;
   section_id: string;
 }
@@ -181,8 +194,47 @@ export interface SuggestionRejectResponse {
   status: AiSuggestionStatus;
 }
 
-export interface TailoredCvAiHistoryResponse {
-  tailored_cv_id: string;
+export interface CvAiHistoryResponse {
+  cv_kind: CvKind;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   ai_runs: AiRunSummary[];
   suggestions: AiSuggestionSummary[];
+}
+
+export interface AiBlockVersionEntry {
+  source: "original" | "manual_pre_ai" | "ai_applied";
+  label: string;
+  index: number;
+  created_at: string | null;
+  ai_suggestion_id: string | null;
+  ai_run_id: string | null;
+  content_snapshot: Record<string, unknown>;
+}
+
+export interface AiBlockVersionChain {
+  block_id: string;
+  current_version_index: number;
+  versions: AiBlockVersionEntry[];
+}
+
+export interface CvAiBlockVersionsResponse {
+  cv_kind: CvKind;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
+  blocks: AiBlockVersionChain[];
+}
+
+export interface ImportImproveResponse {
+  ai_run_id: string;
+  improved_content: CvContent;
+  generation_summary: string;
+  changed_block_ids: string[];
+  generation_metadata: {
+    provider: string;
+    model_name: string;
+    flow_type: "import_improve";
+    prompt_key: string;
+    prompt_version: string;
+  };
 }

@@ -38,6 +38,7 @@ describe("environment config", () => {
     expect(config.billing.stripeWebhookSecret).toBeNull();
     expect(config.billing.stripeProPriceId).toBeNull();
     expect(config.supabase.url).toBe("https://example.supabase.co");
+    expect(config.ai.geminiApiKey).toBeNull();
   });
 
   it("applies export defaults when export env vars are omitted", () => {
@@ -76,5 +77,41 @@ describe("environment config", () => {
         SUPABASE_SERVICE_ROLE_KEY: "service"
       })
     ).toThrow(/Invalid environment configuration/);
+  });
+
+  it("requires Gemini API key when provider is gemini", () => {
+    expect(() =>
+      loadConfig({
+        APP_NAME: "cv-builder-backend",
+        APP_ENV: "test",
+        APP_VERSION: "1.0.0",
+        PORT: "4100",
+        LOG_LEVEL: "info",
+        FRONTEND_APP_URL: "http://localhost:5173",
+        AI_PROVIDER: "gemini",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+        SUPABASE_SERVICE_ROLE_KEY: "service"
+      })
+    ).toThrow(/GEMINI_API_KEY/);
+  });
+
+  it("loads gemini config when API key is provided", () => {
+    const config = loadConfig({
+      APP_NAME: "cv-builder-backend",
+      APP_ENV: "test",
+      APP_VERSION: "1.0.0",
+      PORT: "4100",
+      LOG_LEVEL: "info",
+      FRONTEND_APP_URL: "http://localhost:5173",
+      AI_PROVIDER: "gemini",
+      GEMINI_API_KEY: "gemini-key",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "anon",
+      SUPABASE_SERVICE_ROLE_KEY: "service"
+    });
+
+    expect(config.ai.provider).toBe("gemini");
+    expect(config.ai.geminiApiKey).toBe("gemini-key");
   });
 });

@@ -1,4 +1,4 @@
-# API Documentation (Phase 4C)
+# API Documentation (Phase 5)
 
 Base path:
 - `/api/v1`
@@ -294,6 +294,7 @@ Even if frontend pre-checks entitlements, backend remains source of truth.
 
 Protected action enforcement:
 - `POST /ai/tailored-cv-draft`
+- `POST /ai/import-improve`
 - `POST /ai/blocks/suggest`
 - `POST /ai/blocks/options`
 - `POST /tailored-cvs/:tailoredCvId/exports/pdf`
@@ -303,3 +304,132 @@ Exceeded access returns:
 - `ENTITLEMENT_EXCEEDED`
 
 Ownership behavior remains user-scoped for protected resources.
+
+---
+
+## AI Endpoints (Phase 5)
+
+### 10) `POST /ai/import-improve`
+
+Auth:
+- required
+
+Purpose:
+- run AI improvement on parsed import content before conversion to a master CV
+
+Body:
+
+```json
+{
+  "parsed_content": {},
+  "language": "en",
+  "improvement_guidance": ["optional", "hints"]
+}
+```
+
+Response `200`:
+
+```json
+{
+  "ai_run_id": "uuid",
+  "improved_content": {},
+  "generation_summary": "string",
+  "changed_block_ids": ["block-id"],
+  "generation_metadata": {
+    "provider": "gemini",
+    "model_name": "gemini-2.5-flash",
+    "flow_type": "import_improve",
+    "prompt_key": "import-improve",
+    "prompt_version": "phase5-v1"
+  }
+}
+```
+
+### 11) `POST /ai/blocks/suggest` (master or tailored target)
+
+Auth:
+- required
+
+Body:
+- exactly one target id must be provided
+
+```json
+{
+  "master_cv_id": "uuid",
+  "tailored_cv_id": null,
+  "block_id": "block-id",
+  "action_type": "improve|summarize|rewrite|ats_optimize|shorten|expand|options",
+  "user_instruction": "optional"
+}
+```
+
+Notes:
+- `ats_optimize` is technically accepted by API for either scope.
+- UI should expose ATS compare controls only where applicable to tailored/job context.
+
+### 12) `POST /ai/blocks/options` (master or tailored target)
+
+Auth:
+- required
+
+Body:
+
+```json
+{
+  "master_cv_id": "uuid",
+  "tailored_cv_id": null,
+  "block_id": "block-id",
+  "option_count": 3,
+  "user_instruction": "optional"
+}
+```
+
+### 13) `GET /tailored-cvs/:tailoredCvId/ai-history`
+
+Auth:
+- required
+
+Purpose:
+- run/suggestion history for a tailored CV
+
+### 14) `GET /master-cvs/:masterCvId/ai-history`
+
+Auth:
+- required
+
+Purpose:
+- run/suggestion history parity endpoint for master CV
+
+### 15) `GET /tailored-cvs/:tailoredCvId/ai-block-versions`
+
+Auth:
+- required
+
+Purpose:
+- committed block version chains for fast local prev/next navigation in UI
+
+### 16) `GET /master-cvs/:masterCvId/ai-block-versions`
+
+Auth:
+- required
+
+Purpose:
+- same committed block-version chain API for master CV editor
+
+### 17) `POST /ai/suggestions/:suggestionId/apply` (response update)
+
+Auth:
+- required
+
+Response `200` now includes target scope:
+
+```json
+{
+  "suggestion": {},
+  "cv_kind": "master|tailored",
+  "master_cv_id": "uuid|null",
+  "tailored_cv_id": "uuid|null",
+  "updated_block": {},
+  "section_id": "section-id"
+}
+```
