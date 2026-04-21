@@ -31,6 +31,7 @@ Runtime selection:
 Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
+- Gemini provider retries transient upstream errors (`429`, `503`, similar) with bounded backoff before marking run as failed
 
 ## Prompt Management
 

@@ -148,7 +148,10 @@ describe("GeminiAiProvider", () => {
   });
 
   it("maps provider status and reason into AiProviderError details", async () => {
-    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 3,
+      retryDelayMs: [0, 0]
+    });
 
     const apiError = new Error("Request contains an invalid argument.") as Error & {
       status: number;
@@ -185,5 +188,52 @@ describe("GeminiAiProvider", () => {
         reason: "Request contains an invalid argument."
       })
     );
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries transient provider failures and succeeds when a later attempt works", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 3,
+      retryDelayMs: [0, 0]
+    });
+
+    const transientError = new Error(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "This model is currently experiencing high demand.",
+          status: "UNAVAILABLE"
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    transientError.status = 503;
+    transientError.name = "ApiError";
+
+    generateContentMock
+      .mockRejectedValueOnce(transientError)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          questions: []
+        })
+      });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
   });
 });

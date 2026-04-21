@@ -4,6 +4,14 @@ import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
 
+const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
+  "RESOURCE_EXHAUSTED",
+  "UNAVAILABLE",
+  "DEADLINE_EXCEEDED",
+  "INTERNAL"
+]);
+
 const GEMINI_SCHEMA_DROPPED_KEYS = new Set([
   "$schema",
   "minLength",
@@ -59,15 +67,89 @@ const toPromptText = (request: AiProviderRequest): string => {
   ].join("\n\n");
 };
 
+const sleep = async (ms: number): Promise<void> => {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+};
+
+interface GeminiProviderErrorContext {
+  providerStatus: number | null;
+  providerErrorName: string | null;
+  providerStatusCode: string | null;
+  reason: string;
+}
+
+const parseProviderStatusCode = (message: string): string | null => {
+  if (!message.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(message) as {
+      error?: {
+        status?: unknown;
+      };
+    };
+
+    return typeof parsed.error?.status === "string" ? parsed.error.status : null;
+  } catch {
+    return null;
+  }
+};
+
+const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContext => {
+  const providerStatus =
+    typeof (error as { status?: unknown })?.status === "number"
+      ? ((error as { status: number }).status as number)
+      : null;
+  const providerErrorName = error instanceof Error ? error.name : null;
+  const reason = error instanceof Error ? error.message : "Unknown provider error";
+  const providerStatusCode = parseProviderStatusCode(reason);
+
+  return {
+    providerStatus,
+    providerErrorName,
+    providerStatusCode,
+    reason
+  };
+};
+
+const isRetryableProviderError = (context: GeminiProviderErrorContext): boolean => {
+  if (
+    typeof context.providerStatus === "number" &&
+    RETRYABLE_HTTP_STATUS_CODES.has(context.providerStatus)
+  ) {
+    return true;
+  }
+
+  if (
+    typeof context.providerStatusCode === "string" &&
+    RETRYABLE_PROVIDER_STATUS_CODES.has(context.providerStatusCode)
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 export class GeminiAiProvider implements AiProvider {
   readonly providerName = "gemini";
   private readonly client: GoogleGenAI;
+  private readonly maxAttempts: number;
+  private readonly retryDelayMs: number[];
 
   constructor(
     private readonly defaultModelName: string,
-    apiKey: string
+    apiKey: string,
+    options?: {
+      maxAttempts?: number;
+      retryDelayMs?: number[];
+    }
   ) {
     this.client = new GoogleGenAI({ apiKey });
+    this.maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
+    this.retryDelayMs = options?.retryDelayMs ?? [350, 1000];
   }
 
   resolveModelName(_flowType: AiFlowType): string {
@@ -81,58 +163,72 @@ export class GeminiAiProvider implements AiProvider {
     }) as Record<string, unknown>;
     const schema = sanitizeGeminiResponseJsonSchema(rawSchema) as Record<string, unknown>;
 
-    try {
-      const response = await this.client.models.generateContent({
-        model: request.model_name,
-        contents: toPromptText(request),
-        config: {
-          responseMimeType: "application/json",
-          responseJsonSchema: schema
-        }
-      });
+    let lastErrorContext: GeminiProviderErrorContext | null = null;
 
-      const responseText =
-        typeof response.text === "string" ? response.text.trim() : "";
-
-      if (!responseText) {
-        throw new AiProviderError("Gemini returned an empty response");
-      }
-
-      let parsed: unknown;
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       try {
-        parsed = JSON.parse(responseText);
-      } catch (error) {
-        throw new AiProviderError("Gemini returned non-JSON output", {
-          reason: error instanceof Error ? error.message : "Unknown parse error"
+        const response = await this.client.models.generateContent({
+          model: request.model_name,
+          contents: toPromptText(request),
+          config: {
+            responseMimeType: "application/json",
+            responseJsonSchema: schema
+          }
         });
+
+        const responseText =
+          typeof response.text === "string" ? response.text.trim() : "";
+
+        if (!responseText) {
+          throw new AiProviderError("Gemini returned an empty response");
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(responseText);
+        } catch (error) {
+          throw new AiProviderError("Gemini returned non-JSON output", {
+            reason: error instanceof Error ? error.message : "Unknown parse error"
+          });
+        }
+
+        const outputPayload = asRecord(parsed);
+        if (!outputPayload) {
+          throw new AiProviderError("Gemini returned unsupported output shape");
+        }
+
+        return {
+          provider: this.providerName,
+          model_name: request.model_name,
+          output_payload: outputPayload
+        };
+      } catch (error) {
+        if (error instanceof AiProviderError) {
+          throw error;
+        }
+
+        const context = toGeminiProviderErrorContext(error);
+        lastErrorContext = context;
+        const shouldRetry =
+          attempt < this.maxAttempts && isRetryableProviderError(context);
+
+        if (!shouldRetry) {
+          break;
+        }
+
+        const nextDelayMs =
+          this.retryDelayMs[Math.min(attempt - 1, this.retryDelayMs.length - 1)] ?? 0;
+        if (nextDelayMs > 0) {
+          await sleep(nextDelayMs);
+        }
       }
-
-      const outputPayload = asRecord(parsed);
-      if (!outputPayload) {
-        throw new AiProviderError("Gemini returned unsupported output shape");
-      }
-
-      return {
-        provider: this.providerName,
-        model_name: request.model_name,
-        output_payload: outputPayload
-      };
-    } catch (error) {
-      if (error instanceof AiProviderError) {
-        throw error;
-      }
-
-      const providerStatus =
-        typeof (error as { status?: unknown })?.status === "number"
-          ? ((error as { status: number }).status as number)
-          : null;
-      const providerErrorName = error instanceof Error ? error.name : null;
-
-      throw new AiProviderError("Gemini provider request failed", {
-        reason: error instanceof Error ? error.message : "Unknown provider error",
-        provider_status: providerStatus,
-        provider_error_name: providerErrorName
-      });
     }
+
+    throw new AiProviderError("Gemini provider request failed", {
+      reason: lastErrorContext?.reason ?? "Unknown provider error",
+      provider_status: lastErrorContext?.providerStatus ?? null,
+      provider_error_name: lastErrorContext?.providerErrorName ?? null,
+      provider_status_code: lastErrorContext?.providerStatusCode ?? null
+    });
   }
 }
