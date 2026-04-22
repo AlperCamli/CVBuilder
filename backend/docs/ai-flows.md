@@ -31,7 +31,7 @@ Runtime selection:
 Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
-- Gemini runs with single-attempt execution in runtime (`maxAttempts=1`)
+- Gemini retries are controlled by `AI_GEMINI_MAX_ATTEMPTS` (default `1`)
 - non-JSON responses get one controlled JSON recovery pass (extract + repair) before failing
 - hard quota-exceeded `429 RESOURCE_EXHAUSTED` errors are treated as non-retryable
 

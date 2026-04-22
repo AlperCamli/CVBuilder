@@ -15,7 +15,7 @@ export const createAiProvider = (config: AppConfig): AiProvider => {
     }
 
     return new GeminiAiProvider(config.ai.defaultModel, config.ai.geminiApiKey, {
-      maxAttempts: 1,
+      maxAttempts: config.ai.geminiMaxAttempts,
       baseRetryDelayMs: config.ai.geminiRetryBaseDelayMs,
       maxRetryDelayMs: config.ai.geminiRetryMaxDelayMs,
       lightModelName: config.ai.geminiModelLight,

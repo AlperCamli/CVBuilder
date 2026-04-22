@@ -469,7 +469,7 @@ describe("GeminiAiProvider", () => {
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 
-  it("enforces single-attempt behavior through createAiProvider runtime guard", async () => {
+  it("uses configured max-attempts through createAiProvider", async () => {
     const config: AppConfig = {
       appName: "cv-builder-backend",
       appEnv: "test",
@@ -484,7 +484,7 @@ describe("GeminiAiProvider", () => {
         geminiApiKey: "gemini-key",
         geminiModelLight: "gemini-3-flash",
         geminiModelHeavy: "gemini-2.5-flash",
-        geminiMaxAttempts: 5,
+        geminiMaxAttempts: 3,
         geminiRetryBaseDelayMs: 1000,
         geminiRetryMaxDelayMs: 16000
       },
@@ -541,6 +541,6 @@ describe("GeminiAiProvider", () => {
       })
     ).rejects.toBeInstanceOf(AiProviderError);
 
-    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).toHaveBeenCalledTimes(3);
   });
 });
