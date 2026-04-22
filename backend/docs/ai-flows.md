@@ -32,6 +32,7 @@ Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
 - Gemini retries are controlled by `AI_GEMINI_MAX_ATTEMPTS` (default `1`)
+- on transient model-unavailable failures (`503/UNAVAILABLE`), Gemini provider can fall back heavy->light model once
 - non-JSON responses get one controlled JSON recovery pass (extract + repair) before failing
 - hard quota-exceeded `429 RESOURCE_EXHAUSTED` errors are treated as non-retryable
 

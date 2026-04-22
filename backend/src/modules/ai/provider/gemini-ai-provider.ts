@@ -11,6 +11,7 @@ const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
   "DEADLINE_EXCEEDED",
   "INTERNAL"
 ]);
+const MODEL_FALLBACK_PROVIDER_STATUS_CODES = new Set(["UNAVAILABLE", "INTERNAL"]);
 const MAX_PROVIDER_RETRY_HINT_DELAY_MS = 120_000;
 const MAX_DEBUG_EXCERPT_LENGTH = 2_000;
 const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
@@ -312,6 +313,24 @@ const isRetryableProviderError = (context: GeminiProviderErrorContext): boolean 
   return false;
 };
 
+const isModelFallbackEligible = (context: GeminiProviderErrorContext): boolean => {
+  if (
+    typeof context.providerStatus === "number" &&
+    (context.providerStatus === 503 || context.providerStatus === 500)
+  ) {
+    return true;
+  }
+
+  if (
+    typeof context.providerStatusCode === "string" &&
+    MODEL_FALLBACK_PROVIDER_STATUS_CODES.has(context.providerStatusCode)
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 export class GeminiAiProvider implements AiProvider {
   readonly providerName = "gemini";
   private readonly client: GoogleGenAI;
@@ -359,6 +378,22 @@ export class GeminiAiProvider implements AiProvider {
     return this.lightModelName ?? this.defaultModelName;
   }
 
+  private resolveModelCandidates(modelName: string): string[] {
+    const unique = new Set<string>();
+    unique.add(modelName);
+
+    if (
+      this.heavyModelName &&
+      this.lightModelName &&
+      modelName === this.heavyModelName &&
+      this.lightModelName !== this.heavyModelName
+    ) {
+      unique.add(this.lightModelName);
+    }
+
+    return [...unique];
+  }
+
   private computeRetryDelayMs(attempt: number): number {
     if (this.retryDelayMs && this.retryDelayMs.length > 0) {
       return this.retryDelayMs[Math.min(attempt - 1, this.retryDelayMs.length - 1)] ?? 0;
@@ -381,83 +416,105 @@ export class GeminiAiProvider implements AiProvider {
     const schema = sanitizeGeminiResponseJsonSchema(rawSchema) as Record<string, unknown>;
 
     let lastErrorContext: GeminiProviderErrorContext | null = null;
+    let lastAttemptedModel = request.model_name;
+    const attemptedModels: string[] = [];
+    const modelCandidates = this.resolveModelCandidates(request.model_name);
 
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
-      try {
-        const response = await this.client.models.generateContent({
-          model: request.model_name,
-          contents: toPromptText(request),
-          config: {
-            responseMimeType: "application/json",
-            responseJsonSchema: schema
-          }
-        });
+    for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
+      const candidateModel = modelCandidates[modelIndex] ?? request.model_name;
+      attemptedModels.push(candidateModel);
 
-        const responseText =
-          typeof response.text === "string" ? response.text.trim() : "";
-
-        if (!responseText) {
-          throw new AiProviderError("Gemini returned an empty response", {
-            raw_output_excerpt: ""
-          });
-        }
-
-        await request.onStage?.("parsing_output");
-
-        let parsed: unknown;
+      for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
         try {
-          parsed = JSON.parse(responseText);
-        } catch {
-          const recovered = tryParseRecoveredJson(responseText);
-          if (recovered === null) {
-            throw new AiProviderError("Gemini returned non-JSON output", {
-              reason: "Unable to parse or repair model JSON output",
-              recovery_attempted: true,
-              raw_output_excerpt: toDebugExcerpt(responseText)
+          const response = await this.client.models.generateContent({
+            model: candidateModel,
+            contents: toPromptText(request),
+            config: {
+              responseMimeType: "application/json",
+              responseJsonSchema: schema
+            }
+          });
+
+          const responseText =
+            typeof response.text === "string" ? response.text.trim() : "";
+
+          if (!responseText) {
+            throw new AiProviderError("Gemini returned an empty response", {
+              raw_output_excerpt: "",
+              attempted_models: attemptedModels
             });
           }
 
-          parsed = recovered;
-        }
+          await request.onStage?.("parsing_output");
 
-        const outputPayload = asRecord(parsed);
-        if (!outputPayload) {
-          throw new AiProviderError("Gemini returned unsupported output shape", {
-            raw_output_excerpt: toDebugExcerpt(responseText)
-          });
-        }
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(responseText);
+          } catch {
+            const recovered = tryParseRecoveredJson(responseText);
+            if (recovered === null) {
+              throw new AiProviderError("Gemini returned non-JSON output", {
+                reason: "Unable to parse or repair model JSON output",
+                recovery_attempted: true,
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
 
-        return {
-          provider: this.providerName,
-          model_name: request.model_name,
-          output_payload: outputPayload
-        };
-      } catch (error) {
-        if (error instanceof AiProviderError) {
-          throw error;
-        }
+            parsed = recovered;
+          }
 
-        const context = toGeminiProviderErrorContext(error);
-        lastErrorContext = context;
-        const shouldRetry =
-          attempt < this.maxAttempts && isRetryableProviderError(context);
+          const outputPayload = asRecord(parsed);
+          if (!outputPayload) {
+            throw new AiProviderError("Gemini returned unsupported output shape", {
+              raw_output_excerpt: toDebugExcerpt(responseText),
+              attempted_models: attemptedModels
+            });
+          }
 
-        if (!shouldRetry) {
-          break;
-        }
+          return {
+            provider: this.providerName,
+            model_name: candidateModel,
+            output_payload: outputPayload
+          };
+        } catch (error) {
+          if (error instanceof AiProviderError) {
+            throw error;
+          }
 
-        const nextDelayMs = Math.max(
-          this.computeRetryDelayMs(attempt),
-          context.providerRetryDelayMs ?? 0
-        );
-        if (nextDelayMs > 0) {
-          await this.sleepFn(nextDelayMs);
+          const context = toGeminiProviderErrorContext(error);
+          lastErrorContext = context;
+          lastAttemptedModel = candidateModel;
+          const shouldRetry =
+            attempt < this.maxAttempts && isRetryableProviderError(context);
+
+          if (!shouldRetry) {
+            break;
+          }
+
+          const nextDelayMs = Math.max(
+            this.computeRetryDelayMs(attempt),
+            context.providerRetryDelayMs ?? 0
+          );
+          if (nextDelayMs > 0) {
+            await this.sleepFn(nextDelayMs);
+          }
         }
+      }
+
+      const canFallbackToNextModel =
+        modelIndex < modelCandidates.length - 1 &&
+        lastErrorContext !== null &&
+        isModelFallbackEligible(lastErrorContext);
+      if (!canFallbackToNextModel) {
+        break;
       }
     }
 
     throw new AiProviderError("Gemini provider request failed", {
       reason: lastErrorContext?.reason ?? "Unknown provider error",
+      model_name: lastAttemptedModel,
+      attempted_models: attemptedModels,
       provider_status: lastErrorContext?.providerStatus ?? null,
       provider_error_name: lastErrorContext?.providerErrorName ?? null,
       provider_status_code: lastErrorContext?.providerStatusCode ?? null,

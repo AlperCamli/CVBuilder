@@ -469,6 +469,56 @@ describe("GeminiAiProvider", () => {
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back from heavy to light model when heavy returns UNAVAILABLE", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 1,
+      heavyModelName: "gemini-2.5-flash",
+      lightModelName: "gemini-3-flash"
+    });
+
+    const unavailableError = new Error(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "This model is currently experiencing high demand.",
+          status: "UNAVAILABLE"
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    unavailableError.status = 503;
+    unavailableError.name = "ApiError";
+
+    generateContentMock
+      .mockRejectedValueOnce(unavailableError)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          questions: []
+        })
+      });
+
+    const result = await provider.generate({
+      flow_type: "job_analysis",
+      model_name: "gemini-2.5-flash",
+      prompt: {
+        prompt_key: "job-analysis",
+        prompt_version: "phase5-v1",
+        system_prompt: "Analyze job fit",
+        user_prompt: "Analyze now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.model_name).toBe("gemini-3-flash");
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(generateContentMock.mock.calls[0][0].model).toBe("gemini-2.5-flash");
+    expect(generateContentMock.mock.calls[1][0].model).toBe("gemini-3-flash");
+  });
+
   it("uses configured max-attempts through createAiProvider", async () => {
     const config: AppConfig = {
       appName: "cv-builder-backend",
