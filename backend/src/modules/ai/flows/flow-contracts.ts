@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cvContentInputSchema } from "../../../shared/cv-content/cv-content.schemas";
 
 export const followUpQuestionSchema = z
   .object({
@@ -39,7 +40,7 @@ export const followUpQuestionsOutputSchema = z
 
 export const tailoredDraftOutputSchema = z
   .object({
-    current_content: z.record(z.unknown()),
+    current_content: cvContentInputSchema,
     generation_summary: z.string().trim().min(1).max(2000),
     changed_block_ids: z.array(z.string().trim().min(1).max(128)).max(200)
   })
@@ -47,7 +48,7 @@ export const tailoredDraftOutputSchema = z
 
 export const importImproveOutputSchema = z
   .object({
-    improved_content: z.record(z.unknown()),
+    improved_content: cvContentInputSchema,
     generation_summary: z.string().trim().min(1).max(2000),
     changed_block_ids: z.array(z.string().trim().min(1).max(128)).max(200)
   })
