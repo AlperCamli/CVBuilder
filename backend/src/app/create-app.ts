@@ -86,7 +86,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
   app.use("/api/v1", v1Router);
 
   app.use(notFoundMiddleware);
-  app.use(createErrorHandler(config.appEnv === "production"));
+  app.use(createErrorHandler());
 
   return app;
 };

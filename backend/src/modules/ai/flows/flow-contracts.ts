@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { cvContentInputSchema } from "../../../shared/cv-content/cv-content.schemas";
 
+const normalizedHintSchema = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 160 ? trimmed.slice(0, 160) : trimmed;
+}, z.string().max(160).nullable().optional());
+
 export const followUpQuestionSchema = z
   .object({
     id: z.string().trim().min(1).max(128),
@@ -17,7 +26,7 @@ export const followUpQuestionSchema = z
       )
       .max(10)
       .optional(),
-    target_hint: z.string().trim().max(160).nullable().optional()
+    target_hint: normalizedHintSchema
   })
   .strict();
 

@@ -219,6 +219,41 @@ describe("AiService follow_up_questions flow", () => {
     expect(completeRun).not.toHaveBeenCalled();
   });
 
+  it("normalizes overly long target_hint values instead of failing the flow", async () => {
+    const service = makeService();
+    const longTargetHint = "A".repeat(220);
+    providerGenerate.mockResolvedValue({
+      provider: "gemini",
+      model_name: "gemini-3-flash-preview",
+      output_payload: {
+        questions: [
+          {
+            id: "q1",
+            question: "Which outcomes should we emphasize first?",
+            question_type: "text",
+            target_hint: longTargetHint
+          }
+        ]
+      }
+    });
+
+    const result = await service.generateFollowUpQuestions(session, {
+      master_cv_id: masterCv.id,
+      job: {
+        company_name: "Acme",
+        job_title: "Backend Engineer",
+        job_description: "Build APIs and services."
+      }
+    });
+
+    const questions = result.questions as Array<{ target_hint?: string | null }>;
+    expect(questions).toHaveLength(1);
+    expect(questions[0]?.target_hint).toHaveLength(160);
+    expect(questions[0]?.target_hint).toBe("A".repeat(160));
+    expect(completeRun).toHaveBeenCalledTimes(1);
+    expect(failRun).not.toHaveBeenCalled();
+  });
+
   it("persists provider diagnostics into ai_runs.error_message on provider failures", async () => {
     const service = makeService();
     providerGenerate.mockRejectedValue(

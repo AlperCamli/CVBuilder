@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import type { JobAnalysisResult, FollowUpQuestion } from "../integration/api-types";
+import { ApiClientError } from "../integration/api-error";
 
 interface TailorCvLocationState {
   prefillJob?: {
@@ -14,6 +15,60 @@ interface TailorCvLocationState {
     notes?: string;
   };
 }
+
+const RETRY_DELAY_MS = [800, 1800];
+
+const sleep = async (ms: number): Promise<void> => {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+};
+
+const isTransientAiRequestError = (error: unknown): boolean => {
+  if (error instanceof ApiClientError) {
+    return error.status >= 500 || error.status === 429;
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("network") ||
+      message.includes("failed to fetch") ||
+      message.includes("load failed")
+    );
+  }
+
+  return false;
+};
+
+const withTransientRetry = async <T,>(
+  task: () => Promise<T>,
+  maxAttempts = 3
+): Promise<T> => {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      const shouldRetry = attempt < maxAttempts && isTransientAiRequestError(error);
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      const baseDelay = RETRY_DELAY_MS[Math.min(attempt - 1, RETRY_DELAY_MS.length - 1)] ?? 0;
+      const jitter = Math.floor(Math.random() * 250);
+      await sleep(baseDelay + jitter);
+    }
+  }
+
+  throw lastError ?? new Error("Request failed");
+};
 
 export function TailorCV() {
   const navigate = useNavigate();
@@ -118,16 +173,24 @@ export function TailorCV() {
         job_description: formData.jobDescription
       };
 
-      const analysis = await api.postJobAnalysis({
-        master_cv_id: masterCvId,
-        job
-      });
+      const analysis = await withTransientRetry(
+        () =>
+          api.postJobAnalysis({
+            master_cv_id: masterCvId,
+            job
+          }),
+        3
+      );
 
-      const followUp = await api.postFollowUpQuestions({
-        master_cv_id: masterCvId,
-        job,
-        prior_analysis: analysis
-      });
+      const followUp = await withTransientRetry(
+        () =>
+          api.postFollowUpQuestions({
+            master_cv_id: masterCvId,
+            job,
+            prior_analysis: analysis
+          }),
+        3
+      );
 
       navigate(`/app/tailoring-flow/${masterCvId}`, {
         state: {
