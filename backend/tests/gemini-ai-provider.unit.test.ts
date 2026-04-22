@@ -236,4 +236,70 @@ describe("GeminiAiProvider", () => {
     expect(result.output_payload).toEqual({ questions: [] });
     expect(generateContentMock).toHaveBeenCalledTimes(2);
   });
+
+  it("does not retry hard quota-exceeded 429 errors", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 3,
+      retryDelayMs: [0, 0]
+    });
+
+    const quotaError = new Error(
+      JSON.stringify({
+        error: {
+          code: 429,
+          message:
+            "You exceeded your current quota. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests",
+          status: "RESOURCE_EXHAUSTED",
+          details: [
+            {
+              "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+              violations: [
+                {
+                  quotaMetric:
+                    "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+                  quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+                }
+              ]
+            }
+          ]
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    quotaError.status = 429;
+    quotaError.name = "ApiError";
+    generateContentMock.mockRejectedValue(quotaError);
+
+    let thrown: unknown;
+    try {
+      await provider.generate({
+        flow_type: "follow_up_questions",
+        model_name: "gemini-3-flash-preview",
+        prompt: {
+          prompt_key: "follow-up-questions",
+          prompt_version: "phase5-v1",
+          system_prompt: "Generate follow-up questions",
+          user_prompt: "Generate follow-up questions now"
+        },
+        output_schema: followUpQuestionsOutputSchema,
+        input_payload: {}
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AiProviderError);
+    expect((thrown as AiProviderError).details).toEqual(
+      expect.objectContaining({
+        provider_status: 429,
+        provider_status_code: "RESOURCE_EXHAUSTED",
+        provider_quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+        provider_quota_metric:
+          "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+      })
+    );
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
 });

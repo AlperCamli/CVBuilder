@@ -19,6 +19,32 @@ interface TailoringFlowState {
   followUpQuestions?: FollowUpQuestion[];
 }
 
+const toOptionalUrl = (value?: string): string | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    try {
+      return new URL(`https://${trimmed}`).toString();
+    } catch {
+      return null;
+    }
+  }
+};
+
+const toOptionalTrimmed = (value: string | undefined, maxLength: number): string | null => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.slice(0, maxLength);
+};
+
 export function TailoringFlow() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -71,14 +97,21 @@ export function TailoringFlow() {
     setError(null);
 
     try {
+      const normalizedJobPostingUrl = toOptionalUrl(jobData.jobPostingUrl);
+      if (jobData.jobPostingUrl?.trim() && !normalizedJobPostingUrl) {
+        setError("Job posting URL is invalid. Use a full URL (for example https://...) or leave it empty.");
+        setGenerating(false);
+        return;
+      }
+
       const answers = [
         {
           question_id: "priority_topics",
-          selected_options: selectedTopics
+          selected_options: selectedTopics.slice(0, 20).map((value) => value.slice(0, 200))
         },
         {
           question_id: "priority_keywords",
-          selected_options: selectedKeywords
+          selected_options: selectedKeywords.slice(0, 20).map((value) => value.slice(0, 200))
         },
         ...followUpQuestions
           .map((question) => {
@@ -88,7 +121,7 @@ export function TailoringFlow() {
             }
             return {
               question_id: question.id,
-              answer_text: answer
+              answer_text: answer.slice(0, 4000)
             };
           })
           .filter((item): item is { question_id: string; answer_text: string } => Boolean(item))
@@ -100,9 +133,9 @@ export function TailoringFlow() {
           company_name: jobData.company,
           job_title: jobData.role,
           job_description: jobData.jobDescription,
-          job_posting_url: jobData.jobPostingUrl || null,
-          location_text: jobData.locationText || null,
-          notes: jobData.notes || null
+          job_posting_url: normalizedJobPostingUrl,
+          location_text: toOptionalTrimmed(jobData.locationText, 240),
+          notes: toOptionalTrimmed(jobData.notes, 10_000)
         },
         answers
       });

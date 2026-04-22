@@ -77,25 +77,72 @@ interface GeminiProviderErrorContext {
   providerStatus: number | null;
   providerErrorName: string | null;
   providerStatusCode: string | null;
+  quotaId: string | null;
+  quotaMetric: string | null;
+  isHardQuotaExceeded: boolean;
   reason: string;
 }
 
-const parseProviderStatusCode = (message: string): string | null => {
+interface ParsedGeminiErrorPayload {
+  error?: {
+    status?: unknown;
+    message?: unknown;
+    details?: unknown;
+  };
+}
+
+const parseGeminiErrorPayload = (message: string): ParsedGeminiErrorPayload | null => {
   if (!message.trim()) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(message) as {
-      error?: {
-        status?: unknown;
-      };
-    };
-
-    return typeof parsed.error?.status === "string" ? parsed.error.status : null;
+    return JSON.parse(message) as ParsedGeminiErrorPayload;
   } catch {
     return null;
   }
+};
+
+const parseProviderStatusCode = (payload: ParsedGeminiErrorPayload | null): string | null => {
+  return typeof payload?.error?.status === "string" ? payload.error.status : null;
+};
+
+const parseQuotaContext = (
+  payload: ParsedGeminiErrorPayload | null
+): { quotaId: string | null; quotaMetric: string | null } => {
+  const details = Array.isArray(payload?.error?.details) ? payload?.error?.details : [];
+
+  for (const detail of details) {
+    if (typeof detail !== "object" || detail === null) {
+      continue;
+    }
+
+    const violations = (detail as { violations?: unknown }).violations;
+    if (!Array.isArray(violations)) {
+      continue;
+    }
+
+    for (const violation of violations) {
+      if (typeof violation !== "object" || violation === null) {
+        continue;
+      }
+
+      const quotaId =
+        typeof (violation as { quotaId?: unknown }).quotaId === "string"
+          ? (violation as { quotaId: string }).quotaId
+          : null;
+      const quotaMetric =
+        typeof (violation as { quotaMetric?: unknown }).quotaMetric === "string"
+          ? (violation as { quotaMetric: string }).quotaMetric
+          : null;
+
+      if (quotaId || quotaMetric) {
+        return { quotaId, quotaMetric };
+      }
+    }
+  }
+
+  return { quotaId: null, quotaMetric: null };
 };
 
 const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContext => {
@@ -105,17 +152,32 @@ const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContex
       : null;
   const providerErrorName = error instanceof Error ? error.name : null;
   const reason = error instanceof Error ? error.message : "Unknown provider error";
-  const providerStatusCode = parseProviderStatusCode(reason);
+  const parsedPayload = parseGeminiErrorPayload(reason);
+  const providerStatusCode = parseProviderStatusCode(parsedPayload);
+  const { quotaId, quotaMetric } = parseQuotaContext(parsedPayload);
+  const normalizedReason = reason.toLowerCase();
+  const isHardQuotaExceeded =
+    (typeof providerStatus === "number" && providerStatus === 429) &&
+    (normalizedReason.includes("quota exceeded") ||
+      normalizedReason.includes("free_tier_requests") ||
+      (typeof quotaId === "string" && quotaId.includes("PerDay")));
 
   return {
     providerStatus,
     providerErrorName,
     providerStatusCode,
+    quotaId,
+    quotaMetric,
+    isHardQuotaExceeded,
     reason
   };
 };
 
 const isRetryableProviderError = (context: GeminiProviderErrorContext): boolean => {
+  if (context.isHardQuotaExceeded) {
+    return false;
+  }
+
   if (
     typeof context.providerStatus === "number" &&
     RETRYABLE_HTTP_STATUS_CODES.has(context.providerStatus)
@@ -228,7 +290,9 @@ export class GeminiAiProvider implements AiProvider {
       reason: lastErrorContext?.reason ?? "Unknown provider error",
       provider_status: lastErrorContext?.providerStatus ?? null,
       provider_error_name: lastErrorContext?.providerErrorName ?? null,
-      provider_status_code: lastErrorContext?.providerStatusCode ?? null
+      provider_status_code: lastErrorContext?.providerStatusCode ?? null,
+      provider_quota_id: lastErrorContext?.quotaId ?? null,
+      provider_quota_metric: lastErrorContext?.quotaMetric ?? null
     });
   }
 }
