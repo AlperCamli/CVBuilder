@@ -14,7 +14,11 @@ export const createAiProvider = (config: AppConfig): AiProvider => {
       throw new InternalServerError("GEMINI_API_KEY is required when AI_PROVIDER=gemini");
     }
 
-    return new GeminiAiProvider(config.ai.defaultModel, config.ai.geminiApiKey);
+    return new GeminiAiProvider(config.ai.defaultModel, config.ai.geminiApiKey, {
+      maxAttempts: config.ai.geminiMaxAttempts,
+      baseRetryDelayMs: config.ai.geminiRetryBaseDelayMs,
+      maxRetryDelayMs: config.ai.geminiRetryMaxDelayMs
+    });
   }
 
   throw new InternalServerError("Unsupported AI provider configuration");

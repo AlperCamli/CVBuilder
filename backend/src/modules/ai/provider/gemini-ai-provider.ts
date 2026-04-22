@@ -11,6 +11,7 @@ const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
   "DEADLINE_EXCEEDED",
   "INTERNAL"
 ]);
+const MAX_PROVIDER_RETRY_HINT_DELAY_MS = 120_000;
 
 const GEMINI_SCHEMA_DROPPED_KEYS = new Set([
   "$schema",
@@ -73,12 +74,21 @@ const sleep = async (ms: number): Promise<void> => {
   });
 };
 
+const clampNonNegativeInteger = (value: number, fallback: number): number => {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.floor(value));
+};
+
 interface GeminiProviderErrorContext {
   providerStatus: number | null;
   providerErrorName: string | null;
   providerStatusCode: string | null;
   quotaId: string | null;
   quotaMetric: string | null;
+  providerRetryDelayMs: number | null;
   isHardQuotaExceeded: boolean;
   reason: string;
 }
@@ -145,6 +155,50 @@ const parseQuotaContext = (
   return { quotaId: null, quotaMetric: null };
 };
 
+const parseRetryDelayMs = (payload: ParsedGeminiErrorPayload | null): number | null => {
+  const details = Array.isArray(payload?.error?.details) ? payload?.error?.details : [];
+
+  for (const detail of details) {
+    if (typeof detail !== "object" || detail === null) {
+      continue;
+    }
+
+    const typedDetail = detail as {
+      "@type"?: unknown;
+      retryDelay?: unknown;
+      retry_delay?: unknown;
+    };
+
+    const typeName = typeof typedDetail["@type"] === "string" ? typedDetail["@type"] : "";
+    if (!typeName.includes("google.rpc.RetryInfo")) {
+      continue;
+    }
+
+    const retryDelay =
+      typeof typedDetail.retryDelay === "string"
+        ? typedDetail.retryDelay
+        : typeof typedDetail.retry_delay === "string"
+          ? typedDetail.retry_delay
+          : null;
+
+    if (!retryDelay || !retryDelay.endsWith("s")) {
+      continue;
+    }
+
+    const seconds = Number.parseFloat(retryDelay.slice(0, -1));
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      continue;
+    }
+
+    const milliseconds = Math.floor(seconds * 1000);
+    if (milliseconds > 0) {
+      return Math.min(milliseconds, MAX_PROVIDER_RETRY_HINT_DELAY_MS);
+    }
+  }
+
+  return null;
+};
+
 const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContext => {
   const providerStatus =
     typeof (error as { status?: unknown })?.status === "number"
@@ -155,6 +209,7 @@ const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContex
   const parsedPayload = parseGeminiErrorPayload(reason);
   const providerStatusCode = parseProviderStatusCode(parsedPayload);
   const { quotaId, quotaMetric } = parseQuotaContext(parsedPayload);
+  const providerRetryDelayMs = parseRetryDelayMs(parsedPayload);
   const normalizedReason = reason.toLowerCase();
   const isHardQuotaExceeded =
     (typeof providerStatus === "number" && providerStatus === 429) &&
@@ -168,6 +223,7 @@ const toGeminiProviderErrorContext = (error: unknown): GeminiProviderErrorContex
     providerStatusCode,
     quotaId,
     quotaMetric,
+    providerRetryDelayMs,
     isHardQuotaExceeded,
     reason
   };
@@ -199,7 +255,11 @@ export class GeminiAiProvider implements AiProvider {
   readonly providerName = "gemini";
   private readonly client: GoogleGenAI;
   private readonly maxAttempts: number;
-  private readonly retryDelayMs: number[];
+  private readonly retryDelayMs: number[] | null;
+  private readonly baseRetryDelayMs: number;
+  private readonly maxRetryDelayMs: number;
+  private readonly randomFn: () => number;
+  private readonly sleepFn: (ms: number) => Promise<void>;
 
   constructor(
     private readonly defaultModelName: string,
@@ -207,15 +267,39 @@ export class GeminiAiProvider implements AiProvider {
     options?: {
       maxAttempts?: number;
       retryDelayMs?: number[];
+      baseRetryDelayMs?: number;
+      maxRetryDelayMs?: number;
+      randomFn?: () => number;
+      sleepFn?: (ms: number) => Promise<void>;
     }
   ) {
     this.client = new GoogleGenAI({ apiKey });
     this.maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
-    this.retryDelayMs = options?.retryDelayMs ?? [350, 1000];
+    this.retryDelayMs = options?.retryDelayMs?.map((value) =>
+      clampNonNegativeInteger(value, 0)
+    ) ?? null;
+    this.baseRetryDelayMs = clampNonNegativeInteger(options?.baseRetryDelayMs ?? 500, 500);
+    this.maxRetryDelayMs = clampNonNegativeInteger(options?.maxRetryDelayMs ?? 8_000, 8_000);
+    this.randomFn = options?.randomFn ?? Math.random;
+    this.sleepFn = options?.sleepFn ?? sleep;
   }
 
   resolveModelName(_flowType: AiFlowType): string {
     return this.defaultModelName;
+  }
+
+  private computeRetryDelayMs(attempt: number): number {
+    if (this.retryDelayMs && this.retryDelayMs.length > 0) {
+      return this.retryDelayMs[Math.min(attempt - 1, this.retryDelayMs.length - 1)] ?? 0;
+    }
+
+    const capped = Math.min(this.maxRetryDelayMs, this.baseRetryDelayMs * 2 ** (attempt - 1));
+    if (!Number.isFinite(capped) || capped <= 0) {
+      return 0;
+    }
+
+    // Full jitter strategy to prevent synchronized retry waves across concurrent requests.
+    return Math.floor(this.randomFn() * capped);
   }
 
   async generate(request: AiProviderRequest): Promise<AiProviderResult> {
@@ -278,10 +362,12 @@ export class GeminiAiProvider implements AiProvider {
           break;
         }
 
-        const nextDelayMs =
-          this.retryDelayMs[Math.min(attempt - 1, this.retryDelayMs.length - 1)] ?? 0;
+        const nextDelayMs = Math.max(
+          this.computeRetryDelayMs(attempt),
+          context.providerRetryDelayMs ?? 0
+        );
         if (nextDelayMs > 0) {
-          await sleep(nextDelayMs);
+          await this.sleepFn(nextDelayMs);
         }
       }
     }
@@ -292,7 +378,8 @@ export class GeminiAiProvider implements AiProvider {
       provider_error_name: lastErrorContext?.providerErrorName ?? null,
       provider_status_code: lastErrorContext?.providerStatusCode ?? null,
       provider_quota_id: lastErrorContext?.quotaId ?? null,
-      provider_quota_metric: lastErrorContext?.quotaMetric ?? null
+      provider_quota_metric: lastErrorContext?.quotaMetric ?? null,
+      provider_retry_delay_ms: lastErrorContext?.providerRetryDelayMs ?? null
     });
   }
 }

@@ -237,6 +237,119 @@ describe("GeminiAiProvider", () => {
     expect(generateContentMock).toHaveBeenCalledTimes(2);
   });
 
+  it("applies exponential backoff with jitter between retries", async () => {
+    const observedDelays: number[] = [];
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 3,
+      baseRetryDelayMs: 100,
+      maxRetryDelayMs: 1_000,
+      randomFn: () => 0.5,
+      sleepFn: async (ms) => {
+        observedDelays.push(ms);
+      }
+    });
+
+    const transientError = new Error(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "This model is currently experiencing high demand.",
+          status: "UNAVAILABLE"
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    transientError.status = 503;
+    transientError.name = "ApiError";
+
+    generateContentMock
+      .mockRejectedValueOnce(transientError)
+      .mockRejectedValueOnce(transientError)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          questions: []
+        })
+      });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(3);
+    expect(observedDelays).toEqual([50, 100]);
+  });
+
+  it("honors provider retry hints when present", async () => {
+    const observedDelays: number[] = [];
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
+      maxAttempts: 2,
+      baseRetryDelayMs: 100,
+      maxRetryDelayMs: 1_000,
+      randomFn: () => 0.1,
+      sleepFn: async (ms) => {
+        observedDelays.push(ms);
+      }
+    });
+
+    const hintedTransientError = new Error(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "Service unavailable",
+          status: "UNAVAILABLE",
+          details: [
+            {
+              "@type": "type.googleapis.com/google.rpc.RetryInfo",
+              retryDelay: "2.000s"
+            }
+          ]
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    hintedTransientError.status = 503;
+    hintedTransientError.name = "ApiError";
+
+    generateContentMock
+      .mockRejectedValueOnce(hintedTransientError)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          questions: []
+        })
+      });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(observedDelays).toEqual([2000]);
+  });
+
   it("does not retry hard quota-exceeded 429 errors", async () => {
     const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key", {
       maxAttempts: 3,

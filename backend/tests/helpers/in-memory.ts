@@ -427,7 +427,10 @@ export const createTestConfig = (): AppConfig => {
       provider: "mock",
       defaultModel: "mock-cv-builder-v1",
       promptProfile: "phase3-v1",
-      geminiApiKey: null
+      geminiApiKey: null,
+      geminiMaxAttempts: 4,
+      geminiRetryBaseDelayMs: 1000,
+      geminiRetryMaxDelayMs: 16000
     },
     exports: {
       storageBucket: "exports",

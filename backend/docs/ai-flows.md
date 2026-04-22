@@ -31,8 +31,14 @@ Runtime selection:
 Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
-- Gemini provider retries transient upstream errors (`429`, `503`, similar) with bounded backoff before marking run as failed
+- Gemini provider retries transient upstream errors (`429`, `503`, similar) with exponential backoff + full jitter before marking run as failed
+- Gemini `google.rpc.RetryInfo` hints are honored when present to avoid retrying too aggressively
 - hard quota-exceeded `429 RESOURCE_EXHAUSTED` errors are treated as non-retryable
+
+Retry tuning env vars:
+- `AI_GEMINI_MAX_ATTEMPTS` (default `4`)
+- `AI_GEMINI_RETRY_BASE_DELAY_MS` (default `1000`)
+- `AI_GEMINI_RETRY_MAX_DELAY_MS` (default `16000`)
 
 ## Prompt Management
 
