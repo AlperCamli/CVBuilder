@@ -18,7 +18,9 @@ const envSchema = z
     AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
     AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
     GEMINI_API_KEY: z.string().min(1).optional(),
-    AI_GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(4),
+    AI_GEMINI_MODEL_LIGHT: z.string().min(1).default("gemini-3-flash"),
+    AI_GEMINI_MODEL_HEAVY: z.string().min(1).default("gemini-2.5-flash"),
+    AI_GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(1),
     AI_GEMINI_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     AI_GEMINI_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(200).max(120_000).default(16_000),
     EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
@@ -65,6 +67,8 @@ export interface AppConfig {
     defaultModel: string;
     promptProfile: string;
     geminiApiKey: string | null;
+    geminiModelLight: string;
+    geminiModelHeavy: string;
     geminiMaxAttempts: number;
     geminiRetryBaseDelayMs: number;
     geminiRetryMaxDelayMs: number;
@@ -151,6 +155,8 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       defaultModel: parsed.data.AI_DEFAULT_MODEL,
       promptProfile: parsed.data.AI_PROMPT_PROFILE,
       geminiApiKey: parsed.data.GEMINI_API_KEY ?? null,
+      geminiModelLight: parsed.data.AI_GEMINI_MODEL_LIGHT,
+      geminiModelHeavy: parsed.data.AI_GEMINI_MODEL_HEAVY,
       geminiMaxAttempts: parsed.data.AI_GEMINI_MAX_ATTEMPTS,
       geminiRetryBaseDelayMs: parsed.data.AI_GEMINI_RETRY_BASE_DELAY_MS,
       geminiRetryMaxDelayMs: parsed.data.AI_GEMINI_RETRY_MAX_DELAY_MS

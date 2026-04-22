@@ -14,6 +14,7 @@ export interface AiProviderRequest {
   prompt: AiPromptContext;
   output_schema: ZodTypeAny;
   input_payload: Record<string, unknown>;
+  onStage?: (stage: "parsing_output") => Promise<void> | void;
 }
 
 export interface AiProviderResult {

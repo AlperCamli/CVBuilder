@@ -520,7 +520,17 @@ export interface AiRunSummary {
   provider: string;
   model_name: string;
   status: "pending" | "completed" | "failed";
+  progress_stage:
+    | "queued"
+    | "building_prompt"
+    | "calling_model"
+    | "parsing_output"
+    | "validating_output"
+    | "persisting_result"
+    | "completed"
+    | "failed";
   error_message: string | null;
+  debug_payload: Record<string, unknown> | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -586,6 +596,35 @@ export interface FollowUpQuestion {
 export interface FollowUpQuestionsResult {
   ai_run_id: string;
   questions: FollowUpQuestion[];
+}
+
+export type TailoringRunFlowType = "job_analysis" | "follow_up_questions" | "tailored_draft";
+
+export interface TailoringRunStartResponse {
+  ai_run_id: string;
+  flow_type: TailoringRunFlowType;
+  status: "pending" | "completed" | "failed";
+  progress_stage: AiRunSummary["progress_stage"];
+}
+
+export interface TailoringRunExecuteResponse {
+  ai_run_id: string;
+  flow_type: TailoringRunFlowType;
+  status: "pending" | "completed" | "failed";
+  progress_stage: AiRunSummary["progress_stage"];
+}
+
+export interface TailoringRunStatusResponse extends TailoringRunExecuteResponse {
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface TailoringRunResultResponse {
+  ai_run_id: string;
+  flow_type: TailoringRunFlowType;
+  status: "completed";
+  result: Record<string, unknown>;
 }
 
 export interface TailoredCvDraftSummary {

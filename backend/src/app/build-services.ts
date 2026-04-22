@@ -173,7 +173,9 @@ export const buildDefaultServices = (
   const aiProvider = overrides?.aiProvider ?? createAiProvider(config);
   const aiPromptResolver = new AiPromptResolver(
     aiPromptConfigRepository,
-    config.ai.promptProfile
+    config.ai.promptProfile,
+    30_000,
+    config.appEnv !== "production"
   );
   const templatesRepository =
     overrides?.templatesRepository ?? new SupabaseTemplatesRepository(supabaseClients.serviceRoleClient);

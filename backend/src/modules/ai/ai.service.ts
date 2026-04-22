@@ -13,10 +13,13 @@ import {
   AiFlowFailedError,
   AiProviderError,
   ConflictError,
+  InternalServerError,
   NotFoundError,
   SuggestionNotApplicableError
 } from "../../shared/errors/app-error";
 import type {
+  AiFlowType,
+  AiRunProgressStage,
   CvKind,
   AiSuggestionActionType,
   AiRunRecord,
@@ -46,12 +49,20 @@ import type {
   BlockOptionsInput,
   BlockSuggestInput,
   FollowUpQuestionsInput,
+  FollowUpQuestionsResult,
   ImportImproveInput,
   ImportImproveResponse,
   JobAnalysisInput,
+  JobAnalysisResult,
   SessionContext,
   SuggestionApplyResponse,
   SuggestionRejectResponse,
+  TailoringRunExecuteResponse,
+  TailoringRunFlowType,
+  TailoringRunResultResponse,
+  TailoringRunStartInput,
+  TailoringRunStartResponse,
+  TailoringRunStatusResponse,
   TailoredCvDraftInput,
   TailoredCvDraftJobSummary,
   TailoredCvDraftSummary
@@ -59,6 +70,11 @@ import type {
 import type { AiRepository } from "./ai.repository";
 import type { AiPromptResolver } from "./prompts/prompt-resolver";
 import type { AiProvider } from "./provider/ai-provider";
+import {
+  aiFollowUpQuestionsSchema,
+  aiJobAnalysisSchema,
+  aiTailoredDraftSchema
+} from "./ai.schemas";
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -129,6 +145,54 @@ const toPersistableAiRunError = (error: unknown): string => {
   return "Unknown AI flow error";
 };
 
+const sanitizeDebugScalar = (value: unknown): string | number | boolean | null => {
+  if (typeof value === "string") {
+    return value.slice(0, 2000);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  return null;
+};
+
+const toPersistableAiRunDebugPayload = (error: unknown): Record<string, unknown> | null => {
+  if (error instanceof AiProviderError) {
+    const details = asRecord(error.details);
+    return {
+      error_name: error.name,
+      provider_error: error.message,
+      provider_status: sanitizeDebugScalar(details.provider_status),
+      provider_status_code: sanitizeDebugScalar(details.provider_status_code),
+      provider_error_name: sanitizeDebugScalar(details.provider_error_name),
+      provider_quota_id: sanitizeDebugScalar(details.provider_quota_id),
+      provider_quota_metric: sanitizeDebugScalar(details.provider_quota_metric),
+      provider_retry_delay_ms: sanitizeDebugScalar(details.provider_retry_delay_ms),
+      reason: sanitizeDebugScalar(details.reason),
+      raw_output_excerpt: sanitizeDebugScalar(details.raw_output_excerpt)
+    };
+  }
+
+  if (error instanceof AiFlowFailedError) {
+    const details = asRecord(error.details);
+    return Object.keys(details).length > 0
+      ? {
+          error_name: error.name,
+          reason: error.message,
+          details
+        }
+      : null;
+  }
+
+  if (error instanceof Error) {
+    return {
+      error_name: error.name,
+      reason: error.message.slice(0, 2000)
+    };
+  }
+
+  return null;
+};
+
 interface ExecuteFlowOptions {
   flow_type: keyof typeof AI_FLOW_REGISTRY;
   user_id: string;
@@ -156,6 +220,36 @@ interface AiBlockTargetContext {
   linked_job: JobRecord | null;
 }
 
+interface ResolvedPromptSnapshot {
+  prompt_key: string;
+  prompt_version: string;
+  system_prompt: string;
+  user_prompt: string;
+  model_name: string;
+}
+
+interface RunFlowExecutionOptions {
+  user_id: string;
+  ai_run_id: string;
+  flow_type: AiFlowType;
+  prompt: ResolvedPromptSnapshot;
+  input_payload: Record<string, unknown>;
+}
+
+interface RunFlowExecutionResult {
+  output_payload: Record<string, unknown>;
+  provider: string;
+  model_name: string;
+}
+
+type TailoringRunInputPayload = JobAnalysisInput | FollowUpQuestionsInput | TailoredCvDraftInput;
+
+const TAILORING_FLOW_TYPES: TailoringRunFlowType[] = [
+  "job_analysis",
+  "follow_up_questions",
+  "tailored_draft"
+];
+
 export class AiService {
   constructor(
     private readonly aiRepository: AiRepository,
@@ -168,6 +262,138 @@ export class AiService {
     private readonly promptResolver: AiPromptResolver,
     private readonly billingService: BillingService
   ) {}
+
+  async startTailoringRun(
+    session: SessionContext,
+    input: TailoringRunStartInput
+  ): Promise<TailoringRunStartResponse> {
+    const parsedInput = this.parseTailoringRunInput(input.flow_type, input.input);
+    const runtimeContext = await this.assertTailoringRunInput(
+      session.appUser.id,
+      input.flow_type,
+      parsedInput
+    );
+    const userPrompt = this.buildTailoringUserPrompt(input.flow_type, parsedInput);
+    const resolvedPrompt = await this.resolvePromptForFlow({
+      flow_type: input.flow_type,
+      action_type: null,
+      user_prompt: userPrompt
+    });
+
+    const runContext = this.extractRunTargetContext(parsedInput);
+    const run = await this.aiRepository.createRun({
+      user_id: session.appUser.id,
+      flow_type: input.flow_type,
+      provider: this.aiProvider.providerName,
+      model_name: resolvedPrompt.model_name,
+      master_cv_id: runContext.master_cv_id,
+      tailored_cv_id: runContext.tailored_cv_id,
+      job_id: runContext.job_id,
+      progress_stage: "queued",
+      input_payload: {
+        flow_input: parsedInput,
+        runtime: runtimeContext,
+        prompt: {
+          prompt_key: resolvedPrompt.prompt_key,
+          prompt_version: resolvedPrompt.prompt_version,
+          provider: this.aiProvider.providerName,
+          model_name: resolvedPrompt.model_name,
+          user_prompt: resolvedPrompt.user_prompt,
+          system_prompt: resolvedPrompt.system_prompt
+        }
+      }
+    });
+
+    return {
+      ai_run_id: run.id,
+      flow_type: input.flow_type,
+      status: run.status,
+      progress_stage: run.progress_stage
+    };
+  }
+
+  async executeTailoringRun(
+    session: SessionContext,
+    aiRunId: string
+  ): Promise<TailoringRunExecuteResponse> {
+    const run = await this.requireTailoringRun(session.appUser.id, aiRunId);
+    if (run.status !== "pending") {
+      return this.toTailoringRunExecuteResponse(run);
+    }
+    if (run.progress_stage !== "queued") {
+      return this.toTailoringRunExecuteResponse(run);
+    }
+
+    const parsedInput = this.parseTailoringRunInput(
+      run.flow_type as TailoringRunFlowType,
+      this.readRunFlowInput(run)
+    );
+    const storedPrompt = await this.resolveStoredRunPrompt(run, parsedInput);
+
+    let executedRun: AiRunRecord;
+    if (run.flow_type === "job_analysis") {
+      executedRun = await this.executeTailoringJobAnalysisRun(
+        session.appUser.id,
+        run,
+        parsedInput as JobAnalysisInput,
+        storedPrompt
+      );
+    } else if (run.flow_type === "follow_up_questions") {
+      executedRun = await this.executeTailoringFollowUpQuestionsRun(
+        session.appUser.id,
+        run,
+        parsedInput as FollowUpQuestionsInput,
+        storedPrompt
+      );
+    } else {
+      executedRun = await this.executeTailoringDraftRun(
+        session.appUser.id,
+        run,
+        parsedInput as TailoredCvDraftInput,
+        storedPrompt
+      );
+    }
+
+    return this.toTailoringRunExecuteResponse(executedRun);
+  }
+
+  async getTailoringRunStatus(
+    session: SessionContext,
+    aiRunId: string
+  ): Promise<TailoringRunStatusResponse> {
+    const run = await this.requireTailoringRun(session.appUser.id, aiRunId);
+    return {
+      ai_run_id: run.id,
+      flow_type: run.flow_type as TailoringRunFlowType,
+      status: run.status,
+      progress_stage: run.progress_stage,
+      error_message: run.error_message,
+      started_at: run.started_at,
+      completed_at: run.completed_at
+    };
+  }
+
+  async getTailoringRunResult(
+    session: SessionContext,
+    aiRunId: string
+  ): Promise<TailoringRunResultResponse> {
+    const run = await this.requireTailoringRun(session.appUser.id, aiRunId);
+    if (run.status !== "completed") {
+      throw new ConflictError("AI run result is not ready", {
+        ai_run_id: run.id,
+        status: run.status,
+        error_message: run.error_message
+      });
+    }
+
+    const result = asRecord(run.output_payload);
+    return {
+      ai_run_id: run.id,
+      flow_type: run.flow_type as TailoringRunFlowType,
+      status: "completed",
+      result
+    };
+  }
 
   async analyzeJob(session: SessionContext, input: JobAnalysisInput) {
     const masterCv = await this.requireMasterCv(session.appUser.id, input.master_cv_id);
@@ -734,92 +960,246 @@ export class AiService {
   private async executeFlow<TOutput>(
     options: ExecuteFlowOptions
   ): Promise<ExecuteFlowResult<TOutput>> {
-    const definition = AI_FLOW_REGISTRY[options.flow_type];
-    const resolvedPrompt = await this.promptResolver.resolve({
+    const prompt = await this.resolvePromptForFlow({
       flow_type: options.flow_type,
-      provider: this.aiProvider.providerName,
       action_type: options.action_type ?? null,
-      fallback: {
-        prompt_key: definition.prompt_key,
-        prompt_version: definition.prompt_version,
-        system_prompt: definition.system_prompt,
-        model_name: this.aiProvider.resolveModelName(options.flow_type)
-      }
+      user_prompt: options.user_prompt
     });
-    const resolvedUserPrompt = resolvedPrompt.user_prompt_template?.trim() || options.user_prompt;
 
     const aiRun = await this.aiRepository.createRun({
       user_id: options.user_id,
       flow_type: options.flow_type,
       provider: this.aiProvider.providerName,
-      model_name: resolvedPrompt.model_name,
+      model_name: prompt.model_name,
       master_cv_id: options.master_cv_id ?? null,
       tailored_cv_id: options.tailored_cv_id ?? null,
       job_id: options.job_id ?? null,
+      progress_stage: "queued",
       input_payload: {
         flow_input: options.input_payload,
         prompt: {
-          prompt_key: resolvedPrompt.prompt_key,
-          prompt_version: resolvedPrompt.prompt_version,
+          prompt_key: prompt.prompt_key,
+          prompt_version: prompt.prompt_version,
           provider: this.aiProvider.providerName,
-          model_name: resolvedPrompt.model_name,
-          user_prompt: resolvedUserPrompt,
-          system_prompt: resolvedPrompt.system_prompt
+          model_name: prompt.model_name,
+          user_prompt: prompt.user_prompt,
+          system_prompt: prompt.system_prompt
         }
       }
     });
 
+    const executed = await this.executeRunFlow({
+      user_id: options.user_id,
+      ai_run_id: aiRun.id,
+      flow_type: options.flow_type,
+      prompt,
+      input_payload: options.input_payload
+    });
+    const completed = await this.completeRunWithPayload(
+      options.user_id,
+      aiRun.id,
+      executed.output_payload
+    );
+
+    return {
+      ai_run: completed,
+      output: executed.output_payload as TOutput,
+      provider: executed.provider,
+      model_name: executed.model_name,
+      prompt_key: prompt.prompt_key,
+      prompt_version: prompt.prompt_version
+    };
+  }
+
+  private async executeTailoringJobAnalysisRun(
+    userId: string,
+    run: AiRunRecord,
+    input: JobAnalysisInput,
+    prompt: ResolvedPromptSnapshot
+  ): Promise<AiRunRecord> {
+    const masterCv = await this.requireMasterCv(userId, input.master_cv_id);
+    const flowInput = {
+      company_name: input.job.company_name,
+      job_title: input.job.job_title,
+      job_description: input.job.job_description,
+      master_cv_text: buildCvSummaryText(masterCv.current_content, 5000) ?? "",
+      master_cv_summary: masterCv.summary_text
+    };
+
+    const executed = await this.executeRunFlow({
+      user_id: userId,
+      ai_run_id: run.id,
+      flow_type: "job_analysis",
+      prompt,
+      input_payload: flowInput
+    });
+
+    const resultPayload: JobAnalysisResult = {
+      keywords: asStringArray(asRecord(executed.output_payload).keywords),
+      requirements: asStringArray(asRecord(executed.output_payload).requirements),
+      strengths: asStringArray(asRecord(executed.output_payload).strengths),
+      gaps: asStringArray(asRecord(executed.output_payload).gaps),
+      summary: String(asRecord(executed.output_payload).summary ?? ""),
+      fit_score:
+        typeof asRecord(executed.output_payload).fit_score === "number"
+          ? Number(asRecord(executed.output_payload).fit_score)
+          : null
+    };
+
+    return this.completeRunWithPayload(userId, run.id, resultPayload as unknown as Record<string, unknown>);
+  }
+
+  private async executeTailoringFollowUpQuestionsRun(
+    userId: string,
+    run: AiRunRecord,
+    input: FollowUpQuestionsInput,
+    prompt: ResolvedPromptSnapshot
+  ): Promise<AiRunRecord> {
+    await this.requireMasterCv(userId, input.master_cv_id);
+    const priorAnalysis = asRecord(input.prior_analysis);
+    const flowInput = {
+      company_name: input.job.company_name,
+      job_title: input.job.job_title,
+      job_description: input.job.job_description,
+      gap_keywords: asStringArray(priorAnalysis.gaps),
+      prior_analysis: input.prior_analysis ?? null
+    };
+
+    const executed = await this.executeRunFlow({
+      user_id: userId,
+      ai_run_id: run.id,
+      flow_type: "follow_up_questions",
+      prompt,
+      input_payload: flowInput
+    });
+
+    const resultPayload: FollowUpQuestionsResult = {
+      questions: Array.isArray(asRecord(executed.output_payload).questions)
+        ? (asRecord(executed.output_payload).questions as FollowUpQuestionsResult["questions"])
+        : []
+    };
+
+    return this.completeRunWithPayload(userId, run.id, resultPayload as unknown as Record<string, unknown>);
+  }
+
+  private async executeTailoringDraftRun(
+    userId: string,
+    run: AiRunRecord,
+    input: TailoredCvDraftInput,
+    prompt: ResolvedPromptSnapshot
+  ): Promise<AiRunRecord> {
+    await this.billingService.assertActionAllowed(userId, "tailored_cv_generation");
+    const masterCv = await this.requireMasterCv(userId, input.master_cv_id);
+
+    const persistedRuntime = asRecord(asRecord(run.input_payload).runtime);
+    const persistedTemplateId = persistedRuntime.validated_template_id;
+    const validatedTemplateId =
+      typeof persistedTemplateId === "string" || persistedTemplateId === null
+        ? persistedTemplateId
+        : input.template_id !== undefined
+          ? await this.templatesService.validateAssignableTemplateId(input.template_id)
+          : undefined;
+
+    const { tailoredCv, job } = await this.prepareDraftTarget(
+      userId,
+      masterCv,
+      input,
+      validatedTemplateId
+    );
+
+    await this.aiRepository.updateRunContext(userId, run.id, {
+      master_cv_id: masterCv.id,
+      tailored_cv_id: tailoredCv.id,
+      job_id: job.id
+    });
+
     try {
-      const providerResult = await this.aiProvider.generate({
-        flow_type: options.flow_type,
-        model_name: resolvedPrompt.model_name,
-        prompt: {
-          prompt_key: resolvedPrompt.prompt_key,
-          prompt_version: resolvedPrompt.prompt_version,
-          user_prompt: resolvedUserPrompt,
-          system_prompt: resolvedPrompt.system_prompt
-        },
-        output_schema: definition.output_schema,
-        input_payload: options.input_payload
+      const flowInput = {
+        master_content: masterCv.current_content,
+        master_cv_title: masterCv.title,
+        master_cv_summary: masterCv.summary_text,
+        job: input.job,
+        answers: input.answers,
+        language: input.language ?? tailoredCv.language
+      };
+
+      const executed = await this.executeRunFlow({
+        user_id: userId,
+        ai_run_id: run.id,
+        flow_type: "tailored_draft",
+        prompt,
+        input_payload: flowInput
       });
 
-      const parsed = definition.output_schema.safeParse(providerResult.output_payload);
-      if (!parsed.success) {
-        await this.aiRepository.failRun(
-          options.user_id,
-          aiRun.id,
-          `Structured output validation failed: ${parsed.error.issues
-            .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
-            .join("; ")}`
-        );
+      const output = asRecord(executed.output_payload);
+      const normalizedContent = normalizeCvContent(
+        asRecord(output.current_content),
+        input.language ?? tailoredCv.language
+      );
 
-        throw new AiFlowFailedError("AI output did not match required contract", {
-          flow_type: options.flow_type
-        });
+      const updatedTailoredCv = await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
+        current_content: normalizedContent,
+        language: normalizedContent.language,
+        template_id: validatedTemplateId !== undefined ? validatedTemplateId : tailoredCv.template_id,
+        ai_generation_status: "completed",
+        job_id: job.id
+      });
+
+      if (!updatedTailoredCv) {
+        throw new NotFoundError("Tailored CV was not found");
       }
 
-      const serializedOutput = z.record(z.unknown()).parse(parsed.data);
-
-      const completed = await this.aiRepository.completeRun(options.user_id, aiRun.id, serializedOutput);
-      if (!completed) {
-        throw new NotFoundError("AI run was not found after completion");
-      }
-
-      return {
-        ai_run: completed,
-        output: serializedOutput as TOutput,
-        provider: providerResult.provider,
-        model_name: providerResult.model_name,
-        prompt_key: resolvedPrompt.prompt_key,
-        prompt_version: resolvedPrompt.prompt_version
+      const linkedJob = await this.ensureJobLinked(userId, updatedTailoredCv.id, job);
+      const resultPayload = {
+        tailored_cv: this.toTailoredDraftSummary(updatedTailoredCv),
+        job: this.toDraftJobSummary(linkedJob),
+        generation_metadata: {
+          provider: executed.provider,
+          model_name: executed.model_name,
+          flow_type: "tailored_draft" as const,
+          prompt_key: prompt.prompt_key,
+          prompt_version: prompt.prompt_version,
+          changed_block_ids: asStringArray(output.changed_block_ids),
+          generation_summary: String(output.generation_summary ?? "")
+        }
       };
-    } catch (error) {
-      if (error instanceof AiFlowFailedError) {
-        throw error;
-      }
 
-      const message = toPersistableAiRunError(error);
-      await this.aiRepository.failRun(options.user_id, aiRun.id, message.slice(0, 2000));
+      const completed = await this.completeRunWithPayload(userId, run.id, resultPayload);
+      await this.billingService.recordTailoredCvGenerationUsage(userId);
+      return completed;
+    } catch (error) {
+      await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
+        ai_generation_status: "failed"
+      });
+      throw error;
+    }
+  }
+
+  private async executeRunFlow(options: RunFlowExecutionOptions): Promise<RunFlowExecutionResult> {
+    const definition = AI_FLOW_REGISTRY[options.flow_type];
+
+    await this.updateRunStage(options.user_id, options.ai_run_id, "building_prompt");
+    await this.updateRunStage(options.user_id, options.ai_run_id, "calling_model");
+
+    let providerResult;
+    try {
+      providerResult = await this.aiProvider.generate({
+        flow_type: options.flow_type,
+        model_name: options.prompt.model_name,
+        prompt: {
+          prompt_key: options.prompt.prompt_key,
+          prompt_version: options.prompt.prompt_version,
+          system_prompt: options.prompt.system_prompt,
+          user_prompt: options.prompt.user_prompt
+        },
+        output_schema: definition.output_schema,
+        input_payload: options.input_payload,
+        onStage: async () => {
+          await this.updateRunStage(options.user_id, options.ai_run_id, "parsing_output");
+        }
+      });
+    } catch (error) {
+      await this.failRunWithDiagnostics(options.user_id, options.ai_run_id, error);
 
       if (error instanceof AiProviderError) {
         throw error;
@@ -827,6 +1207,262 @@ export class AiService {
 
       throw new AiFlowFailedError("AI flow execution failed", { flow_type: options.flow_type });
     }
+
+    await this.updateRunStage(options.user_id, options.ai_run_id, "validating_output");
+    const parsed = definition.output_schema.safeParse(providerResult.output_payload);
+    if (!parsed.success) {
+      const validationDetails = parsed.error.issues.slice(0, 20).map((issue) => ({
+        path: issue.path.join(".") || "root",
+        message: issue.message
+      }));
+      const validationMessage = `Structured output validation failed: ${validationDetails
+        .map((issue) => `${issue.path}: ${issue.message}`)
+        .join("; ")}`;
+
+      await this.aiRepository.failRun(options.user_id, options.ai_run_id, validationMessage.slice(0, 2000), {
+        error_name: "AiFlowFailedError",
+        reason: "Output contract validation failed",
+        stage: "validating_output",
+        validation_errors: validationDetails
+      });
+
+      throw new AiFlowFailedError("AI output did not match required contract", {
+        flow_type: options.flow_type,
+        validation_errors: validationDetails
+      });
+    }
+
+    const serializedOutput = z.record(z.unknown()).parse(parsed.data);
+    return {
+      output_payload: serializedOutput,
+      provider: providerResult.provider,
+      model_name: providerResult.model_name
+    };
+  }
+
+  private async resolvePromptForFlow(options: {
+    flow_type: AiFlowType;
+    action_type: AiSuggestionActionType | null;
+    user_prompt: string;
+  }): Promise<ResolvedPromptSnapshot> {
+    const definition = AI_FLOW_REGISTRY[options.flow_type];
+    const modelName = this.aiProvider.resolveModelName(options.flow_type);
+    const resolvedPrompt = await this.promptResolver.resolve({
+      flow_type: options.flow_type,
+      provider: this.aiProvider.providerName,
+      action_type: options.action_type,
+      fallback: {
+        prompt_key: definition.prompt_key,
+        prompt_version: definition.prompt_version,
+        system_prompt: definition.system_prompt,
+        model_name: modelName
+      }
+    });
+
+    return {
+      prompt_key: resolvedPrompt.prompt_key,
+      prompt_version: resolvedPrompt.prompt_version,
+      system_prompt: resolvedPrompt.system_prompt,
+      user_prompt: resolvedPrompt.user_prompt_template?.trim() || options.user_prompt,
+      model_name: modelName
+    };
+  }
+
+  private async resolveStoredRunPrompt(
+    run: AiRunRecord,
+    input: TailoringRunInputPayload
+  ): Promise<ResolvedPromptSnapshot> {
+    const promptPayload = asRecord(asRecord(run.input_payload).prompt);
+    const promptKey =
+      typeof promptPayload.prompt_key === "string" ? promptPayload.prompt_key.trim() : "";
+    const promptVersion =
+      typeof promptPayload.prompt_version === "string" ? promptPayload.prompt_version.trim() : "";
+    const systemPrompt =
+      typeof promptPayload.system_prompt === "string" ? promptPayload.system_prompt : "";
+    const userPrompt = typeof promptPayload.user_prompt === "string" ? promptPayload.user_prompt : "";
+    const modelName = typeof promptPayload.model_name === "string" ? promptPayload.model_name : "";
+
+    if (promptKey && promptVersion && systemPrompt && userPrompt && modelName) {
+      return {
+        prompt_key: promptKey,
+        prompt_version: promptVersion,
+        system_prompt: systemPrompt,
+        user_prompt: userPrompt,
+        model_name: modelName
+      };
+    }
+
+    return this.resolvePromptForFlow({
+      flow_type: run.flow_type,
+      action_type: null,
+      user_prompt: this.buildTailoringUserPrompt(run.flow_type as TailoringRunFlowType, input)
+    });
+  }
+
+  private async completeRunWithPayload(
+    userId: string,
+    runId: string,
+    outputPayload: Record<string, unknown>
+  ): Promise<AiRunRecord> {
+    await this.updateRunStage(userId, runId, "persisting_result");
+    const completed = await this.aiRepository.completeRun(userId, runId, outputPayload);
+    if (!completed) {
+      throw new NotFoundError("AI run was not found after completion");
+    }
+
+    return completed;
+  }
+
+  private async failRunWithDiagnostics(
+    userId: string,
+    runId: string,
+    error: unknown
+  ): Promise<void> {
+    const message = toPersistableAiRunError(error).slice(0, 2000);
+    const debugPayload = toPersistableAiRunDebugPayload(error);
+    await this.aiRepository.failRun(userId, runId, message, debugPayload);
+  }
+
+  private async updateRunStage(
+    userId: string,
+    runId: string,
+    progressStage: AiRunProgressStage
+  ): Promise<void> {
+    await this.aiRepository.updateRunProgressStage(userId, runId, progressStage);
+  }
+
+  private parseTailoringRunInput(
+    flowType: TailoringRunFlowType,
+    payload: unknown
+  ): TailoringRunInputPayload {
+    if (flowType === "job_analysis") {
+      const parsed = aiJobAnalysisSchema.safeParse(payload);
+      if (parsed.success) {
+        return parsed.data;
+      }
+      throw new InternalServerError("Stored job analysis input is invalid", {
+        flow_type: flowType,
+        issues: parsed.error.issues
+      });
+    }
+
+    if (flowType === "follow_up_questions") {
+      const parsed = aiFollowUpQuestionsSchema.safeParse(payload);
+      if (parsed.success) {
+        return parsed.data;
+      }
+      throw new InternalServerError("Stored follow-up input is invalid", {
+        flow_type: flowType,
+        issues: parsed.error.issues
+      });
+    }
+
+    const parsed = aiTailoredDraftSchema.safeParse(payload);
+    if (parsed.success) {
+      return parsed.data;
+    }
+    throw new InternalServerError("Stored tailored draft input is invalid", {
+      flow_type: flowType,
+      issues: parsed.error.issues
+    });
+  }
+
+  private readRunFlowInput(run: AiRunRecord): Record<string, unknown> {
+    const payload = asRecord(run.input_payload);
+    const flowInput = asRecord(payload.flow_input);
+    if (Object.keys(flowInput).length === 0) {
+      throw new InternalServerError("AI run is missing flow input payload", {
+        ai_run_id: run.id,
+        flow_type: run.flow_type
+      });
+    }
+    return flowInput;
+  }
+
+  private extractRunTargetContext(input: TailoringRunInputPayload): {
+    master_cv_id: string | null;
+    tailored_cv_id: string | null;
+    job_id: string | null;
+  } {
+    if ("master_cv_id" in input) {
+      return {
+        master_cv_id: input.master_cv_id,
+        tailored_cv_id: "tailored_cv_id" in input ? input.tailored_cv_id ?? null : null,
+        job_id: null
+      };
+    }
+
+    return {
+      master_cv_id: null,
+      tailored_cv_id: null,
+      job_id: null
+    };
+  }
+
+  private async assertTailoringRunInput(
+    userId: string,
+    flowType: TailoringRunFlowType,
+    payload: TailoringRunInputPayload
+  ): Promise<{ validated_template_id?: string | null }> {
+    if (flowType === "job_analysis") {
+      await this.requireMasterCv(userId, (payload as JobAnalysisInput).master_cv_id);
+      return {};
+    }
+
+    if (flowType === "follow_up_questions") {
+      await this.requireMasterCv(userId, (payload as FollowUpQuestionsInput).master_cv_id);
+      return {};
+    }
+
+    const draftInput = payload as TailoredCvDraftInput;
+    await this.billingService.assertActionAllowed(userId, "tailored_cv_generation");
+    await this.requireMasterCv(userId, draftInput.master_cv_id);
+
+    if (draftInput.template_id !== undefined) {
+      const validatedTemplateId = await this.templatesService.validateAssignableTemplateId(
+        draftInput.template_id
+      );
+      return {
+        validated_template_id: validatedTemplateId
+      };
+    }
+
+    return {};
+  }
+
+  private buildTailoringUserPrompt(
+    flowType: TailoringRunFlowType,
+    payload: TailoringRunInputPayload
+  ): string {
+    if (flowType === "job_analysis") {
+      const input = payload as JobAnalysisInput;
+      return `Analyze role fit for ${input.job.job_title} at ${input.job.company_name}.`;
+    }
+
+    if (flowType === "follow_up_questions") {
+      const input = payload as FollowUpQuestionsInput;
+      return `Generate follow-up questions for ${input.job.job_title} at ${input.job.company_name}.`;
+    }
+
+    const input = payload as TailoredCvDraftInput;
+    return `Generate a tailored draft for ${input.job.job_title} at ${input.job.company_name}.`;
+  }
+
+  private async requireTailoringRun(userId: string, aiRunId: string): Promise<AiRunRecord> {
+    const run = await this.aiRepository.findRunById(userId, aiRunId);
+    if (!run || !TAILORING_FLOW_TYPES.includes(run.flow_type as TailoringRunFlowType)) {
+      throw new NotFoundError("Tailoring AI run was not found");
+    }
+    return run;
+  }
+
+  private toTailoringRunExecuteResponse(run: AiRunRecord): TailoringRunExecuteResponse {
+    return {
+      ai_run_id: run.id,
+      flow_type: run.flow_type as TailoringRunFlowType,
+      status: run.status,
+      progress_stage: run.progress_stage
+    };
   }
 
   private async resolveAiBlockTarget(
@@ -1156,7 +1792,9 @@ export class AiService {
       provider: row.provider,
       model_name: row.model_name,
       status: row.status,
+      progress_stage: row.progress_stage,
       error_message: row.error_message,
+      debug_payload: row.debug_payload,
       started_at: row.started_at,
       completed_at: row.completed_at
     };

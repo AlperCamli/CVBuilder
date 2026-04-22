@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type {
   AiFlowType,
+  AiRunProgressStage,
   AiRunRecord,
   AiRunStatus,
   AiSuggestionActionType,
@@ -17,7 +18,14 @@ export interface CreateAiRunPayload {
   master_cv_id?: string | null;
   tailored_cv_id?: string | null;
   job_id?: string | null;
+  progress_stage?: AiRunProgressStage;
   input_payload: Record<string, unknown>;
+}
+
+export interface UpdateAiRunContextPayload {
+  master_cv_id?: string | null;
+  tailored_cv_id?: string | null;
+  job_id?: string | null;
 }
 
 export interface CreateAiSuggestionPayload {
@@ -44,7 +52,23 @@ export interface AiRepository {
     runId: string,
     outputPayload: Record<string, unknown>
   ): Promise<AiRunRecord | null>;
-  failRun(userId: string, runId: string, errorMessage: string): Promise<AiRunRecord | null>;
+  failRun(
+    userId: string,
+    runId: string,
+    errorMessage: string,
+    debugPayload?: Record<string, unknown> | null
+  ): Promise<AiRunRecord | null>;
+  findRunById(userId: string, runId: string): Promise<AiRunRecord | null>;
+  updateRunProgressStage(
+    userId: string,
+    runId: string,
+    progressStage: AiRunProgressStage
+  ): Promise<AiRunRecord | null>;
+  updateRunContext(
+    userId: string,
+    runId: string,
+    payload: UpdateAiRunContextPayload
+  ): Promise<AiRunRecord | null>;
   createSuggestions(payloads: CreateAiSuggestionPayload[]): Promise<AiSuggestionRecord[]>;
   findSuggestionById(userId: string, suggestionId: string): Promise<AiSuggestionRecord | null>;
   updateSuggestionById(
@@ -76,9 +100,11 @@ const toAiRunRecord = (row: Record<string, unknown>): AiRunRecord => {
     provider: String(row.provider),
     model_name: String(row.model_name),
     status: row.status as AiRunStatus,
+    progress_stage: row.progress_stage as AiRunProgressStage,
     input_payload: (row.input_payload as Record<string, unknown>) ?? {},
     output_payload: (row.output_payload as Record<string, unknown> | null) ?? null,
     error_message: (row.error_message as string | null) ?? null,
+    debug_payload: (row.debug_payload as Record<string, unknown> | null) ?? null,
     started_at: String(row.started_at),
     completed_at: (row.completed_at as string | null) ?? null
   };
@@ -114,12 +140,14 @@ export class SupabaseAiRepository implements AiRepository {
         provider: payload.provider,
         model_name: payload.model_name,
         status: "pending",
+        progress_stage: payload.progress_stage ?? "queued",
         master_cv_id: payload.master_cv_id ?? null,
         tailored_cv_id: payload.tailored_cv_id ?? null,
         job_id: payload.job_id ?? null,
         input_payload: payload.input_payload,
         output_payload: null,
         error_message: null,
+        debug_payload: null,
         started_at: new Date().toISOString(),
         completed_at: null
       })
@@ -144,8 +172,10 @@ export class SupabaseAiRepository implements AiRepository {
       .from("ai_runs")
       .update({
         status: "completed",
+        progress_stage: "completed",
         output_payload: outputPayload,
         error_message: null,
+        debug_payload: null,
         completed_at: new Date().toISOString()
       })
       .eq("id", runId)
@@ -166,12 +196,19 @@ export class SupabaseAiRepository implements AiRepository {
     return toAiRunRecord(data as Record<string, unknown>);
   }
 
-  async failRun(userId: string, runId: string, errorMessage: string): Promise<AiRunRecord | null> {
+  async failRun(
+    userId: string,
+    runId: string,
+    errorMessage: string,
+    debugPayload?: Record<string, unknown> | null
+  ): Promise<AiRunRecord | null> {
     const { data, error } = await this.supabaseClient
       .from("ai_runs")
       .update({
         status: "failed",
+        progress_stage: "failed",
         error_message: errorMessage,
+        debug_payload: debugPayload ?? null,
         completed_at: new Date().toISOString()
       })
       .eq("id", runId)
@@ -181,6 +218,98 @@ export class SupabaseAiRepository implements AiRepository {
 
     if (error) {
       throw new InternalServerError("Failed to fail AI run", {
+        reason: error.message
+      });
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return toAiRunRecord(data as Record<string, unknown>);
+  }
+
+  async findRunById(userId: string, runId: string): Promise<AiRunRecord | null> {
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .select("*")
+      .eq("id", runId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to load AI run", {
+        reason: error.message
+      });
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return toAiRunRecord(data as Record<string, unknown>);
+  }
+
+  async updateRunProgressStage(
+    userId: string,
+    runId: string,
+    progressStage: AiRunProgressStage
+  ): Promise<AiRunRecord | null> {
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .update({
+        progress_stage: progressStage
+      })
+      .eq("id", runId)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to update AI run progress stage", {
+        reason: error.message
+      });
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return toAiRunRecord(data as Record<string, unknown>);
+  }
+
+  async updateRunContext(
+    userId: string,
+    runId: string,
+    payload: UpdateAiRunContextPayload
+  ): Promise<AiRunRecord | null> {
+    const updatePayload: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(payload, "master_cv_id")) {
+      updatePayload.master_cv_id = payload.master_cv_id ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, "tailored_cv_id")) {
+      updatePayload.tailored_cv_id = payload.tailored_cv_id ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, "job_id")) {
+      updatePayload.job_id = payload.job_id ?? null;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return this.findRunById(userId, runId);
+    }
+
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .update(updatePayload)
+      .eq("id", runId)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to update AI run context", {
         reason: error.message
       });
     }

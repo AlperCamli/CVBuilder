@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { InternalServerError } from "../src/shared/errors/app-error";
 import type { AiPromptConfigRecord, AiPromptConfigRepository } from "../src/modules/ai/prompts/prompt-config.repository";
 import { AiPromptResolver } from "../src/modules/ai/prompts/prompt-resolver";
 
@@ -80,6 +81,24 @@ describe("AiPromptResolver", () => {
       model_name: "fallback-model",
       user_prompt_template: null
     });
+  });
+
+  it("fails without fallback when active prompt row is missing", async () => {
+    const repository = new InMemoryPromptConfigRepository([]);
+    const resolver = new AiPromptResolver(repository, "phase3-v1", 60_000, false);
+
+    await expect(
+      resolver.resolve({
+        flow_type: "job_analysis",
+        provider: "gemini",
+        fallback: {
+          prompt_key: "fallback-key",
+          prompt_version: "fallback-v1",
+          system_prompt: "fallback-system",
+          model_name: "fallback-model"
+        }
+      })
+    ).rejects.toBeInstanceOf(InternalServerError);
   });
 
   it("prefers provider-specific prompt over provider=any", async () => {

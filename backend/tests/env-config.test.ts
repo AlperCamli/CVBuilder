@@ -31,7 +31,9 @@ describe("environment config", () => {
     expect(config.port).toBe(4100);
     expect(config.ai.provider).toBe("mock");
     expect(config.ai.defaultModel).toBe("mock-cv-builder-v1");
-    expect(config.ai.geminiMaxAttempts).toBe(4);
+    expect(config.ai.geminiModelLight).toBe("gemini-3-flash");
+    expect(config.ai.geminiModelHeavy).toBe("gemini-2.5-flash");
+    expect(config.ai.geminiMaxAttempts).toBe(1);
     expect(config.ai.geminiRetryBaseDelayMs).toBe(1000);
     expect(config.ai.geminiRetryMaxDelayMs).toBe(16000);
     expect(config.exports.storageBucket).toBe("exports");
@@ -109,6 +111,8 @@ describe("environment config", () => {
       FRONTEND_APP_URL: "http://localhost:5173",
       AI_PROVIDER: "gemini",
       GEMINI_API_KEY: "gemini-key",
+      AI_GEMINI_MODEL_LIGHT: "gemini-3-flash",
+      AI_GEMINI_MODEL_HEAVY: "gemini-2.5-flash",
       AI_GEMINI_MAX_ATTEMPTS: "5",
       AI_GEMINI_RETRY_BASE_DELAY_MS: "1500",
       AI_GEMINI_RETRY_MAX_DELAY_MS: "30000",
@@ -119,6 +123,8 @@ describe("environment config", () => {
 
     expect(config.ai.provider).toBe("gemini");
     expect(config.ai.geminiApiKey).toBe("gemini-key");
+    expect(config.ai.geminiModelLight).toBe("gemini-3-flash");
+    expect(config.ai.geminiModelHeavy).toBe("gemini-2.5-flash");
     expect(config.ai.geminiMaxAttempts).toBe(5);
     expect(config.ai.geminiRetryBaseDelayMs).toBe(1500);
     expect(config.ai.geminiRetryMaxDelayMs).toBe(30000);

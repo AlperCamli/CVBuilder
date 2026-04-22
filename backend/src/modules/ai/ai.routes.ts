@@ -3,12 +3,14 @@ import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { AiController } from "./ai.controller";
 import {
+  aiRunIdParamsSchema,
   aiBlockCompareSchema,
   aiImportImproveSchema,
   aiBlockOptionsSchema,
   aiBlockSuggestSchema,
   aiFollowUpQuestionsSchema,
   aiJobAnalysisSchema,
+  aiTailoringRunStartSchema,
   aiTailoredDraftSchema,
   masterCvAiHistoryParamsSchema,
   suggestionIdParamsSchema,
@@ -20,6 +22,34 @@ export const createAiRouter = (
   authMiddleware: RequestHandler
 ): Router => {
   const router = Router();
+
+  router.post(
+    "/ai/tailoring-runs/start",
+    authMiddleware,
+    validate({ body: aiTailoringRunStartSchema }),
+    aiController.postTailoringRunStart
+  );
+
+  router.post(
+    "/ai/tailoring-runs/:aiRunId/execute",
+    authMiddleware,
+    validate({ params: aiRunIdParamsSchema }),
+    aiController.postTailoringRunExecute
+  );
+
+  router.get(
+    "/ai/tailoring-runs/:aiRunId/status",
+    authMiddleware,
+    validate({ params: aiRunIdParamsSchema }),
+    aiController.getTailoringRunStatus
+  );
+
+  router.get(
+    "/ai/tailoring-runs/:aiRunId/result",
+    authMiddleware,
+    validate({ params: aiRunIdParamsSchema }),
+    aiController.getTailoringRunResult
+  );
 
   router.post(
     "/ai/job-analysis",

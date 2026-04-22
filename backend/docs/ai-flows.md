@@ -31,14 +31,20 @@ Runtime selection:
 Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
-- Gemini provider retries transient upstream errors (`429`, `503`, similar) with exponential backoff + full jitter before marking run as failed
-- Gemini `google.rpc.RetryInfo` hints are honored when present to avoid retrying too aggressively
+- Gemini runs with single-attempt execution in runtime (`maxAttempts=1`)
+- non-JSON responses get one controlled JSON recovery pass (extract + repair) before failing
 - hard quota-exceeded `429 RESOURCE_EXHAUSTED` errors are treated as non-retryable
 
 Retry tuning env vars:
-- `AI_GEMINI_MAX_ATTEMPTS` (default `4`)
+- `AI_GEMINI_MAX_ATTEMPTS` (default `1`)
 - `AI_GEMINI_RETRY_BASE_DELAY_MS` (default `1000`)
 - `AI_GEMINI_RETRY_MAX_DELAY_MS` (default `16000`)
+- `AI_GEMINI_MODEL_LIGHT` (default `gemini-3-flash`)
+- `AI_GEMINI_MODEL_HEAVY` (default `gemini-2.5-flash`)
+
+Static model tier routing:
+- Heavy: `tailored_draft`, `import_improve`, `multi_option`
+- Light: `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`
 
 ## Prompt Management
 
@@ -52,7 +58,8 @@ Resolution:
 - in-memory TTL cache avoids per-request DB roundtrips
 
 Fallback path:
-- if no DB row is found, registry defaults are used
+- non-production: if no DB row is found, registry defaults are used
+- production: missing prompt rows fail resolution and startup coverage check fails boot
 
 Prompt metadata persisted in `ai_runs.input_payload.prompt`:
 - `prompt_key`
@@ -89,16 +96,28 @@ Key outputs:
 ## Orchestration Lifecycle
 
 `AiService.executeFlow(...)`:
-1. resolve prompt/model using resolver + profile
-2. create `ai_runs` row (`status=pending`) with flow input + prompt metadata
-3. call provider with flow/input/prompt/schema
-4. validate provider output against flow Zod schema
+1. resolve prompt using resolver + profile and deterministic tier model
+2. create `ai_runs` row (`status=pending`, `progress_stage=queued`) with flow input + prompt metadata
+3. update stages through lifecycle:
+   - `building_prompt`
+   - `calling_model`
+   - `parsing_output`
+   - `validating_output`
+   - `persisting_result`
+4. validate provider output against strict flow Zod schema
 5. on success:
-   - persist `output_payload`
-   - set `status=completed`
+   - persist structured `output_payload`
+   - set `status=completed`, `progress_stage=completed`
 6. on failure:
-   - persist `status=failed` + `error_message`
+   - persist `status=failed`, `progress_stage=failed`, `error_message`
+   - persist sanitized debug metadata in `debug_payload` (including raw-output excerpt only on parse/provider failures)
    - throw normalized AI error
+
+Tailoring lifecycle endpoints (polling):
+- `POST /ai/tailoring-runs/start`
+- `POST /ai/tailoring-runs/:aiRunId/execute`
+- `GET /ai/tailoring-runs/:aiRunId/status`
+- `GET /ai/tailoring-runs/:aiRunId/result`
 
 ## Suggestion and Apply Model (Master + Tailored)
 
@@ -194,6 +213,7 @@ order by flow_type, action_type nulls first;
 ```
 
 If this returns zero rows, runtime falls back to `flow-registry.ts` defaults.
+In production, missing required rows for the active profile/provider fails boot.
 
 Apply migrations and seed prompts to linked environment:
 

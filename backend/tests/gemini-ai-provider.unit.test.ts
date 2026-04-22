@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "../src/shared/errors/app-error";
 import { followUpQuestionsOutputSchema } from "../src/modules/ai/flows/flow-contracts";
+import { createAiProvider } from "../src/modules/ai/provider/create-ai-provider";
+import type { AppConfig } from "../src/shared/config/env";
 
 const { generateContentMock } = vi.hoisted(() => ({
   generateContentMock: vi.fn()
@@ -145,6 +147,57 @@ describe("GeminiAiProvider", () => {
         unknown
       >).additionalProperties
     ).toBe(false);
+  });
+
+  it("recovers JSON payload from non-JSON wrapper text using one repair pass", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+
+    generateContentMock.mockResolvedValue({
+      text: "Here is the result: {\"questions\": [],}"
+    });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits parsing_output stage callback before JSON parsing", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+    const onStage = vi.fn();
+
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        questions: []
+      })
+    });
+
+    await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {},
+      onStage
+    });
+
+    expect(onStage).toHaveBeenCalledWith("parsing_output");
   });
 
   it("maps provider status and reason into AiProviderError details", async () => {
@@ -413,6 +466,81 @@ describe("GeminiAiProvider", () => {
           "generativelanguage.googleapis.com/generate_content_free_tier_requests"
       })
     );
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("enforces single-attempt behavior through createAiProvider runtime guard", async () => {
+    const config: AppConfig = {
+      appName: "cv-builder-backend",
+      appEnv: "test",
+      appVersion: "0.1.0-test",
+      port: 4000,
+      logLevel: "silent",
+      frontendAppUrl: "http://localhost:5173",
+      ai: {
+        provider: "gemini",
+        defaultModel: "gemini-3-flash-preview",
+        promptProfile: "phase3-v1",
+        geminiApiKey: "gemini-key",
+        geminiModelLight: "gemini-3-flash",
+        geminiModelHeavy: "gemini-2.5-flash",
+        geminiMaxAttempts: 5,
+        geminiRetryBaseDelayMs: 1000,
+        geminiRetryMaxDelayMs: 16000
+      },
+      exports: {
+        storageBucket: "exports",
+        downloadUrlTtlSeconds: 600
+      },
+      billing: {
+        provider: "stripe",
+        stripeSecretKey: null,
+        stripeWebhookSecret: null,
+        stripeProPriceId: null,
+        checkoutSuccessUrl: "http://localhost:5173/app/pricing?checkout=success",
+        checkoutCancelUrl: "http://localhost:5173/app/pricing?checkout=cancel",
+        portalReturnUrl: "http://localhost:5173/app/pricing"
+      },
+      supabase: {
+        url: "https://example.supabase.co",
+        anonKey: "anon",
+        serviceRoleKey: "service"
+      }
+    };
+
+    const provider = createAiProvider(config);
+
+    const transientError = new Error(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "Service unavailable",
+          status: "UNAVAILABLE"
+        }
+      })
+    ) as Error & {
+      status: number;
+      name: string;
+    };
+    transientError.status = 503;
+    transientError.name = "ApiError";
+    generateContentMock.mockRejectedValue(transientError);
+
+    await expect(
+      provider.generate({
+        flow_type: "follow_up_questions",
+        model_name: "gemini-3-flash-preview",
+        prompt: {
+          prompt_key: "follow-up-questions",
+          prompt_version: "phase5-v1",
+          system_prompt: "Generate follow-up questions",
+          user_prompt: "Generate follow-up questions now"
+        },
+        output_schema: followUpQuestionsOutputSchema,
+        input_payload: {}
+      })
+    ).rejects.toBeInstanceOf(AiProviderError);
+
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 });

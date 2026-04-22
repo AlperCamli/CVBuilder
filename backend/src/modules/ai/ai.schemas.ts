@@ -122,6 +122,42 @@ export const aiImportImproveSchema = z
   })
   .strict();
 
+const tailoringRunFlowTypeSchema = z.enum([
+  "job_analysis",
+  "follow_up_questions",
+  "tailored_draft"
+]);
+
+export const aiTailoringRunStartSchema = z
+  .object({
+    flow_type: tailoringRunFlowTypeSchema,
+    input: z.record(z.unknown())
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const parseInput =
+      value.flow_type === "job_analysis"
+        ? aiJobAnalysisSchema.safeParse(value.input)
+        : value.flow_type === "follow_up_questions"
+          ? aiFollowUpQuestionsSchema.safeParse(value.input)
+          : aiTailoredDraftSchema.safeParse(value.input);
+
+    if (!parseInput.success) {
+      for (const issue of parseInput.error.issues) {
+        context.addIssue({
+          ...issue,
+          path: ["input", ...issue.path]
+        });
+      }
+    }
+  });
+
+export const aiRunIdParamsSchema = z
+  .object({
+    aiRunId: uuidSchema
+  })
+  .strict();
+
 export const suggestionIdParamsSchema = z
   .object({
     suggestionId: uuidSchema

@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
-import type { JobAnalysisResult, FollowUpQuestion } from "../integration/api-types";
+import type {
+  JobAnalysisResult,
+  FollowUpQuestion,
+  TailoringRunFlowType,
+  TailoringRunStatusResponse
+} from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
 
 interface TailorCvLocationState {
@@ -17,6 +22,7 @@ interface TailorCvLocationState {
 }
 
 const RETRY_DELAY_MS = [800, 1800];
+const POLL_INTERVAL_MS = 750;
 
 const sleep = async (ms: number): Promise<void> => {
   await new Promise((resolve) => {
@@ -70,6 +76,79 @@ const withTransientRetry = async <T,>(
   throw lastError ?? new Error("Request failed");
 };
 
+const toFlowLabel = (flowType: TailoringRunFlowType): string => {
+  if (flowType === "job_analysis") {
+    return "Job analysis";
+  }
+  if (flowType === "follow_up_questions") {
+    return "Follow-up questions";
+  }
+  return "Tailored draft";
+};
+
+const toStageLabel = (
+  flowType: TailoringRunFlowType,
+  stage: TailoringRunStatusResponse["progress_stage"]
+): string => {
+  const flowLabel = toFlowLabel(flowType);
+
+  if (stage === "queued") {
+    return `${flowLabel}: queued`;
+  }
+  if (stage === "building_prompt") {
+    return `${flowLabel}: preparing prompt`;
+  }
+  if (stage === "calling_model") {
+    return `${flowLabel}: calling AI model`;
+  }
+  if (stage === "parsing_output") {
+    return `${flowLabel}: parsing response`;
+  }
+  if (stage === "validating_output") {
+    return `${flowLabel}: validating output`;
+  }
+  if (stage === "persisting_result") {
+    return `${flowLabel}: saving results`;
+  }
+  if (stage === "completed") {
+    return `${flowLabel}: completed`;
+  }
+  return `${flowLabel}: failed`;
+};
+
+const toRunErrorMessage = (status: TailoringRunStatusResponse): string => {
+  const raw = status.error_message?.trim();
+  const normalized = raw?.toLowerCase() ?? "";
+
+  if (
+    normalized.includes("provider_status=429") ||
+    normalized.includes("resource_exhausted")
+  ) {
+    return "AI rate limit reached. Wait a moment and try again.";
+  }
+
+  if (
+    normalized.includes("provider_status=503") ||
+    normalized.includes("provider_status=504") ||
+    normalized.includes("unavailable")
+  ) {
+    return "AI service is temporarily unavailable. Please retry shortly.";
+  }
+
+  if (
+    normalized.includes("structured output validation failed") ||
+    normalized.includes("required contract")
+  ) {
+    return "AI returned an invalid structured response. Please retry.";
+  }
+
+  if (raw) {
+    return raw;
+  }
+
+  return "Tailoring AI request failed.";
+};
+
 export function TailorCV() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -91,6 +170,7 @@ export function TailorCV() {
   const [loadingMaster, setLoadingMaster] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +238,51 @@ export function TailorCV() {
     }));
   }, [prefillJob]);
 
+  const runTailoringFlow = async <TResult extends Record<string, unknown>>(
+    flowType: TailoringRunFlowType,
+    input: Record<string, unknown>
+  ): Promise<{ ai_run_id: string; result: TResult }> => {
+    const started = await withTransientRetry(
+      () =>
+        api.startTailoringRun({
+          flow_type: flowType,
+          input
+        }),
+      3
+    );
+
+    setProgressMessage(toStageLabel(flowType, started.progress_stage));
+
+    const executePromise = api.executeTailoringRun(started.ai_run_id).catch((executeError) => executeError);
+
+    let status = await withTransientRetry(
+      () => api.getTailoringRunStatus(started.ai_run_id),
+      3
+    );
+    setProgressMessage(toStageLabel(flowType, status.progress_stage));
+
+    while (status.status === "pending") {
+      await sleep(POLL_INTERVAL_MS);
+      status = await withTransientRetry(() => api.getTailoringRunStatus(started.ai_run_id), 3);
+      setProgressMessage(toStageLabel(flowType, status.progress_stage));
+    }
+
+    const executeOutcome = await executePromise;
+    if (executeOutcome instanceof Error && status.status !== "completed") {
+      throw executeOutcome;
+    }
+
+    if (status.status !== "completed") {
+      throw new Error(toRunErrorMessage(status));
+    }
+
+    const result = await withTransientRetry(() => api.getTailoringRunResult(started.ai_run_id), 3);
+    return {
+      ai_run_id: started.ai_run_id,
+      result: result.result as TResult
+    };
+  };
+
   const handleSubmit = async () => {
     if (!masterCvId) {
       return;
@@ -165,6 +290,7 @@ export function TailorCV() {
 
     setSubmitting(true);
     setError(null);
+    setProgressMessage(null);
 
     try {
       const job = {
@@ -173,24 +299,30 @@ export function TailorCV() {
         job_description: formData.jobDescription
       };
 
-      const analysis = await withTransientRetry(
-        () =>
-          api.postJobAnalysis({
-            master_cv_id: masterCvId,
-            job
-          }),
-        3
+      const analysisRun = await runTailoringFlow<Omit<JobAnalysisResult, "ai_run_id">>(
+        "job_analysis",
+        {
+          master_cv_id: masterCvId,
+          job
+        }
       );
+      const analysis: JobAnalysisResult = {
+        ai_run_id: analysisRun.ai_run_id,
+        ...(analysisRun.result as Omit<JobAnalysisResult, "ai_run_id">)
+      };
 
-      const followUp = await withTransientRetry(
-        () =>
-          api.postFollowUpQuestions({
-            master_cv_id: masterCvId,
-            job,
-            prior_analysis: analysis
-          }),
-        3
+      const followUpRun = await runTailoringFlow<{ questions: FollowUpQuestion[] }>(
+        "follow_up_questions",
+        {
+          master_cv_id: masterCvId,
+          job,
+          prior_analysis: analysis
+        }
       );
+      const followUp = {
+        ai_run_id: followUpRun.ai_run_id,
+        questions: followUpRun.result.questions
+      };
 
       navigate(`/app/tailoring-flow/${masterCvId}`, {
         state: {
@@ -204,8 +336,8 @@ export function TailorCV() {
             locationText: formData.locationText,
             notes: formData.notes
           },
-          analysis: analysis as JobAnalysisResult,
-          followUpQuestions: followUp.questions as FollowUpQuestion[]
+          analysis,
+          followUpQuestions: followUp.questions
         }
       });
     } catch (err) {
@@ -215,6 +347,7 @@ export function TailorCV() {
         setError("Failed to analyze job description.");
       }
     } finally {
+      setProgressMessage(null);
       setSubmitting(false);
     }
   };
@@ -383,6 +516,11 @@ export function TailorCV() {
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
                 {submitting ? "Analyzing..." : "Analyze job & continue"}
               </button>
+              {submitting && progressMessage ? (
+                <p className="mt-3" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                  {progressMessage}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>

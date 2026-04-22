@@ -15,6 +15,35 @@ const requireSession = (request: Request) => {
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
+  postTailoringRunStart = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.startTailoringRun(requireSession(request), request.body);
+    sendSuccess(response, data);
+  });
+
+  postTailoringRunExecute = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.executeTailoringRun(
+      requireSession(request),
+      request.params.aiRunId
+    );
+    sendSuccess(response, data);
+  });
+
+  getTailoringRunStatus = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.getTailoringRunStatus(
+      requireSession(request),
+      request.params.aiRunId
+    );
+    sendSuccess(response, data);
+  });
+
+  getTailoringRunResult = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.getTailoringRunResult(
+      requireSession(request),
+      request.params.aiRunId
+    );
+    sendSuccess(response, data);
+  });
+
   postJobAnalysis = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.aiService.analyzeJob(requireSession(request), request.body);
     sendSuccess(response, data);

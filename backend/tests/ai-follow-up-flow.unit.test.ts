@@ -66,9 +66,11 @@ const pendingRun: AiRunRecord = {
   provider: "gemini",
   model_name: "gemini-3-flash-preview",
   status: "pending",
+  progress_stage: "queued",
   input_payload: {},
   output_payload: null,
   error_message: null,
+  debug_payload: null,
   started_at: NOW,
   completed_at: null
 };
@@ -76,6 +78,7 @@ const pendingRun: AiRunRecord = {
 const completedRun: AiRunRecord = {
   ...pendingRun,
   status: "completed",
+  progress_stage: "completed",
   output_payload: {
     questions: []
   },
@@ -94,6 +97,8 @@ describe("AiService follow_up_questions flow", () => {
   const createRun = vi.fn();
   const completeRun = vi.fn();
   const failRun = vi.fn();
+  const updateRunProgressStage = vi.fn();
+  const updateRunContext = vi.fn();
   const findMasterCvById = vi.fn();
   const providerGenerate = vi.fn();
   const resolvePrompt = vi.fn();
@@ -102,7 +107,9 @@ describe("AiService follow_up_questions flow", () => {
     const aiRepository = {
       createRun,
       completeRun,
-      failRun
+      failRun,
+      updateRunProgressStage,
+      updateRunContext
     } as unknown as AiRepository;
 
     const aiProvider = {
@@ -136,6 +143,8 @@ describe("AiService follow_up_questions flow", () => {
     createRun.mockReset();
     completeRun.mockReset();
     failRun.mockReset();
+    updateRunProgressStage.mockReset();
+    updateRunContext.mockReset();
     findMasterCvById.mockReset();
     providerGenerate.mockReset();
     resolvePrompt.mockReset();
@@ -143,6 +152,8 @@ describe("AiService follow_up_questions flow", () => {
     findMasterCvById.mockResolvedValue(masterCv);
     createRun.mockResolvedValue(pendingRun);
     completeRun.mockResolvedValue(completedRun);
+    updateRunProgressStage.mockResolvedValue(pendingRun);
+    updateRunContext.mockResolvedValue(pendingRun);
     failRun.mockResolvedValue({
       ...pendingRun,
       status: "failed",

@@ -1,4 +1,5 @@
 import type { AiFlowType, AiSuggestionActionType } from "../../../shared/types/domain";
+import { InternalServerError } from "../../../shared/errors/app-error";
 import type { AiPromptConfigRepository } from "./prompt-config.repository";
 
 export interface PromptResolutionFallback {
@@ -36,7 +37,8 @@ export class AiPromptResolver {
   constructor(
     private readonly repository: AiPromptConfigRepository,
     private readonly profile: string,
-    private readonly ttlMs = 30_000
+    private readonly ttlMs = 30_000,
+    private readonly allowFallback = true
   ) {}
 
   async resolve(input: ResolveAiPromptInput): Promise<ResolvedAiPrompt> {
@@ -44,6 +46,14 @@ export class AiPromptResolver {
     const candidate = this.selectCandidate(rows, input);
 
     if (!candidate) {
+      if (!this.allowFallback) {
+        throw new InternalServerError("AI prompt profile is missing an active config", {
+          profile: this.profile,
+          flow_type: input.flow_type,
+          provider: input.provider
+        });
+      }
+
       return {
         prompt_key: input.fallback.prompt_key,
         prompt_version: input.fallback.prompt_version,

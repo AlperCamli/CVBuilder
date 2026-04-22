@@ -43,6 +43,10 @@ import type {
   SettingsResponseData,
   SuggestionApplyResponse,
   SuggestionRejectResponse,
+  TailoringRunExecuteResponse,
+  TailoringRunResultResponse,
+  TailoringRunStartResponse,
+  TailoringRunStatusResponse,
   TailoredCvAiHistoryResponse,
   TailoredCvDetail,
   TailoredCvPreviewResponse,
@@ -54,7 +58,8 @@ import type {
   UsageSummary,
   UpdateJobStatusResponse,
   EntitlementSummary,
-  CreatePortalResponseData
+  CreatePortalResponseData,
+  TailoringRunFlowType
 } from "./api-types";
 
 export interface UpdateMeInput {
@@ -202,6 +207,11 @@ export interface TailoredDraftInput {
     notes?: string | null;
   };
   answers: FollowUpAnswer[];
+}
+
+export interface TailoringRunStartInput {
+  flow_type: TailoringRunFlowType;
+  input: Record<string, unknown>;
 }
 
 export interface AiBlockTargetInput {
@@ -465,6 +475,25 @@ export class BackendApi {
 
   postJobAnalysis(payload: JobAnalysisInput): Promise<JobAnalysisResult> {
     return this.client.post<JobAnalysisResult, JobAnalysisInput>("/ai/job-analysis", payload);
+  }
+
+  startTailoringRun(payload: TailoringRunStartInput): Promise<TailoringRunStartResponse> {
+    return this.client.post<TailoringRunStartResponse, TailoringRunStartInput>(
+      "/ai/tailoring-runs/start",
+      payload
+    );
+  }
+
+  executeTailoringRun(aiRunId: string): Promise<TailoringRunExecuteResponse> {
+    return this.client.post<TailoringRunExecuteResponse>(`/ai/tailoring-runs/${aiRunId}/execute`);
+  }
+
+  getTailoringRunStatus(aiRunId: string): Promise<TailoringRunStatusResponse> {
+    return this.client.get<TailoringRunStatusResponse>(`/ai/tailoring-runs/${aiRunId}/status`);
+  }
+
+  getTailoringRunResult(aiRunId: string): Promise<TailoringRunResultResponse> {
+    return this.client.get<TailoringRunResultResponse>(`/ai/tailoring-runs/${aiRunId}/result`);
   }
 
   postFollowUpQuestions(payload: FollowUpQuestionsInput): Promise<FollowUpQuestionsResult> {

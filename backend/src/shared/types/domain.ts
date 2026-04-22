@@ -99,6 +99,16 @@ export type AiFlowType =
 
 export type AiRunStatus = "pending" | "completed" | "failed";
 
+export type AiRunProgressStage =
+  | "queued"
+  | "building_prompt"
+  | "calling_model"
+  | "parsing_output"
+  | "validating_output"
+  | "persisting_result"
+  | "completed"
+  | "failed";
+
 export interface AiRunRecord {
   id: string;
   user_id: string;
@@ -109,9 +119,11 @@ export interface AiRunRecord {
   provider: string;
   model_name: string;
   status: AiRunStatus;
+  progress_stage: AiRunProgressStage;
   input_payload: Record<string, unknown>;
   output_payload: Record<string, unknown> | null;
   error_message: string | null;
+  debug_payload: Record<string, unknown> | null;
   started_at: string;
   completed_at: string | null;
 }
