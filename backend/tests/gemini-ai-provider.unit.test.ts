@@ -13,7 +13,16 @@ vi.mock("@google/genai", () => ({
     models: {
       generateContent: generateContentMock
     }
-  }))
+  })),
+  HarmCategory: {
+    HARM_CATEGORY_HARASSMENT: "HARM_CATEGORY_HARASSMENT",
+    HARM_CATEGORY_HATE_SPEECH: "HARM_CATEGORY_HATE_SPEECH",
+    HARM_CATEGORY_SEXUALLY_EXPLICIT: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    HARM_CATEGORY_DANGEROUS_CONTENT: "HARM_CATEGORY_DANGEROUS_CONTENT"
+  },
+  HarmBlockThreshold: {
+    BLOCK_NONE: "BLOCK_NONE"
+  }
 }));
 
 import {
@@ -536,7 +545,12 @@ describe("GeminiAiProvider", () => {
         geminiModelHeavy: "gemini-2.5-flash",
         geminiMaxAttempts: 3,
         geminiRetryBaseDelayMs: 1000,
-        geminiRetryMaxDelayMs: 16000
+        geminiRetryMaxDelayMs: 16000,
+        geminiRequestTimeoutMs: 60000,
+        geminiMaxOutputTokensLight: 4096,
+        geminiMaxOutputTokensHeavy: 16384,
+        runStaleAfterMs: 300000,
+        runSweepIntervalMs: 60000
       },
       exports: {
         storageBucket: "exports",

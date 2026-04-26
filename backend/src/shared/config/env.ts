@@ -18,11 +18,16 @@ const envSchema = z
     AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
     AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
     GEMINI_API_KEY: z.string().min(1).optional(),
-    AI_GEMINI_MODEL_LIGHT: z.string().min(1).default("gemini-3-flash"),
-    AI_GEMINI_MODEL_HEAVY: z.string().min(1).default("gemini-2.5-flash"),
-    AI_GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(1),
+    AI_GEMINI_MODEL_LIGHT: z.string().min(1).default("gemini-2.5-flash-preview"),
+    AI_GEMINI_MODEL_HEAVY: z.string().min(1).default("gemini-3-flash"),
+    AI_GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(3),
     AI_GEMINI_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     AI_GEMINI_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(200).max(120_000).default(16_000),
+    AI_GEMINI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
+    AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
+    AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
+    AI_RUN_STALE_AFTER_MS: z.coerce.number().int().min(60_000).max(1_800_000).default(300_000),
+    AI_RUN_SWEEP_INTERVAL_MS: z.coerce.number().int().min(15_000).max(600_000).default(60_000),
     EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
     EXPORT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(600),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
@@ -72,6 +77,11 @@ export interface AppConfig {
     geminiMaxAttempts: number;
     geminiRetryBaseDelayMs: number;
     geminiRetryMaxDelayMs: number;
+    geminiRequestTimeoutMs: number;
+    geminiMaxOutputTokensLight: number;
+    geminiMaxOutputTokensHeavy: number;
+    runStaleAfterMs: number;
+    runSweepIntervalMs: number;
   };
   exports: {
     storageBucket: string;
@@ -159,7 +169,12 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       geminiModelHeavy: parsed.data.AI_GEMINI_MODEL_HEAVY,
       geminiMaxAttempts: parsed.data.AI_GEMINI_MAX_ATTEMPTS,
       geminiRetryBaseDelayMs: parsed.data.AI_GEMINI_RETRY_BASE_DELAY_MS,
-      geminiRetryMaxDelayMs: parsed.data.AI_GEMINI_RETRY_MAX_DELAY_MS
+      geminiRetryMaxDelayMs: parsed.data.AI_GEMINI_RETRY_MAX_DELAY_MS,
+      geminiRequestTimeoutMs: parsed.data.AI_GEMINI_REQUEST_TIMEOUT_MS,
+      geminiMaxOutputTokensLight: parsed.data.AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT,
+      geminiMaxOutputTokensHeavy: parsed.data.AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY,
+      runStaleAfterMs: parsed.data.AI_RUN_STALE_AFTER_MS,
+      runSweepIntervalMs: parsed.data.AI_RUN_SWEEP_INTERVAL_MS
     },
     exports: {
       storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,

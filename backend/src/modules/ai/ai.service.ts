@@ -317,38 +317,41 @@ export class AiService {
     aiRunId: string
   ): Promise<TailoringRunExecuteResponse> {
     const run = await this.requireTailoringRun(session.appUser.id, aiRunId);
-    if (run.status !== "pending") {
+    if (run.status !== "pending" || run.progress_stage !== "queued") {
       return this.toTailoringRunExecuteResponse(run);
     }
-    if (run.progress_stage !== "queued") {
-      return this.toTailoringRunExecuteResponse(run);
+
+    const claimed = await this.aiRepository.claimRunForExecution(session.appUser.id, run.id);
+    if (!claimed) {
+      const current = await this.aiRepository.findRunById(session.appUser.id, run.id);
+      return this.toTailoringRunExecuteResponse(current ?? run);
     }
 
     const parsedInput = this.parseTailoringRunInput(
-      run.flow_type as TailoringRunFlowType,
-      this.readRunFlowInput(run)
+      claimed.flow_type as TailoringRunFlowType,
+      this.readRunFlowInput(claimed)
     );
-    const storedPrompt = await this.resolveStoredRunPrompt(run, parsedInput);
+    const storedPrompt = await this.resolveStoredRunPrompt(claimed, parsedInput);
 
     let executedRun: AiRunRecord;
-    if (run.flow_type === "job_analysis") {
+    if (claimed.flow_type === "job_analysis") {
       executedRun = await this.executeTailoringJobAnalysisRun(
         session.appUser.id,
-        run,
+        claimed,
         parsedInput as JobAnalysisInput,
         storedPrompt
       );
-    } else if (run.flow_type === "follow_up_questions") {
+    } else if (claimed.flow_type === "follow_up_questions") {
       executedRun = await this.executeTailoringFollowUpQuestionsRun(
         session.appUser.id,
-        run,
+        claimed,
         parsedInput as FollowUpQuestionsInput,
         storedPrompt
       );
     } else {
       executedRun = await this.executeTailoringDraftRun(
         session.appUser.id,
-        run,
+        claimed,
         parsedInput as TailoredCvDraftInput,
         storedPrompt
       );
@@ -1164,8 +1167,14 @@ export class AiService {
         }
       };
 
-      const completed = await this.completeRunWithPayload(userId, run.id, resultPayload);
-      await this.billingService.recordTailoredCvGenerationUsage(userId);
+      const { run: completed, claimed_completion } = await this.tryCompleteRun(
+        userId,
+        run.id,
+        resultPayload
+      );
+      if (claimed_completion) {
+        await this.billingService.recordTailoredCvGenerationUsage(userId);
+      }
       return completed;
     } catch (error) {
       await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
@@ -1304,13 +1313,27 @@ export class AiService {
     runId: string,
     outputPayload: Record<string, unknown>
   ): Promise<AiRunRecord> {
+    const result = await this.tryCompleteRun(userId, runId, outputPayload);
+    return result.run;
+  }
+
+  private async tryCompleteRun(
+    userId: string,
+    runId: string,
+    outputPayload: Record<string, unknown>
+  ): Promise<{ run: AiRunRecord; claimed_completion: boolean }> {
     await this.updateRunStage(userId, runId, "persisting_result");
     const completed = await this.aiRepository.completeRun(userId, runId, outputPayload);
-    if (!completed) {
-      throw new NotFoundError("AI run was not found after completion");
+    if (completed) {
+      return { run: completed, claimed_completion: true };
     }
 
-    return completed;
+    // Run was no longer pending — watchdog or duplicate execute already finalized it.
+    const current = await this.aiRepository.findRunById(userId, runId);
+    if (!current) {
+      throw new NotFoundError("AI run was not found after completion");
+    }
+    return { run: current, claimed_completion: false };
   }
 
   private async failRunWithDiagnostics(

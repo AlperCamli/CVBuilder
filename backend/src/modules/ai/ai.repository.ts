@@ -47,6 +47,7 @@ export interface UpdateAiSuggestionPayload {
 
 export interface AiRepository {
   createRun(payload: CreateAiRunPayload): Promise<AiRunRecord>;
+  claimRunForExecution(userId: string, runId: string): Promise<AiRunRecord | null>;
   completeRun(
     userId: string,
     runId: string,
@@ -69,6 +70,7 @@ export interface AiRepository {
     runId: string,
     payload: UpdateAiRunContextPayload
   ): Promise<AiRunRecord | null>;
+  failStaleRuns(beforeIso: string): Promise<number>;
   createSuggestions(payloads: CreateAiSuggestionPayload[]): Promise<AiSuggestionRecord[]>;
   findSuggestionById(userId: string, suggestionId: string): Promise<AiSuggestionRecord | null>;
   updateSuggestionById(
@@ -163,6 +165,32 @@ export class SupabaseAiRepository implements AiRepository {
     return toAiRunRecord(data as Record<string, unknown>);
   }
 
+  async claimRunForExecution(userId: string, runId: string): Promise<AiRunRecord | null> {
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .update({
+        progress_stage: "building_prompt"
+      })
+      .eq("id", runId)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .eq("progress_stage", "queued")
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to claim AI run for execution", {
+        reason: error.message
+      });
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return toAiRunRecord(data as Record<string, unknown>);
+  }
+
   async completeRun(
     userId: string,
     runId: string,
@@ -180,6 +208,7 @@ export class SupabaseAiRepository implements AiRepository {
       })
       .eq("id", runId)
       .eq("user_id", userId)
+      .eq("status", "pending")
       .select("*")
       .maybeSingle();
 
@@ -213,6 +242,7 @@ export class SupabaseAiRepository implements AiRepository {
       })
       .eq("id", runId)
       .eq("user_id", userId)
+      .eq("status", "pending")
       .select("*")
       .maybeSingle();
 
@@ -227,6 +257,28 @@ export class SupabaseAiRepository implements AiRepository {
     }
 
     return toAiRunRecord(data as Record<string, unknown>);
+  }
+
+  async failStaleRuns(beforeIso: string): Promise<number> {
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .update({
+        status: "failed",
+        progress_stage: "failed",
+        error_message: "AI run timed out (no terminal state recorded before deadline)",
+        completed_at: new Date().toISOString()
+      })
+      .eq("status", "pending")
+      .lt("started_at", beforeIso)
+      .select("id");
+
+    if (error) {
+      throw new InternalServerError("Failed to sweep stale AI runs", {
+        reason: error.message
+      });
+    }
+
+    return (data ?? []).length;
   }
 
   async findRunById(userId: string, runId: string): Promise<AiRunRecord | null> {

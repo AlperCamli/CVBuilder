@@ -30,6 +30,7 @@ const hasCompleteServiceOverrides = (
       services?.tailoredCvService &&
       services?.cvRevisionsService &&
       services?.aiService &&
+      services?.aiRepository &&
       services?.templatesService &&
       services?.renderingService &&
       services?.filesService &&
@@ -59,6 +60,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
     cvRevisionsService:
       options?.services?.cvRevisionsService ?? defaultServices?.cvRevisionsService!,
     aiService: options?.services?.aiService ?? defaultServices?.aiService!,
+    aiRepository: options?.services?.aiRepository ?? defaultServices?.aiRepository!,
     templatesService: options?.services?.templatesService ?? defaultServices?.templatesService!,
     renderingService: options?.services?.renderingService ?? defaultServices?.renderingService!,
     filesService: options?.services?.filesService ?? defaultServices?.filesService!,

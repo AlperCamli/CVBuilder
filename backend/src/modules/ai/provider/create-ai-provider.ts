@@ -19,7 +19,10 @@ export const createAiProvider = (config: AppConfig): AiProvider => {
       baseRetryDelayMs: config.ai.geminiRetryBaseDelayMs,
       maxRetryDelayMs: config.ai.geminiRetryMaxDelayMs,
       lightModelName: config.ai.geminiModelLight,
-      heavyModelName: config.ai.geminiModelHeavy
+      heavyModelName: config.ai.geminiModelHeavy,
+      requestTimeoutMs: config.ai.geminiRequestTimeoutMs,
+      maxOutputTokensLight: config.ai.geminiMaxOutputTokensLight,
+      maxOutputTokensHeavy: config.ai.geminiMaxOutputTokensHeavy
     });
   }
 

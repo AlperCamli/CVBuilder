@@ -2,13 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
-import type {
-  FollowUpQuestion,
-  JobAnalysisResult,
-  TailoringRunFlowType,
-  TailoringRunStatusResponse
-} from "../integration/api-types";
-import { ApiClientError } from "../integration/api-error";
+import type { FollowUpQuestion, JobAnalysisResult } from "../integration/api-types";
+import { runTailoringFlow } from "../integration/tailoring-run";
 
 interface TailoringFlowState {
   masterCvId?: string;
@@ -24,134 +19,6 @@ interface TailoringFlowState {
   analysis?: JobAnalysisResult;
   followUpQuestions?: FollowUpQuestion[];
 }
-
-const RETRY_DELAY_MS = [800, 1800];
-const POLL_INTERVAL_MS = 750;
-
-const sleep = async (ms: number): Promise<void> => {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-};
-
-const isTransientAiRequestError = (error: unknown): boolean => {
-  if (error instanceof ApiClientError) {
-    return error.status >= 500 || error.status === 429;
-  }
-
-  if (error instanceof TypeError) {
-    return true;
-  }
-
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    return (
-      message.includes("network") ||
-      message.includes("failed to fetch") ||
-      message.includes("load failed")
-    );
-  }
-
-  return false;
-};
-
-const withTransientRetry = async <T,>(
-  task: () => Promise<T>,
-  maxAttempts = 3
-): Promise<T> => {
-  let lastError: unknown = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await task();
-    } catch (error) {
-      lastError = error;
-      const shouldRetry = attempt < maxAttempts && isTransientAiRequestError(error);
-      if (!shouldRetry) {
-        throw error;
-      }
-
-      const baseDelay = RETRY_DELAY_MS[Math.min(attempt - 1, RETRY_DELAY_MS.length - 1)] ?? 0;
-      const jitter = Math.floor(Math.random() * 250);
-      await sleep(baseDelay + jitter);
-    }
-  }
-
-  throw lastError ?? new Error("Request failed");
-};
-
-const toFlowLabel = (flowType: TailoringRunFlowType): string => {
-  if (flowType === "job_analysis") {
-    return "Job analysis";
-  }
-  if (flowType === "follow_up_questions") {
-    return "Follow-up questions";
-  }
-  return "Tailored CV draft";
-};
-
-const toStageLabel = (
-  flowType: TailoringRunFlowType,
-  stage: TailoringRunStatusResponse["progress_stage"]
-): string => {
-  const flowLabel = toFlowLabel(flowType);
-
-  if (stage === "queued") {
-    return `${flowLabel}: queued`;
-  }
-  if (stage === "building_prompt") {
-    return `${flowLabel}: preparing prompt`;
-  }
-  if (stage === "calling_model") {
-    return `${flowLabel}: calling AI model`;
-  }
-  if (stage === "parsing_output") {
-    return `${flowLabel}: parsing response`;
-  }
-  if (stage === "validating_output") {
-    return `${flowLabel}: validating output`;
-  }
-  if (stage === "persisting_result") {
-    return `${flowLabel}: saving results`;
-  }
-  if (stage === "completed") {
-    return `${flowLabel}: completed`;
-  }
-  return `${flowLabel}: failed`;
-};
-
-const toRunErrorMessage = (status: TailoringRunStatusResponse): string => {
-  const raw = status.error_message?.trim();
-  const normalized = raw?.toLowerCase() ?? "";
-
-  if (
-    normalized.includes("provider_status=429") ||
-    normalized.includes("resource_exhausted")
-  ) {
-    return "AI rate limit reached. Wait a moment and try again.";
-  }
-
-  if (
-    normalized.includes("provider_status=503") ||
-    normalized.includes("provider_status=504") ||
-    normalized.includes("unavailable")
-  ) {
-    return "AI service is temporarily unavailable. Please retry shortly.";
-  }
-
-  if (
-    normalized.includes("structured output validation failed") ||
-    normalized.includes("required contract")
-  ) {
-    return "AI returned an invalid structured response. Please retry.";
-  }
-
-  if (raw) {
-    return raw;
-  }
-
-  return "Tailoring AI request failed.";
-};
 
 const toOptionalUrl = (value?: string): string | null => {
   const trimmed = value?.trim();
@@ -227,48 +94,6 @@ export function TailoringFlow() {
     );
   }
 
-  const runTailoringFlow = async <TResult extends Record<string, unknown>>(
-    flowType: TailoringRunFlowType,
-    input: Record<string, unknown>
-  ): Promise<TResult> => {
-    const started = await withTransientRetry(
-      () =>
-        api.startTailoringRun({
-          flow_type: flowType,
-          input
-        }),
-      3
-    );
-
-    setProgressMessage(toStageLabel(flowType, started.progress_stage));
-
-    const executePromise = api.executeTailoringRun(started.ai_run_id).catch((executeError) => executeError);
-
-    let status = await withTransientRetry(
-      () => api.getTailoringRunStatus(started.ai_run_id),
-      3
-    );
-    setProgressMessage(toStageLabel(flowType, status.progress_stage));
-
-    while (status.status === "pending") {
-      await sleep(POLL_INTERVAL_MS);
-      status = await withTransientRetry(() => api.getTailoringRunStatus(started.ai_run_id), 3);
-      setProgressMessage(toStageLabel(flowType, status.progress_stage));
-    }
-
-    const executeOutcome = await executePromise;
-    if (executeOutcome instanceof Error && status.status !== "completed") {
-      throw executeOutcome;
-    }
-
-    if (status.status !== "completed") {
-      throw new Error(toRunErrorMessage(status));
-    }
-
-    const result = await withTransientRetry(() => api.getTailoringRunResult(started.ai_run_id), 3);
-    return result.result as TResult;
-  };
-
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
@@ -305,20 +130,25 @@ export function TailoringFlow() {
           .filter((item): item is { question_id: string; answer_text: string } => Boolean(item))
       ];
 
-      const draft = await runTailoringFlow<Record<string, unknown>>("tailored_draft", {
-        master_cv_id: masterCvId,
-        job: {
-          company_name: jobData.company,
-          job_title: jobData.role,
-          job_description: jobData.jobDescription,
-          job_posting_url: normalizedJobPostingUrl,
-          location_text: toOptionalTrimmed(jobData.locationText, 240),
-          notes: toOptionalTrimmed(jobData.notes, 10_000)
+      const draft = await runTailoringFlow<Record<string, unknown>>({
+        api,
+        flowType: "tailored_draft",
+        input: {
+          master_cv_id: masterCvId,
+          job: {
+            company_name: jobData.company,
+            job_title: jobData.role,
+            job_description: jobData.jobDescription,
+            job_posting_url: normalizedJobPostingUrl,
+            location_text: toOptionalTrimmed(jobData.locationText, 240),
+            notes: toOptionalTrimmed(jobData.notes, 10_000)
+          },
+          answers
         },
-        answers
+        onStage: setProgressMessage
       });
 
-      const draftPayload = draft as {
+      const draftPayload = draft.result as {
         tailored_cv: { id: string };
         job: { job_title: string; company_name: string };
       };

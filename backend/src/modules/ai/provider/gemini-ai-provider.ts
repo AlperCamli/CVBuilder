@@ -1,10 +1,10 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmBlockThreshold, HarmCategory, type SafetySetting } from "@google/genai";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
 
-const RETRYABLE_HTTP_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
   "RESOURCE_EXHAUSTED",
   "UNAVAILABLE",
@@ -14,11 +14,19 @@ const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
 const MODEL_FALLBACK_PROVIDER_STATUS_CODES = new Set(["UNAVAILABLE", "INTERNAL"]);
 const MAX_PROVIDER_RETRY_HINT_DELAY_MS = 120_000;
 const MAX_DEBUG_EXCERPT_LENGTH = 2_000;
+const REQUEST_TIMEOUT_ERROR_NAME = "GeminiRequestTimeout";
 const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "import_improve",
   "multi_option"
 ]);
+
+const DEFAULT_SAFETY_SETTINGS: SafetySetting[] = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+];
 
 const GEMINI_SCHEMA_DROPPED_KEYS = new Set([
   "$schema",
@@ -340,6 +348,9 @@ export class GeminiAiProvider implements AiProvider {
   private readonly maxRetryDelayMs: number;
   private readonly lightModelName: string | null;
   private readonly heavyModelName: string | null;
+  private readonly requestTimeoutMs: number;
+  private readonly maxOutputTokensLight: number;
+  private readonly maxOutputTokensHeavy: number;
   private readonly randomFn: () => number;
   private readonly sleepFn: (ms: number) => Promise<void>;
 
@@ -353,6 +364,9 @@ export class GeminiAiProvider implements AiProvider {
       maxRetryDelayMs?: number;
       lightModelName?: string;
       heavyModelName?: string;
+      requestTimeoutMs?: number;
+      maxOutputTokensLight?: number;
+      maxOutputTokensHeavy?: number;
       randomFn?: () => number;
       sleepFn?: (ms: number) => Promise<void>;
     }
@@ -366,8 +380,17 @@ export class GeminiAiProvider implements AiProvider {
     this.maxRetryDelayMs = clampNonNegativeInteger(options?.maxRetryDelayMs ?? 8_000, 8_000);
     this.lightModelName = options?.lightModelName?.trim() || null;
     this.heavyModelName = options?.heavyModelName?.trim() || null;
+    this.requestTimeoutMs = clampNonNegativeInteger(options?.requestTimeoutMs ?? 60_000, 60_000);
+    this.maxOutputTokensLight = clampNonNegativeInteger(options?.maxOutputTokensLight ?? 4_096, 4_096);
+    this.maxOutputTokensHeavy = clampNonNegativeInteger(options?.maxOutputTokensHeavy ?? 16_384, 16_384);
     this.randomFn = options?.randomFn ?? Math.random;
     this.sleepFn = options?.sleepFn ?? sleep;
+  }
+
+  private resolveMaxOutputTokens(flowType: AiFlowType): number {
+    return HEAVY_MODEL_FLOW_TYPES.has(flowType)
+      ? this.maxOutputTokensHeavy
+      : this.maxOutputTokensLight;
   }
 
   resolveModelName(flowType: AiFlowType): string {
@@ -392,6 +415,32 @@ export class GeminiAiProvider implements AiProvider {
     }
 
     return [...unique];
+  }
+
+  private async callWithTimeout<T>(promise: Promise<T>): Promise<T> {
+    if (!this.requestTimeoutMs) {
+      return promise;
+    }
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        const timeoutError = new Error(
+          `Gemini request exceeded ${this.requestTimeoutMs}ms timeout`
+        ) as Error & { status: number; name: string };
+        timeoutError.status = 504;
+        timeoutError.name = REQUEST_TIMEOUT_ERROR_NAME;
+        reject(timeoutError);
+      }, this.requestTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 
   private computeRetryDelayMs(attempt: number): number {
@@ -426,14 +475,18 @@ export class GeminiAiProvider implements AiProvider {
 
       for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
         try {
-          const response = await this.client.models.generateContent({
-            model: candidateModel,
-            contents: toPromptText(request),
-            config: {
-              responseMimeType: "application/json",
-              responseJsonSchema: schema
-            }
-          });
+          const response = await this.callWithTimeout(
+            this.client.models.generateContent({
+              model: candidateModel,
+              contents: toPromptText(request),
+              config: {
+                responseMimeType: "application/json",
+                responseJsonSchema: schema,
+                maxOutputTokens: this.resolveMaxOutputTokens(request.flow_type),
+                safetySettings: DEFAULT_SAFETY_SETTINGS
+              }
+            })
+          );
 
           const responseText =
             typeof response.text === "string" ? response.text.trim() : "";

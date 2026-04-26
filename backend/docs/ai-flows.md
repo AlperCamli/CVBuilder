@@ -31,17 +31,23 @@ Runtime selection:
 Failure behavior:
 - no silent provider fallback
 - provider/runtime/schema failures fail the run and return AI errors
-- Gemini retries are controlled by `AI_GEMINI_MAX_ATTEMPTS` (default `1`)
+- Gemini retries are controlled by `AI_GEMINI_MAX_ATTEMPTS` (default `3`)
 - on transient model-unavailable failures (`503/UNAVAILABLE`), Gemini provider can fall back heavy->light model once
 - non-JSON responses get one controlled JSON recovery pass (extract + repair) before failing
 - hard quota-exceeded `429 RESOURCE_EXHAUSTED` errors are treated as non-retryable
+- each attempt has a per-call hard timeout (`AI_GEMINI_REQUEST_TIMEOUT_MS`, default `60000`); timeouts surface as retryable `504` errors
+- `safetySettings` are set to `BLOCK_NONE` for all four standard harm categories so CV content (names, locations, demographic context) does not trip safety filters
+- output is capped per tier via `AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT` / `AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY` to make truncation explicit instead of silent
 
 Retry tuning env vars:
-- `AI_GEMINI_MAX_ATTEMPTS` (default `1`)
+- `AI_GEMINI_MAX_ATTEMPTS` (default `3`)
 - `AI_GEMINI_RETRY_BASE_DELAY_MS` (default `1000`)
 - `AI_GEMINI_RETRY_MAX_DELAY_MS` (default `16000`)
-- `AI_GEMINI_MODEL_LIGHT` (default `gemini-3-flash`)
-- `AI_GEMINI_MODEL_HEAVY` (default `gemini-2.5-flash`)
+- `AI_GEMINI_REQUEST_TIMEOUT_MS` (default `60000`)
+- `AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT` (default `4096`)
+- `AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY` (default `16384`)
+- `AI_GEMINI_MODEL_LIGHT` (default `gemini-2.5-flash-preview`)
+- `AI_GEMINI_MODEL_HEAVY` (default `gemini-3-flash`)
 
 Static model tier routing:
 - Heavy: `tailored_draft`, `import_improve`, `multi_option`

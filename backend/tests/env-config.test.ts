@@ -31,11 +31,14 @@ describe("environment config", () => {
     expect(config.port).toBe(4100);
     expect(config.ai.provider).toBe("mock");
     expect(config.ai.defaultModel).toBe("mock-cv-builder-v1");
-    expect(config.ai.geminiModelLight).toBe("gemini-3-flash");
-    expect(config.ai.geminiModelHeavy).toBe("gemini-2.5-flash");
-    expect(config.ai.geminiMaxAttempts).toBe(1);
+    expect(config.ai.geminiModelLight).toBe("gemini-2.5-flash-preview");
+    expect(config.ai.geminiModelHeavy).toBe("gemini-3-flash");
+    expect(config.ai.geminiMaxAttempts).toBe(3);
     expect(config.ai.geminiRetryBaseDelayMs).toBe(1000);
     expect(config.ai.geminiRetryMaxDelayMs).toBe(16000);
+    expect(config.ai.geminiRequestTimeoutMs).toBe(60000);
+    expect(config.ai.geminiMaxOutputTokensLight).toBe(4096);
+    expect(config.ai.geminiMaxOutputTokensHeavy).toBe(16384);
     expect(config.exports.storageBucket).toBe("exports");
     expect(config.exports.downloadUrlTtlSeconds).toBe(900);
     expect(config.billing.provider).toBe("stripe");

@@ -36,11 +36,16 @@
 - `AI_DEFAULT_MODEL` (default: `mock-cv-builder-v1`)
 - `AI_PROMPT_PROFILE` (default: `phase3-v1`)
 - `GEMINI_API_KEY` (required when `AI_PROVIDER=gemini`)
-- `AI_GEMINI_MODEL_LIGHT` (default: `gemini-3-flash`)
-- `AI_GEMINI_MODEL_HEAVY` (default: `gemini-2.5-flash`)
-- `AI_GEMINI_MAX_ATTEMPTS` (default: `1`, min `1`, max `8`)
+- `AI_GEMINI_MODEL_LIGHT` (default: `gemini-2.5-flash-preview`)
+- `AI_GEMINI_MODEL_HEAVY` (default: `gemini-3-flash`)
+- `AI_GEMINI_MAX_ATTEMPTS` (default: `3`, min `1`, max `8`)
 - `AI_GEMINI_RETRY_BASE_DELAY_MS` (default: `1000`, min `100`, max `60000`)
 - `AI_GEMINI_RETRY_MAX_DELAY_MS` (default: `16000`, min `200`, max `120000`, must be `>= AI_GEMINI_RETRY_BASE_DELAY_MS`)
+- `AI_GEMINI_REQUEST_TIMEOUT_MS` (default: `60000`, min `5000`, max `180000`) — per-attempt hard timeout around `generateContent`
+- `AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT` (default: `4096`, min `512`, max `65536`) — output cap for `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`
+- `AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY` (default: `16384`, min `1024`, max `65536`) — output cap for `tailored_draft`, `import_improve`, `multi_option`
+- `AI_RUN_STALE_AFTER_MS` (default: `300000`, min `60000`, max `1800000`) — pending `ai_runs` older than this are auto-failed by the watchdog so the polling lifecycle never hangs forever
+- `AI_RUN_SWEEP_INTERVAL_MS` (default: `60000`, min `15000`, max `600000`) — how often the watchdog scans for stale runs
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, min `60`, max `86400`)
 - `PDF_OCR_ENABLED` (default: `true`, defaults to `false` in `test` runtime)

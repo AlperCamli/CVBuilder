@@ -428,11 +428,16 @@ export const createTestConfig = (): AppConfig => {
       defaultModel: "mock-cv-builder-v1",
       promptProfile: "phase3-v1",
       geminiApiKey: null,
-      geminiModelLight: "gemini-3-flash",
-      geminiModelHeavy: "gemini-2.5-flash",
-      geminiMaxAttempts: 1,
+      geminiModelLight: "gemini-2.5-flash-preview",
+      geminiModelHeavy: "gemini-3-flash",
+      geminiMaxAttempts: 3,
       geminiRetryBaseDelayMs: 1000,
-      geminiRetryMaxDelayMs: 16000
+      geminiRetryMaxDelayMs: 16000,
+      geminiRequestTimeoutMs: 60000,
+      geminiMaxOutputTokensLight: 4096,
+      geminiMaxOutputTokensHeavy: 16384,
+      runStaleAfterMs: 300000,
+      runSweepIntervalMs: 60000
     },
     exports: {
       storageBucket: "exports",

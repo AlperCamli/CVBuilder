@@ -97,6 +97,7 @@ export interface AppServices {
   tailoredCvService: TailoredCvService;
   cvRevisionsService: CvRevisionsService;
   aiService: AiService;
+  aiRepository: AiRepository;
   templatesService: TemplatesService;
   renderingService: RenderingService;
   filesService: FilesService;
@@ -276,6 +277,7 @@ export const buildDefaultServices = (
     tailoredCvService,
     cvRevisionsService,
     aiService,
+    aiRepository,
     templatesService,
     renderingService,
     filesService,
