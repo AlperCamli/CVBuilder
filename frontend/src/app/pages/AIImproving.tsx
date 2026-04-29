@@ -71,6 +71,16 @@ export function AIImproving() {
               });
 
               await api.patchImportResult(importId, improved.improved_content);
+
+              try {
+                const existing = await api.listMasterCvs();
+                for (const cv of existing) {
+                  await api.deleteMasterCv(cv.id);
+                }
+              } catch {
+                // Proceed even if cleanup fails — backend will create the new CV
+              }
+
               const converted = await api.createMasterCvFromImport(importId, {});
 
               navigate(`/app/cv/${converted.master_cv.id}`, {

@@ -929,6 +929,7 @@ export interface CoverLetterJobSummary {
   id: string;
   company_name: string;
   job_title: string;
+  job_description: string | null;
   status: JobStatus;
   tailored_cv_id: string | null;
   tailored_cv_title: string | null;

@@ -583,6 +583,7 @@ export class CoverLettersService {
       id: job.id,
       company_name: job.company_name,
       job_title: job.job_title,
+      job_description: job.job_description,
       status: job.status,
       tailored_cv_id: job.tailored_cv_id,
       tailored_cv_title: hasTailoredTitle(job) ? job.tailored_cv_title : null,

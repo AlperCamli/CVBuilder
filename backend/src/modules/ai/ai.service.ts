@@ -509,6 +509,17 @@ export class AiService {
         input.language ?? tailoredCv.language
       );
 
+      const totalBlocks = normalizedContent.sections.reduce(
+        (sum, sec) => sum + sec.blocks.length,
+        0
+      );
+      if (normalizedContent.sections.length === 0 || totalBlocks === 0) {
+        throw new AiFlowFailedError(
+          "The AI could not generate a valid CV from the provided content. Please ensure the job description is work-related and your master CV contains professional experience.",
+          { flow_type: "tailored_draft", reason: "empty_output" }
+        );
+      }
+
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCv.id, {
         current_content: normalizedContent,
         language: normalizedContent.language,
@@ -1209,6 +1220,17 @@ export class AiService {
         asRecord(output.current_content),
         input.language ?? tailoredCv.language
       );
+
+      const totalBlocks = normalizedContent.sections.reduce(
+        (sum, sec) => sum + sec.blocks.length,
+        0
+      );
+      if (normalizedContent.sections.length === 0 || totalBlocks === 0) {
+        throw new AiFlowFailedError(
+          "The AI could not generate a valid CV from the provided content. Please ensure the job description is work-related and your master CV contains professional experience.",
+          { flow_type: "tailored_draft", reason: "empty_output" }
+        );
+      }
 
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
         current_content: normalizedContent,

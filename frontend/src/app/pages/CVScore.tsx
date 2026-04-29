@@ -151,8 +151,26 @@ export function CVScore() {
       return;
     }
 
-    setConverting(true);
     setError(null);
+
+    try {
+      const existing = await api.listMasterCvs();
+      if (existing.length > 0) {
+        const confirmed = window.confirm(
+          "You already have a master CV. Creating a new one will permanently delete the existing one. Continue?"
+        );
+        if (!confirmed) {
+          return;
+        }
+        for (const cv of existing) {
+          await api.deleteMasterCv(cv.id);
+        }
+      }
+    } catch {
+      // If the check fails, proceed anyway — a backend error on create will surface
+    }
+
+    setConverting(true);
 
     try {
       await api.patchImportResult(importId, contentToSave);
