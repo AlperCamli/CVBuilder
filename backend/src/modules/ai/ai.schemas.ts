@@ -122,6 +122,21 @@ export const aiImportImproveSchema = z
   })
   .strict();
 
+export const aiCoverLetterGenerationSchema = z
+  .object({
+    job_title: z.string().trim().min(1).max(160),
+    company_name: z.string().trim().min(1).max(160),
+    job_description: z.string().trim().max(40000).optional(),
+    master_cv_id: uuidSchema.optional(),
+    tailored_cv_id: uuidSchema.optional(),
+    tone: z.string().trim().max(100).optional(),
+    additional_instructions: z.string().trim().max(3000).optional()
+  })
+  .strict()
+  .refine((data) => data.master_cv_id || data.tailored_cv_id, {
+    message: "Either master_cv_id or tailored_cv_id must be provided"
+  });
+
 const tailoringRunFlowTypeSchema = z.enum([
   "job_analysis",
   "follow_up_questions",

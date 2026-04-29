@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { FileText, Edit, Target, Download, MoreVertical, Trash2, Copy } from "lucide-react";
+import { FileText, ExternalLink, Target, Download, MoreVertical, Trash2, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
@@ -103,6 +103,9 @@ export function Resumes() {
     setBusyMasterId(masterCvId);
     try {
       await api.deleteMasterCv(masterCvId);
+      // Immediately remove from local state to prevent stale UI
+      setMasterCvs((prev) => prev.filter((cv) => cv.id !== masterCvId));
+      setTailoredCvs((prev) => prev.filter((cv) => cv.master_cv_id !== masterCvId));
       await load();
     } catch (err) {
       if (err instanceof Error) {
@@ -246,8 +249,8 @@ export function Resumes() {
                       color: "var(--color-teal-50)"
                     }}
                   >
-                    <Edit size={14} />
-                    Edit
+                    <ExternalLink size={14} />
+                    Open
                   </Link>
                   <Link
                     to={`/app/tailor/${primaryMaster.id}`}
@@ -370,8 +373,8 @@ export function Resumes() {
                               color: "var(--color-teal-50)"
                             }}
                           >
-                            <Edit size={12} />
-                            Edit
+                            <ExternalLink size={12} />
+                            Open
                           </Link>
                           <button
                             onClick={() => void exportTailoredCv(cv.id)}

@@ -95,6 +95,8 @@ export function CoverLetterEditor() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<"pdf" | "docx" | null>(null);
   const [exportHistory, setExportHistory] = useState<CoverLetterExportSummaryItem[]>([]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     setSidebarVisible(false);
@@ -285,6 +287,37 @@ export function CoverLetterEditor() {
     }
   };
 
+  const handleGenerateWithAi = async () => {
+    if (!coverLetter?.job?.tailored_cv_id) {
+      setError("A tailored CV must be linked to this job to generate a cover letter.");
+      return;
+    }
+
+    setGenerating(true);
+    setError(null);
+
+    try {
+      const generated = await api.postGenerateCoverLetter({
+        job_title: coverLetter.job.job_title,
+        company_name: coverLetter.job.company_name,
+        job_description: coverLetter.job.job_description,
+        tailored_cv_id: coverLetter.job.tailored_cv_id
+      });
+
+      setTitle(generated.title);
+      setContent(generated.content);
+      markDirty();
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("AI Generation failed.");
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const saveStatusText = (() => {
     if (saving) {
       return "Saving...";
@@ -366,17 +399,21 @@ export function CoverLetterEditor() {
 
           <div className="flex items-center gap-2">
             <button
-              disabled
-              className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2 border opacity-70 cursor-not-allowed"
+              onClick={() => void handleGenerateWithAi()}
+              disabled={generating || !coverLetter?.job?.tailored_cv_id}
+              className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2 border"
               style={{
                 fontSize: "13px",
                 background: "var(--color-teal-50)",
                 color: "var(--color-teal-800)",
-                borderColor: "var(--color-teal-200)"
+                borderColor: "var(--color-teal-200)",
+                opacity: generating || !coverLetter?.job?.tailored_cv_id ? 0.7 : 1,
+                cursor: generating || !coverLetter?.job?.tailored_cv_id ? "not-allowed" : "pointer"
               }}
+              title={!coverLetter?.job?.tailored_cv_id ? "A tailored CV must be linked to the job first." : "Generate with AI"}
             >
-              <Sparkles size={14} />
-              AI Enhance (Soon)
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {generating ? "Generating..." : "Generate with AI"}
             </button>
             <button
               onClick={() => void persistCoverLetter("manual")}
@@ -391,34 +428,51 @@ export function CoverLetterEditor() {
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? "Saving..." : "Save"}
             </button>
-            <button
-              onClick={() => void handleExport("pdf")}
-              disabled={Boolean(exportingFormat)}
-              className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2"
-              style={{
-                fontSize: "13px",
-                background: "var(--color-teal-600)",
-                color: "white",
-                opacity: exportingFormat ? 0.7 : 1
-              }}
-            >
-              {exportingFormat === "pdf" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {exportingFormat === "pdf" ? "Exporting..." : "Export PDF"}
-            </button>
-            <button
-              onClick={() => void handleExport("docx")}
-              disabled={Boolean(exportingFormat)}
-              className="px-3 py-1.5 rounded-lg font-medium flex items-center gap-2 border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-tertiary)",
-                color: "var(--color-text-secondary)",
-                opacity: exportingFormat ? 0.7 : 1
-              }}
-            >
-              {exportingFormat === "docx" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-              {exportingFormat === "docx" ? "Exporting..." : "DOCX"}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                disabled={Boolean(exportingFormat)}
+                className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2"
+                style={{
+                  fontSize: "13px",
+                  background: "var(--color-teal-600)",
+                  color: "white",
+                  opacity: exportingFormat ? 0.7 : 1
+                }}
+              >
+                {exportingFormat ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                {exportingFormat ? "Exporting..." : "Export"}
+              </button>
+              {showExportMenu && !exportingFormat && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                  <div
+                    className="absolute right-0 mt-2 w-40 py-1 rounded-lg border shadow-lg z-50"
+                    style={{
+                      background: "var(--color-background-primary)",
+                      borderColor: "var(--color-border-tertiary)"
+                    }}
+                  >
+                    <button
+                      onClick={() => { setShowExportMenu(false); void handleExport("pdf"); }}
+                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                      style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
+                    >
+                      <Download size={14} style={{ color: "var(--color-teal-600)" }} />
+                      Export as PDF
+                    </button>
+                    <button
+                      onClick={() => { setShowExportMenu(false); void handleExport("docx"); }}
+                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                      style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
+                    >
+                      <FileText size={14} style={{ color: "var(--color-teal-600)" }} />
+                      Export as DOCX
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

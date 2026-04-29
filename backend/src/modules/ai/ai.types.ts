@@ -93,6 +93,16 @@ export interface ImportImproveInput {
   improvement_guidance?: string[];
 }
 
+export interface CoverLetterGenerationInput {
+  job_title: string;
+  company_name: string;
+  job_description?: string;
+  master_cv_id?: string;
+  tailored_cv_id?: string;
+  tone?: string;
+  additional_instructions?: string;
+}
+
 export interface JobAnalysisResult {
   keywords: string[];
   requirements: string[];
@@ -110,6 +120,11 @@ export interface TailoredDraftResult {
   current_content: Record<string, unknown>;
   generation_summary: string;
   changed_block_ids: string[];
+}
+
+export interface CoverLetterGenerationResult {
+  title: string;
+  content: string;
 }
 
 export interface BlockSuggestionVariant {

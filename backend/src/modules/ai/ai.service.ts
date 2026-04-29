@@ -240,6 +240,11 @@ interface RunFlowExecutionResult {
   output_payload: Record<string, unknown>;
   provider: string;
   model_name: string;
+  token_usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  } | null;
 }
 
 type TailoringRunInputPayload = JobAnalysisInput | FollowUpQuestionsInput | TailoredCvDraftInput;
@@ -587,6 +592,60 @@ export class AiService {
         prompt_key: executed.prompt_key,
         prompt_version: executed.prompt_version
       }
+    };
+  }
+
+  async generateCoverLetter(
+    session: SessionContext,
+    input: import("./ai.types").CoverLetterGenerationInput
+  ): Promise<import("./ai.types").CoverLetterGenerationResult> {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
+    let cvContent;
+    let actualMasterCvId = input.master_cv_id;
+
+    if (input.tailored_cv_id) {
+      const tailoredCv = await this.tailoredCvRepository.findById(session.appUser.id, input.tailored_cv_id);
+      if (!tailoredCv || tailoredCv.is_deleted) {
+        throw new NotFoundError("Tailored CV not found");
+      }
+      cvContent = tailoredCv.current_content;
+      actualMasterCvId = tailoredCv.master_cv_id;
+    } else if (input.master_cv_id) {
+      const masterCv = await this.masterCvRepository.findById(session.appUser.id, input.master_cv_id);
+      if (!masterCv || masterCv.is_deleted) {
+        throw new NotFoundError("Master CV not found");
+      }
+      cvContent = masterCv.current_content;
+    } else {
+      throw new InternalServerError("Either master_cv_id or tailored_cv_id is required");
+    }
+
+    const flowInput = {
+      job_title: input.job_title,
+      company_name: input.company_name,
+      job_description: input.job_description ?? "",
+      cv_content: cvContent,
+      tone: input.tone ?? "professional",
+      additional_instructions: input.additional_instructions ?? ""
+    };
+
+    const executed = await this.executeFlow({
+      flow_type: "cover_letter_generation",
+      user_id: session.appUser.id,
+      master_cv_id: actualMasterCvId,
+      tailored_cv_id: input.tailored_cv_id ?? null,
+      input_payload: flowInput,
+      user_prompt: `Generate a cover letter for the role of ${input.job_title} at ${input.company_name}.`
+    });
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
+
+    const output = asRecord(executed.output);
+
+    return {
+      title: String(output.title ?? `Cover Letter - ${input.company_name}`),
+      content: String(output.content ?? "")
     };
   }
 
@@ -1001,7 +1060,8 @@ export class AiService {
     const completed = await this.completeRunWithPayload(
       options.user_id,
       aiRun.id,
-      executed.output_payload
+      executed.output_payload,
+      executed.token_usage
     );
 
     return {
@@ -1049,7 +1109,12 @@ export class AiService {
           : null
     };
 
-    return this.completeRunWithPayload(userId, run.id, resultPayload as unknown as Record<string, unknown>);
+    return this.completeRunWithPayload(
+      userId,
+      run.id,
+      resultPayload as unknown as Record<string, unknown>,
+      executed.token_usage
+    );
   }
 
   private async executeTailoringFollowUpQuestionsRun(
@@ -1082,7 +1147,12 @@ export class AiService {
         : []
     };
 
-    return this.completeRunWithPayload(userId, run.id, resultPayload as unknown as Record<string, unknown>);
+    return this.completeRunWithPayload(
+      userId,
+      run.id,
+      resultPayload as unknown as Record<string, unknown>,
+      executed.token_usage
+    );
   }
 
   private async executeTailoringDraftRun(
@@ -1170,7 +1240,8 @@ export class AiService {
       const { run: completed, claimed_completion } = await this.tryCompleteRun(
         userId,
         run.id,
-        resultPayload
+        resultPayload,
+        executed.token_usage
       );
       if (claimed_completion) {
         await this.billingService.recordTailoredCvGenerationUsage(userId);
@@ -1245,7 +1316,8 @@ export class AiService {
     return {
       output_payload: serializedOutput,
       provider: providerResult.provider,
-      model_name: providerResult.model_name
+      model_name: providerResult.model_name,
+      token_usage: providerResult.usage ?? null
     };
   }
 
@@ -1311,19 +1383,29 @@ export class AiService {
   private async completeRunWithPayload(
     userId: string,
     runId: string,
-    outputPayload: Record<string, unknown>
+    outputPayload: Record<string, unknown>,
+    tokenUsage: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    } | null = null
   ): Promise<AiRunRecord> {
-    const result = await this.tryCompleteRun(userId, runId, outputPayload);
+    const result = await this.tryCompleteRun(userId, runId, outputPayload, tokenUsage);
     return result.run;
   }
 
   private async tryCompleteRun(
     userId: string,
     runId: string,
-    outputPayload: Record<string, unknown>
+    outputPayload: Record<string, unknown>,
+    tokenUsage: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+    } | null = null
   ): Promise<{ run: AiRunRecord; claimed_completion: boolean }> {
     await this.updateRunStage(userId, runId, "persisting_result");
-    const completed = await this.aiRepository.completeRun(userId, runId, outputPayload);
+    const completed = await this.aiRepository.completeRun(userId, runId, outputPayload, tokenUsage);
     if (completed) {
       return { run: completed, claimed_completion: true };
     }

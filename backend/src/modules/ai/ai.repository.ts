@@ -51,7 +51,8 @@ export interface AiRepository {
   completeRun(
     userId: string,
     runId: string,
-    outputPayload: Record<string, unknown>
+    outputPayload: Record<string, unknown>,
+    tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
   ): Promise<AiRunRecord | null>;
   failRun(
     userId: string,
@@ -107,6 +108,9 @@ const toAiRunRecord = (row: Record<string, unknown>): AiRunRecord => {
     output_payload: (row.output_payload as Record<string, unknown> | null) ?? null,
     error_message: (row.error_message as string | null) ?? null,
     debug_payload: (row.debug_payload as Record<string, unknown> | null) ?? null,
+    input_tokens: (row.input_tokens as number | null) ?? null,
+    output_tokens: (row.output_tokens as number | null) ?? null,
+    total_tokens: (row.total_tokens as number | null) ?? null,
     started_at: String(row.started_at),
     completed_at: (row.completed_at as string | null) ?? null
   };
@@ -194,7 +198,8 @@ export class SupabaseAiRepository implements AiRepository {
   async completeRun(
     userId: string,
     runId: string,
-    outputPayload: Record<string, unknown>
+    outputPayload: Record<string, unknown>,
+    tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
   ): Promise<AiRunRecord | null> {
     const { data, error } = await this.supabaseClient
       .from("ai_runs")
@@ -204,6 +209,9 @@ export class SupabaseAiRepository implements AiRepository {
         output_payload: outputPayload,
         error_message: null,
         debug_payload: null,
+        input_tokens: tokenUsage?.input_tokens ?? null,
+        output_tokens: tokenUsage?.output_tokens ?? null,
+        total_tokens: tokenUsage?.total_tokens ?? null,
         completed_at: new Date().toISOString()
       })
       .eq("id", runId)

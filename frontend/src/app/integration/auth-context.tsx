@@ -30,6 +30,7 @@ interface AuthContextValue {
   authMessage: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (fullName: string, email: string, password: string) => Promise<SignUpResult>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<MeResponseData | null>;
   clearAuthMessage: () => void;
@@ -151,6 +152,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [refreshMe]
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    ensureSupabaseConfigured();
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`
+      }
+    });
+
+    if (error) {
+      throw error;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     setAuthMessage(null);
     setMe(null);
@@ -224,6 +241,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       authMessage,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       refreshMe,
       clearAuthMessage
@@ -237,6 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       authMessage,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
       refreshMe,
       clearAuthMessage

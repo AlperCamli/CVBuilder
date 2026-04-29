@@ -21,6 +21,11 @@ export interface AiProviderResult {
   provider: string;
   model_name: string;
   output_payload: Record<string, unknown>;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export interface AiProvider {

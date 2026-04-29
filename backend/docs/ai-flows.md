@@ -7,6 +7,8 @@ Phase 5 AI module supports:
 - `follow_up_questions`
 - `tailored_draft`
 - `import_improve` (new)
+- `cv_parse` (new)
+- `cover_letter_generation` (new)
 - `block_suggest`
 - `block_compare`
 - `multi_option`
@@ -51,7 +53,7 @@ Retry tuning env vars:
 
 Static model tier routing:
 - Heavy: `tailored_draft`, `import_improve`, `multi_option`
-- Light: `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`
+- Light: `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`, `cv_parse`, `cover_letter_generation`
 
 ## Prompt Management
 
@@ -159,6 +161,16 @@ Behavior:
 - runs `import_improve` flow
 - returns improved content + generation metadata
 - import flow then persists improved parsed content before master CV conversion
+
+## Cover Letter Generation Flow
+
+Endpoint:
+- `POST /ai/cover-letters/generate`
+
+Behavior:
+- accepts either `tailored_cv_id` or `master_cv_id` as CV context
+- generates structured `{ title, content }` output via `cover_letter_generation`
+- records one AI action usage on successful completion
 
 ## Version History Chains (Committed States)
 

@@ -6,7 +6,9 @@ import {
   followUpQuestionsOutputSchema,
   importImproveOutputSchema,
   jobAnalysisOutputSchema,
-  tailoredDraftOutputSchema
+  tailoredDraftOutputSchema,
+  cvParseOutputSchema,
+  coverLetterOutputSchema
 } from "./flow-contracts";
 
 export interface AiFlowDefinition {
@@ -86,6 +88,22 @@ const definitions: AiFlowDefinition[] = [
     prompt_version: "phase3-v1",
     system_prompt: "Improve clarity, impact, and relevance of CV block content.",
     output_schema: blockSuggestOutputSchema
+  },
+  {
+    flow_type: "cv_parse",
+    prompt_key: "cv-parse",
+    prompt_version: "phase5-v1",
+    system_prompt:
+      "Parse unstructured raw CV text into a strictly structured JSON CV content format.",
+    output_schema: cvParseOutputSchema
+  },
+  {
+    flow_type: "cover_letter_generation",
+    prompt_key: "cover-letter-generation",
+    prompt_version: "phase5-v1",
+    system_prompt:
+      "Generate a concise, highly impactful cover letter that emphasizes candidate strengths and makes recruiters want to meet them.",
+    output_schema: coverLetterOutputSchema
   }
 ];
 

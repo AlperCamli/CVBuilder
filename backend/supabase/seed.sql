@@ -13,6 +13,27 @@ values
     'active',
     '{"preview": "v1"}'::jsonb,
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Executive Timeline',
+    'executive-timeline',
+    'active',
+    '{"preview": "v1", "theme": "dark"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": false}}'::jsonb
+  ),
+  (
+    'Creative Portfolio',
+    'creative-portfolio',
+    'active',
+    '{"preview": "v2", "theme": "light"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": false}}'::jsonb
+  ),
+  (
+    'Template Playground',
+    'template-playground',
+    'inactive',
+    '{"preview": "v1", "theme": "test"}'::jsonb,
+    '{"pdf": {"enabled": false}, "docx": {"enabled": false}}'::jsonb
   )
 on conflict (slug) do update
 set
@@ -84,6 +105,30 @@ values
     'phase5-v1',
     'Improve imported CV content for clarity and impact without fabricating facts. Output must be in English and strict JSON.',
     'Improve parsed imported content and return full improved content snapshot.',
+    true
+  ),
+  (
+    'phase3-v1',
+    'cv_parse',
+    null,
+    'gemini',
+    'gemini-2.5-flash',
+    'cv-parse',
+    'phase5-v1',
+    'Convert raw CV text into strict structured CV JSON without inventing facts. Output must be in English and strict JSON.',
+    'Parse the raw CV text and return canonical cv_content JSON.',
+    true
+  ),
+  (
+    'phase3-v1',
+    'cover_letter_generation',
+    null,
+    'gemini',
+    'gemini-2.5-flash',
+    'cover-letter-generation',
+    'phase5-v1',
+    'Generate concise, high-impact cover letters tailored to the target role and company. Output must be in English and strict JSON.',
+    'Generate a tailored cover letter with persuasive and factual language.',
     true
   ),
   (

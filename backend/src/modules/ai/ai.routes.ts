@@ -14,7 +14,8 @@ import {
   aiTailoredDraftSchema,
   masterCvAiHistoryParamsSchema,
   suggestionIdParamsSchema,
-  tailoredCvAiHistoryParamsSchema
+  tailoredCvAiHistoryParamsSchema,
+  aiCoverLetterGenerationSchema
 } from "./ai.schemas";
 
 export const createAiRouter = (
@@ -77,6 +78,13 @@ export const createAiRouter = (
     authMiddleware,
     validate({ body: aiImportImproveSchema }),
     aiController.postImportImprove
+  );
+
+  router.post(
+    "/ai/cover-letters/generate",
+    authMiddleware,
+    validate({ body: aiCoverLetterGenerationSchema }),
+    aiController.postGenerateCoverLetter
   );
 
   router.post(

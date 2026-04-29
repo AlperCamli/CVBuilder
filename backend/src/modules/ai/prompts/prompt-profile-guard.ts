@@ -13,6 +13,8 @@ const REQUIRED_PROMPT_TARGETS: PromptCoverageTarget[] = [
   { flow_type: "follow_up_questions", action_type: null },
   { flow_type: "tailored_draft", action_type: null },
   { flow_type: "import_improve", action_type: null },
+  { flow_type: "cv_parse", action_type: null },
+  { flow_type: "cover_letter_generation", action_type: null },
   { flow_type: "block_compare", action_type: null },
   { flow_type: "multi_option", action_type: "options" },
   { flow_type: "block_suggest", action_type: "improve" },

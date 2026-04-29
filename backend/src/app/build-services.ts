@@ -227,7 +227,13 @@ export const buildDefaultServices = (
     downloadUrlTtlSeconds: config.exports.downloadUrlTtlSeconds
   });
   const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
-  const importsService = new ImportsService(importsRepository, masterCvRepository, cvParser);
+  const importsService = new ImportsService(
+    importsRepository,
+    masterCvRepository,
+    cvParser,
+    aiProvider,
+    aiPromptResolver
+  );
   const jobsService = new JobsService(jobsRepository);
   const coverLettersService = new CoverLettersService(
     coverLettersRepository,

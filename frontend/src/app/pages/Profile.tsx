@@ -277,6 +277,12 @@ export function Profile() {
                     ? `${usage.remaining.tailored_cv_generations ?? "∞"} tailored CV generations remaining this month`
                     : "Loading usage..."}
                 </p>
+                {planCode !== "free" && meData?.current_plan.current_period_end && (
+                  <p style={{ fontSize: "12px", color: meData.current_plan.cancel_at_period_end ? "var(--color-red-600)" : "var(--color-teal-700)", marginTop: "4px" }}>
+                    {meData.current_plan.cancel_at_period_end ? "Expires on " : "Renews on "}
+                    {new Date(meData.current_plan.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 {planCode === "free" ? (

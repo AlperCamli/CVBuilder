@@ -86,3 +86,17 @@ export const blockCompareOutputSchema = z
     missing_keywords: z.array(z.string().trim().min(1).max(80)).max(30)
   })
   .strict();
+
+export const cvParseOutputSchema = z
+  .object({
+    parsed_content: cvContentInputSchema,
+    warnings: z.array(z.string()).max(20).optional()
+  })
+  .strict();
+
+export const coverLetterOutputSchema = z
+  .object({
+    title: z.string().trim().min(1).max(255),
+    content: z.string().trim().min(1)
+  })
+  .strict();

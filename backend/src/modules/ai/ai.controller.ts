@@ -64,6 +64,11 @@ export class AiController {
     sendSuccess(response, data);
   });
 
+  postGenerateCoverLetter = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.aiService.generateCoverLetter(requireSession(request), request.body);
+    sendSuccess(response, data);
+  });
+
   postBlockSuggest = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.aiService.suggestBlock(requireSession(request), request.body);
     sendSuccess(response, data);

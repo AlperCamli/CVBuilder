@@ -1,11 +1,14 @@
 import { Link } from "react-router";
-import { FileText, Edit, Target, Plus, MoreVertical } from "lucide-react";
+import { FileText, ExternalLink, Target, Plus, MoreVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
+import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import type {
   DashboardActivityResponseData,
   DashboardResponseData,
-  JobBoardResponse
+  JobBoardResponse,
+  JobStatus
 } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
@@ -28,6 +31,166 @@ const formatDate = (value: string | null): string => {
 
 const statusLabel = (status: string): string =>
   status.charAt(0).toUpperCase() + status.slice(1);
+
+const applyBoardMove = (
+  board: JobBoardResponse,
+  jobId: string,
+  nextStatus: JobStatus
+): JobBoardResponse => {
+  let movedItem: JobBoardResponse["groups"][number]["items"][number] | null = null;
+
+  const groupsWithoutOriginal = board.groups.map((group) => {
+    const index = group.items.findIndex((item) => item.id === jobId);
+    if (index === -1) return group;
+
+    movedItem = { ...group.items[index], status: nextStatus, updated_at: new Date().toISOString() };
+    const nextItems = [...group.items.slice(0, index), ...group.items.slice(index + 1)];
+    return { ...group, count: nextItems.length, items: nextItems };
+  });
+
+  if (!movedItem) return board;
+
+  const groupsWithTarget = groupsWithoutOriginal.map((group) => {
+    if (group.status !== nextStatus) return group;
+    const nextItems = [movedItem!, ...group.items];
+    return { ...group, count: nextItems.length, items: nextItems };
+  });
+
+  const countsByStatus = groupsWithTarget.reduce(
+    (acc, group) => {
+      acc[group.status] = group.count;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  return { ...board, groups: groupsWithTarget, counts_by_status: countsByStatus };
+};
+
+const applyJobsSummaryMove = (
+  dashboard: DashboardResponseData,
+  previousStatus: JobStatus,
+  nextStatus: JobStatus
+): DashboardResponseData => {
+  if (previousStatus === nextStatus) {
+    return dashboard;
+  }
+
+  const counts = { ...dashboard.jobs_summary.counts_by_status };
+  const previousCount = counts[previousStatus] ?? 0;
+  counts[previousStatus] = Math.max(0, previousCount - 1);
+  counts[nextStatus] = (counts[nextStatus] ?? 0) + 1;
+
+  return {
+    ...dashboard,
+    jobs_summary: {
+      ...dashboard.jobs_summary,
+      counts_by_status: counts
+    }
+  };
+};
+
+const DraggableDashboardJob = ({ job }: { job: any }) => {
+  const [{ isDragging }, drag] = useDrag({
+    type: "JOB",
+    item: { id: job.id, status: job.status },
+    collect: (monitor) => ({ isDragging: monitor.isDragging() })
+  });
+
+  return (
+    <div
+      ref={drag as any}
+      className="p-3 rounded-lg border cursor-move hover:shadow-sm transition-all"
+      style={{
+        background: "var(--color-background-primary)",
+        borderColor: "var(--color-border-tertiary)",
+        opacity: isDragging ? 0.6 : 1
+      }}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <h4 className="font-medium mb-0.5" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
+            {job.job_title}
+          </h4>
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+            {job.company_name}
+          </p>
+        </div>
+        <button style={{ color: "var(--color-text-secondary)" }}>
+          <MoreVertical size={14} />
+        </button>
+      </div>
+      <div className="flex items-center justify-between">
+        <span
+          className="px-2 py-0.5 rounded-full text-xs"
+          style={{
+            background: "var(--color-teal-50)",
+            color: "var(--color-teal-800)"
+          }}
+        >
+          {statusLabel(job.status)}
+        </span>
+        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+          {formatDate(job.updated_at)}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const DroppableDashboardColumn = ({ column, group, onDrop }: { column: any, group: any, onDrop: (jobId: string, status: JobStatus) => void }) => {
+  const [{ isOver }, drop] = useDrop({
+    accept: "JOB",
+    drop: (item: { id: string; status: JobStatus }) => {
+      if (item.status !== column.id) {
+        onDrop(item.id, column.id as JobStatus);
+      }
+    },
+    collect: (monitor) => ({ isOver: monitor.isOver() })
+  });
+
+  const items = group?.items ?? [];
+
+  return (
+    <div ref={drop as any}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
+          {column.label}
+        </h3>
+        <span
+          className="px-2 py-0.5 rounded-full"
+          style={{
+            fontSize: "11px",
+            background: "var(--color-background-secondary)",
+            color: "var(--color-text-secondary)"
+          }}
+        >
+          {group?.count ?? 0}
+        </span>
+      </div>
+
+      <div
+        className="space-y-2 p-1 rounded-lg transition-colors"
+        style={{ background: isOver ? "var(--color-teal-50)" : "transparent" }}
+      >
+        {items.slice(0, 3).map((job: any) => (
+          <DraggableDashboardJob key={job.id} job={job} />
+        ))}
+
+        {items.length === 0 && (
+          <div
+            className="p-4 rounded-lg border-2 border-dashed text-center"
+            style={{ borderColor: "var(--color-border-tertiary)" }}
+          >
+            <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              No applications
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export function Dashboard() {
   const { setSidebarVisible } = useSidebar();
@@ -115,6 +278,36 @@ export function Dashboard() {
     { id: "interview", label: "Interview" },
     { id: "offer", label: "Offer" }
   ] as const;
+
+  const handleDropJob = async (jobId: string, nextStatus: JobStatus) => {
+    if (!jobBoard) {
+      return;
+    }
+
+    const previousGroup = jobBoard.groups.find((group) =>
+      group.items.some((item) => item.id === jobId)
+    );
+    const previousStatus = previousGroup?.status as JobStatus | undefined;
+
+    if (!previousStatus || previousStatus === nextStatus) {
+      return;
+    }
+
+    const previousBoard = jobBoard;
+    setJobBoard(applyBoardMove(previousBoard, jobId, nextStatus));
+    setDashboard((current) =>
+      current ? applyJobsSummaryMove(current, previousStatus, nextStatus) : current
+    );
+
+    try {
+      await api.patchJobStatus(jobId, nextStatus);
+    } catch {
+      setJobBoard(previousBoard);
+      setDashboard((current) =>
+        current ? applyJobsSummaryMove(current, nextStatus, previousStatus) : current
+      );
+    }
+  };
 
   if (loading) {
     return (
@@ -269,8 +462,8 @@ export function Dashboard() {
                   color: "var(--color-teal-50)"
                 }}
               >
-                <Edit size={14} />
-                Edit
+                <ExternalLink size={14} />
+                Open
               </Link>
               <Link
                 to={`/app/tailor/${primaryMaster.id}`}
@@ -307,83 +500,23 @@ export function Dashboard() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {columns.map((column) => {
-            const group = jobBoard?.groups.find((item) => item.status === column.id);
-            const items = group?.items ?? [];
-            return (
-              <div key={column.id}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                    {column.label}
-                  </h3>
-                  <span
-                    className="px-2 py-0.5 rounded-full"
-                    style={{
-                      fontSize: "11px",
-                      background: "var(--color-background-secondary)",
-                      color: "var(--color-text-secondary)"
-                    }}
-                  >
-                    {group?.count ?? 0}
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  {items.slice(0, 3).map((job) => (
-                    <div
-                      key={job.id}
-                      className="p-3 rounded-lg border"
-                      style={{
-                        background: "var(--color-background-primary)",
-                        borderColor: "var(--color-border-tertiary)"
-                      }}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h4 className="font-medium mb-0.5" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                            {job.job_title}
-                          </h4>
-                          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                            {job.company_name}
-                          </p>
-                        </div>
-                        <button style={{ color: "var(--color-text-secondary)" }}>
-                          <MoreVertical size={14} />
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span
-                          className="px-2 py-0.5 rounded-full text-xs"
-                          style={{
-                            background: "var(--color-teal-50)",
-                            color: "var(--color-teal-800)"
-                          }}
-                        >
-                          {statusLabel(job.status)}
-                        </span>
-                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                          {formatDate(job.updated_at)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-
-                  {items.length === 0 && (
-                    <div
-                      className="p-4 rounded-lg border-2 border-dashed text-center"
-                      style={{ borderColor: "var(--color-border-tertiary)" }}
-                    >
-                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        No applications
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DndProvider backend={HTML5Backend}>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {columns.map((column) => {
+              const group = jobBoard?.groups.find((item) => item.status === column.id);
+              return (
+                <DroppableDashboardColumn
+                  key={column.id}
+                  column={column}
+                  group={group}
+                  onDrop={(jobId, nextStatus) => {
+                    void handleDropJob(jobId, nextStatus);
+                  }}
+                />
+              );
+            })}
+          </div>
+        </DndProvider>
       </div>
 
       <div>

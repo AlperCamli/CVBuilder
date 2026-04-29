@@ -40,6 +40,11 @@ Current parser abstraction:
 - interface: `CvParser`
 - implementation class: `SimpleCvParser`
 
+Phase 5 behavior in service orchestration:
+- `ImportsService` first extracts and structures content with `SimpleCvParser`.
+- When AI services are configured, `cv_parse` flow re-structures the extracted raw text as the primary final result.
+- If AI parse fails (including timeout/quota/provider errors), the system falls back to `SimpleCvParser` output and returns warnings.
+
 Parser identities:
 - `smart_pdf_parser_v2` for `application/pdf`
 - `smart_docx_parser_v1` for DOCX files

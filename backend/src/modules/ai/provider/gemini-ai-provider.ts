@@ -528,7 +528,14 @@ export class GeminiAiProvider implements AiProvider {
           return {
             provider: this.providerName,
             model_name: candidateModel,
-            output_payload: outputPayload
+            output_payload: outputPayload,
+            usage: response.usageMetadata
+              ? {
+                  input_tokens: response.usageMetadata.promptTokenCount ?? 0,
+                  output_tokens: response.usageMetadata.candidatesTokenCount ?? 0,
+                  total_tokens: response.usageMetadata.totalTokenCount ?? 0
+                }
+              : undefined
           };
         } catch (error) {
           if (error instanceof AiProviderError) {

@@ -71,6 +71,9 @@ const pendingRun: AiRunRecord = {
   output_payload: null,
   error_message: null,
   debug_payload: null,
+  input_tokens: null,
+  output_tokens: null,
+  total_tokens: null,
   started_at: NOW,
   completed_at: null
 };

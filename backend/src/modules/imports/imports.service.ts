@@ -3,6 +3,10 @@ import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../sh
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
 import type { CreateMasterCvPayload, MasterCvRepository } from "../master-cv/master-cv.repository";
+import type { AiProvider } from "../ai/provider/ai-provider";
+import type { AiPromptResolver } from "../ai/prompts/prompt-resolver";
+import { AI_FLOW_REGISTRY } from "../ai/flows/flow-registry";
+import { cvParseOutputSchema } from "../ai/flows/flow-contracts";
 import type {
   CreateMasterCvFromImportInput,
   CreateImportSessionInput,
@@ -37,6 +41,10 @@ const countBlocks = (content: CvContent): number => {
 };
 
 const DEFAULT_IMPORTS_STORAGE_BUCKET = "imports";
+const AI_PARSE_FLOW_TYPE = "cv_parse";
+const DEFAULT_AI_PARSE_USER_PROMPT =
+  "Convert raw CV text into strict CV content JSON without inventing facts.";
+const MAX_AI_PARSE_RAW_TEXT_LENGTH = 40_000;
 
 const sanitizeFilename = (value: string): string => {
   const normalized = value
@@ -57,7 +65,9 @@ export class ImportsService {
   constructor(
     private readonly importsRepository: ImportsRepository,
     private readonly masterCvRepository: MasterCvRepository,
-    private readonly parser: CvParser
+    private readonly parser: CvParser,
+    private readonly aiProvider?: AiProvider,
+    private readonly aiPromptResolver?: AiPromptResolver
   ) {}
 
   async createImportSession(
@@ -170,11 +180,16 @@ export class ImportsService {
         bytes
       });
 
+      const effectiveParseResult = await this.resolveEffectiveParseResult(parseResult, {
+        original_filename: detail.sourceFile.original_filename,
+        mime_type: detail.sourceFile.mime_type
+      });
+
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
-        parser_name: parseResult.parserName,
-        raw_extracted_text: parseResult.rawExtractedText,
-        parsed_content: parseResult.parsedContent,
+        parser_name: effectiveParseResult.parserName,
+        raw_extracted_text: effectiveParseResult.rawExtractedText,
+        parsed_content: effectiveParseResult.parsedContent,
         error_message: null
       });
 
@@ -191,13 +206,13 @@ export class ImportsService {
           target_master_cv: refreshed.targetMasterCv
         },
         parse_summary: {
-          parser_name: parseResult.parserName,
+          parser_name: effectiveParseResult.parserName,
           status: "parsed",
-          raw_text_length: parseResult.rawExtractedText.length,
-          section_count: parseResult.parsedContent.sections.length,
-          block_count: countBlocks(parseResult.parsedContent),
-          warnings: parseResult.warnings,
-          diagnostics: parseResult.diagnostics ?? null
+          raw_text_length: effectiveParseResult.rawExtractedText.length,
+          section_count: effectiveParseResult.parsedContent.sections.length,
+          block_count: countBlocks(effectiveParseResult.parsedContent),
+          warnings: effectiveParseResult.warnings,
+          diagnostics: effectiveParseResult.diagnostics ?? null
         }
       };
     } catch (error) {
@@ -362,5 +377,98 @@ export class ImportsService {
     }
 
     return base.length <= 160 ? base : `${base.slice(0, 157)}...`;
+  }
+
+  private async resolveEffectiveParseResult(
+    fallbackResult: Awaited<ReturnType<CvParser["parse"]>>,
+    sourceFile: { original_filename: string; mime_type: string | null }
+  ): Promise<Awaited<ReturnType<CvParser["parse"]>>> {
+    const aiResult = await this.tryParseWithAi(fallbackResult, sourceFile);
+    if (aiResult) {
+      return aiResult;
+    }
+
+    return fallbackResult;
+  }
+
+  private async tryParseWithAi(
+    fallbackResult: Awaited<ReturnType<CvParser["parse"]>>,
+    sourceFile: { original_filename: string; mime_type: string | null }
+  ): Promise<Awaited<ReturnType<CvParser["parse"]>> | null> {
+    if (!this.aiProvider || !this.aiPromptResolver) {
+      return null;
+    }
+
+    const rawExtractedText = fallbackResult.rawExtractedText.trim();
+    if (!rawExtractedText) {
+      return null;
+    }
+
+    const flowDefinition = AI_FLOW_REGISTRY[AI_PARSE_FLOW_TYPE];
+    const fallbackModelName = this.aiProvider.resolveModelName(AI_PARSE_FLOW_TYPE);
+
+    try {
+      const prompt = await this.aiPromptResolver.resolve({
+        flow_type: AI_PARSE_FLOW_TYPE,
+        provider: this.aiProvider.providerName,
+        action_type: null,
+        fallback: {
+          prompt_key: flowDefinition.prompt_key,
+          prompt_version: flowDefinition.prompt_version,
+          system_prompt: flowDefinition.system_prompt,
+          model_name: fallbackModelName
+        }
+      });
+
+      const aiResult = await this.aiProvider.generate({
+        flow_type: AI_PARSE_FLOW_TYPE,
+        model_name: prompt.model_name,
+        prompt: {
+          prompt_key: prompt.prompt_key,
+          prompt_version: prompt.prompt_version,
+          system_prompt: prompt.system_prompt,
+          user_prompt: prompt.user_prompt_template?.trim() || DEFAULT_AI_PARSE_USER_PROMPT
+        },
+        output_schema: flowDefinition.output_schema,
+        input_payload: {
+          raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
+          source_filename: sourceFile.original_filename,
+          mime_type: sourceFile.mime_type ?? "application/octet-stream",
+          language_hint: fallbackResult.parsedContent.language
+        }
+      });
+
+      const parsed = cvParseOutputSchema.safeParse(aiResult.output_payload);
+      if (!parsed.success) {
+        throw new Error("AI CV parsing output did not match contract");
+      }
+
+      const normalized = normalizeCvContent(
+        parsed.data.parsed_content,
+        fallbackResult.parsedContent.language || "en"
+      );
+      const mergedWarnings = [
+        ...fallbackResult.warnings,
+        ...(parsed.data.warnings ?? [])
+      ];
+
+      return {
+        parserName: `${this.aiProvider.providerName}_cv_parser_v1`,
+        rawExtractedText: fallbackResult.rawExtractedText,
+        parsedContent: normalized,
+        warnings: mergedWarnings,
+        diagnostics: fallbackResult.diagnostics
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown AI parsing error";
+
+      return {
+        ...fallbackResult,
+        warnings: [
+          ...fallbackResult.warnings,
+          `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
+        ]
+      };
+    }
   }
 }

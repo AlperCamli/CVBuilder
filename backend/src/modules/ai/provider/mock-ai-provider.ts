@@ -447,6 +447,97 @@ const generateImportImprove = (input: Record<string, unknown>): Record<string, u
   };
 };
 
+const generateCvParse = (input: Record<string, unknown>): Record<string, unknown> => {
+  const rawText = asString(input.raw_text).trim();
+  const language = asString(input.language_hint) || "en";
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const summaryText = clip(lines.slice(0, 4).join(" "), 1200) || "Imported CV content.";
+  const keywordCandidates = tokenizeKeywords(rawText, 12).map((keyword) => capitalize(keyword));
+  const skillValues = [...new Set(keywordCandidates)].slice(0, 12);
+
+  return {
+    parsed_content: {
+      version: "v1",
+      language,
+      metadata: {},
+      sections: [
+        {
+          id: `summary-${randomUUID()}`,
+          type: "summary",
+          title: "Summary",
+          order: 1,
+          blocks: [
+            {
+              id: `summary-block-${randomUUID()}`,
+              type: "summary",
+              order: 1,
+              visibility: "visible",
+              fields: {
+                text: summaryText
+              },
+              meta: {}
+            }
+          ],
+          meta: {}
+        },
+        {
+          id: `skills-${randomUUID()}`,
+          type: "skills",
+          title: "Skills",
+          order: 2,
+          blocks: [
+            {
+              id: `skills-block-${randomUUID()}`,
+              type: "skills",
+              order: 1,
+              visibility: "visible",
+              fields: {
+                items: skillValues,
+                text: skillValues.join(", ")
+              },
+              meta: {}
+            }
+          ],
+          meta: {}
+        }
+      ]
+    },
+    warnings: rawText ? [] : ["Input text was empty; returned minimal structured content."]
+  };
+};
+
+const generateCoverLetter = (input: Record<string, unknown>): Record<string, unknown> => {
+  const jobTitle = asString(input.job_title).trim() || "the role";
+  const companyName = asString(input.company_name).trim() || "the company";
+  const tone = asString(input.tone).trim() || "professional";
+  const keywords = tokenizeKeywords(asString(input.job_description), 6)
+    .map((keyword) => capitalize(keyword))
+    .join(", ");
+
+  const body = [
+    `Dear Hiring Team,`,
+    ``,
+    `I am excited to apply for the ${jobTitle} position at ${companyName}.`,
+    `My background aligns well with the role, and I can contribute quickly with a ${tone} approach focused on measurable outcomes.`,
+    keywords
+      ? `I would particularly bring value in areas such as ${keywords}.`
+      : `I would bring strong execution, ownership, and collaboration to your team.`,
+    `I would welcome the opportunity to discuss how I can support your priorities.`,
+    ``,
+    `Sincerely,`,
+    `[Your Name]`
+  ].join("\n");
+
+  return {
+    title: `${jobTitle} - ${companyName}`,
+    content: body
+  };
+};
+
 const generateBlockSuggestions = (
   input: Record<string, unknown>,
   fallbackCount = 1
@@ -543,6 +634,12 @@ export class MockAiProvider implements AiProvider {
         break;
       case "import_improve":
         outputPayload = generateImportImprove(request.input_payload);
+        break;
+      case "cv_parse":
+        outputPayload = generateCvParse(request.input_payload);
+        break;
+      case "cover_letter_generation":
+        outputPayload = generateCoverLetter(request.input_payload);
         break;
       case "block_compare":
         outputPayload = generateBlockCompare(request.input_payload);

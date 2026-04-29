@@ -95,7 +95,9 @@ export type AiFlowType =
   | "multi_option"
   | "import_improve"
   | "summary"
-  | "improve";
+  | "improve"
+  | "cv_parse"
+  | "cover_letter_generation";
 
 export type AiRunStatus = "pending" | "completed" | "failed";
 
@@ -124,6 +126,9 @@ export interface AiRunRecord {
   output_payload: Record<string, unknown> | null;
   error_message: string | null;
   debug_payload: Record<string, unknown> | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
   started_at: string;
   completed_at: string | null;
 }

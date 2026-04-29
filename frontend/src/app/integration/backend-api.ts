@@ -242,6 +242,16 @@ export interface ImportImproveInput {
   improvement_guidance?: string[];
 }
 
+export interface CoverLetterGenerationInput {
+  job_title: string;
+  company_name: string;
+  job_description?: string;
+  master_cv_id?: string;
+  tailored_cv_id?: string;
+  tone?: string;
+  additional_instructions?: string;
+}
+
 export interface CreateExportInput {
   template_id?: string | null;
 }
@@ -617,6 +627,13 @@ export class BackendApi {
 
   getCoverLetter(coverLetterId: string): Promise<CoverLetterDetail> {
     return this.client.get<CoverLetterDetail>(`/cover-letters/${coverLetterId}`);
+  }
+
+  postGenerateCoverLetter(payload: CoverLetterGenerationInput): Promise<{ title: string; content: string }> {
+    return this.client.post<{ title: string; content: string }, CoverLetterGenerationInput>(
+      "/ai/cover-letters/generate",
+      payload
+    );
   }
 
   putCoverLetterContent(
