@@ -1072,6 +1072,31 @@ const extractSocialLinks = (metadata: Record<string, CvJsonValue>): EditorHeader
   return [...deduped.values()];
 };
 
+const STRICT_MAPPED_FIELDS_SECTION_TYPES = new Set([
+  "experience",
+  "education",
+  "languages",
+  "certifications",
+  "courses",
+  "projects",
+  "volunteer",
+  "awards",
+  "publications",
+  "references"
+]);
+
+const resolveSectionFields = (
+  sectionType: string,
+  rawFields: unknown,
+  mappedFields: Record<string, CvJsonValue>
+): Record<string, CvJsonValue> => {
+  if (STRICT_MAPPED_FIELDS_SECTION_TYPES.has(sectionType)) {
+    return mergeJsonRecords(mappedFields);
+  }
+
+  return mergeJsonRecords(rawFields, mappedFields);
+};
+
 const sectionFromItems = (
   section: EditorSection,
   sectionIndex: number,
@@ -1096,7 +1121,7 @@ const sectionFromItems = (
       type: asString(item.blockType) || mapped.type,
       order: index,
       visibility: section.hidden ? "hidden" : toVisibility(Boolean(item.hidden)),
-      fields: mergeJsonRecords(item.rawFields, mapped.fields),
+      fields: resolveSectionFields(sectionType, item.rawFields, mapped.fields),
       meta: mergeJsonRecords(item.rawMeta, mapped.meta)
     };
   });

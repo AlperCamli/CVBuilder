@@ -219,6 +219,7 @@ describe("rendering presentation mapper", () => {
     });
 
     expect(presentation.header.name).toBe("Alper Çamlı");
+    expect(presentation.document_title).toBe("My CV");
     expect(presentation.header.photo).toBe("data:image/png;base64,AAA");
     expect(presentation.header.social_links).toHaveLength(2);
 
@@ -235,5 +236,36 @@ describe("rendering presentation mapper", () => {
     const educationSection = presentation.sections.find((section) => section.type === "education");
     const educationItem = educationSection?.items[0];
     expect(educationItem?.body).toBe("Board Member of the Game Developers Club");
+  });
+
+  it("does not use legacy free-text fallback for education body", () => {
+    const payload = renderingPayload();
+    const educationSection = payload.sections.find((section) => section.type === "education");
+    const educationBlock = educationSection?.blocks[0];
+    if (!educationBlock) {
+      throw new Error("education block fixture missing");
+    }
+
+    educationBlock.normalized_fields = {
+      degree: field("Computer Science", "Computer Science", ["Computer Science"]),
+      institution: field("Sabancı University", "Sabancı University", ["Sabancı University"]),
+      start_date: field("02/2022", "02/2022", ["02/2022"]),
+      end_date: field("01/2026", "01/2026", ["01/2026"]),
+      text: field(
+        "Computer Science 01/2026 Board Member, Game Developers Club 02/2022 Sabancı University false false",
+        "Computer Science 01/2026 Board Member, Game Developers Club 02/2022 Sabancı University false false",
+        [
+          "Computer Science 01/2026 Board Member, Game Developers Club 02/2022 Sabancı University false false"
+        ]
+      )
+    };
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const mappedEducation = presentation.sections.find((section) => section.type === "education");
+    const mappedItem = mappedEducation?.items[0];
+
+    expect(mappedItem?.title).toBe("Computer Science");
+    expect(mappedItem?.subtitle).toBe("Sabancı University");
+    expect(mappedItem?.body).toBeNull();
   });
 });

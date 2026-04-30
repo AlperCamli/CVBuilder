@@ -105,7 +105,8 @@ export const mapPresentationToExportDocument = (
   presentation: RenderingPresentation
 ): ExportDocumentModel => {
   const header = presentation.header;
-  const title = normalizeLine(header.name) ?? "Tailored CV";
+  const title =
+    normalizeLine(header.name) ?? normalizeLine(presentation.document_title) ?? "CV";
   const subtitle = normalizeLine(header.title);
 
   const contactItems = header.contact_items

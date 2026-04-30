@@ -74,6 +74,7 @@ export interface PresentationSection {
 
 export interface RenderingPresentation {
   version: "v1";
+  document_title: string | null;
   theme: PresentationTheme;
   header: PresentationHeader;
   sections: PresentationSection[];
@@ -250,22 +251,60 @@ const extractTextItems = (value: CvJsonValue): string[] => {
   return Object.values(value).flatMap((item) => extractTextItems(item));
 };
 
-const pickBodyText = (block: RenderingBlock): string | null => {
-  const preferredKeys = [
-    "description",
-    "summary",
-    "details",
-    "notes",
-    "responsibilities",
-    "highlights",
-    "text"
-  ];
+const textByKey = (block: RenderingBlock, keys: string[]): string | null => {
+  for (const key of keys) {
+    const direct = normalizeLine(block.normalized_fields[key]?.text ?? null);
+    if (direct) {
+      return direct;
+    }
+
+    const match = Object.entries(block.normalized_fields).find(([fieldKey]) => keyMatches(fieldKey, [key]));
+    const matched = normalizeLine(match?.[1].text ?? null);
+    if (matched) {
+      return matched;
+    }
+  }
+
+  return null;
+};
+
+const pickBodyText = (sectionType: string, block: RenderingBlock): string | null => {
+  const preferredKeys = ["description", "summary", "details", "notes", "responsibilities", "highlights"];
 
   for (const key of preferredKeys) {
     const value = normalizeLine(block.normalized_fields[key]?.text ?? null);
     if (value) {
       return value;
     }
+  }
+
+  const allowTextFallback = ["experience", "volunteer", "projects", "awards", "publications", "references", "custom"].includes(
+    sectionType
+  );
+  if (allowTextFallback) {
+    const textValue = normalizeLine(block.normalized_fields.text?.text ?? null);
+    if (textValue) {
+      return textValue;
+    }
+  }
+
+  const allowPlainTextFallback = ![
+    "summary",
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "certifications",
+    "courses",
+    "projects",
+    "volunteer",
+    "awards",
+    "publications",
+    "references"
+  ].includes(sectionType);
+
+  if (!allowPlainTextFallback) {
+    return null;
   }
 
   return normalizeLine(block.plain_text);
@@ -371,7 +410,7 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
   const metadataLine = buildMetadataLine(dateRange, location);
   const bullets = dedupeText(block.derived.bullets);
 
-  let body = pickBodyText(block);
+  let body = pickBodyText(sectionType, block);
   const mergedHeading = [headline, subheadline].filter(Boolean).join(" ");
 
   if (
@@ -553,7 +592,7 @@ const mapSection = (section: RenderingSection): PresentationSection | null => {
   if (type === "summary") {
     const summaryParts = section.blocks
       .filter((block) => block.visibility === "visible")
-      .map((block) => pickBodyText(block) ?? normalizeLine(block.derived.headline))
+      .map((block) => pickBodyText(type, block) ?? normalizeLine(block.derived.headline))
       .filter((value): value is string => Boolean(value));
 
     const deduped = dedupeText(summaryParts);
@@ -580,6 +619,77 @@ const mapSection = (section: RenderingSection): PresentationSection | null => {
           bullets: []
         }
       ]
+    };
+  }
+
+  if (type === "education") {
+    const items = section.blocks
+      .filter((block) => block.visibility === "visible")
+      .map((block) => {
+        const institution = textByKey(block, ["institution", "school", "university"]);
+        const degree = textByKey(block, ["degree", "title"]);
+        const fieldOfStudy = textByKey(block, ["field_of_study", "major", "program"]);
+        const gpa = textByKey(block, ["gpa"]);
+        const startDate = textByKey(block, ["start_date", "start"]);
+        const endDate = textByKey(block, ["end_date", "end"]);
+        const description = textByKey(block, ["description", "notes", "details"]);
+
+        const dateRange =
+          startDate && endDate
+            ? `${startDate} - ${endDate}`
+            : startDate || endDate || normalizeLine(block.derived.date_range);
+
+        const titleValue = degree || institution || normalizeLine(block.derived.headline);
+        const subtitleParts = [institution, fieldOfStudy]
+          .filter((value): value is string => Boolean(value))
+          .filter((value, index, values) => values.findIndex((item) => collapseForCompare(item) === collapseForCompare(value)) === index)
+          .filter((value) => !titleValue || collapseForCompare(value) !== collapseForCompare(titleValue));
+
+        const bodyParts: string[] = [];
+        if (gpa) {
+          bodyParts.push(`GPA: ${gpa}`);
+        }
+        if (description) {
+          bodyParts.push(description);
+        }
+
+        const metadataLine = buildMetadataLine(dateRange, null);
+
+        const item: PresentationItem = {
+          id: block.id,
+          title: titleValue,
+          subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : null,
+          date_range: dateRange,
+          location: null,
+          metadata_line: metadataLine,
+          body: bodyParts.length > 0 ? bodyParts.join("\n") : null,
+          bullets: []
+        };
+
+        if (
+          !item.title &&
+          !item.subtitle &&
+          !item.date_range &&
+          !item.metadata_line &&
+          !item.body
+        ) {
+          return null;
+        }
+
+        return item;
+      })
+      .filter((item): item is PresentationItem => item !== null);
+
+    if (items.length === 0) {
+      return null;
+    }
+
+    return {
+      id: section.id,
+      type,
+      title,
+      inline_text: null,
+      items
     };
   }
 
@@ -691,6 +801,7 @@ export const mapRenderingPayloadToPresentation = (
 
   return {
     version: "v1",
+    document_title: normalizeLine(rendering.document.title) ?? null,
     theme,
     header,
     sections

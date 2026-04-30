@@ -384,6 +384,7 @@ export interface PresentationSection {
 
 export interface RenderingPresentation {
   version: "v1";
+  document_title: string | null;
   theme: PresentationTheme;
   header: PresentationHeader;
   sections: PresentationSection[];

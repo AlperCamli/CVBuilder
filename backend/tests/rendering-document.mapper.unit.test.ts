@@ -4,6 +4,7 @@ import { mapPresentationToExportDocument } from "../src/modules/exports/generato
 
 const basePresentation = (): RenderingPresentation => ({
   version: "v1",
+  document_title: "Tailored CV",
   theme: {
     layout: "modern-clean",
     mode: "classic-single-column",
@@ -106,5 +107,18 @@ describe("presentation to export document mapper", () => {
     presentation.header.photo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6W8h4AAAAASUVORK5CYII=";
     const mappedDataUri = mapPresentationToExportDocument(presentation);
     expect(mappedDataUri.photo_data_uri?.startsWith("data:image/png;base64,")).toBe(true);
+  });
+
+  it("uses document title fallback before generic CV fallback", () => {
+    const presentation = basePresentation();
+    presentation.header.name = null;
+    presentation.document_title = "My Tailored Resume";
+
+    const mappedFromDocumentTitle = mapPresentationToExportDocument(presentation);
+    expect(mappedFromDocumentTitle.title).toBe("My Tailored Resume");
+
+    presentation.document_title = null;
+    const mappedGeneric = mapPresentationToExportDocument(presentation);
+    expect(mappedGeneric.title).toBe("CV");
   });
 });
