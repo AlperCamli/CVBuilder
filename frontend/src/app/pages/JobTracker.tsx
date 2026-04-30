@@ -30,6 +30,24 @@ const statusToLabel: Record<JobStatus, string> = {
   archived: "Archived"
 };
 
+const statusBadgeStyle = (status: JobStatus): { background: string; color: string } => {
+  switch (status) {
+    case "saved":
+      return { background: "var(--status-saved-bg)", color: "var(--status-saved-fg)" };
+    case "applied":
+      return { background: "var(--status-applied-bg)", color: "var(--status-applied-fg)" };
+    case "interview":
+      return { background: "var(--status-interview-bg)", color: "var(--status-interview-fg)" };
+    case "offer":
+      return { background: "var(--status-offer-bg)", color: "var(--status-offer-fg)" };
+    case "rejected":
+      return { background: "var(--status-rejected-bg)", color: "var(--status-rejected-fg)" };
+    case "archived":
+    default:
+      return { background: "var(--status-draft-bg)", color: "var(--status-draft-fg)" };
+  }
+};
+
 const formatDate = (value: string): string =>
   new Date(value).toLocaleDateString("en-US", {
     month: "short",
@@ -255,10 +273,11 @@ const DraggableJobCard = ({
       <div className="flex items-center justify-between mt-3">
         <span
           className="px-2 py-0.5 rounded-full text-xs"
-          style={{
-            background: job.isNew ? "var(--color-teal-600)" : "var(--color-teal-50)",
-            color: job.isNew ? "white" : "var(--color-teal-800)"
-          }}
+          style={
+            job.isNew
+              ? { background: "var(--color-teal-600)", color: "var(--color-teal-50)" }
+              : statusBadgeStyle(job.status)
+          }
         >
           {statusToLabel[job.status]}
         </span>
@@ -354,11 +373,11 @@ export function JobTracker() {
   const [jobHistory, setJobHistory] = useState<JobHistoryResponse | null>(null);
 
   const columns = [
-    { id: "saved", label: "Saved", color: "#E6F1FB" },
-    { id: "applied", label: "Applied", color: "#E1F5EE" },
-    { id: "interview", label: "Interview", color: "#EAF3DE" },
-    { id: "offer", label: "Offer", color: "#FAEEDA" },
-    { id: "rejected", label: "Rejected", color: "#FCEBEB" }
+    { id: "saved", label: "Saved", color: "var(--status-saved-bg)" },
+    { id: "applied", label: "Applied", color: "var(--status-applied-bg)" },
+    { id: "interview", label: "Interview", color: "var(--status-interview-bg)" },
+    { id: "offer", label: "Offer", color: "var(--status-offer-bg)" },
+    { id: "rejected", label: "Rejected", color: "var(--status-rejected-bg)" }
   ] as const;
 
   const jobs = useMemo(() => {

@@ -120,7 +120,8 @@ export function AIImproving() {
     <div
       className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden"
       style={{
-        background: "linear-gradient(135deg, #0f172a 0%, #0c4a4e 40%, #134e4a 70%, #1e293b 100%)"
+        background:
+          "linear-gradient(135deg, var(--color-slate-950) 0%, var(--color-teal-900) 40%, var(--color-teal-800) 70%, var(--color-slate-800) 100%)"
       }}
     >
       {/* Floating particles */}
@@ -151,7 +152,7 @@ export function AIImproving() {
           left: "50%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          background: "radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(29, 158, 117, 0.12) 0%, transparent 70%)",
           animation: "ambientGlow 4s ease-in-out infinite"
         }}
       />
@@ -162,7 +163,7 @@ export function AIImproving() {
           style={{
             background: "rgba(15, 23, 42, 0.6)",
             backdropFilter: "blur(24px)",
-            border: "1px solid rgba(20, 184, 166, 0.15)",
+            border: "1px solid rgba(29, 158, 117, 0.15)",
             boxShadow: "0 25px 60px -12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
           }}
         >
@@ -192,9 +193,9 @@ export function AIImproving() {
                 />
                 <defs>
                   <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#2dd4bf" />
-                    <stop offset="50%" stopColor="#14b8a6" />
-                    <stop offset="100%" stopColor="#0d9488" />
+                    <stop offset="0%" stopColor="var(--color-teal-200)" />
+                    <stop offset="50%" stopColor="var(--color-teal-400)" />
+                    <stop offset="100%" stopColor="var(--color-teal-600)" />
                   </linearGradient>
                 </defs>
               </svg>
@@ -204,11 +205,11 @@ export function AIImproving() {
                 <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center"
                   style={{
-                    background: "linear-gradient(135deg, rgba(20, 184, 166, 0.2) 0%, rgba(45, 212, 191, 0.1) 100%)",
-                    border: "1px solid rgba(20, 184, 166, 0.3)"
+                    background: "linear-gradient(135deg, rgba(29, 158, 117, 0.2) 0%, rgba(93, 202, 165, 0.1) 100%)",
+                    border: "1px solid rgba(29, 158, 117, 0.3)"
                   }}
                 >
-                  <Sparkles size={28} style={{ color: "#2dd4bf" }} />
+                  <Sparkles size={28} style={{ color: "var(--color-teal-200)" }} />
                 </div>
               </div>
             </div>
@@ -216,20 +217,20 @@ export function AIImproving() {
 
           <h2
             className="font-semibold mb-2"
-            style={{ fontSize: "22px", color: "#f1f5f9", letterSpacing: "-0.01em" }}
+            style={{ fontSize: "22px", color: "var(--color-slate-50)", letterSpacing: "-0.01em" }}
           >
             AI is improving your CV
           </h2>
           <p
             className="mb-1 font-medium ai-step-text"
             key={currentStep}
-            style={{ fontSize: "15px", color: "#2dd4bf" }}
+            style={{ fontSize: "15px", color: "var(--color-teal-200)" }}
           >
             {currentStepData.label}
           </p>
           <p
             className="mb-8"
-            style={{ fontSize: "13px", color: "#64748b" }}
+            style={{ fontSize: "13px", color: "var(--color-slate-400)" }}
           >
             {currentStepData.sublabel}
           </p>
@@ -252,24 +253,24 @@ export function AIImproving() {
                     }`}
                     style={{
                       background: isComplete
-                        ? "rgba(20, 184, 166, 0.15)"
+                        ? "rgba(29, 158, 117, 0.15)"
                         : isCurrent
-                          ? "rgba(20, 184, 166, 0.2)"
+                          ? "rgba(29, 158, 117, 0.2)"
                           : "rgba(255, 255, 255, 0.03)",
                       border: `1.5px solid ${
                         isComplete
-                          ? "rgba(20, 184, 166, 0.4)"
+                          ? "rgba(29, 158, 117, 0.4)"
                           : isCurrent
-                            ? "rgba(45, 212, 191, 0.5)"
+                            ? "rgba(93, 202, 165, 0.5)"
                             : "rgba(255, 255, 255, 0.06)"
                       }`,
-                      boxShadow: isCurrent ? "0 0 20px rgba(20, 184, 166, 0.2)" : "none"
+                      boxShadow: isCurrent ? "0 0 20px rgba(29, 158, 117, 0.2)" : "none"
                     }}
                   >
                     <StepIcon
                       size={16}
                       style={{
-                        color: isComplete || isCurrent ? "#2dd4bf" : "#475569",
+                        color: isComplete || isCurrent ? "var(--color-teal-200)" : "var(--color-slate-600)",
                         transition: "color 0.5s"
                       }}
                     />
@@ -280,7 +281,7 @@ export function AIImproving() {
           </div>
 
           {/* Progress percentage */}
-          <p style={{ fontSize: "12px", color: "#475569" }}>
+          <p style={{ fontSize: "12px", color: "var(--color-slate-400)" }}>
             {Math.round(progress)}% complete
           </p>
 
@@ -289,9 +290,9 @@ export function AIImproving() {
               className="mt-6 flex items-center justify-center gap-2 p-3 rounded-xl"
               style={{
                 fontSize: "13px",
-                color: "#2dd4bf",
-                background: "rgba(20, 184, 166, 0.08)",
-                border: "1px solid rgba(20, 184, 166, 0.15)"
+                color: "var(--color-teal-200)",
+                background: "rgba(29, 158, 117, 0.08)",
+                border: "1px solid rgba(29, 158, 117, 0.15)"
               }}
             >
               <Loader2 size={14} className="animate-spin" />
@@ -304,9 +305,9 @@ export function AIImproving() {
               <div
                 className="p-4 rounded-xl text-left"
                 style={{
-                  background: "rgba(239, 68, 68, 0.1)",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                  color: "#fca5a5",
+                  background: "rgba(226, 75, 74, 0.12)",
+                  border: "1px solid rgba(226, 75, 74, 0.25)",
+                  color: "var(--color-red-200)",
                   fontSize: "13px"
                 }}
               >
@@ -319,7 +320,7 @@ export function AIImproving() {
                 style={{
                   fontSize: "13px",
                   background: "rgba(255, 255, 255, 0.06)",
-                  color: "#94a3b8",
+                  color: "var(--color-slate-400)",
                   border: "1px solid rgba(255, 255, 255, 0.1)"
                 }}
               >

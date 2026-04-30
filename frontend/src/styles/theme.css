@@ -11,14 +11,20 @@
   --color-teal-100: #9FE1CB;
   --color-teal-50: #E1F5EE;
   
+  /* Teal aliases for code paths that reference odd steps */
+  --color-teal-300: #7FD7B8;
+  --color-teal-500: #15835F;
+  --color-teal-700: #0B5544;
+
   /* Neutrals - Slate */
   --color-slate-950: #111827;
   --color-slate-800: #1F2937;
   --color-slate-600: #374151;
   --color-slate-400: #6B7280;
   --color-slate-200: #D1D5DB;
+  --color-slate-100: #E5E7EB;
   --color-slate-50: #F3F4F6;
-  
+
   /* Semantic Colors */
   --color-success: #1D9E75;
   --color-success-bg: #E1F5EE;
@@ -28,6 +34,61 @@
   --color-danger-bg: #FCEBEB;
   --color-info: #378ADD;
   --color-info-bg: #E6F1FB;
+
+  /* Danger (red) scale — referenced as --color-red-* across the app */
+  --color-red-50:  #FCEBEB;
+  --color-red-100: #F8D5D5;
+  --color-red-200: #F09595;
+  --color-red-300: #E97171;
+  --color-red-500: #E24B4A;
+  --color-red-600: #B73332;
+  --color-red-700: #791F1F;
+  --color-red-900: #4A0E0E;
+
+  /* Warning (yellow / amber) scale */
+  --color-yellow-50:  #FAEEDA;
+  --color-yellow-100: #F5DEB3;
+  --color-yellow-200: #EFC97F;
+  --color-yellow-600: #B7780C;
+  --color-yellow-700: #8A5907;
+  --color-yellow-900: #412402;
+
+  /* Offer status uses the warning palette as well */
+  --color-amber-50:  #FAEEDA;
+  --color-amber-200: #EFC97F;
+  --color-amber-700: #633806;
+  --color-orange-50: #FAEEDA;
+  --color-orange-700: #633806;
+
+  /* Info (blue) scale */
+  --color-blue-50:  #E6F1FB;
+  --color-blue-100: #C9DFF5;
+  --color-blue-200: #97BFEA;
+  --color-blue-500: #378ADD;
+  --color-blue-700: #0C447C;
+  --color-blue-900: #07335F;
+
+  /* Interview status (olive / lime) scale */
+  --color-olive-50:  #EAF3DE;
+  --color-olive-200: #CFE3A6;
+  --color-olive-500: #6B9425;
+  --color-olive-700: #27500A;
+  --color-green-50:  #EAF3DE;
+  --color-green-700: #27500A;
+
+  /* Status badge tokens — pair (background / foreground) per JobStatus */
+  --status-saved-bg: var(--color-blue-50);
+  --status-saved-fg: var(--color-blue-700);
+  --status-applied-bg: var(--color-teal-50);
+  --status-applied-fg: var(--color-teal-800);
+  --status-interview-bg: var(--color-olive-50);
+  --status-interview-fg: var(--color-olive-700);
+  --status-offer-bg: var(--color-amber-50);
+  --status-offer-fg: var(--color-amber-700);
+  --status-rejected-bg: var(--color-red-50);
+  --status-rejected-fg: var(--color-red-700);
+  --status-draft-bg: var(--color-slate-50);
+  --status-draft-fg: var(--color-slate-600);
   
   /* Text Colors */
   --color-text-primary: #111827;
@@ -237,6 +298,15 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+
+  /* Design-system focus ring — mirrors the HTML spec's input:focus state */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: var(--color-teal-400);
+    box-shadow: 0 0 0 3px rgba(29, 158, 117, 0.15);
   }
 
   /* Custom animations */

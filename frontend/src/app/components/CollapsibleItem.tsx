@@ -66,7 +66,7 @@ export function CollapsibleItem({
           </div>
           <button
             onClick={() => onToggleCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}

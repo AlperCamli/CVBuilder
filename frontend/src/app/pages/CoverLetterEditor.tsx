@@ -455,7 +455,7 @@ export function CoverLetterEditor() {
                   >
                     <button
                       onClick={() => { setShowExportMenu(false); void handleExport("pdf"); }}
-                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-[var(--color-background-secondary)] transition-colors"
                       style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
                     >
                       <Download size={14} style={{ color: "var(--color-teal-600)" }} />
@@ -463,7 +463,7 @@ export function CoverLetterEditor() {
                     </button>
                     <button
                       onClick={() => { setShowExportMenu(false); void handleExport("docx"); }}
-                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                      className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-[var(--color-background-secondary)] transition-colors"
                       style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
                     >
                       <FileText size={14} style={{ color: "var(--color-teal-600)" }} />

@@ -55,7 +55,8 @@ export function EmailSent() {
     <div
       className="min-h-screen flex items-center justify-center p-8"
       style={{
-        background: "linear-gradient(135deg, #0f172a 0%, #134e4a 50%, #0f766e 100%)"
+        background:
+          "linear-gradient(135deg, var(--color-slate-950) 0%, var(--color-teal-900) 50%, var(--color-teal-600) 100%)"
       }}
     >
       <div
@@ -64,33 +65,34 @@ export function EmailSent() {
           background: "rgba(255, 255, 255, 0.95)",
           backdropFilter: "blur(20px)",
           borderColor: "rgba(255, 255, 255, 0.2)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 80px rgba(20, 184, 166, 0.15)"
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 80px rgba(29, 158, 117, 0.15)"
         }}
       >
         <div className="flex justify-center mb-6">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center"
             style={{
-              background: "linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)",
+              background:
+                "linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-teal-100) 100%)",
               animation: "emailPulse 2s ease-in-out infinite"
             }}
           >
-            <Mail size={36} style={{ color: "#0d9488" }} />
+            <Mail size={36} style={{ color: "var(--color-teal-600)" }} />
           </div>
         </div>
 
-        <h1 className="font-semibold mb-2" style={{ fontSize: "24px", color: "#0f172a" }}>
+        <h1 className="font-semibold mb-2" style={{ fontSize: "24px", color: "var(--color-text-primary)" }}>
           Check your email
         </h1>
-        <p className="mb-2" style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.6" }}>
+        <p className="mb-2" style={{ fontSize: "14px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
           We've sent a verification link to
         </p>
         {email && (
-          <p className="mb-6 font-medium" style={{ fontSize: "15px", color: "#0f766e" }}>
+          <p className="mb-6 font-medium" style={{ fontSize: "15px", color: "var(--color-teal-700)" }}>
             {email}
           </p>
         )}
-        <p className="mb-8" style={{ fontSize: "13px", color: "#94a3b8", lineHeight: "1.6" }}>
+        <p className="mb-8" style={{ fontSize: "13px", color: "var(--color-slate-400)", lineHeight: "1.6" }}>
           Click the link in the email to verify your account and get started.
           If you don't see it, check your spam folder.
         </p>
@@ -99,8 +101,8 @@ export function EmailSent() {
           <div
             className="mb-4 p-3 rounded-lg text-left"
             style={{
-              background: "#fef2f2",
-              color: "#b91c1c",
+              background: "var(--color-red-50)",
+              color: "var(--color-red-700)",
               fontSize: "13px"
             }}
           >
@@ -112,8 +114,8 @@ export function EmailSent() {
           <div
             className="mb-4 p-3 rounded-lg"
             style={{
-              background: "#f0fdfa",
-              color: "#0f766e",
+              background: "var(--color-teal-50)",
+              color: "var(--color-teal-700)",
               fontSize: "13px"
             }}
           >
@@ -128,8 +130,8 @@ export function EmailSent() {
           className="w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 mb-4"
           style={{
             fontSize: "14px",
-            background: cooldown > 0 || resending ? "#e2e8f0" : "#0d9488",
-            color: cooldown > 0 || resending ? "#94a3b8" : "white",
+            background: cooldown > 0 || resending ? "var(--color-slate-200)" : "var(--color-teal-600)",
+            color: cooldown > 0 || resending ? "var(--color-slate-400)" : "var(--color-teal-50)",
             cursor: cooldown > 0 || resending ? "not-allowed" : "pointer"
           }}
         >
@@ -144,7 +146,7 @@ export function EmailSent() {
         <Link
           to="/signin"
           className="inline-flex items-center gap-2 font-medium transition-colors"
-          style={{ fontSize: "13px", color: "#64748b" }}
+          style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
         >
           <ArrowLeft size={14} />
           Back to sign in
@@ -155,11 +157,11 @@ export function EmailSent() {
         @keyframes emailPulse {
           0%, 100% {
             transform: scale(1);
-            box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.3);
+            box-shadow: 0 0 0 0 rgba(29, 158, 117, 0.3);
           }
           50% {
             transform: scale(1.05);
-            box-shadow: 0 0 0 16px rgba(20, 184, 166, 0);
+            box-shadow: 0 0 0 16px rgba(29, 158, 117, 0);
           }
         }
       `}</style>

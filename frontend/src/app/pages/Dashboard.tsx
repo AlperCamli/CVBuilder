@@ -32,6 +32,23 @@ const formatDate = (value: string | null): string => {
 const statusLabel = (status: string): string =>
   status.charAt(0).toUpperCase() + status.slice(1);
 
+const statusBadgeStyle = (status: string): { background: string; color: string } => {
+  switch (status) {
+    case "saved":
+      return { background: "var(--status-saved-bg)", color: "var(--status-saved-fg)" };
+    case "applied":
+      return { background: "var(--status-applied-bg)", color: "var(--status-applied-fg)" };
+    case "interview":
+      return { background: "var(--status-interview-bg)", color: "var(--status-interview-fg)" };
+    case "offer":
+      return { background: "var(--status-offer-bg)", color: "var(--status-offer-fg)" };
+    case "rejected":
+      return { background: "var(--status-rejected-bg)", color: "var(--status-rejected-fg)" };
+    default:
+      return { background: "var(--status-draft-bg)", color: "var(--status-draft-fg)" };
+  }
+};
+
 const applyBoardMove = (
   board: JobBoardResponse,
   jobId: string,
@@ -123,10 +140,7 @@ const DraggableDashboardJob = ({ job }: { job: any }) => {
       <div className="flex items-center justify-between">
         <span
           className="px-2 py-0.5 rounded-full text-xs"
-          style={{
-            background: "var(--color-teal-50)",
-            color: "var(--color-teal-800)"
-          }}
+          style={statusBadgeStyle(job.status)}
         >
           {statusLabel(job.status)}
         </span>

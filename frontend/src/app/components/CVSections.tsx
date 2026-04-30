@@ -116,14 +116,14 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                 />
                 <button
                   onClick={() => onChange({ ...data, photo: null })}
-                  className="absolute -top-1 -right-1 p-0.5 rounded-full bg-red-500 text-white"
-                  style={{ fontSize: "10px" }}
+                  className="absolute -top-1 -right-1 p-0.5 rounded-full"
+                  style={{ fontSize: "10px", background: "var(--color-danger)", color: "var(--color-danger-bg)" }}
                 >
                   <XIcon size={12} />
                 </button>
               </div>
             ) : (
-              <label className="w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors"
+              <label className="w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer transition-colors hover:bg-[var(--color-background-secondary)]"
                 style={{ borderColor: "var(--color-border-tertiary)" }}>
                 <input
                   type="file"
@@ -215,7 +215,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
               </label>
               <button
                 onClick={() => setShowSocialModal(true)}
-                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-[var(--color-background-secondary)] transition-colors"
                 style={{ color: "var(--color-teal-600)" }}
               >
                 <Plus size={16} />
@@ -541,7 +541,7 @@ function ExperienceItem({
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -849,7 +849,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -1275,7 +1275,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}

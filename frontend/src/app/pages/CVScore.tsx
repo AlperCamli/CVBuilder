@@ -367,7 +367,7 @@ export function CVScore() {
             <button
               onClick={handleContinueWithoutAI}
               disabled={converting || !parsedContent || parseNeedsManualReview}
-              className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-gray-50 inline-flex items-center justify-center gap-2"
+              className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
               style={{
                 background: "transparent",
                 border: "1px solid var(--color-border-tertiary)",

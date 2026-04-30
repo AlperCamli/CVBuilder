@@ -65,7 +65,7 @@ function CertificateItem({ item, index, updateItem, removeItem, toggleItemVisibi
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -288,7 +288,7 @@ function CourseItem({ item, index, updateItem, removeItem, toggleItemVisibility,
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -523,7 +523,7 @@ function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -757,7 +757,7 @@ function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, 
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -986,7 +986,7 @@ function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibi
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -1215,7 +1215,7 @@ function ReferenceItem({ item, index, updateItem, removeItem, toggleItemVisibili
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -1464,7 +1464,7 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
           </div>
           <button
             onClick={() => toggleItemCollapsed(index)}
-            className="hover:bg-gray-100 rounded p-1"
+            className="hover:bg-[var(--color-background-secondary)] rounded p-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
             {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}

@@ -129,7 +129,7 @@ export function Layout() {
       {!mobileMenuOpen && (
         <button
           onClick={toggleSidebar}
-          className="hidden lg:block fixed top-4 z-50 p-2 rounded-lg transition-all hover:bg-gray-100"
+          className="hidden lg:block fixed top-4 z-50 p-2 rounded-lg transition-all hover:bg-[var(--color-background-secondary)]"
           style={{
             left: sidebarVisible ? "200px" : "16px",
             color: "var(--color-text-secondary)"

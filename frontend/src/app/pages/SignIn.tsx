@@ -174,7 +174,7 @@ export function SignIn() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-[var(--color-background-secondary)]"
                 >
                   {showPassword ? (
                     <EyeOff size={16} style={{ color: "var(--color-text-tertiary)" }} />

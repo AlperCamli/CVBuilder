@@ -151,7 +151,7 @@ export function TipsDrawer({ isOpen, onClose, sectionType }: TipsDrawerProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-[var(--color-background-secondary)] transition-colors"
             style={{ color: "var(--color-text-secondary)" }}
           >
             <XIcon size={20} />
