@@ -5,6 +5,7 @@ import { normalizeCvContent } from "../../../shared/cv-content/cv-content.utils"
 import type { CvContent } from "../../../shared/cv-content/cv-content.types";
 import type {
   CvParser,
+  ExtractCvRawTextResult,
   ParseCvFileDiagnostics,
   ParseCvFileInput,
   ParseCvFileResult,
@@ -2888,15 +2889,26 @@ const collectStructuredMappingWarnings = (parsedContent: CvContent): string[] =>
 };
 
 export class SimpleCvParser implements CvParser {
-  async parse(input: ParseCvFileInput): Promise<ParseCvFileResult> {
+  async extractRawText(input: ParseCvFileInput): Promise<ExtractCvRawTextResult> {
     const extracted = await maybeExtractRawText(input);
-
     const fallbackRaw = extracted.rawText || `${input.originalFilename}\n${input.mimeType}\n${input.sizeBytes}`;
+
+    return {
+      parserName: parserNameForResolvedKind(extracted.resolvedKind),
+      rawExtractedText: fallbackRaw,
+      warnings: extracted.warnings,
+      diagnostics: extracted.diagnostics
+    };
+  }
+
+  async parse(input: ParseCvFileInput): Promise<ParseCvFileResult> {
+    const extracted = await this.extractRawText(input);
+    const fallbackRaw = extracted.rawExtractedText;
     const parsedContent = toStructuredContent(fallbackRaw);
     const structuredWarnings = collectStructuredMappingWarnings(parsedContent);
 
     return {
-      parserName: parserNameForResolvedKind(extracted.resolvedKind),
+      parserName: extracted.parserName,
       rawExtractedText: fallbackRaw,
       parsedContent,
       warnings: dedupe([...extracted.warnings, ...structuredWarnings]),

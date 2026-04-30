@@ -19,7 +19,12 @@ import type {
   UpdateImportResultInput
 } from "./imports.types";
 import type { ImportsRepository } from "./imports.repository";
-import type { CvParser } from "./parsers/cv-parser";
+import type {
+  CvParser,
+  ExtractCvRawTextResult,
+  ParseCvFileInput,
+  ParseCvFileResult
+} from "./parsers/cv-parser";
 
 const toMasterCvDetail = (row: MasterCvRecord) => {
   return {
@@ -173,17 +178,17 @@ export class ImportsService {
         detail.sourceFile.storage_path
       );
 
-      const parseResult = await this.parser.parse({
+      const parseInput: ParseCvFileInput = {
         originalFilename: detail.sourceFile.original_filename,
         mimeType: detail.sourceFile.mime_type,
         sizeBytes: detail.sourceFile.size_bytes,
         bytes
-      });
+      };
 
-      const effectiveParseResult = await this.resolveEffectiveParseResult(parseResult, {
+      const effectiveParseResult = await this.resolveEffectiveParseResult(parseInput, {
         original_filename: detail.sourceFile.original_filename,
         mime_type: detail.sourceFile.mime_type
-      });
+      }, session.appUser.default_cv_language || "en");
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
@@ -380,28 +385,84 @@ export class ImportsService {
   }
 
   private async resolveEffectiveParseResult(
-    fallbackResult: Awaited<ReturnType<CvParser["parse"]>>,
-    sourceFile: { original_filename: string; mime_type: string | null }
-  ): Promise<Awaited<ReturnType<CvParser["parse"]>>> {
-    const aiResult = await this.tryParseWithAi(fallbackResult, sourceFile);
-    if (aiResult) {
-      return aiResult;
+    parseInput: ParseCvFileInput,
+    sourceFile: { original_filename: string; mime_type: string | null },
+    defaultLanguage: string
+  ): Promise<ParseCvFileResult> {
+    if (!this.aiProvider || !this.aiPromptResolver) {
+      return this.parser.parse(parseInput);
     }
 
-    return fallbackResult;
+    const extraction = await this.extractRawTextForAi(parseInput);
+    const aiAttempt = await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage);
+    if (aiAttempt.parseResult) {
+      return aiAttempt.parseResult;
+    }
+
+    const fallbackResult = extraction.precomputedFallbackResult ?? (await this.parser.parse(parseInput));
+    if (!aiAttempt.failureWarning) {
+      return fallbackResult;
+    }
+
+    return {
+      ...fallbackResult,
+      warnings: [...new Set([...fallbackResult.warnings, aiAttempt.failureWarning])]
+    };
+  }
+
+  private async extractRawTextForAi(
+    parseInput: ParseCvFileInput
+  ): Promise<{ extracted: ExtractCvRawTextResult; precomputedFallbackResult: ParseCvFileResult | null }> {
+    if (this.parser.extractRawText) {
+      const extracted = await this.parser.extractRawText(parseInput);
+      return {
+        extracted,
+        precomputedFallbackResult: null
+      };
+    }
+
+    const fallbackResult = await this.parser.parse(parseInput);
+    return {
+      extracted: {
+        parserName: fallbackResult.parserName,
+        rawExtractedText: fallbackResult.rawExtractedText,
+        warnings: fallbackResult.warnings,
+        diagnostics: fallbackResult.diagnostics
+      },
+      precomputedFallbackResult: fallbackResult
+    };
   }
 
   private async tryParseWithAi(
-    fallbackResult: Awaited<ReturnType<CvParser["parse"]>>,
-    sourceFile: { original_filename: string; mime_type: string | null }
-  ): Promise<Awaited<ReturnType<CvParser["parse"]>> | null> {
+    extractedResult: ExtractCvRawTextResult,
+    sourceFile: { original_filename: string; mime_type: string | null },
+    defaultLanguage: string
+  ): Promise<{
+    parseResult: ParseCvFileResult | null;
+    failureWarning: string | null;
+  }> {
     if (!this.aiProvider || !this.aiPromptResolver) {
-      return null;
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
     }
 
-    const rawExtractedText = fallbackResult.rawExtractedText.trim();
+    const rawExtractedText = extractedResult.rawExtractedText.trim();
     if (!rawExtractedText) {
-      return null;
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
+    }
+    const hasNoReadableTextSignal = extractedResult.warnings.some((warning) =>
+      /no readable text was extracted/i.test(warning)
+    );
+    if (hasNoReadableTextSignal) {
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
     }
 
     const flowDefinition = AI_FLOW_REGISTRY[AI_PARSE_FLOW_TYPE];
@@ -434,7 +495,7 @@ export class ImportsService {
           raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
           source_filename: sourceFile.original_filename,
           mime_type: sourceFile.mime_type ?? "application/octet-stream",
-          language_hint: fallbackResult.parsedContent.language
+          language_hint: defaultLanguage || "en"
         }
       });
 
@@ -445,29 +506,29 @@ export class ImportsService {
 
       const normalized = normalizeCvContent(
         parsed.data.parsed_content,
-        fallbackResult.parsedContent.language || "en"
+        parsed.data.parsed_content.language || defaultLanguage || "en"
       );
       const mergedWarnings = [
-        ...fallbackResult.warnings,
+        ...extractedResult.warnings,
         ...(parsed.data.warnings ?? [])
       ];
 
       return {
-        parserName: `${this.aiProvider.providerName}_cv_parser_v1`,
-        rawExtractedText: fallbackResult.rawExtractedText,
-        parsedContent: normalized,
-        warnings: mergedWarnings,
-        diagnostics: fallbackResult.diagnostics
+        parseResult: {
+          parserName: `${this.aiProvider.providerName}_cv_parser_v1`,
+          rawExtractedText: extractedResult.rawExtractedText,
+          parsedContent: normalized,
+          warnings: [...new Set(mergedWarnings)],
+          diagnostics: extractedResult.diagnostics
+        },
+        failureWarning: null
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown AI parsing error";
 
       return {
-        ...fallbackResult,
-        warnings: [
-          ...fallbackResult.warnings,
-          `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
-        ]
+        parseResult: null,
+        failureWarning: `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
       };
     }
   }

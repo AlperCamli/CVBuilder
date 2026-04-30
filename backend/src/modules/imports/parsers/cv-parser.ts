@@ -40,6 +40,14 @@ export interface ParseCvFileResult {
   diagnostics?: ParseCvFileDiagnostics;
 }
 
+export interface ExtractCvRawTextResult {
+  parserName: string;
+  rawExtractedText: string;
+  warnings: string[];
+  diagnostics?: ParseCvFileDiagnostics;
+}
+
 export interface CvParser {
   parse(input: ParseCvFileInput): Promise<ParseCvFileResult>;
+  extractRawText?(input: ParseCvFileInput): Promise<ExtractCvRawTextResult>;
 }

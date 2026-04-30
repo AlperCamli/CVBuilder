@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ImportsService } from "../src/modules/imports/imports.service";
+import { AiPromptResolver } from "../src/modules/ai/prompts/prompt-resolver";
 import {
   type CreateFilePayload,
   type CreateImportPayload,
@@ -10,6 +11,14 @@ import {
 } from "../src/modules/imports/imports.repository";
 import { type SessionContext } from "../src/modules/imports/imports.types";
 import { SimpleCvParser } from "../src/modules/imports/parsers/simple-cv-parser";
+import type {
+  CvParser,
+  ExtractCvRawTextResult,
+  ParseCvFileInput,
+  ParseCvFileResult
+} from "../src/modules/imports/parsers/cv-parser";
+import type { AiProvider, AiProviderRequest, AiProviderResult } from "../src/modules/ai/provider/ai-provider";
+import type { AiPromptConfigRepository } from "../src/modules/ai/prompts/prompt-config.repository";
 import { type CreateMasterCvPayload, type MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
 import type {
   FileRecord,
@@ -19,6 +28,7 @@ import type {
   MasterCvSourceType,
   UserRecord
 } from "../src/shared/types/domain";
+import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -211,6 +221,115 @@ const buildSession = (userId: string): SessionContext => {
   };
 };
 
+const createMinimalContent = (summary: string): CvContent => {
+  return {
+    version: "v1",
+    language: "en",
+    metadata: {},
+    sections: [
+      {
+        id: "summary-1",
+        type: "summary",
+        title: "Summary",
+        order: 0,
+        meta: {},
+        blocks: [
+          {
+            id: "summary-block-1",
+            type: "summary",
+            order: 0,
+            visibility: "visible",
+            fields: {
+              text: summary
+            },
+            meta: {}
+          }
+        ]
+      }
+    ]
+  };
+};
+
+class StubCvParser implements CvParser {
+  parseCalls = 0;
+  extractCalls = 0;
+
+  constructor(
+    private readonly extractionResult: ExtractCvRawTextResult,
+    private readonly fallbackResult: ParseCvFileResult,
+    private readonly throwOnParse = false
+  ) {}
+
+  async extractRawText(_input: ParseCvFileInput): Promise<ExtractCvRawTextResult> {
+    this.extractCalls += 1;
+    return this.extractionResult;
+  }
+
+  async parse(_input: ParseCvFileInput): Promise<ParseCvFileResult> {
+    this.parseCalls += 1;
+    if (this.throwOnParse) {
+      throw new Error("Fallback parser should not be called");
+    }
+
+    return this.fallbackResult;
+  }
+}
+
+class SuccessfulCvParseAiProvider implements AiProvider {
+  readonly providerName = "stubai";
+
+  resolveModelName(): string {
+    return "stubai-model";
+  }
+
+  async generate(request: AiProviderRequest): Promise<AiProviderResult> {
+    expect(request.flow_type).toBe("cv_parse");
+
+    return {
+      provider: this.providerName,
+      model_name: request.model_name,
+      output_payload: {
+        parsed_content: createMinimalContent("AI parsed summary."),
+        warnings: ["AI parser warning."]
+      }
+    };
+  }
+}
+
+class FailingCvParseAiProvider implements AiProvider {
+  readonly providerName = "stubai";
+
+  resolveModelName(): string {
+    return "stubai-model";
+  }
+
+  async generate(_request: AiProviderRequest): Promise<AiProviderResult> {
+    throw new Error("simulated AI failure");
+  }
+}
+
+class NeverCallCvParseAiProvider implements AiProvider {
+  readonly providerName = "stubai";
+
+  resolveModelName(): string {
+    return "stubai-model";
+  }
+
+  async generate(_request: AiProviderRequest): Promise<AiProviderResult> {
+    throw new Error("AI parser should have been skipped");
+  }
+}
+
+const createPromptResolver = (): AiPromptResolver => {
+  const repository: AiPromptConfigRepository = {
+    async listActiveByProfile(): Promise<[]> {
+      return [];
+    }
+  };
+
+  return new AiPromptResolver(repository, "test-profile");
+};
+
 describe("imports service integration checks", () => {
   it("returns parsed status with warnings on low-confidence PDF text and still converts to master CV", async () => {
     const userId = randomUUID();
@@ -254,5 +373,135 @@ describe("imports service integration checks", () => {
     expect(converted.import.status).toBe("converted");
     expect(converted.master_cv.current_content.sections.length).toBeGreaterThan(0);
     expect(converted.master_cv.title).toBe("Imported CV");
+  });
+
+  it("uses AI parsing as primary and does not call heuristic parser when AI succeeds", async () => {
+    const userId = randomUUID();
+    const importsRepository = new InMemoryImportsRepository(
+      userId,
+      new Uint8Array(Buffer.from("John Doe\nSenior Engineer\nBuilt backend systems.", "utf-8")),
+      "text/plain",
+      "resume.txt"
+    );
+    const masterCvRepository = new InMemoryMasterCvRepository();
+    const parser = new StubCvParser(
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "John Doe\nSenior Engineer\nBuilt backend systems.",
+        warnings: ["Extraction diagnostics warning."],
+        diagnostics: undefined
+      },
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "fallback text",
+        parsedContent: createMinimalContent("Fallback parsed summary."),
+        warnings: ["Fallback warning."],
+        diagnostics: undefined
+      },
+      true
+    );
+    const service = new ImportsService(
+      importsRepository,
+      masterCvRepository,
+      parser,
+      new SuccessfulCvParseAiProvider(),
+      createPromptResolver()
+    );
+    const session = buildSession(userId);
+
+    const parsed = await service.parseImport(session, importsRepository.importId);
+
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parsed.parse_summary.parser_name).toBe("stubai_cv_parser_v1");
+    expect(parsed.parse_summary.warnings).toEqual(["Extraction diagnostics warning.", "AI parser warning."]);
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(0);
+  });
+
+  it("falls back to heuristic parser when AI parsing fails", async () => {
+    const userId = randomUUID();
+    const importsRepository = new InMemoryImportsRepository(
+      userId,
+      new Uint8Array(Buffer.from("Jane Doe\nProduct Manager\nLed cross-functional teams.", "utf-8")),
+      "text/plain",
+      "resume.txt"
+    );
+    const masterCvRepository = new InMemoryMasterCvRepository();
+    const parser = new StubCvParser(
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "Jane Doe\nProduct Manager\nLed cross-functional teams.",
+        warnings: ["Extraction diagnostics warning."],
+        diagnostics: undefined
+      },
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "Jane Doe\nProduct Manager\nLed cross-functional teams.",
+        parsedContent: createMinimalContent("Fallback parsed summary."),
+        warnings: ["Fallback warning."],
+        diagnostics: undefined
+      }
+    );
+    const service = new ImportsService(
+      importsRepository,
+      masterCvRepository,
+      parser,
+      new FailingCvParseAiProvider(),
+      createPromptResolver()
+    );
+    const session = buildSession(userId);
+
+    const parsed = await service.parseImport(session, importsRepository.importId);
+
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parsed.parse_summary.parser_name).toBe("simple_cv_parser_v1");
+    expect(parsed.parse_summary.warnings).toContain("Fallback warning.");
+    expect(parsed.parse_summary.warnings.join("\n")).toMatch(
+      /AI parser failed; fallback parser output was used/i
+    );
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(1);
+  });
+
+  it("skips AI parsing and uses heuristic parser when no readable text is extracted", async () => {
+    const userId = randomUUID();
+    const importsRepository = new InMemoryImportsRepository(
+      userId,
+      new Uint8Array(Buffer.from("%PDF-1.7", "utf-8")),
+      "application/pdf",
+      "empty.pdf"
+    );
+    const masterCvRepository = new InMemoryMasterCvRepository();
+    const parser = new StubCvParser(
+      {
+        parserName: "smart_pdf_parser_v2",
+        rawExtractedText: "empty.pdf\napplication/pdf\n9",
+        warnings: ["No readable text was extracted from the source file."],
+        diagnostics: undefined
+      },
+      {
+        parserName: "smart_pdf_parser_v2",
+        rawExtractedText: "empty.pdf\napplication/pdf\n9",
+        parsedContent: createMinimalContent("Fallback parsed summary."),
+        warnings: ["Fallback warning."],
+        diagnostics: undefined
+      }
+    );
+    const service = new ImportsService(
+      importsRepository,
+      masterCvRepository,
+      parser,
+      new NeverCallCvParseAiProvider(),
+      createPromptResolver()
+    );
+    const session = buildSession(userId);
+
+    const parsed = await service.parseImport(session, importsRepository.importId);
+
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parsed.parse_summary.parser_name).toBe("smart_pdf_parser_v2");
+    expect(parsed.parse_summary.warnings).toEqual(["Fallback warning."]);
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(1);
   });
 });
