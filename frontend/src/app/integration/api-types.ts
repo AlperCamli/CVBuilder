@@ -312,6 +312,83 @@ export interface RenderingPayload {
   plain_text: string;
 }
 
+export type PresentationTemplateLayout =
+  | "modern-clean"
+  | "minimal-professional"
+  | "executive-timeline"
+  | "creative-portfolio";
+
+export type PresentationLayoutMode =
+  | "classic-single-column"
+  | "compact-single-column"
+  | "timeline-split"
+  | "portfolio-two-column";
+
+export interface PresentationStyleTokens {
+  font_family: string;
+  heading_color_hex: string;
+  accent_color_hex: string;
+  body_color_hex: string;
+  muted_color_hex: string;
+  page_background_hex: string;
+  section_spacing: number;
+  block_spacing: number;
+  body_text_size: number;
+  compact_density: true;
+}
+
+export interface PresentationTheme {
+  layout: PresentationTemplateLayout;
+  mode: PresentationLayoutMode;
+  template_slug: string;
+  template_name: string;
+  tokens: PresentationStyleTokens;
+}
+
+export interface PresentationSocialLink {
+  id: string;
+  type: string;
+  url: string;
+  label: string;
+}
+
+export interface PresentationHeader {
+  name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  photo: string | null;
+  contact_items: string[];
+  social_links: PresentationSocialLink[];
+}
+
+export interface PresentationItem {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  date_range: string | null;
+  location: string | null;
+  metadata_line: string | null;
+  body: string | null;
+  bullets: string[];
+}
+
+export interface PresentationSection {
+  id: string;
+  type: string;
+  title: string;
+  inline_text: string | null;
+  items: PresentationItem[];
+}
+
+export interface RenderingPresentation {
+  version: "v1";
+  theme: PresentationTheme;
+  header: PresentationHeader;
+  sections: PresentationSection[];
+}
+
 export interface MasterCvPreviewResponse {
   cv: {
     id: string;
@@ -325,6 +402,7 @@ export interface MasterCvPreviewResponse {
   preview: CvPreview;
   selected_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export type TailoredCvStatus = "draft" | "ready" | "exported" | "archived";
@@ -381,6 +459,7 @@ export interface TailoredCvPreviewResponse {
   preview: CvPreview;
   selected_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export interface TailoredCvSourceResponse {
@@ -868,6 +947,7 @@ export interface RenderingPreviewResponse {
   current_content: CvContent;
   resolved_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export type ExportFormat = "pdf" | "docx";

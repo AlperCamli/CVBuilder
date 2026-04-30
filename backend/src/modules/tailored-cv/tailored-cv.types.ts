@@ -2,6 +2,7 @@ import type { AuthenticatedRequestContext } from "../auth/auth.types";
 import type { CvBlock, CvBlockPatch, CvContent, CvPreview } from "../../shared/cv-content/cv-content.types";
 import type { JobStatus, TailoredCvStatus } from "../../shared/types/domain";
 import type { RenderingPayload } from "../rendering/rendering.types";
+import type { RenderingPresentation } from "../rendering/rendering-presentation";
 import type { ResolvedTemplateSummary } from "../templates/templates.types";
 
 export type SessionContext = AuthenticatedRequestContext;
@@ -58,6 +59,7 @@ export interface TailoredCvPreviewResponse {
   preview: CvPreview;
   selected_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export interface TailoredCvSourceResponse {

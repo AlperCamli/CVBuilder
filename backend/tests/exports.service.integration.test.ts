@@ -297,6 +297,57 @@ class FakeRenderingService {
           }
         ],
         plain_text: "Summary content"
+      },
+      presentation: {
+        version: "v1" as const,
+        theme: {
+          layout: "modern-clean" as const,
+          mode: "classic-single-column" as const,
+          template_slug: this.template?.slug ?? "modern-clean",
+          template_name: this.template?.name ?? "Default",
+          tokens: {
+            font_family: "Georgia, serif",
+            heading_color_hex: "#111827",
+            accent_color_hex: "#0f5ea6",
+            body_color_hex: "#1f2937",
+            muted_color_hex: "#4b5563",
+            page_background_hex: "#ffffff",
+            section_spacing: 16,
+            block_spacing: 12,
+            body_text_size: 12,
+            compact_density: true as const
+          }
+        },
+        header: {
+          name: "John Doe",
+          title: "Backend Engineer",
+          email: "john@example.com",
+          phone: null,
+          location: null,
+          photo: null,
+          contact_items: ["john@example.com"],
+          social_links: []
+        },
+        sections: [
+          {
+            id: "summary-1",
+            type: "summary",
+            title: "Professional Summary",
+            inline_text: null,
+            items: [
+              {
+                id: "summary-item-1",
+                title: null,
+                subtitle: null,
+                date_range: null,
+                location: null,
+                metadata_line: null,
+                body: "Summary content",
+                bullets: []
+              }
+            ]
+          }
+        ]
       }
     };
   }

@@ -7,6 +7,7 @@ import type {
   CvVisibility
 } from "../../shared/cv-content/cv-content.types";
 import type { ResolvedTemplateSummary } from "../templates/templates.types";
+import type { RenderingPresentation } from "./rendering-presentation";
 
 export type SessionContext = AuthenticatedRequestContext;
 
@@ -84,6 +85,7 @@ export interface BuildRenderingResult {
   current_content: CvContent;
   resolved_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export interface RenderingPreviewRequest {
@@ -98,6 +100,7 @@ export interface RenderingPreviewResponse {
   current_content: CvContent;
   resolved_template: ResolvedTemplateSummary;
   rendering: RenderingPayload;
+  presentation: RenderingPresentation;
 }
 
 export interface SectionRenderingContext {

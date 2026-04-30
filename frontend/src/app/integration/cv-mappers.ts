@@ -6,6 +6,7 @@ export interface EditorHeaderData {
   email: string;
   phone: string;
   location: string;
+  photo?: string | null;
   socialLinks: Array<{ id: string; type: string; url: string }>;
 }
 
@@ -1167,6 +1168,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     email: toJsonValue(firstNonEmpty(asString(metadata.email), getHeaderField("email"), inferEmailFromText(headerText))),
     phone: toJsonValue(firstNonEmpty(asString(metadata.phone), getHeaderField("phone"), inferPhoneFromText(headerText))),
     location: toJsonValue(firstNonEmpty(asString(metadata.location), getHeaderField("location"))),
+    photo: toJsonValue(asString(metadata.photo)),
     urls: toJsonValue(
       dedupe([
         ...asStringArray(content.metadata.urls),
@@ -1189,6 +1191,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         email: asString(normalizedMetadata.email),
         phone: asString(normalizedMetadata.phone),
         location: asString(normalizedMetadata.location),
+        photo: asString(normalizedMetadata.photo),
         socialLinks: extractSocialLinks(metadataWithHeaderFallback)
       }
     }
@@ -1859,6 +1862,7 @@ export const editorSectionsToCvContent = (
     email: toJsonValue(asString(headerData.email)),
     phone: toJsonValue(asString(headerData.phone)),
     location: toJsonValue(asString(headerData.location)),
+    photo: toJsonValue(asString(headerData.photo)),
     social_links: socialLinks,
     urls: urlList
   };

@@ -1,6 +1,7 @@
 import { normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { TemplatesService } from "../templates/templates.service";
+import { mapRenderingPayloadToPresentation } from "./rendering-presentation";
 import type {
   BlockRenderingContext,
   BuildRenderingInput,
@@ -79,24 +80,33 @@ export class RenderingService {
       .join("\n")
       .trim();
 
+    const renderingPayload = {
+      version: "v1" as const,
+      document: {
+        kind: input.cv_kind,
+        id: input.document?.id ?? null,
+        title: input.document?.title ?? null,
+        language: normalizedContent.language,
+        generated_at: new Date().toISOString(),
+        updated_at: input.document?.updated_at ?? null,
+        context: isPlainObject(input.context) ? input.context : {}
+      },
+      template: resolvedTemplate,
+      sections: sortedSections,
+      plain_text: plainText
+    };
+
+    const presentation = mapRenderingPayloadToPresentation(
+      renderingPayload,
+      normalizedContent.metadata,
+      resolvedTemplate.template
+    );
+
     return {
       current_content: normalizedContent,
       resolved_template: resolvedTemplate,
-      rendering: {
-        version: "v1",
-        document: {
-          kind: input.cv_kind,
-          id: input.document?.id ?? null,
-          title: input.document?.title ?? null,
-          language: normalizedContent.language,
-          generated_at: new Date().toISOString(),
-          updated_at: input.document?.updated_at ?? null,
-          context: isPlainObject(input.context) ? input.context : {}
-        },
-        template: resolvedTemplate,
-        sections: sortedSections,
-        plain_text: plainText
-      }
+      rendering: renderingPayload,
+      presentation
     };
   }
 

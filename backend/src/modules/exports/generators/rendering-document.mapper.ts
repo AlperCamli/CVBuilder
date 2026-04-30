@@ -1,9 +1,27 @@
-import type { RenderingPayload } from "../../rendering/rendering.types";
-import type { TemplateSummary } from "../../templates/templates.types";
+import type {
+  PresentationItem,
+  RenderingPresentation,
+  PresentationSocialLink
+} from "../../rendering/rendering-presentation";
 
 export interface ExportDocumentTheme {
-  heading_color_rgb: [number, number, number];
-  accent_color_rgb: [number, number, number];
+  layout: "modern-clean" | "minimal-professional" | "executive-timeline" | "creative-portfolio";
+  mode: "classic-single-column" | "compact-single-column" | "timeline-split" | "portfolio-two-column";
+  heading_color_hex: string;
+  accent_color_hex: string;
+  body_color_hex: string;
+  muted_color_hex: string;
+  page_background_hex: string;
+  body_text_size: number;
+  section_spacing: number;
+  block_spacing: number;
+  font_family: string;
+}
+
+export interface ExportDocumentSocialLink {
+  label: string;
+  url: string;
+  type: string;
 }
 
 export interface ExportDocumentBlock {
@@ -15,7 +33,9 @@ export interface ExportDocumentBlock {
 }
 
 export interface ExportDocumentSection {
+  type: string;
   title: string;
+  inline_text: string | null;
   blocks: ExportDocumentBlock[];
 }
 
@@ -23,185 +43,100 @@ export interface ExportDocumentModel {
   title: string;
   subtitle: string | null;
   contact_line: string | null;
+  contact_items: string[];
+  social_links: ExportDocumentSocialLink[];
+  photo_data_uri: string | null;
   sections: ExportDocumentSection[];
   theme: ExportDocumentTheme;
 }
 
-const DEFAULT_THEME: ExportDocumentTheme = {
-  heading_color_rgb: [28, 28, 33],
-  accent_color_rgb: [26, 99, 176]
-};
-
-const MINIMAL_THEME: ExportDocumentTheme = {
-  heading_color_rgb: [24, 24, 24],
-  accent_color_rgb: [91, 91, 91]
-};
-
-const toTitleCase = (value: string): string => {
-  const words = value
-    .replace(/[_-]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1));
-
-  return words.join(" ");
-};
-
-const firstText = (value: unknown): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const normalizeLine = (value: string | null): string | null => {
+const normalizeLine = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 };
 
-const buildMetadataLine = (dateRange: string | null, location: string | null): string | null => {
-  const items = [dateRange, location].map((item) => item?.trim()).filter(Boolean);
+const mapItemToBlock = (item: PresentationItem): ExportDocumentBlock => {
+  return {
+    headline: normalizeLine(item.title),
+    subheadline: normalizeLine(item.subtitle),
+    metadata_line: normalizeLine(item.metadata_line),
+    bullets: item.bullets.map((bullet) => bullet.trim()).filter((bullet) => bullet.length > 0),
+    body: normalizeLine(item.body)
+  };
+};
 
-  if (items.length === 0) {
-    return null;
+const mapSocialLinks = (links: PresentationSocialLink[]): ExportDocumentSocialLink[] => {
+  return links.map((link) => ({
+    label: normalizeLine(link.label) ?? "Link",
+    url: link.url,
+    type: link.type
+  }));
+};
+
+const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
+  return {
+    layout: presentation.theme.layout,
+    mode: presentation.theme.mode,
+    heading_color_hex: presentation.theme.tokens.heading_color_hex,
+    accent_color_hex: presentation.theme.tokens.accent_color_hex,
+    body_color_hex: presentation.theme.tokens.body_color_hex,
+    muted_color_hex: presentation.theme.tokens.muted_color_hex,
+    page_background_hex: presentation.theme.tokens.page_background_hex,
+    body_text_size: presentation.theme.tokens.body_text_size,
+    section_spacing: presentation.theme.tokens.section_spacing,
+    block_spacing: presentation.theme.tokens.block_spacing,
+    font_family: presentation.theme.tokens.font_family
+  };
+};
+
+const isDataUriImage = (value: string | null): boolean => {
+  if (!value) {
+    return false;
   }
 
-  return items.join(" • ");
+  return /^data:image\/(png|jpeg|jpg);base64,/i.test(value);
 };
 
-const resolveTheme = (template: TemplateSummary | null): ExportDocumentTheme => {
-  const slug = template?.slug ?? "";
-
-  if (slug === "minimal-professional") {
-    return MINIMAL_THEME;
-  }
-
-  return DEFAULT_THEME;
-};
-
-const pickBodyText = (block: RenderingPayload["sections"][number]["blocks"][number]): string | null => {
-  const preferredKeys = [
-    "description",
-    "summary",
-    "details",
-    "notes",
-    "responsibilities",
-    "highlights",
-    "text"
-  ];
-
-  for (const key of preferredKeys) {
-    const value = block.normalized_fields[key]?.text;
-    const normalized = normalizeLine(value ?? null);
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return normalizeLine(block.plain_text);
-};
-
-const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim().toLowerCase();
-
-export const mapRenderingPayloadToExportDocument = (
-  rendering: RenderingPayload,
-  template: TemplateSummary | null
+export const mapPresentationToExportDocument = (
+  presentation: RenderingPresentation
 ): ExportDocumentModel => {
-  const metadata = rendering.document.context;
+  const header = presentation.header;
+  const title = normalizeLine(header.name) ?? "Tailored CV";
+  const subtitle = normalizeLine(header.title);
 
-  const title =
-    firstText((rendering.document.context?.full_name as string | undefined) ?? undefined) ??
-    firstText((metadata?.full_name as string | undefined) ?? undefined) ??
-    firstText((metadata?.name as string | undefined) ?? undefined) ??
-    firstText((rendering.document.title as string | undefined) ?? undefined) ??
-    "Tailored CV";
+  const contactItems = header.contact_items
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 
-  const subtitle =
-    firstText((metadata?.headline as string | undefined) ?? undefined) ??
-    firstText((metadata?.title as string | undefined) ?? undefined) ??
-    null;
-
-  const contactItems = [
-    firstText((metadata?.email as string | undefined) ?? undefined),
-    firstText((metadata?.phone as string | undefined) ?? undefined),
-    firstText((metadata?.location as string | undefined) ?? undefined)
-  ].filter(Boolean) as string[];
-
-  const sections: ExportDocumentSection[] = rendering.sections
-    .map((section) => {
-      const blocks: ExportDocumentBlock[] = section.blocks
-        .filter((block) => block.visibility === "visible")
-        .map((block) => {
-          const rawHeadline = normalizeLine(block.derived.headline);
-          const rawSubheadline = normalizeLine(block.derived.subheadline);
-          const metadataLine = buildMetadataLine(block.derived.date_range, block.derived.location);
-          const bullets = block.derived.bullets.filter((item) => item.trim().length > 0);
-          let body = pickBodyText(block);
-
-          const isSummaryLikeSection = section.type === "summary";
-          const mergedHeading = [rawHeadline, rawSubheadline].filter(Boolean).join(" ");
-
-          if (
-            body &&
-            !isSummaryLikeSection &&
-            rawHeadline &&
-            !rawSubheadline &&
-            !metadataLine &&
-            bullets.length === 0 &&
-            collapseWhitespace(body) === collapseWhitespace(rawHeadline)
-          ) {
-            body = null;
-          }
-
-          const headline = isSummaryLikeSection ? null : rawHeadline;
-          const subheadline = isSummaryLikeSection ? null : rawSubheadline;
-
-          if (
-            body &&
-            !isSummaryLikeSection &&
-            mergedHeading &&
-            !metadataLine &&
-            bullets.length === 0 &&
-            collapseWhitespace(body) === collapseWhitespace(mergedHeading)
-          ) {
-            body = null;
-          }
-
-          return {
-            headline,
-            subheadline,
-            metadata_line: metadataLine,
-            bullets,
-            body
-          };
-        })
-        .filter(
-          (block) =>
-            block.headline !== null ||
-            block.subheadline !== null ||
-            block.metadata_line !== null ||
-            block.bullets.length > 0 ||
-            block.body !== null
+  const sections = presentation.sections
+    .map((section) => ({
+      type: section.type,
+      title: section.title,
+      inline_text: normalizeLine(section.inline_text),
+      blocks: section.items.map((item) => mapItemToBlock(item)).filter((block) => {
+        return (
+          block.headline !== null ||
+          block.subheadline !== null ||
+          block.metadata_line !== null ||
+          block.bullets.length > 0 ||
+          block.body !== null
         );
-
-      return {
-        title: normalizeLine(section.title) ?? toTitleCase(section.type),
-        blocks
-      };
-    })
-    .filter((section) => section.blocks.length > 0);
+      })
+    }))
+    .filter((section) => section.inline_text !== null || section.blocks.length > 0);
 
   return {
     title,
     subtitle,
     contact_line: contactItems.length > 0 ? contactItems.join(" • ") : null,
+    contact_items: contactItems,
+    social_links: mapSocialLinks(header.social_links),
+    photo_data_uri: isDataUriImage(header.photo) ? header.photo : null,
     sections,
-    theme: resolveTheme(template)
+    theme: toTheme(presentation)
   };
 };

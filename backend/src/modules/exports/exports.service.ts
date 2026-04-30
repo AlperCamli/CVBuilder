@@ -322,8 +322,7 @@ export class ExportsService {
 
       const generatedBytes = await this.renderingExportGenerator.generate(
         format,
-        renderingResult.rendering,
-        resolvedTemplate
+        renderingResult.presentation
       );
 
       const uploaded = await this.filesService.uploadExportObject({

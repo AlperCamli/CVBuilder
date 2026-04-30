@@ -2,6 +2,7 @@ import {
   AlignmentType,
   Document,
   HeadingLevel,
+  ImageRun,
   Packer,
   Paragraph,
   TextRun,
@@ -9,9 +10,7 @@ import {
 } from "docx";
 import type { ExportDocumentModel } from "./rendering-document.mapper";
 
-const rgbToHex = (rgb: [number, number, number]): string => {
-  return rgb.map((value) => value.toString(16).padStart(2, "0")).join("");
-};
+const rgbToHex = (value: string): string => value.replace(/^#/, "").toUpperCase();
 
 const paragraph = (text: string, options?: Partial<IParagraphOptions>): Paragraph => {
   return new Paragraph({
@@ -20,11 +19,49 @@ const paragraph = (text: string, options?: Partial<IParagraphOptions>): Paragrap
   });
 };
 
-export const generateDocxDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
-  const headingColor = rgbToHex(documentModel.theme.heading_color_rgb);
-  const accentColor = rgbToHex(documentModel.theme.accent_color_rgb);
+const parseDataUriImage = (dataUri: string): { data: Uint8Array; extension: "png" | "jpg" } | null => {
+  const match = dataUri.match(/^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) {
+    return null;
+  }
 
-  const body: Paragraph[] = [
+  return {
+    extension: match[1].toLowerCase() === "png" ? "png" : "jpg",
+    data: new Uint8Array(Buffer.from(match[2].replace(/\s+/g, ""), "base64"))
+  };
+};
+
+export const generateDocxDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
+  const headingColor = rgbToHex(documentModel.theme.heading_color_hex);
+  const accentColor = rgbToHex(documentModel.theme.accent_color_hex);
+  const bodySize = Math.max(20, documentModel.theme.body_text_size * 2);
+
+  const body: Paragraph[] = [];
+
+  if (documentModel.photo_data_uri) {
+    const parsedPhoto = parseDataUriImage(documentModel.photo_data_uri);
+    if (parsedPhoto) {
+      body.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: parsedPhoto.data,
+              type: parsedPhoto.extension,
+              transformation: {
+                width: 64,
+                height: 64
+              }
+            })
+          ],
+          spacing: {
+            after: 140
+          }
+        })
+      );
+    }
+  }
+
+  body.push(
     new Paragraph({
       heading: HeadingLevel.TITLE,
       children: [
@@ -32,14 +69,14 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           text: documentModel.title,
           color: headingColor,
           bold: true,
-          size: 38
+          size: bodySize + 16
         })
       ],
       spacing: {
-        after: 160
+        after: 120
       }
     })
-  ];
+  );
 
   if (documentModel.subtitle) {
     body.push(
@@ -49,11 +86,11 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             text: documentModel.subtitle,
             color: accentColor,
             italics: true,
-            size: 24
+            size: bodySize + 2
           })
         ],
         spacing: {
-          after: 140
+          after: 100
         }
       })
     );
@@ -65,17 +102,43 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         children: [
           new TextRun({
             text: documentModel.contact_line,
-            size: 20
+            size: bodySize
           })
         ],
         spacing: {
-          after: 260
+          after: 80
         }
       })
     );
   }
 
-  for (const section of documentModel.sections) {
+  if (documentModel.social_links.length > 0) {
+    body.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: documentModel.social_links.map((link) => link.label).join(" • "),
+            color: "5A5A5A",
+            size: Math.max(18, bodySize - 2)
+          })
+        ],
+        spacing: {
+          after: 200
+        }
+      })
+    );
+  }
+
+  const sideTypes = new Set(["skills", "languages", "references", "certifications", "courses"]);
+  const orderedSections =
+    documentModel.theme.mode === "portfolio-two-column"
+      ? [
+          ...documentModel.sections.filter((section) => sideTypes.has(section.type)),
+          ...documentModel.sections.filter((section) => !sideTypes.has(section.type))
+        ]
+      : documentModel.sections;
+
+  for (const section of orderedSections) {
     body.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_2,
@@ -84,17 +147,45 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             text: section.title,
             color: headingColor,
             bold: true,
-            size: 26
+            size: bodySize + 4
           })
         ],
         spacing: {
-          before: 140,
-          after: 120
+          before: 100,
+          after: 80
         }
       })
     );
 
+    if (section.inline_text) {
+      body.push(
+        paragraph(section.inline_text, {
+          spacing: {
+            after: 100
+          }
+        })
+      );
+      continue;
+    }
+
     for (const block of section.blocks) {
+      if (documentModel.theme.mode === "timeline-split" && block.metadata_line) {
+        body.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: block.metadata_line,
+                color: accentColor,
+                size: Math.max(18, bodySize - 4)
+              })
+            ],
+            spacing: {
+              after: 40
+            }
+          })
+        );
+      }
+
       if (block.headline) {
         body.push(
           new Paragraph({
@@ -102,11 +193,11 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
               new TextRun({
                 text: block.headline,
                 bold: true,
-                size: 22
+                size: bodySize + 1
               })
             ],
             spacing: {
-              after: 60
+              after: 40
             }
           })
         );
@@ -116,24 +207,24 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         body.push(
           paragraph(block.subheadline, {
             spacing: {
-              after: 40
+              after: 30
             }
           })
         );
       }
 
-      if (block.metadata_line) {
+      if (documentModel.theme.mode !== "timeline-split" && block.metadata_line) {
         body.push(
           new Paragraph({
             children: [
               new TextRun({
                 text: block.metadata_line,
-                color: "6c6c6c",
-                size: 18
+                color: "6C6C6C",
+                size: Math.max(18, bodySize - 4)
               })
             ],
             spacing: {
-              after: 70
+              after: 40
             }
           })
         );
@@ -147,7 +238,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
                 level: 0
               },
               spacing: {
-                after: 40
+                after: 20
               }
             })
           );
@@ -156,7 +247,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         body.push(
           paragraph(block.body, {
             spacing: {
-              after: 70
+              after: 40
             }
           })
         );
@@ -184,12 +275,12 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
       default: {
         document: {
           run: {
-            font: "Calibri",
-            size: 22
+            font: documentModel.theme.layout === "minimal-professional" ? "Calibri" : "Cambria",
+            size: bodySize
           },
           paragraph: {
             spacing: {
-              line: 276
+              line: 260
             },
             alignment: AlignmentType.LEFT
           }

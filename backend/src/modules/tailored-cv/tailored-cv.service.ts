@@ -315,7 +315,8 @@ export class TailoredCvService {
       current_content: row.current_content,
       preview: buildCvPreview(row.current_content),
       selected_template: renderingResult.resolved_template,
-      rendering: renderingResult.rendering
+      rendering: renderingResult.rendering,
+      presentation: renderingResult.presentation
     };
   }
 

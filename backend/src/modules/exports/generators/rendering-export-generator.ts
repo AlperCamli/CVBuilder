@@ -1,22 +1,17 @@
 import { ExportGenerationFailedError } from "../../../shared/errors/app-error";
 import type { ExportFormat } from "../../../shared/types/domain";
-import type { RenderingPayload } from "../../rendering/rendering.types";
-import type { TemplateSummary } from "../../templates/templates.types";
+import type { RenderingPresentation } from "../../rendering/rendering-presentation";
 import { generateDocxDocument } from "./docx-generator";
 import { generatePdfDocument } from "./pdf-generator";
-import { mapRenderingPayloadToExportDocument } from "./rendering-document.mapper";
+import { mapPresentationToExportDocument } from "./rendering-document.mapper";
 
 export interface RenderingExportGenerator {
-  generate(format: ExportFormat, rendering: RenderingPayload, template: TemplateSummary | null): Promise<Uint8Array>;
+  generate(format: ExportFormat, presentation: RenderingPresentation): Promise<Uint8Array>;
 }
 
 export class DefaultRenderingExportGenerator implements RenderingExportGenerator {
-  async generate(
-    format: ExportFormat,
-    rendering: RenderingPayload,
-    template: TemplateSummary | null
-  ): Promise<Uint8Array> {
-    const documentModel = mapRenderingPayloadToExportDocument(rendering, template);
+  async generate(format: ExportFormat, presentation: RenderingPresentation): Promise<Uint8Array> {
+    const documentModel = mapPresentationToExportDocument(presentation);
 
     try {
       if (format === "pdf") {

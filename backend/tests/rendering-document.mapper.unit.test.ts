@@ -1,121 +1,110 @@
 import { describe, expect, it } from "vitest";
-import type { RenderingPayload } from "../src/modules/rendering/rendering.types";
-import { mapRenderingPayloadToExportDocument } from "../src/modules/exports/generators/rendering-document.mapper";
+import type { RenderingPresentation } from "../src/modules/rendering/rendering-presentation";
+import { mapPresentationToExportDocument } from "../src/modules/exports/generators/rendering-document.mapper";
 
-const baseRenderingPayload = (): RenderingPayload =>
-  ({
-    version: "v1",
-    document: {
-      kind: "master",
-      id: "master-1",
-      title: "Imported CV",
-      language: "en",
-      generated_at: "2026-04-20T00:00:00.000Z",
-      updated_at: null,
-      context: {
-        full_name: "Alper Camli",
-        email: "alper@example.com"
-      }
-    },
-    template: {
-      resolution: "none",
-      template: null
-    },
-    sections: [],
-    plain_text: ""
-  }) as RenderingPayload;
-
-describe("rendering document mapper", () => {
-  it("suppresses duplicate body text when it matches non-summary headings", () => {
-    const rendering = baseRenderingPayload();
-    rendering.sections = [
+const basePresentation = (): RenderingPresentation => ({
+  version: "v1",
+  theme: {
+    layout: "modern-clean",
+    mode: "classic-single-column",
+    template_slug: "modern-clean",
+    template_name: "Modern Clean",
+    tokens: {
+      font_family: "Georgia, serif",
+      heading_color_hex: "#111827",
+      accent_color_hex: "#0f5ea6",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 16,
+      block_spacing: 12,
+      body_text_size: 12,
+      compact_density: true
+    }
+  },
+  header: {
+    name: "Alper Çamlı",
+    title: "Computer Science Student",
+    email: "alper@example.com",
+    phone: "+90 500 000 00 00",
+    location: "Istanbul, Turkey",
+    photo: null,
+    contact_items: ["alper@example.com", "+90 500 000 00 00", "Istanbul, Turkey"],
+    social_links: [
       {
-        id: "experience",
-        type: "experience",
-        title: "Experience",
-        order: 0,
-        meta: {},
-        plain_text: "Backend Engineer",
-        blocks: [
-          {
-            id: "experience-1",
-            type: "experience",
-            order: 0,
-            visibility: "visible",
-            fields: {},
-            meta: {},
-            plain_text: "Backend Engineer",
-            normalized_fields: {
-              description: {
-                raw: "Backend Engineer",
-                text: "Backend Engineer",
-                text_items: []
-              }
-            },
-            derived: {
-              headline: "Backend Engineer",
-              subheadline: null,
-              bullets: [],
-              date_range: null,
-              location: null
-            }
-          }
-        ]
+        id: "social-1",
+        type: "linkedin",
+        url: "https://www.linkedin.com/in/alpercamli",
+        label: "/in/alpercamli"
       }
-    ];
-
-    const mapped = mapRenderingPayloadToExportDocument(rendering, null);
-
-    expect(mapped.sections).toHaveLength(1);
-    expect(mapped.sections[0]?.blocks).toHaveLength(1);
-    expect(mapped.sections[0]?.blocks[0]?.headline).toBe("Backend Engineer");
-    expect(mapped.sections[0]?.blocks[0]?.body).toBeNull();
-  });
-
-  it("keeps summary body when summary headline mirrors the same text", () => {
-    const rendering = baseRenderingPayload();
-    rendering.sections = [
-      {
-        id: "summary",
-        type: "summary",
-        title: "Summary",
-        order: 0,
-        meta: {},
-        plain_text: "Backend engineer focused on APIs.",
-        blocks: [
-          {
-            id: "summary-1",
-            type: "summary",
-            order: 0,
-            visibility: "visible",
-            fields: {},
-            meta: {},
-            plain_text: "Backend engineer focused on APIs.",
-            normalized_fields: {
-              summary: {
-                raw: "Backend engineer focused on APIs.",
-                text: "Backend engineer focused on APIs.",
-                text_items: []
-              }
-            },
-            derived: {
-              headline: "Backend engineer focused on APIs.",
-              subheadline: null,
-              bullets: [],
-              date_range: null,
-              location: null
-            }
-          }
-        ]
-      }
-    ];
-
-    const mapped = mapRenderingPayloadToExportDocument(rendering, null);
-
-    expect(mapped.sections).toHaveLength(1);
-    expect(mapped.sections[0]?.blocks).toHaveLength(1);
-    expect(mapped.sections[0]?.blocks[0]?.headline).toBeNull();
-    expect(mapped.sections[0]?.blocks[0]?.body).toBe("Backend engineer focused on APIs.");
-  });
+    ]
+  },
+  sections: [
+    {
+      id: "summary",
+      type: "summary",
+      title: "Professional Summary",
+      inline_text: null,
+      items: [
+        {
+          id: "summary-item",
+          title: null,
+          subtitle: null,
+          date_range: null,
+          location: null,
+          metadata_line: null,
+          body: "Highly motivated student.",
+          bullets: []
+        }
+      ]
+    }
+  ]
 });
 
+describe("presentation to export document mapper", () => {
+  it("maps header + social links + sections", () => {
+    const presentation = basePresentation();
+
+    const mapped = mapPresentationToExportDocument(presentation);
+
+    expect(mapped.title).toBe("Alper Çamlı");
+    expect(mapped.subtitle).toBe("Computer Science Student");
+    expect(mapped.contact_line).toBe("alper@example.com • +90 500 000 00 00 • Istanbul, Turkey");
+    expect(mapped.social_links).toHaveLength(1);
+    expect(mapped.social_links[0]?.label).toBe("/in/alpercamli");
+    expect(mapped.sections).toHaveLength(1);
+    expect(mapped.sections[0]?.title).toBe("Professional Summary");
+    expect(mapped.sections[0]?.blocks[0]?.body).toBe("Highly motivated student.");
+  });
+
+  it("keeps inline sections without inventing blocks", () => {
+    const presentation = basePresentation();
+    presentation.sections = [
+      {
+        id: "skills",
+        type: "skills",
+        title: "Skills",
+        inline_text: "PostgreSQL, Spark, Python",
+        items: []
+      }
+    ];
+
+    const mapped = mapPresentationToExportDocument(presentation);
+
+    expect(mapped.sections).toHaveLength(1);
+    expect(mapped.sections[0]?.inline_text).toBe("PostgreSQL, Spark, Python");
+    expect(mapped.sections[0]?.blocks).toHaveLength(0);
+  });
+
+  it("accepts data-uri photo only", () => {
+    const presentation = basePresentation();
+    presentation.header.photo = "https://example.com/photo.jpg";
+
+    const mappedWithoutDataUri = mapPresentationToExportDocument(presentation);
+    expect(mappedWithoutDataUri.photo_data_uri).toBeNull();
+
+    presentation.header.photo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6W8h4AAAAASUVORK5CYII=";
+    const mappedDataUri = mapPresentationToExportDocument(presentation);
+    expect(mappedDataUri.photo_data_uri?.startsWith("data:image/png;base64,")).toBe(true);
+  });
+});

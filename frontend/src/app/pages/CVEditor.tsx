@@ -11,15 +11,13 @@ import {
   FileText,
   Loader2,
   History,
-  RefreshCw,
-  Github,
-  Linkedin,
-  Globe
+  RefreshCw
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AddContentModal } from "../components/AddContentModal";
 import { TipsDrawer } from "../components/TipsDrawer";
+import { CVPresentationPreview } from "../components/CVPresentationPreview";
 import { useSidebar } from "../contexts/SidebarContext";
 import {
   Dialog,
@@ -315,9 +313,9 @@ export function CVEditor() {
     setTailoredJobData(
       tailored.job
         ? {
-            role: tailored.job.job_title,
-            company: tailored.job.company_name
-          }
+          role: tailored.job.job_title,
+          company: tailored.job.company_name
+        }
         : null
     );
   };
@@ -334,13 +332,13 @@ export function CVEditor() {
       const [history, versions] =
         targetKind === "tailored"
           ? await Promise.all([
-              api.getTailoredCvAiHistory(targetId),
-              api.getTailoredCvAiBlockVersions(targetId)
-            ])
+            api.getTailoredCvAiHistory(targetId),
+            api.getTailoredCvAiBlockVersions(targetId)
+          ])
           : await Promise.all([
-              api.getMasterCvAiHistory(targetId),
-              api.getMasterCvAiBlockVersions(targetId)
-            ]);
+            api.getMasterCvAiHistory(targetId),
+            api.getMasterCvAiBlockVersions(targetId)
+          ]);
 
       setAiHistory(history);
       setAiBlockVersions(mapAiBlockVersions(versions));
@@ -633,9 +631,9 @@ export function CVEditor() {
         setTailoredJobData(
           updated.job
             ? {
-                role: updated.job.job_title,
-                company: updated.job.company_name
-              }
+              role: updated.job.job_title,
+              company: updated.job.company_name
+            }
             : null
         );
       }
@@ -728,8 +726,17 @@ export function CVEditor() {
       return;
     }
 
-    setExportingFormat(format);
     setExportError(null);
+    setExportingFormat(format);
+
+    if (dirty) {
+      const persisted = await persistCv("manual");
+      if (!persisted) {
+        setExportError("Failed to save the latest edits before export.");
+        setExportingFormat(null);
+        return;
+      }
+    }
 
     try {
       const detail =
@@ -1173,20 +1180,9 @@ export function CVEditor() {
   };
 
   const headerSection = sections.find((section) => section.type === "header");
-  const headerSocialLinks = Array.isArray(headerSection?.data?.socialLinks)
-    ? (headerSection.data.socialLinks as Array<Record<string, unknown>>)
-        .map((entry) => ({
-          id: String(entry.id || ""),
-          type: String(entry.type || "link").trim(),
-          url: String(entry.url || "").trim()
-        }))
-        .filter((entry) => entry.url.length > 0)
-    : [];
   const bodySections = sections
     .filter((section) => section.type !== "header")
     .sort((a, b) => a.order - b.order);
-
-  const visibleSections = sections.filter((section) => !section.hidden);
 
   const selectedTemplateName =
     templates.find((template) => template.id === templateId)?.name ??
@@ -1212,191 +1208,6 @@ export function CVEditor() {
     return lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet";
   })();
 
-  const formatItemDateRange = (item: any): string => {
-    const start = String(item.startDate || "").trim();
-    const end = item.currentRole ? "Present" : String(item.endDate || "").trim();
-
-    if (start && end) {
-      return `${start} - ${end}`;
-    }
-    if (start) {
-      return start;
-    }
-    if (end) {
-      return end;
-    }
-
-    return String(item.dates || item.date || "").trim();
-  };
-
-  const hasTextValue = (value: unknown): boolean => String(value || "").trim().length > 0;
-
-  const toPreviewLinkHref = (rawUrl: string): string => {
-    const trimmed = rawUrl.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    if (/^(https?:\/\/|mailto:|tel:)/i.test(trimmed)) {
-      return trimmed;
-    }
-
-    return `https://${trimmed}`;
-  };
-
-  const toPreviewSocialLabel = (rawUrl: string): string => {
-    const trimmed = rawUrl.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    const normalized = toPreviewLinkHref(trimmed);
-
-    try {
-      const parsed = new URL(normalized);
-      const cleanedPath = parsed.pathname.replace(/\/+$/, "");
-
-      if (cleanedPath && cleanedPath !== "/") {
-        return cleanedPath;
-      }
-
-      return parsed.hostname.replace(/^www\./i, "");
-    } catch {
-      return trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
-    }
-  };
-
-  const getPreviewSocialIcon = (type: string) => {
-    switch (type.trim().toLowerCase()) {
-      case "github":
-        return Github;
-      case "linkedin":
-        return Linkedin;
-      default:
-        return Globe;
-    }
-  };
-
-  const getPreviewSectionTitle = (sectionType: string): string => {
-    switch (sectionType) {
-      case "languages":
-        return "Languages";
-      case "certifications":
-        return "Certifications";
-      case "courses":
-        return "Courses";
-      case "projects":
-        return "Projects";
-      case "volunteer":
-        return "Volunteer Work";
-      case "awards":
-        return "Awards";
-      case "publications":
-        return "Publications";
-      case "references":
-        return "References";
-      default:
-        return sectionType.charAt(0).toUpperCase() + sectionType.slice(1);
-    }
-  };
-
-  const getPreviewItemParts = (
-    sectionType: string,
-    item: any
-  ): { title: string; subtitle: string; dates: string; description: string } => {
-    switch (sectionType) {
-      case "languages":
-        if (!hasTextValue(item.language) && !hasTextValue(item.proficiency) && !hasTextValue(item.certificate) && !hasTextValue(item.notes)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.language || "").trim() || "Language",
-          subtitle: [item.proficiency, item.certificate].filter(Boolean).join(" • "),
-          dates: "",
-          description: String(item.notes || "").trim()
-        };
-      case "certifications":
-        if (!hasTextValue(item.name) && !hasTextValue(item.verificationId) && !hasTextValue(item.url)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.name || "").trim() || "Certification",
-          subtitle: [item.verificationId, item.url].filter(Boolean).join(" • "),
-          dates: "",
-          description: ""
-        };
-      case "courses":
-        if (!hasTextValue(item.title) && !hasTextValue(item.institution) && !hasTextValue(item.url) && !hasTextValue(item.description)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.title || "").trim() || "Course",
-          subtitle: [item.institution, item.url].filter(Boolean).join(" • "),
-          dates: "",
-          description: String(item.description || "").trim()
-        };
-      case "projects":
-        if (!hasTextValue(item.title) && !hasTextValue(item.subtitle) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.title || "").trim() || "Project",
-          subtitle: String(item.subtitle || "").trim(),
-          dates: formatItemDateRange(item),
-          description: String(item.description || "").trim()
-        };
-      case "volunteer":
-        if (!hasTextValue(item.role) && !hasTextValue(item.organization) && !hasTextValue(item.country) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.role || "").trim() || "Volunteer Role",
-          subtitle: [item.organization, item.country].filter(Boolean).join(" • "),
-          dates: formatItemDateRange(item),
-          description: String(item.description || "").trim()
-        };
-      case "awards":
-        if (!hasTextValue(item.name) && !hasTextValue(item.issuer) && !hasTextValue(item.date) && !hasTextValue(item.description)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.name || "").trim() || "Award",
-          subtitle: String(item.issuer || "").trim(),
-          dates: String(item.date || "").trim(),
-          description: String(item.description || "").trim()
-        };
-      case "publications":
-        if (!hasTextValue(item.title) && !hasTextValue(item.publisher) && !hasTextValue(item.date) && !hasTextValue(item.description)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.title || "").trim() || "Publication",
-          subtitle: String(item.publisher || "").trim(),
-          dates: String(item.date || "").trim(),
-          description: String(item.description || "").trim()
-        };
-      case "references":
-        if (!hasTextValue(item.name) && !hasTextValue(item.jobTitle) && !hasTextValue(item.organization) && !hasTextValue(item.email) && !hasTextValue(item.phone)) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.name || "").trim() || "Reference",
-          subtitle: [item.jobTitle, item.organization].filter(Boolean).join(" • "),
-          dates: "",
-          description: [item.email, item.phone].filter(Boolean).join(" • ")
-        };
-      default:
-        if (!hasTextValue(item.title) && !hasTextValue(item.subtitle) && !hasTextValue(item.description) && !hasTextValue(formatItemDateRange(item))) {
-          return { title: "", subtitle: "", dates: "", description: "" };
-        }
-        return {
-          title: String(item.title || "").trim() || "Title",
-          subtitle: String(item.subtitle || "").trim(),
-          dates: formatItemDateRange(item),
-          description: String(item.description || "").trim()
-        };
-    }
-  };
 
   if (loading) {
     return (
@@ -1592,192 +1403,7 @@ export function CVEditor() {
               <p className="uppercase tracking-wider mb-4" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
                 Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
               </p>
-
-              <div className="bg-white shadow-lg" style={{ width: "595px", minHeight: "842px", padding: "48px 40px", fontFamily: "Georgia, serif" }}>
-                <div className="max-w-lg mx-auto">
-                  {headerSection && !headerSection.hidden && (
-                    <>
-                      <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-                        {(headerSection.data.name as string) || "Your Name"}
-                      </h1>
-                      <p className="mb-3" style={{ fontSize: "15px", color: "var(--color-text-secondary)" }}>
-                        {(headerSection.data.title as string) || "Your Job Title"}
-                      </p>
-                      <div className="mb-6 pb-4 border-b" style={{ fontSize: "12px", color: "var(--color-text-secondary)", borderColor: "var(--color-border-tertiary)" }}>
-                        {headerSection.data.email ? <div>{String(headerSection.data.email)}</div> : null}
-                        {headerSection.data.phone ? <div>{String(headerSection.data.phone)}</div> : null}
-                        {headerSection.data.location ? <div>{String(headerSection.data.location)}</div> : null}
-                        {headerSocialLinks.length > 0 ? (
-                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                            {headerSocialLinks.map((link) => {
-                              const Icon = getPreviewSocialIcon(link.type);
-                              const label = toPreviewSocialLabel(link.url);
-
-                              return (
-                                <a
-                                  key={link.id || `${link.type}-${link.url}`}
-                                  href={toPreviewLinkHref(link.url)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1.5"
-                                  style={{ textDecoration: "underline" }}
-                                >
-                                  <Icon size={11} />
-                                  <span>{label || "Link"}</span>
-                                </a>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  )}
-
-                  {visibleSections
-                    .filter((section) => section.type !== "header")
-                    .map((section) => (
-                      <div key={section.id} className="mb-6">
-                        {section.type === "summary" && (
-                          <>
-                            <h2 className="font-medium mb-2" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              Professional Summary
-                            </h2>
-                            <p style={{ fontSize: "12px", lineHeight: "1.7", color: "var(--color-text-secondary)" }}>
-                              {String(section.data.text || "")}
-                            </p>
-                          </>
-                        )}
-
-                        {section.type === "experience" && Array.isArray(section.data.items) && section.data.items.length > 0 && (
-                          <>
-                            <h2 className="font-medium mb-3" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              Work Experience
-                            </h2>
-                            {(section.data.items as any[])
-                              .filter(
-                                (item) =>
-                                  !item.hidden &&
-                                  [item.role, item.company, item.country, item.startDate, item.endDate, item.description]
-                                    .map((value) => String(value || "").trim())
-                                    .some((value) => value.length > 0)
-                              )
-                              .map((item, idx) => (
-                                <div key={idx} className="mb-4">
-                                  <div className="flex items-start justify-between mb-1">
-                                    <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                                      {item.role || "Position"}
-                                    </h3>
-                                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                                      {item.startDate || ""}
-                                      {item.startDate || item.endDate ? " - " : ""}
-                                      {item.currentRole ? "Present" : item.endDate || ""}
-                                    </span>
-                                  </div>
-                                  <p className="mb-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                                    {item.company}
-                                  </p>
-                                  {item.description ? (
-                                    <div style={{ fontSize: "12px", lineHeight: "1.6", color: "var(--color-text-secondary)", whiteSpace: "pre-line" }}>
-                                      {item.description}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ))}
-                          </>
-                        )}
-
-                        {section.type === "education" && Array.isArray(section.data.items) && section.data.items.length > 0 && (
-                          <>
-                            <h2 className="font-medium mb-3" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              Education
-                            </h2>
-                            {(section.data.items as any[])
-                              .filter(
-                                (item) =>
-                                  !item.hidden &&
-                                  [item.degree, item.institution, item.gpa, item.startDate, item.endDate, item.description]
-                                    .map((value) => String(value || "").trim())
-                                    .some((value) => value.length > 0)
-                              )
-                              .map((item, idx) => (
-                                <div key={idx} className="mb-3">
-                                  <div className="flex items-start justify-between mb-1">
-                                    <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                                      {item.degree || "Degree"}
-                                    </h3>
-                                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                                      {item.startDate || ""}
-                                      {item.startDate || item.endDate ? " - " : ""}
-                                      {item.endDate || ""}
-                                    </span>
-                                  </div>
-                                  <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{item.institution}</p>
-                                  {item.gpa ? (
-                                    <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                                      GPA: {item.gpa}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))}
-                          </>
-                        )}
-
-                        {section.type === "skills" && Array.isArray(section.data.skills) && section.data.skills.length > 0 && (
-                          <>
-                            <h2 className="font-medium mb-2" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              Skills
-                            </h2>
-                            <p style={{ fontSize: "12px", lineHeight: "1.7", color: "var(--color-text-secondary)" }}>
-                              {(section.data.skills as string[]).join(", ")}
-                            </p>
-                          </>
-                        )}
-
-                        {!["summary", "experience", "education", "skills", "header"].includes(section.type) &&
-                        Array.isArray(section.data.items) &&
-                        section.data.items.length > 0 ? (
-                          <>
-                            <h2 className="font-medium mb-3" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              {getPreviewSectionTitle(section.type)}
-                            </h2>
-                            {(section.data.items as any[])
-                              .filter((item) => !item.hidden)
-                              .map((item, idx) => {
-                                const itemParts = getPreviewItemParts(section.type, item);
-                                if (!itemParts.title && !itemParts.subtitle && !itemParts.dates && !itemParts.description) {
-                                  return null;
-                                }
-
-                                return (
-                                  <div key={idx} className="mb-3">
-                                    <div className="flex items-start justify-between mb-1">
-                                      <h3 className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                                        {itemParts.title}
-                                      </h3>
-                                      {itemParts.dates ? (
-                                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                                          {itemParts.dates}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    {itemParts.subtitle ? (
-                                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{itemParts.subtitle}</p>
-                                    ) : null}
-                                    {itemParts.description ? (
-                                      <p style={{ fontSize: "12px", lineHeight: "1.6", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-                                        {itemParts.description}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                );
-                              })
-                              .filter(Boolean)}
-                          </>
-                        ) : null}
-                      </div>
-                    ))}
-                </div>
-              </div>
+              <CVPresentationPreview presentation={renderingPreview?.presentation ?? null} />
             </div>
           </div>
         </div>
@@ -1817,23 +1443,23 @@ export function CVEditor() {
                 {(
                   cvKind === "tailored"
                     ? [
-                        { label: "Improve writing", action: "improve" },
-                        { label: "Summarize", action: "summarize" },
-                        { label: "Rewrite", action: "rewrite" },
-                        { label: "Shorten", action: "shorten" },
-                        { label: "Expand", action: "expand" },
-                        { label: "ATS optimize", action: "ats_optimize" },
-                        { label: "Generate options", action: "options" },
-                        { label: "Compare to job", action: "compare" }
-                      ]
+                      { label: "Improve writing", action: "improve" },
+                      { label: "Summarize", action: "summarize" },
+                      { label: "Rewrite", action: "rewrite" },
+                      { label: "Shorten", action: "shorten" },
+                      { label: "Expand", action: "expand" },
+                      { label: "ATS optimize", action: "ats_optimize" },
+                      { label: "Generate options", action: "options" },
+                      { label: "Compare to job", action: "compare" }
+                    ]
                     : [
-                        { label: "Improve writing", action: "improve" },
-                        { label: "Summarize", action: "summarize" },
-                        { label: "Rewrite", action: "rewrite" },
-                        { label: "Shorten", action: "shorten" },
-                        { label: "Expand", action: "expand" },
-                        { label: "Generate options", action: "options" }
-                      ]
+                      { label: "Improve writing", action: "improve" },
+                      { label: "Summarize", action: "summarize" },
+                      { label: "Rewrite", action: "rewrite" },
+                      { label: "Shorten", action: "shorten" },
+                      { label: "Expand", action: "expand" },
+                      { label: "Generate options", action: "options" }
+                    ]
                 ).map((item) => (
                   <button
                     key={item.label}

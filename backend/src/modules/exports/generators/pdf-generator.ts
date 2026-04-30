@@ -1,9 +1,12 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import type { ExportDocumentModel } from "./rendering-document.mapper";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import type { ExportDocumentModel, ExportDocumentSection } from "./rendering-document.mapper";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
-const PAGE_MARGIN = 48;
+const PAGE_MARGIN = 42;
 
 interface DrawContext {
   page: PDFPage;
@@ -21,31 +24,10 @@ interface DrawWrappedTextOptions {
   leadingGap?: number;
 }
 
-const toPdfSafeText = (value: string): string => {
-  if (!value) {
-    return "";
-  }
-
-  return value
-    .replace(/İ/g, "I")
-    .replace(/ı/g, "i")
-    .replace(/Ş/g, "S")
-    .replace(/ş/g, "s")
-    .replace(/Ğ/g, "G")
-    .replace(/ğ/g, "g")
-    .replace(/Ü/g, "U")
-    .replace(/ü/g, "u")
-    .replace(/Ö/g, "O")
-    .replace(/ö/g, "o")
-    .replace(/Ç/g, "C")
-    .replace(/ç/g, "c")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
-};
+export const normalizePdfText = (value: string): string => value.replace(/\s+/g, " ").trim();
 
 const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number): string[] => {
-  const normalized = toPdfSafeText(text).replace(/\s+/g, " ").trim();
+  const normalized = normalizePdfText(text);
   if (!normalized) {
     return [];
   }
@@ -93,10 +75,310 @@ const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines;
 };
 
+const hexToRgb = (hex: string): ReturnType<typeof rgb> => {
+  const normalized = hex.trim().replace(/^#/, "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
+    return rgb(0, 0, 0);
+  }
+
+  const intValue = Number.parseInt(expanded, 16);
+  const r = (intValue >> 16) & 255;
+  const g = (intValue >> 8) & 255;
+  const b = intValue & 255;
+
+  return rgb(r / 255, g / 255, b / 255);
+};
+
+const tryReadFontBytes = (fileName: string): Uint8Array => {
+  const candidates = [
+    resolve(process.cwd(), "assets", "fonts", fileName),
+    resolve(process.cwd(), "backend", "assets", "fonts", fileName)
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const bytes = readFileSync(candidate);
+      return new Uint8Array(bytes);
+    } catch {
+      // try next path
+    }
+  }
+
+  throw new Error(`Font file not found: ${fileName}`);
+};
+
+const parseDataUriImage = (dataUri: string): { mimeType: "image/png" | "image/jpeg"; bytes: Uint8Array } | null => {
+  const match = dataUri.match(/^data:(image\/(?:png|jpeg|jpg));base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const mimeType = match[1].toLowerCase() === "image/png" ? "image/png" : "image/jpeg";
+  const bytes = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
+
+  return {
+    mimeType,
+    bytes: new Uint8Array(bytes)
+  };
+};
+
+const drawDivider = (page: PDFPage, y: number, color: ReturnType<typeof rgb>) => {
+  page.drawLine({
+    start: { x: PAGE_MARGIN, y },
+    end: { x: PAGE_WIDTH - PAGE_MARGIN, y },
+    color,
+    thickness: 0.6,
+    opacity: 0.4
+  });
+};
+
+const renderSectionDefault = (
+  section: ExportDocumentSection,
+  drawContext: DrawContext,
+  ensureSpace: (requiredHeight: number) => void,
+  drawWrappedText: (options: DrawWrappedTextOptions) => void,
+  fonts: { regular: PDFFont; bold: PDFFont },
+  colors: {
+    heading: ReturnType<typeof rgb>;
+    body: ReturnType<typeof rgb>;
+    muted: ReturnType<typeof rgb>;
+  },
+  bodyFontSize: number,
+  blockSpacing: number
+): void => {
+  ensureSpace(24);
+  drawWrappedText({
+    text: section.title,
+    font: fonts.bold,
+    size: bodyFontSize + 1,
+    color: colors.heading,
+    lineHeight: bodyFontSize + 5,
+    maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+    x: PAGE_MARGIN
+  });
+
+  if (section.inline_text) {
+    drawWrappedText({
+      text: section.inline_text,
+      font: fonts.regular,
+      size: bodyFontSize,
+      color: colors.body,
+      lineHeight: bodyFontSize + 4,
+      maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+      x: PAGE_MARGIN
+    });
+    drawContext.cursorY -= blockSpacing;
+    return;
+  }
+
+  for (const block of section.blocks) {
+    if (block.headline) {
+      drawWrappedText({
+        text: block.headline,
+        font: fonts.bold,
+        size: bodyFontSize,
+        color: colors.body,
+        lineHeight: bodyFontSize + 4,
+        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+        x: PAGE_MARGIN
+      });
+    }
+
+    if (block.subheadline) {
+      drawWrappedText({
+        text: block.subheadline,
+        font: fonts.regular,
+        size: bodyFontSize - 1,
+        color: colors.body,
+        lineHeight: bodyFontSize + 3,
+        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+        x: PAGE_MARGIN
+      });
+    }
+
+    if (block.metadata_line) {
+      drawWrappedText({
+        text: block.metadata_line,
+        font: fonts.regular,
+        size: Math.max(9, bodyFontSize - 2),
+        color: colors.muted,
+        lineHeight: bodyFontSize + 2,
+        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+        x: PAGE_MARGIN
+      });
+    }
+
+    if (block.bullets.length > 0) {
+      for (const bullet of block.bullets) {
+        drawWrappedText({
+          text: `• ${bullet}`,
+          font: fonts.regular,
+          size: bodyFontSize - 1,
+          color: colors.body,
+          lineHeight: bodyFontSize + 3,
+          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2 - 10,
+          x: PAGE_MARGIN + 10
+        });
+      }
+    } else if (block.body) {
+      drawWrappedText({
+        text: block.body,
+        font: fonts.regular,
+        size: bodyFontSize - 1,
+        color: colors.body,
+        lineHeight: bodyFontSize + 3,
+        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+        x: PAGE_MARGIN
+      });
+    }
+
+    drawContext.cursorY -= blockSpacing;
+  }
+};
+
+const renderSectionTimeline = (
+  section: ExportDocumentSection,
+  drawContext: DrawContext,
+  ensureSpace: (requiredHeight: number) => void,
+  drawWrappedText: (options: DrawWrappedTextOptions) => void,
+  fonts: { regular: PDFFont; bold: PDFFont },
+  colors: {
+    heading: ReturnType<typeof rgb>;
+    accent: ReturnType<typeof rgb>;
+    body: ReturnType<typeof rgb>;
+    muted: ReturnType<typeof rgb>;
+  },
+  bodyFontSize: number,
+  blockSpacing: number
+): void => {
+  ensureSpace(24);
+  drawWrappedText({
+    text: section.title,
+    font: fonts.bold,
+    size: bodyFontSize + 2,
+    color: colors.heading,
+    lineHeight: bodyFontSize + 6,
+    maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+    x: PAGE_MARGIN
+  });
+
+  if (section.inline_text) {
+    drawWrappedText({
+      text: section.inline_text,
+      font: fonts.regular,
+      size: bodyFontSize,
+      color: colors.body,
+      lineHeight: bodyFontSize + 4,
+      maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+      x: PAGE_MARGIN
+    });
+    drawContext.cursorY -= blockSpacing;
+    return;
+  }
+
+  const timelineX = PAGE_MARGIN + 118;
+  const metaX = PAGE_MARGIN;
+  const contentX = timelineX + 10;
+  const contentWidth = PAGE_WIDTH - PAGE_MARGIN - contentX;
+
+  for (const block of section.blocks) {
+    ensureSpace(36);
+
+    drawContext.page.drawLine({
+      start: { x: timelineX, y: drawContext.cursorY + 6 },
+      end: { x: timelineX, y: drawContext.cursorY - 22 },
+      color: colors.accent,
+      thickness: 1.2,
+      opacity: 0.8
+    });
+
+    drawContext.page.drawCircle({
+      x: timelineX,
+      y: drawContext.cursorY + 2,
+      size: 2.6,
+      color: colors.accent
+    });
+
+    if (block.metadata_line) {
+      drawWrappedText({
+        text: block.metadata_line,
+        font: fonts.regular,
+        size: Math.max(8, bodyFontSize - 2),
+        color: colors.muted,
+        lineHeight: bodyFontSize + 2,
+        maxWidth: 106,
+        x: metaX
+      });
+    }
+
+    if (block.headline) {
+      drawWrappedText({
+        text: block.headline,
+        font: fonts.bold,
+        size: bodyFontSize,
+        color: colors.body,
+        lineHeight: bodyFontSize + 4,
+        maxWidth: contentWidth,
+        x: contentX
+      });
+    }
+
+    if (block.subheadline) {
+      drawWrappedText({
+        text: block.subheadline,
+        font: fonts.regular,
+        size: bodyFontSize - 1,
+        color: colors.body,
+        lineHeight: bodyFontSize + 3,
+        maxWidth: contentWidth,
+        x: contentX
+      });
+    }
+
+    if (block.bullets.length > 0) {
+      for (const bullet of block.bullets) {
+        drawWrappedText({
+          text: `• ${bullet}`,
+          font: fonts.regular,
+          size: bodyFontSize - 1,
+          color: colors.body,
+          lineHeight: bodyFontSize + 3,
+          maxWidth: contentWidth - 8,
+          x: contentX + 8
+        });
+      }
+    } else if (block.body) {
+      drawWrappedText({
+        text: block.body,
+        font: fonts.regular,
+        size: bodyFontSize - 1,
+        color: colors.body,
+        lineHeight: bodyFontSize + 3,
+        maxWidth: contentWidth,
+        x: contentX
+      });
+    }
+
+    drawContext.cursorY -= blockSpacing;
+  }
+};
+
 export const generatePdfDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
   const pdf = await PDFDocument.create();
-  const regularFont = await pdf.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+
+  const regularFontBytes = tryReadFontBytes("NotoSans-Regular.ttf");
+  const boldFontBytes = tryReadFontBytes("NotoSans-Bold.ttf");
+  const regularFont = await pdf.embedFont(regularFontBytes, { subset: false });
+  const boldFont = await pdf.embedFont(boldFontBytes, { subset: false });
 
   const drawContext: DrawContext = {
     page: pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]),
@@ -122,7 +404,7 @@ export const generatePdfDocument = async (documentModel: ExportDocumentModel): P
       return;
     }
 
-    let paragraphIndex = 0;
+    let index = 0;
     for (const paragraph of paragraphs) {
       const wrappedLines = wrapText(paragraph, options.font, options.size, options.maxWidth);
 
@@ -138,45 +420,61 @@ export const generatePdfDocument = async (documentModel: ExportDocumentModel): P
         drawContext.cursorY -= options.lineHeight;
       }
 
-      paragraphIndex += 1;
-      if (paragraphIndex < paragraphs.length) {
+      index += 1;
+      if (index < paragraphs.length) {
         drawContext.cursorY -= options.leadingGap ?? 0;
       }
     }
   };
 
-  const headingColor = rgb(
-    documentModel.theme.heading_color_rgb[0] / 255,
-    documentModel.theme.heading_color_rgb[1] / 255,
-    documentModel.theme.heading_color_rgb[2] / 255
-  );
-  const accentColor = rgb(
-    documentModel.theme.accent_color_rgb[0] / 255,
-    documentModel.theme.accent_color_rgb[1] / 255,
-    documentModel.theme.accent_color_rgb[2] / 255
-  );
-  const bodyColor = rgb(0.12, 0.12, 0.12);
-  const mutedColor = rgb(0.35, 0.35, 0.35);
+  const headingColor = hexToRgb(documentModel.theme.heading_color_hex);
+  const accentColor = hexToRgb(documentModel.theme.accent_color_hex);
+  const bodyColor = hexToRgb(documentModel.theme.body_color_hex);
+  const mutedColor = hexToRgb(documentModel.theme.muted_color_hex);
+  const bodyFontSize = documentModel.theme.body_text_size;
+
+  let headerStartX = PAGE_MARGIN;
+  if (documentModel.photo_data_uri) {
+    const parsed = parseDataUriImage(documentModel.photo_data_uri);
+    if (parsed) {
+      let image: PDFImage;
+      if (parsed.mimeType === "image/png") {
+        image = await pdf.embedPng(parsed.bytes);
+      } else {
+        image = await pdf.embedJpg(parsed.bytes);
+      }
+
+      const size = 56;
+      const y = drawContext.cursorY - size + 8;
+      drawContext.page.drawImage(image, {
+        x: PAGE_MARGIN,
+        y,
+        width: size,
+        height: size
+      });
+      headerStartX = PAGE_MARGIN + size + 12;
+    }
+  }
 
   drawWrappedText({
     text: documentModel.title,
     font: boldFont,
-    size: 22,
+    size: 20,
     color: headingColor,
-    lineHeight: 28,
-    maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-    x: PAGE_MARGIN
+    lineHeight: 25,
+    maxWidth: PAGE_WIDTH - headerStartX - PAGE_MARGIN,
+    x: headerStartX
   });
 
   if (documentModel.subtitle) {
     drawWrappedText({
       text: documentModel.subtitle,
       font: regularFont,
-      size: 12,
+      size: bodyFontSize,
       color: accentColor,
-      lineHeight: 16,
-      maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-      x: PAGE_MARGIN
+      lineHeight: bodyFontSize + 4,
+      maxWidth: PAGE_WIDTH - headerStartX - PAGE_MARGIN,
+      x: headerStartX
     });
   }
 
@@ -184,93 +482,95 @@ export const generatePdfDocument = async (documentModel: ExportDocumentModel): P
     drawWrappedText({
       text: documentModel.contact_line,
       font: regularFont,
-      size: 10,
+      size: Math.max(9, bodyFontSize - 1),
       color: mutedColor,
-      lineHeight: 14,
-      maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-      x: PAGE_MARGIN
+      lineHeight: bodyFontSize + 3,
+      maxWidth: PAGE_WIDTH - headerStartX - PAGE_MARGIN,
+      x: headerStartX
     });
   }
 
-  drawContext.cursorY -= 10;
-
-  for (const section of documentModel.sections) {
-    ensureSpace(28);
+  if (documentModel.social_links.length > 0) {
     drawWrappedText({
-      text: section.title,
-      font: boldFont,
-      size: 13,
-      color: headingColor,
-      lineHeight: 18,
-      maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-      x: PAGE_MARGIN
+      text: documentModel.social_links.map((item) => item.label).join(" • "),
+      font: regularFont,
+      size: Math.max(9, bodyFontSize - 1),
+      color: mutedColor,
+      lineHeight: bodyFontSize + 3,
+      maxWidth: PAGE_WIDTH - headerStartX - PAGE_MARGIN,
+      x: headerStartX
     });
+  }
 
-    for (const block of section.blocks) {
-      if (block.headline) {
-        drawWrappedText({
-          text: block.headline,
-          font: boldFont,
-          size: 11,
-          color: bodyColor,
-          lineHeight: 15,
-          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-          x: PAGE_MARGIN
-        });
-      }
+  drawContext.cursorY -= 6;
+  drawDivider(drawContext.page, drawContext.cursorY, mutedColor);
+  drawContext.cursorY -= 12;
 
-      if (block.subheadline) {
-        drawWrappedText({
-          text: block.subheadline,
-          font: regularFont,
-          size: 10,
-          color: bodyColor,
-          lineHeight: 14,
-          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-          x: PAGE_MARGIN
-        });
-      }
+  const sections = documentModel.sections;
 
-      if (block.metadata_line) {
-        drawWrappedText({
-          text: block.metadata_line,
-          font: regularFont,
-          size: 9,
-          color: mutedColor,
-          lineHeight: 13,
-          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-          x: PAGE_MARGIN
-        });
-      }
+  if (documentModel.theme.mode === "portfolio-two-column") {
+    const sideTypes = new Set(["skills", "languages", "references", "certifications", "courses"]);
+    const sideSections = sections.filter((section) => sideTypes.has(section.type));
+    const mainSections = sections.filter((section) => !sideTypes.has(section.type));
 
-      if (block.bullets.length > 0) {
-        for (const bullet of block.bullets) {
-          drawWrappedText({
-            text: `• ${bullet}`,
-            font: regularFont,
-            size: 10,
-            color: bodyColor,
-            lineHeight: 14,
-            maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2 - 8,
-            x: PAGE_MARGIN + 8
-          });
-        }
-      } else if (block.body) {
-        drawWrappedText({
-          text: block.body,
-          font: regularFont,
-          size: 10,
-          color: bodyColor,
-          lineHeight: 14,
-          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-          x: PAGE_MARGIN
-        });
-      }
-
-      drawContext.cursorY -= 6;
+    for (const section of sideSections) {
+      renderSectionDefault(
+        section,
+        drawContext,
+        ensureSpace,
+        drawWrappedText,
+        { regular: regularFont, bold: boldFont },
+        { heading: accentColor, body: bodyColor, muted: mutedColor },
+        Math.max(10, bodyFontSize - 1),
+        Math.max(6, documentModel.theme.block_spacing - 2)
+      );
     }
 
-    drawContext.cursorY -= 4;
+    drawContext.cursorY -= 8;
+    drawDivider(drawContext.page, drawContext.cursorY, accentColor);
+    drawContext.cursorY -= 12;
+
+    for (const section of mainSections) {
+      renderSectionDefault(
+        section,
+        drawContext,
+        ensureSpace,
+        drawWrappedText,
+        { regular: regularFont, bold: boldFont },
+        { heading: headingColor, body: bodyColor, muted: mutedColor },
+        bodyFontSize,
+        documentModel.theme.block_spacing
+      );
+      drawContext.cursorY -= documentModel.theme.section_spacing;
+    }
+  } else if (documentModel.theme.mode === "timeline-split") {
+    for (const section of sections) {
+      renderSectionTimeline(
+        section,
+        drawContext,
+        ensureSpace,
+        drawWrappedText,
+        { regular: regularFont, bold: boldFont },
+        { heading: headingColor, accent: accentColor, body: bodyColor, muted: mutedColor },
+        bodyFontSize,
+        documentModel.theme.block_spacing
+      );
+      drawContext.cursorY -= documentModel.theme.section_spacing;
+    }
+  } else {
+    for (const section of sections) {
+      renderSectionDefault(
+        section,
+        drawContext,
+        ensureSpace,
+        drawWrappedText,
+        { regular: regularFont, bold: boldFont },
+        { heading: headingColor, body: bodyColor, muted: mutedColor },
+        bodyFontSize,
+        documentModel.theme.block_spacing
+      );
+      drawContext.cursorY -= documentModel.theme.section_spacing;
+    }
   }
 
   const bytes = await pdf.save();
