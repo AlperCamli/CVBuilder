@@ -6,12 +6,19 @@ import {
   ValidationError,
   type AppError
 } from "../../shared/errors/app-error";
-import type { ExportFormat, ExportRecord, FileRecord, TailoredCvRecord } from "../../shared/types/domain";
+import type {
+  ExportFormat,
+  ExportRecord,
+  FileRecord,
+  MasterCvRecord,
+  TailoredCvRecord
+} from "../../shared/types/domain";
 import type { FilesService } from "../files/files.service";
 import type { RenderingService } from "../rendering/rendering.service";
 import type { ResolvedTemplateSummary, TemplateSummary } from "../templates/templates.types";
 import type { TemplatesService } from "../templates/templates.service";
 import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository";
+import type { MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { BillingService } from "../billing/billing.service";
 import type { ExportsRepository } from "./exports.repository";
 import type {
@@ -19,8 +26,10 @@ import type {
   ExportDetailResponse,
   ExportDownloadResponse,
   ExportFileSummary,
+  ExportMasterCvSummary,
   ExportSummaryItem,
   ExportTailoredCvSummary,
+  ListMasterCvExportsResponse,
   ListTailoredCvExportsResponse,
   SessionContext
 } from "./exports.types";
@@ -67,6 +76,7 @@ export class ExportsService {
   constructor(
     private readonly exportsRepository: ExportsRepository,
     private readonly tailoredCvRepository: TailoredCvRepository,
+    private readonly masterCvRepository: MasterCvRepository,
     private readonly templatesService: TemplatesService,
     private readonly renderingService: RenderingService,
     private readonly filesService: FilesService,
@@ -79,7 +89,15 @@ export class ExportsService {
     tailoredCvId: string,
     input: CreateExportInput
   ): Promise<ExportDetailResponse> {
-    return this.createExportByFormat(session, tailoredCvId, "pdf", input);
+    return this.createExportByFormat(
+      session,
+      {
+        kind: "tailored",
+        cv_id: tailoredCvId
+      },
+      "pdf",
+      input
+    );
   }
 
   async createDocxExport(
@@ -87,7 +105,47 @@ export class ExportsService {
     tailoredCvId: string,
     input: CreateExportInput
   ): Promise<ExportDetailResponse> {
-    return this.createExportByFormat(session, tailoredCvId, "docx", input);
+    return this.createExportByFormat(
+      session,
+      {
+        kind: "tailored",
+        cv_id: tailoredCvId
+      },
+      "docx",
+      input
+    );
+  }
+
+  async createMasterCvPdfExport(
+    session: SessionContext,
+    masterCvId: string,
+    input: CreateExportInput
+  ): Promise<ExportDetailResponse> {
+    return this.createExportByFormat(
+      session,
+      {
+        kind: "master",
+        cv_id: masterCvId
+      },
+      "pdf",
+      input
+    );
+  }
+
+  async createMasterCvDocxExport(
+    session: SessionContext,
+    masterCvId: string,
+    input: CreateExportInput
+  ): Promise<ExportDetailResponse> {
+    return this.createExportByFormat(
+      session,
+      {
+        kind: "master",
+        cv_id: masterCvId
+      },
+      "docx",
+      input
+    );
   }
 
   async listTailoredCvExports(
@@ -104,9 +162,28 @@ export class ExportsService {
     };
   }
 
+  async listMasterCvExports(
+    session: SessionContext,
+    masterCvId: string
+  ): Promise<ListMasterCvExportsResponse> {
+    await this.requireMasterCv(session.appUser.id, masterCvId);
+
+    const exports = await this.exportsRepository.listByMasterCv(session.appUser.id, masterCvId);
+
+    return {
+      master_cv_id: masterCvId,
+      exports: exports.map((row) => this.toSummaryItem(row))
+    };
+  }
+
   async getExportDetail(session: SessionContext, exportId: string): Promise<ExportDetailResponse> {
     const exportRow = await this.requireExport(session.appUser.id, exportId);
-    const tailoredCv = await this.tailoredCvRepository.findById(session.appUser.id, exportRow.tailored_cv_id);
+    const tailoredCv = exportRow.tailored_cv_id
+      ? await this.tailoredCvRepository.findById(session.appUser.id, exportRow.tailored_cv_id)
+      : null;
+    const masterCv = exportRow.master_cv_id
+      ? await this.masterCvRepository.findById(session.appUser.id, exportRow.master_cv_id)
+      : null;
 
     const file = exportRow.file_id
       ? await this.filesService.findOwnedFileById(session.appUser.id, exportRow.file_id)
@@ -131,7 +208,7 @@ export class ExportsService {
           template: null
         };
 
-    return this.toDetailResponse(exportRow, tailoredCv, file, template, resolvedTemplate, download);
+    return this.toDetailResponse(exportRow, tailoredCv, masterCv, file, template, resolvedTemplate, download);
   }
 
   async getExportDownload(session: SessionContext, exportId: string): Promise<ExportDownloadResponse> {
@@ -164,7 +241,7 @@ export class ExportsService {
 
   private async createExportByFormat(
     session: SessionContext,
-    tailoredCvId: string,
+    target: { kind: "tailored" | "master"; cv_id: string },
     format: ExportFormat,
     input: CreateExportInput
   ): Promise<ExportDetailResponse> {
@@ -174,16 +251,26 @@ export class ExportsService {
       format === "pdf" ? "export_pdf" : "export_docx"
     );
 
-    const tailoredCv = await this.requireTailoredCv(userId, tailoredCvId);
+    const exportTarget =
+      target.kind === "tailored"
+        ? {
+            kind: "tailored" as const,
+            row: await this.requireTailoredCv(userId, target.cv_id)
+          }
+        : {
+            kind: "master" as const,
+            row: await this.requireMasterCv(userId, target.cv_id)
+          };
 
     const selectedTemplateId =
       input.template_id !== undefined
         ? await this.templatesService.validateAssignableTemplateId(input.template_id)
-        : tailoredCv.template_id;
+        : exportTarget.row.template_id;
 
     const created = await this.exportsRepository.create({
       user_id: userId,
-      tailored_cv_id: tailoredCv.id,
+      master_cv_id: exportTarget.kind === "master" ? exportTarget.row.id : null,
+      tailored_cv_id: exportTarget.kind === "tailored" ? exportTarget.row.id : null,
       format,
       status: "processing",
       file_id: null,
@@ -198,22 +285,29 @@ export class ExportsService {
 
     try {
       const renderingResult = await this.renderingService.buildRendering({
-        cv_kind: "tailored",
-        current_content: tailoredCv.current_content,
+        cv_kind: exportTarget.kind,
+        current_content: exportTarget.row.current_content,
         template_id: selectedTemplateId,
-        language: tailoredCv.language,
+        language: exportTarget.row.language,
         document: {
-          id: tailoredCv.id,
-          title: tailoredCv.title,
-          updated_at: tailoredCv.updated_at
+          id: exportTarget.row.id,
+          title: exportTarget.row.title,
+          updated_at: exportTarget.row.updated_at
         },
-        context: {
-          ...tailoredCv.current_content.metadata,
-          status: tailoredCv.status,
-          master_cv_id: tailoredCv.master_cv_id,
-          job_id: tailoredCv.job_id,
-          last_export_id: created.id
-        },
+        context:
+          exportTarget.kind === "tailored"
+            ? {
+                ...exportTarget.row.current_content.metadata,
+                status: exportTarget.row.status,
+                master_cv_id: exportTarget.row.master_cv_id,
+                job_id: exportTarget.row.job_id,
+                last_export_id: created.id
+              }
+            : {
+                ...exportTarget.row.current_content.metadata,
+                source_type: exportTarget.row.source_type,
+                last_export_id: created.id
+              },
         allow_inactive_selected_template: true
       });
 
@@ -234,7 +328,8 @@ export class ExportsService {
 
       const uploaded = await this.filesService.uploadExportObject({
         userId,
-        tailoredCvId: tailoredCv.id,
+        cvKind: exportTarget.kind,
+        cvId: exportTarget.row.id,
         exportId: created.id,
         format,
         bytes: generatedBytes
@@ -271,9 +366,11 @@ export class ExportsService {
         });
       }
 
-      await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
-        last_exported_at: completedAt
-      });
+      if (exportTarget.kind === "tailored") {
+        await this.tailoredCvRepository.updateById(userId, exportTarget.row.id, {
+          last_exported_at: completedAt
+        });
+      }
 
       await this.billingService.recordExportUsage(userId, fileRecord.size_bytes);
 
@@ -286,7 +383,8 @@ export class ExportsService {
 
       return this.toDetailResponse(
         completed,
-        tailoredCv,
+        exportTarget.kind === "tailored" ? exportTarget.row : null,
+        exportTarget.kind === "master" ? exportTarget.row : null,
         fileRecord,
         resolvedTemplate,
         renderingResult.resolved_template,
@@ -342,6 +440,16 @@ export class ExportsService {
     return row;
   }
 
+  private async requireMasterCv(userId: string, masterCvId: string): Promise<MasterCvRecord> {
+    const row = await this.masterCvRepository.findById(userId, masterCvId);
+
+    if (!row) {
+      throw new NotFoundError("Master CV was not found");
+    }
+
+    return row;
+  }
+
   private async safeGetTemplate(
     session: SessionContext,
     templateId: string
@@ -386,6 +494,20 @@ export class ExportsService {
     };
   }
 
+  private toMasterCvSummary(row: MasterCvRecord | null): ExportMasterCvSummary | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      source_type: row.source_type,
+      template_id: row.template_id,
+      updated_at: row.updated_at
+    };
+  }
+
   private toFileSummary(file: FileRecord | null): ExportFileSummary | null {
     if (!file) {
       return null;
@@ -404,6 +526,7 @@ export class ExportsService {
   private toDetailResponse(
     exportRow: ExportRecord,
     tailoredCv: TailoredCvRecord | null,
+    masterCv: MasterCvRecord | null,
     file: FileRecord | null,
     template: TemplateSummary | null,
     resolvedTemplate: ResolvedTemplateSummary | null,
@@ -412,6 +535,7 @@ export class ExportsService {
     return {
       export: this.toSummaryItem(exportRow),
       tailored_cv: this.toTailoredCvSummary(tailoredCv),
+      master_cv: this.toMasterCvSummary(masterCv),
       file: this.toFileSummary(file),
       template,
       resolved_template: resolvedTemplate,

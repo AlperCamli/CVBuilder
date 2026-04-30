@@ -8,6 +8,12 @@ export const tailoredCvExportParamsSchema = z
   })
   .strict();
 
+export const masterCvExportParamsSchema = z
+  .object({
+    masterCvId: uuidSchema
+  })
+  .strict();
+
 export const exportIdParamSchema = z
   .object({
     exportId: uuidSchema

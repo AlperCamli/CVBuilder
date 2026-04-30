@@ -6,7 +6,9 @@
       "Bash(npm run *)",
       "Bash(npm test *)",
       "Bash(grep -v \"//\")",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(grep -nE \"#[0-9a-fA-F]{6}|rgba\\\\\\(20, 184\" /Users/alpercamli/Desktop/CV_Builder/frontend/src/app/pages/AIImproving.tsx)",
+      "Bash(perl -i -pe 's/rgba\\\\\\(20, 184, 166,/rgba\\(29, 158, 117,/g; s/rgba\\\\\\(45, 212, 191,/rgba\\(93, 202, 165,/g' app/pages/AIImproving.tsx)"
     ]
   }
 }

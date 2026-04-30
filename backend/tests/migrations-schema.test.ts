@@ -122,6 +122,15 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/grant execute on function public\.increment_usage_counters/i);
   });
 
+  it("contains phase 6A exports target scope updates for master CV support", () => {
+    const migration = readMigration("20260430120000_phase6a_master_cv_exports.sql");
+
+    expect(migration).toMatch(/add column if not exists master_cv_id/i);
+    expect(migration).toMatch(/alter column tailored_cv_id drop not null/i);
+    expect(migration).toMatch(/exports_target_scope_check/i);
+    expect(migration).toMatch(/exports_master_cv_id_created_at_idx/i);
+  });
+
   it("contains phase 5 AI prompt table and master/tailored suggestion scope updates", () => {
     const migration = readMigration("20260421130000_phase5_ai_gemini_prompts.sql");
 

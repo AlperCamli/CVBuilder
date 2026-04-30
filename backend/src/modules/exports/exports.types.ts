@@ -1,7 +1,13 @@
 import type { AuthenticatedRequestContext } from "../auth/auth.types";
 import type { DownloadAccess } from "../files/files.service";
 import type { ResolvedTemplateSummary, TemplateSummary } from "../templates/templates.types";
-import type { ExportFormat, ExportStatus, FileRecord, TailoredCvRecord } from "../../shared/types/domain";
+import type {
+  ExportFormat,
+  ExportStatus,
+  FileRecord,
+  MasterCvRecord,
+  TailoredCvRecord
+} from "../../shared/types/domain";
 
 export type SessionContext = AuthenticatedRequestContext;
 
@@ -26,6 +32,11 @@ export interface ListTailoredCvExportsResponse {
   exports: ExportSummaryItem[];
 }
 
+export interface ListMasterCvExportsResponse {
+  master_cv_id: string;
+  exports: ExportSummaryItem[];
+}
+
 export interface ExportFileSummary {
   id: string;
   file_type: FileRecord["file_type"];
@@ -43,9 +54,18 @@ export interface ExportTailoredCvSummary {
   updated_at: string;
 }
 
+export interface ExportMasterCvSummary {
+  id: string;
+  title: string;
+  source_type: MasterCvRecord["source_type"];
+  template_id: string | null;
+  updated_at: string;
+}
+
 export interface ExportDetailResponse {
   export: ExportSummaryItem;
   tailored_cv: ExportTailoredCvSummary | null;
+  master_cv: ExportMasterCvSummary | null;
   file: ExportFileSummary | null;
   template: TemplateSummary | null;
   resolved_template: ResolvedTemplateSummary | null;

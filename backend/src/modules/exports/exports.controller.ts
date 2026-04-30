@@ -27,6 +27,18 @@ export class ExportsController {
     });
   });
 
+  createMasterCvPdfExport = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.exportsService.createMasterCvPdfExport(
+      requireSession(request),
+      request.params.masterCvId,
+      request.body
+    );
+
+    sendSuccess(response, data, {
+      statusCode: 201
+    });
+  });
+
   createDocxExport = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.exportsService.createDocxExport(
       requireSession(request),
@@ -39,10 +51,31 @@ export class ExportsController {
     });
   });
 
+  createMasterCvDocxExport = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.exportsService.createMasterCvDocxExport(
+      requireSession(request),
+      request.params.masterCvId,
+      request.body
+    );
+
+    sendSuccess(response, data, {
+      statusCode: 201
+    });
+  });
+
   listTailoredCvExports = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.exportsService.listTailoredCvExports(
       requireSession(request),
       request.params.tailoredCvId
+    );
+
+    sendSuccess(response, data);
+  });
+
+  listMasterCvExports = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.exportsService.listMasterCvExports(
+      requireSession(request),
+      request.params.masterCvId
     );
 
     sendSuccess(response, data);

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { ExportStorageFailedError } from "../../shared/errors/app-error";
-import type { ExportFormat, FileRecord } from "../../shared/types/domain";
+import type { CvKind, ExportFormat, FileRecord } from "../../shared/types/domain";
 import type { CreateFilePayload, FilesRepository } from "./files.repository";
 
 interface FilesServiceOptions {
@@ -10,7 +10,8 @@ interface FilesServiceOptions {
 
 interface BuildExportStoragePathInput {
   userId: string;
-  tailoredCvId: string;
+  cvKind: CvKind;
+  cvId: string;
   exportId: string;
   format: ExportFormat;
 }
@@ -79,7 +80,8 @@ export class FilesService {
 
   buildExportStoragePath(input: BuildExportStoragePathInput): string {
     const extension = EXTENSION_BY_FORMAT[input.format];
-    return `users/${input.userId}/tailored-cvs/${input.tailoredCvId}/exports/${input.exportId}.${extension}`;
+    const scopeSegment = input.cvKind === "master" ? "master-cvs" : "tailored-cvs";
+    return `users/${input.userId}/${scopeSegment}/${input.cvId}/exports/${input.exportId}.${extension}`;
   }
 
   buildCoverLetterExportStoragePath(input: BuildCoverLetterExportStoragePathInput): string {
@@ -111,7 +113,7 @@ export class FilesService {
       mime_type: mimeType,
       size_bytes: input.bytes.byteLength,
       checksum: createHash("sha256").update(input.bytes).digest("hex"),
-      original_filename: `tailored-cv-export-${input.exportId}.${EXTENSION_BY_FORMAT[input.format]}`
+      original_filename: `${input.cvKind}-cv-export-${input.exportId}.${EXTENSION_BY_FORMAT[input.format]}`
     };
   }
 

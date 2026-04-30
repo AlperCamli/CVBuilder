@@ -3,7 +3,7 @@
 ## Scope
 
 Phase 4B implements:
-- Tailored CV export persistence (`exports` table)
+- Master + tailored CV export persistence (`exports` table)
 - PDF generation pipeline
 - DOCX generation pipeline
 - Supabase Storage upload + `files` metadata persistence
@@ -17,7 +17,7 @@ Out of scope in this phase:
 ## Lifecycle
 
 For both PDF and DOCX:
-1. Validate tailored CV ownership.
+1. Validate target CV ownership (`master` or `tailored`).
 2. Create `exports` row (`status=processing`).
 3. Resolve template (one-off request override or CV/default fallback).
 4. Build rendering payload via `rendering` module.
@@ -25,7 +25,7 @@ For both PDF and DOCX:
 6. Upload bytes to Supabase Storage (`exports` bucket).
 7. Create generated file metadata row in `files`.
 8. Mark export row `completed` with `file_id`, `completed_at`, resolved `template_id`.
-9. Update `tailored_cvs.last_exported_at`.
+9. Update `tailored_cvs.last_exported_at` when target is tailored.
 
 Failure behavior:
 - export row is transitioned to `failed`
@@ -49,9 +49,9 @@ Failure behavior:
 
 ## Template Resolution Rules
 
-- Request `template_id` is one-off only and does not mutate `tailored_cvs.template_id`.
+- Request `template_id` is one-off only and does not mutate CV template assignment.
 - If request `template_id` is provided, it must be assignable (`active`).
-- If not provided, export uses tailored CV assigned template (inactive allowed for compatibility) or rendering fallback default active template.
+- If not provided, export uses target CV assigned template (inactive allowed for compatibility) or rendering fallback default active template.
 - `exports.template_id` stores the template actually used for that export (`null` when none).
 - `template.export_config` is checked per format (`pdf`/`docx`); disabled format is rejected.
 
@@ -60,6 +60,7 @@ Failure behavior:
 - bucket: `EXPORTS_STORAGE_BUCKET` (default `exports`)
 - deterministic path:
   - `users/{userId}/tailored-cvs/{tailoredCvId}/exports/{exportId}.{ext}`
+  - `users/{userId}/master-cvs/{masterCvId}/exports/{exportId}.{ext}`
 - metadata persistence:
   - `files.file_type=export_pdf` for PDF
   - `files.file_type=export_docx` for DOCX

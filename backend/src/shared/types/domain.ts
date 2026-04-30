@@ -237,7 +237,8 @@ export type ExportStatus = "processing" | "completed" | "failed";
 export interface ExportRecord {
   id: string;
   user_id: string;
-  tailored_cv_id: string;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
   file_id: string | null;
   format: ExportFormat;
   status: ExportStatus;

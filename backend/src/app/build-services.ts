@@ -264,6 +264,7 @@ export const buildDefaultServices = (
   const exportsService = new ExportsService(
     exportsRepository,
     tailoredCvRepository,
+    masterCvRepository,
     templatesService,
     renderingService,
     filesService,

@@ -10,9 +10,11 @@ import type {
   ExportRecord,
   ExportStatus,
   FileRecord,
+  MasterCvRecord,
   TailoredCvRecord,
   UserRecord
 } from "../src/shared/types/domain";
+import type { MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
 import type { TailoredCvRepository, TailoredCvUpdatePayload } from "../src/modules/tailored-cv/tailored-cv.repository";
 import type { ExportsRepository, CreateExportPayload, UpdateExportPayload } from "../src/modules/exports/exports.repository";
 import { ExportsService } from "../src/modules/exports/exports.service";
@@ -39,7 +41,8 @@ class InMemoryExportsRepository implements ExportsRepository {
     const row: ExportRecord = {
       id,
       user_id: payload.user_id,
-      tailored_cv_id: payload.tailored_cv_id,
+      master_cv_id: payload.master_cv_id ?? null,
+      tailored_cv_id: payload.tailored_cv_id ?? null,
       file_id: payload.file_id ?? null,
       format: payload.format,
       status: payload.status,
@@ -85,6 +88,12 @@ class InMemoryExportsRepository implements ExportsRepository {
   async listByTailoredCv(userId: string, tailoredCvId: string): Promise<ExportRecord[]> {
     return [...this.rows.values()]
       .filter((row) => row.user_id === userId && row.tailored_cv_id === tailoredCvId)
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  }
+
+  async listByMasterCv(userId: string, masterCvId: string): Promise<ExportRecord[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.user_id === userId && row.master_cv_id === masterCvId)
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   }
 }
@@ -139,6 +148,48 @@ class InMemoryTailoredCvRepository implements TailoredCvRepository {
 
     this.rows.set(tailoredCvId, updated);
     return updated;
+  }
+
+  async softDelete(): Promise<boolean> {
+    return false;
+  }
+}
+
+class InMemoryMasterCvRepository implements MasterCvRepository {
+  rows = new Map<string, MasterCvRecord>();
+
+  seed(row: MasterCvRecord): void {
+    this.rows.set(row.id, row);
+  }
+
+  async listByUser(userId: string): Promise<MasterCvRecord[]> {
+    return [...this.rows.values()].filter((row) => row.user_id === userId && row.is_deleted === false);
+  }
+
+  async findById(userId: string, masterCvId: string): Promise<MasterCvRecord | null> {
+    const row = this.rows.get(masterCvId);
+    if (!row || row.user_id !== userId || row.is_deleted) {
+      return null;
+    }
+
+    return row;
+  }
+
+  async findAnyById(userId: string, masterCvId: string): Promise<MasterCvRecord | null> {
+    const row = this.rows.get(masterCvId);
+    if (!row || row.user_id !== userId) {
+      return null;
+    }
+
+    return row;
+  }
+
+  async create(): Promise<MasterCvRecord> {
+    throw new Error("Not implemented");
+  }
+
+  async updateById(): Promise<MasterCvRecord | null> {
+    return null;
   }
 
   async softDelete(): Promise<boolean> {
@@ -257,7 +308,8 @@ class FakeFilesService {
 
   async uploadExportObject(input: {
     userId: string;
-    tailoredCvId: string;
+    cvKind: "master" | "tailored";
+    cvId: string;
     exportId: string;
     format: ExportFormat;
     bytes: Uint8Array;
@@ -268,11 +320,11 @@ class FakeFilesService {
 
     return {
       storage_bucket: "exports",
-      storage_path: `users/${input.userId}/tailored-cvs/${input.tailoredCvId}/exports/${input.exportId}.${input.format}`,
+      storage_path: `users/${input.userId}/${input.cvKind === "master" ? "master-cvs" : "tailored-cvs"}/${input.cvId}/exports/${input.exportId}.${input.format}`,
       mime_type: input.format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       size_bytes: input.bytes.byteLength,
       checksum: "checksum",
-      original_filename: `tailored-cv-export-${input.exportId}.${input.format}`
+      original_filename: `${input.cvKind}-cv-export-${input.exportId}.${input.format}`
     };
   }
 
@@ -396,6 +448,31 @@ const buildTailoredCv = (userId: string): TailoredCvRecord => {
   };
 };
 
+const buildMasterCv = (userId: string): MasterCvRecord => {
+  return {
+    id: "master-1",
+    user_id: userId,
+    title: "Master CV",
+    language: "en",
+    template_id: "template-base",
+    current_content: {
+      version: "v1",
+      language: "en",
+      metadata: {
+        full_name: "John Doe",
+        headline: "Backend Engineer",
+        email: "john@example.com"
+      },
+      sections: []
+    },
+    summary_text: "Master summary",
+    source_type: "import",
+    is_deleted: false,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
+};
+
 describe("exports service integration checks", () => {
   it("creates completed PDF and DOCX exports and updates tailored last_exported_at", async () => {
     const userId = randomUUID();
@@ -404,6 +481,8 @@ describe("exports service integration checks", () => {
     const exportsRepository = new InMemoryExportsRepository();
     const tailoredRepository = new InMemoryTailoredCvRepository();
     tailoredRepository.seed(buildTailoredCv(userId));
+    const masterRepository = new InMemoryMasterCvRepository();
+    masterRepository.seed(buildMasterCv(userId));
 
     const template: TemplateSummary = {
       id: "template-override",
@@ -429,6 +508,7 @@ describe("exports service integration checks", () => {
     const service = new ExportsService(
       exportsRepository,
       tailoredRepository,
+      masterRepository,
       templatesService as unknown as TemplatesService,
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
@@ -456,6 +536,63 @@ describe("exports service integration checks", () => {
     expect(updatedTailored?.template_id).toBe("template-base");
   });
 
+  it("creates completed master CV export and stores it under master scope", async () => {
+    const userId = randomUUID();
+    const session = buildSession(userId);
+
+    const exportsRepository = new InMemoryExportsRepository();
+    const tailoredRepository = new InMemoryTailoredCvRepository();
+    const masterRepository = new InMemoryMasterCvRepository();
+    masterRepository.seed(buildMasterCv(userId));
+
+    const template: TemplateSummary = {
+      id: "template-override",
+      name: "Modern Clean",
+      slug: "modern-clean",
+      status: "active",
+      preview_config: null,
+      export_config: {
+        pdf: { enabled: true },
+        docx: { enabled: true }
+      },
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+
+    const templatesService = new FakeTemplatesService(new Set(["template-override"]), new Map([[template.id, template]]));
+    const renderingService = new FakeRenderingService();
+    renderingService.template = template;
+
+    const filesService = new FakeFilesService();
+    const generator = new FakeRenderingExportGenerator();
+
+    const service = new ExportsService(
+      exportsRepository,
+      tailoredRepository,
+      masterRepository,
+      templatesService as unknown as TemplatesService,
+      renderingService as unknown as RenderingService,
+      filesService as unknown as FilesService,
+      generator,
+      noopBillingService
+    );
+
+    const result = await service.createMasterCvPdfExport(session, "master-1", {
+      template_id: "template-override"
+    });
+
+    expect(result.export.status).toBe("completed");
+    expect(result.export.format).toBe("pdf");
+    expect(result.master_cv?.id).toBe("master-1");
+    expect(result.tailored_cv).toBeNull();
+    expect(filesService.createdFiles[0]?.storage_path).toContain("/master-cvs/master-1/exports/");
+
+    const stored = [...exportsRepository.rows.values()];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].master_cv_id).toBe("master-1");
+    expect(stored[0].tailored_cv_id).toBeNull();
+  });
+
   it("marks export as failed when generator errors", async () => {
     const userId = randomUUID();
     const session = buildSession(userId);
@@ -463,6 +600,8 @@ describe("exports service integration checks", () => {
     const exportsRepository = new InMemoryExportsRepository();
     const tailoredRepository = new InMemoryTailoredCvRepository();
     tailoredRepository.seed(buildTailoredCv(userId));
+    const masterRepository = new InMemoryMasterCvRepository();
+    masterRepository.seed(buildMasterCv(userId));
 
     const template: TemplateSummary = {
       id: "template-base",
@@ -489,6 +628,7 @@ describe("exports service integration checks", () => {
     const service = new ExportsService(
       exportsRepository,
       tailoredRepository,
+      masterRepository,
       templatesService as unknown as TemplatesService,
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
@@ -513,6 +653,8 @@ describe("exports service integration checks", () => {
     const exportsRepository = new InMemoryExportsRepository();
     const tailoredRepository = new InMemoryTailoredCvRepository();
     tailoredRepository.seed(buildTailoredCv(userId));
+    const masterRepository = new InMemoryMasterCvRepository();
+    masterRepository.seed(buildMasterCv(userId));
 
     const template: TemplateSummary = {
       id: "template-base",
@@ -537,6 +679,7 @@ describe("exports service integration checks", () => {
     const service = new ExportsService(
       exportsRepository,
       tailoredRepository,
+      masterRepository,
       templatesService as unknown as TemplatesService,
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,

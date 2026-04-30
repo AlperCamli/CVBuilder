@@ -5,6 +5,7 @@ import type { ExportsController } from "./exports.controller";
 import {
   createExportSchema,
   exportIdParamSchema,
+  masterCvExportParamsSchema,
   tailoredCvExportParamsSchema
 } from "./exports.schemas";
 
@@ -28,11 +29,32 @@ export const createExportsRouter = (
     exportsController.createDocxExport
   );
 
+  router.post(
+    "/master-cvs/:masterCvId/exports/pdf",
+    authMiddleware,
+    validate({ params: masterCvExportParamsSchema, body: createExportSchema }),
+    exportsController.createMasterCvPdfExport
+  );
+
+  router.post(
+    "/master-cvs/:masterCvId/exports/docx",
+    authMiddleware,
+    validate({ params: masterCvExportParamsSchema, body: createExportSchema }),
+    exportsController.createMasterCvDocxExport
+  );
+
   router.get(
     "/tailored-cvs/:tailoredCvId/exports",
     authMiddleware,
     validate({ params: tailoredCvExportParamsSchema }),
     exportsController.listTailoredCvExports
+  );
+
+  router.get(
+    "/master-cvs/:masterCvId/exports",
+    authMiddleware,
+    validate({ params: masterCvExportParamsSchema }),
+    exportsController.listMasterCvExports
   );
 
   router.get(

@@ -701,8 +701,8 @@ export function CVEditor() {
   };
 
   const openExportDialog = async () => {
-    if (!cvId || cvKind !== "tailored") {
-      setExportError("Exports are available only for tailored CVs.");
+    if (!cvId) {
+      setExportError("CV id is missing.");
       setShowExportDialog(true);
       return;
     }
@@ -710,7 +710,10 @@ export function CVEditor() {
     setExportError(null);
 
     try {
-      const history = await api.listTailoredCvExports(cvId);
+      const history =
+        cvKind === "tailored"
+          ? await api.listTailoredCvExports(cvId)
+          : await api.listMasterCvExports(cvId);
       setExportHistory(history.exports);
     } catch {
       setExportHistory([]);
@@ -720,8 +723,8 @@ export function CVEditor() {
   };
 
   const handleExport = async (format: "pdf" | "docx") => {
-    if (!cvId || cvKind !== "tailored") {
-      setExportError("Tailored CV id is missing.");
+    if (!cvId) {
+      setExportError("CV id is missing.");
       return;
     }
 
@@ -730,9 +733,13 @@ export function CVEditor() {
 
     try {
       const detail =
-        format === "pdf"
-          ? await api.createPdfExport(cvId, { template_id: templateId })
-          : await api.createDocxExport(cvId, { template_id: templateId });
+        cvKind === "tailored"
+          ? format === "pdf"
+            ? await api.createPdfExport(cvId, { template_id: templateId })
+            : await api.createDocxExport(cvId, { template_id: templateId })
+          : format === "pdf"
+            ? await api.createMasterCvPdfExport(cvId, { template_id: templateId })
+            : await api.createMasterCvDocxExport(cvId, { template_id: templateId });
 
       const directUrl = detail.download?.download_url;
       if (directUrl) {
@@ -742,7 +749,10 @@ export function CVEditor() {
         window.open(fallback.download_url, "_blank", "noopener,noreferrer");
       }
 
-      const history = await api.listTailoredCvExports(cvId);
+      const history =
+        cvKind === "tailored"
+          ? await api.listTailoredCvExports(cvId)
+          : await api.listMasterCvExports(cvId);
       setExportHistory(history.exports);
     } catch (err) {
       if (err instanceof Error) {
@@ -1935,9 +1945,9 @@ export function CVEditor() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => void handleExport("pdf")}
-                disabled={Boolean(exportingFormat) || cvKind !== "tailored"}
+                disabled={Boolean(exportingFormat)}
                 className="p-3 rounded-lg border text-left"
-                style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat || cvKind !== "tailored" ? 0.7 : 1 }}
+                style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat ? 0.7 : 1 }}
               >
                 <div style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
                   PDF
@@ -1949,9 +1959,9 @@ export function CVEditor() {
 
               <button
                 onClick={() => void handleExport("docx")}
-                disabled={Boolean(exportingFormat) || cvKind !== "tailored"}
+                disabled={Boolean(exportingFormat)}
                 className="p-3 rounded-lg border text-left"
-                style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat || cvKind !== "tailored" ? 0.7 : 1 }}
+                style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat ? 0.7 : 1 }}
               >
                 <div style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
                   DOCX
@@ -1969,9 +1979,10 @@ export function CVEditor() {
                 </h4>
                 <button
                   onClick={() => {
-                    if (cvId && cvKind === "tailored") {
-                      void api
-                        .listTailoredCvExports(cvId)
+                    if (cvId) {
+                      void (cvKind === "tailored"
+                        ? api.listTailoredCvExports(cvId)
+                        : api.listMasterCvExports(cvId))
                         .then((history) => setExportHistory(history.exports))
                         .catch(() => undefined);
                     }

@@ -28,6 +28,7 @@ import type {
   ListJobsResponse,
   ListCoverLetterExportsResponse,
   ListCoverLettersResponse,
+  ListMasterCvExportsResponse,
   ListTailoredCvExportsResponse,
   ListTemplatesResponse,
   MasterCvBlockUpdateResponse,
@@ -710,6 +711,13 @@ export class BackendApi {
     );
   }
 
+  createMasterCvPdfExport(masterCvId: string, payload: CreateExportInput = {}): Promise<ExportDetailResponse> {
+    return this.client.post<ExportDetailResponse, CreateExportInput>(
+      `/master-cvs/${masterCvId}/exports/pdf`,
+      payload
+    );
+  }
+
   createDocxExport(
     tailoredCvId: string,
     payload: CreateExportInput = {}
@@ -720,8 +728,22 @@ export class BackendApi {
     );
   }
 
+  createMasterCvDocxExport(
+    masterCvId: string,
+    payload: CreateExportInput = {}
+  ): Promise<ExportDetailResponse> {
+    return this.client.post<ExportDetailResponse, CreateExportInput>(
+      `/master-cvs/${masterCvId}/exports/docx`,
+      payload
+    );
+  }
+
   listTailoredCvExports(tailoredCvId: string): Promise<ListTailoredCvExportsResponse> {
     return this.client.get<ListTailoredCvExportsResponse>(`/tailored-cvs/${tailoredCvId}/exports`);
+  }
+
+  listMasterCvExports(masterCvId: string): Promise<ListMasterCvExportsResponse> {
+    return this.client.get<ListMasterCvExportsResponse>(`/master-cvs/${masterCvId}/exports`);
   }
 
   getExport(exportId: string): Promise<ExportDetailResponse> {

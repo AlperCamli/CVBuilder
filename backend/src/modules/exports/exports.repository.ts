@@ -4,7 +4,8 @@ import type { ExportFormat, ExportRecord, ExportStatus } from "../../shared/type
 
 export interface CreateExportPayload {
   user_id: string;
-  tailored_cv_id: string;
+  master_cv_id?: string | null;
+  tailored_cv_id?: string | null;
   file_id?: string | null;
   format: ExportFormat;
   status: ExportStatus;
@@ -26,13 +27,15 @@ export interface ExportsRepository {
   updateById(userId: string, exportId: string, payload: UpdateExportPayload): Promise<ExportRecord | null>;
   findById(userId: string, exportId: string): Promise<ExportRecord | null>;
   listByTailoredCv(userId: string, tailoredCvId: string): Promise<ExportRecord[]>;
+  listByMasterCv(userId: string, masterCvId: string): Promise<ExportRecord[]>;
 }
 
 const toExportRecord = (row: Record<string, unknown>): ExportRecord => {
   return {
     id: String(row.id),
     user_id: String(row.user_id),
-    tailored_cv_id: String(row.tailored_cv_id),
+    master_cv_id: row.master_cv_id ? String(row.master_cv_id) : null,
+    tailored_cv_id: row.tailored_cv_id ? String(row.tailored_cv_id) : null,
     file_id: row.file_id ? String(row.file_id) : null,
     format: row.format as ExportFormat,
     status: row.status as ExportStatus,
@@ -111,6 +114,23 @@ export class SupabaseExportsRepository implements ExportsRepository {
       .select("*")
       .eq("user_id", userId)
       .eq("tailored_cv_id", tailoredCvId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new InternalServerError("Failed to list export records", {
+        reason: error.message
+      });
+    }
+
+    return (data ?? []).map((row) => toExportRecord(row as Record<string, unknown>));
+  }
+
+  async listByMasterCv(userId: string, masterCvId: string): Promise<ExportRecord[]> {
+    const { data, error } = await this.supabaseClient
+      .from("exports")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("master_cv_id", masterCvId)
       .order("created_at", { ascending: false });
 
     if (error) {

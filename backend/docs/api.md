@@ -299,6 +299,8 @@ Protected action enforcement:
 - `POST /ai/blocks/options`
 - `POST /tailored-cvs/:tailoredCvId/exports/pdf`
 - `POST /tailored-cvs/:tailoredCvId/exports/docx`
+- `POST /master-cvs/:masterCvId/exports/pdf`
+- `POST /master-cvs/:masterCvId/exports/docx`
 
 Exceeded access returns:
 - `ENTITLEMENT_EXCEEDED`

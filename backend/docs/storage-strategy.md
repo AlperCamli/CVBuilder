@@ -14,6 +14,7 @@ Expected buckets:
 - generated export files are uploaded to Supabase Storage
 - storage path is deterministic:
   - `users/{userId}/tailored-cvs/{tailoredCvId}/exports/{exportId}.{ext}`
+  - `users/{userId}/master-cvs/{masterCvId}/exports/{exportId}.{ext}`
 - generated metadata rows are persisted in `files`
   - `file_type=export_pdf` / `file_type=export_docx`
 - export lifecycle rows are persisted in `exports`

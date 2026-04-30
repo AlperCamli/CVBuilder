@@ -7,6 +7,7 @@ import type {
   CreateExportInput,
   ExportDetailResponse,
   ExportDownloadResponse,
+  ListMasterCvExportsResponse,
   ListTailoredCvExportsResponse,
   SessionContext
 } from "../src/modules/exports/exports.types";
@@ -22,6 +23,8 @@ import {
 
 const USER_A_TAILORED_ID = "10000000-0000-0000-0000-000000000001";
 const USER_B_TAILORED_ID = "20000000-0000-0000-0000-000000000001";
+const USER_A_MASTER_ID = "10000000-0000-0000-0000-000000000002";
+const USER_B_MASTER_ID = "20000000-0000-0000-0000-000000000002";
 const USER_A_EXPORT_COMPLETED_ID = "10000000-0000-0000-0000-000000000111";
 const USER_A_EXPORT_PROCESSING_ID = "10000000-0000-0000-0000-000000000112";
 
@@ -30,7 +33,8 @@ const nowIso = (): string => new Date().toISOString();
 interface ExportStoreRow {
   id: string;
   user_key: string;
-  tailored_cv_id: string;
+  tailored_cv_id: string | null;
+  master_cv_id: string | null;
   format: "pdf" | "docx";
   status: "processing" | "completed" | "failed";
   file_id: string | null;
@@ -45,6 +49,7 @@ class FakeExportsService {
       id: USER_A_EXPORT_COMPLETED_ID,
       user_key: "auth-a",
       tailored_cv_id: USER_A_TAILORED_ID,
+      master_cv_id: null,
       format: "pdf",
       status: "completed",
       file_id: "30000000-0000-0000-0000-000000000999",
@@ -68,6 +73,7 @@ class FakeExportsService {
       id: USER_A_EXPORT_PROCESSING_ID,
       user_key: "auth-a",
       tailored_cv_id: USER_A_TAILORED_ID,
+      master_cv_id: null,
       format: "docx",
       status: "processing",
       file_id: null,
@@ -88,13 +94,24 @@ class FakeExportsService {
         error_message: row.status === "failed" ? "Export failed" : null,
         download_available: row.status === "completed" && Boolean(row.file_id)
       },
-      tailored_cv: {
-        id: row.tailored_cv_id,
-        title: "Tailored CV",
-        status: "ready",
-        template_id: null,
-        updated_at: nowIso()
-      },
+      tailored_cv: row.tailored_cv_id
+        ? {
+            id: row.tailored_cv_id,
+            title: "Tailored CV",
+            status: "ready",
+            template_id: null,
+            updated_at: nowIso()
+          }
+        : null,
+      master_cv: row.master_cv_id
+        ? {
+            id: row.master_cv_id,
+            title: "Master CV",
+            source_type: "import",
+            template_id: null,
+            updated_at: nowIso()
+          }
+        : null,
       file:
         row.status === "completed" && row.file_id
           ? {
@@ -150,6 +167,7 @@ class FakeExportsService {
       id,
       user_key: session.authUser.auth_user_id,
       tailored_cv_id: tailoredCvId,
+      master_cv_id: null,
       format: "pdf",
       status: "completed",
       file_id: `file-${id}`,
@@ -180,6 +198,69 @@ class FakeExportsService {
       id,
       user_key: session.authUser.auth_user_id,
       tailored_cv_id: tailoredCvId,
+      master_cv_id: null,
+      format: "docx",
+      status: "completed",
+      file_id: `file-${id}`,
+      template: null
+    };
+
+    this.rows.set(id, row);
+    return this.toDetail(row);
+  }
+
+  async createMasterCvPdfExport(
+    session: SessionContext,
+    masterCvId: string,
+    _input: CreateExportInput
+  ): Promise<ExportDetailResponse> {
+    if (
+      (session.authUser.auth_user_id === "auth-a" && masterCvId !== USER_A_MASTER_ID) ||
+      (session.authUser.auth_user_id === "auth-b" && masterCvId !== USER_B_MASTER_ID)
+    ) {
+      throw new NotFoundError("Master CV was not found");
+    }
+
+    const id =
+      session.authUser.auth_user_id === "auth-a"
+        ? "10000000-0000-0000-0000-000000000220"
+        : "20000000-0000-0000-0000-000000000220";
+    const row: ExportStoreRow = {
+      id,
+      user_key: session.authUser.auth_user_id,
+      tailored_cv_id: null,
+      master_cv_id: masterCvId,
+      format: "pdf",
+      status: "completed",
+      file_id: `file-${id}`,
+      template: null
+    };
+
+    this.rows.set(id, row);
+    return this.toDetail(row);
+  }
+
+  async createMasterCvDocxExport(
+    session: SessionContext,
+    masterCvId: string,
+    _input: CreateExportInput
+  ): Promise<ExportDetailResponse> {
+    if (
+      (session.authUser.auth_user_id === "auth-a" && masterCvId !== USER_A_MASTER_ID) ||
+      (session.authUser.auth_user_id === "auth-b" && masterCvId !== USER_B_MASTER_ID)
+    ) {
+      throw new NotFoundError("Master CV was not found");
+    }
+
+    const id =
+      session.authUser.auth_user_id === "auth-a"
+        ? "10000000-0000-0000-0000-000000000221"
+        : "20000000-0000-0000-0000-000000000221";
+    const row: ExportStoreRow = {
+      id,
+      user_key: session.authUser.auth_user_id,
+      tailored_cv_id: null,
+      master_cv_id: masterCvId,
       format: "docx",
       status: "completed",
       file_id: `file-${id}`,
@@ -210,6 +291,30 @@ class FakeExportsService {
 
     return {
       tailored_cv_id: tailoredCvId,
+      exports: items
+    };
+  }
+
+  async listMasterCvExports(
+    session: SessionContext,
+    masterCvId: string
+  ): Promise<ListMasterCvExportsResponse> {
+    if (
+      (session.authUser.auth_user_id === "auth-a" && masterCvId !== USER_A_MASTER_ID) ||
+      (session.authUser.auth_user_id === "auth-b" && masterCvId !== USER_B_MASTER_ID)
+    ) {
+      throw new NotFoundError("Master CV was not found");
+    }
+
+    const items = [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.user_key === session.authUser.auth_user_id && row.master_cv_id === masterCvId
+      )
+      .map((row) => this.toDetail(row).export);
+
+    return {
+      master_cv_id: masterCvId,
       exports: items
     };
   }
@@ -306,8 +411,22 @@ describe("exports endpoints", () => {
       .set("Authorization", "Bearer token-a")
       .send({});
 
+    const createdMasterPdf = await request(app)
+      .post(`/api/v1/master-cvs/${USER_A_MASTER_ID}/exports/pdf`)
+      .set("Authorization", "Bearer token-a")
+      .send({});
+
+    const createdMasterDocx = await request(app)
+      .post(`/api/v1/master-cvs/${USER_A_MASTER_ID}/exports/docx`)
+      .set("Authorization", "Bearer token-a")
+      .send({});
+
     const listed = await request(app)
       .get(`/api/v1/tailored-cvs/${USER_A_TAILORED_ID}/exports`)
+      .set("Authorization", "Bearer token-a");
+
+    const listedMaster = await request(app)
+      .get(`/api/v1/master-cvs/${USER_A_MASTER_ID}/exports`)
       .set("Authorization", "Bearer token-a");
 
     const detailed = await request(app)
@@ -326,10 +445,27 @@ describe("exports endpoints", () => {
     expect(createdDocx.body.success).toBe(true);
     expect(createdDocx.body.data.export.format).toBe("docx");
 
+    expect(createdMasterPdf.status).toBe(201);
+    expect(createdMasterPdf.body.success).toBe(true);
+    expect(createdMasterPdf.body.data.export.format).toBe("pdf");
+    expect(createdMasterPdf.body.data.master_cv.id).toBe(USER_A_MASTER_ID);
+    expect(createdMasterPdf.body.data.tailored_cv).toBeNull();
+
+    expect(createdMasterDocx.status).toBe(201);
+    expect(createdMasterDocx.body.success).toBe(true);
+    expect(createdMasterDocx.body.data.export.format).toBe("docx");
+    expect(createdMasterDocx.body.data.master_cv.id).toBe(USER_A_MASTER_ID);
+    expect(createdMasterDocx.body.data.tailored_cv).toBeNull();
+
     expect(listed.status).toBe(200);
     expect(listed.body.success).toBe(true);
     expect(Array.isArray(listed.body.data.exports)).toBe(true);
     expect(listed.body.data.exports.length).toBeGreaterThan(0);
+
+    expect(listedMaster.status).toBe(200);
+    expect(listedMaster.body.success).toBe(true);
+    expect(Array.isArray(listedMaster.body.data.exports)).toBe(true);
+    expect(listedMaster.body.data.master_cv_id).toBe(USER_A_MASTER_ID);
 
     expect(detailed.status).toBe(200);
     expect(detailed.body.success).toBe(true);
@@ -352,6 +488,10 @@ describe("exports endpoints", () => {
       .get(`/api/v1/tailored-cvs/${USER_A_TAILORED_ID}/exports`)
       .set("Authorization", "Bearer token-b");
 
+    const listMaster = await request(app)
+      .get(`/api/v1/master-cvs/${USER_A_MASTER_ID}/exports`)
+      .set("Authorization", "Bearer token-b");
+
     expect(detail.status).toBe(404);
     expect(detail.body.success).toBe(false);
     expect(detail.body.error.code).toBe("NOT_FOUND");
@@ -359,6 +499,10 @@ describe("exports endpoints", () => {
     expect(list.status).toBe(404);
     expect(list.body.success).toBe(false);
     expect(list.body.error.code).toBe("NOT_FOUND");
+
+    expect(listMaster.status).toBe(404);
+    expect(listMaster.body.success).toBe(false);
+    expect(listMaster.body.error.code).toBe("NOT_FOUND");
   });
 
   it("returns EXPORT_NOT_READY when download is requested before completion", async () => {

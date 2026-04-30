@@ -57,7 +57,7 @@ Atomic increment function:
   - increments when tailored draft generation succeeds (`/ai/tailored-cv-draft`)
 
 - `exports_count`
-  - increments when export reaches completed state (`/exports/pdf`, `/exports/docx`)
+  - increments when export reaches completed state (master or tailored CV export endpoints)
 
 - `ai_actions_count`
   - increments when AI suggestions/options are successfully persisted (`/ai/blocks/suggest`, `/ai/blocks/options`)

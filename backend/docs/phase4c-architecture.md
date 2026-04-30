@@ -73,7 +73,7 @@ Plan logic is centralized in `entitlements`.
 Backend gating is enforced server-side for:
 - AI tailored draft generation (`/ai/tailored-cv-draft`)
 - AI block suggestion actions (`/ai/blocks/suggest`, `/ai/blocks/options`)
-- export generation (`/tailored-cvs/:id/exports/pdf`, `/tailored-cvs/:id/exports/docx`)
+- export generation (`/tailored-cvs/:id/exports/pdf`, `/tailored-cvs/:id/exports/docx`, `/master-cvs/:id/exports/pdf`, `/master-cvs/:id/exports/docx`)
 
 Usage consumption rules:
 - consume tailored generation usage only when draft generation succeeds

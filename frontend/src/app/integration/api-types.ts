@@ -890,6 +890,11 @@ export interface ListTailoredCvExportsResponse {
   exports: ExportSummaryItem[];
 }
 
+export interface ListMasterCvExportsResponse {
+  master_cv_id: string;
+  exports: ExportSummaryItem[];
+}
+
 export interface DownloadAccess {
   download_url: string;
   expires_at: string;
@@ -902,6 +907,13 @@ export interface ExportDetailResponse {
     id: string;
     title: string;
     status: TailoredCvStatus;
+    template_id: string | null;
+    updated_at: string;
+  } | null;
+  master_cv: {
+    id: string;
+    title: string;
+    source_type: MasterCvSourceType;
     template_id: string | null;
     updated_at: string;
   } | null;

@@ -65,20 +65,31 @@ describe("files service", () => {
 
     const pdfPath = service.buildExportStoragePath({
       userId: "user-1",
-      tailoredCvId: "tailored-1",
+      cvKind: "tailored",
+      cvId: "tailored-1",
       exportId: "export-1",
       format: "pdf"
     });
 
     const docxPath = service.buildExportStoragePath({
       userId: "user-1",
-      tailoredCvId: "tailored-1",
+      cvKind: "tailored",
+      cvId: "tailored-1",
       exportId: "export-2",
       format: "docx"
     });
 
+    const masterPdfPath = service.buildExportStoragePath({
+      userId: "user-1",
+      cvKind: "master",
+      cvId: "master-1",
+      exportId: "export-3",
+      format: "pdf"
+    });
+
     expect(pdfPath).toBe("users/user-1/tailored-cvs/tailored-1/exports/export-1.pdf");
     expect(docxPath).toBe("users/user-1/tailored-cvs/tailored-1/exports/export-2.docx");
+    expect(masterPdfPath).toBe("users/user-1/master-cvs/master-1/exports/export-3.pdf");
   });
 
   it("returns signed URL metadata with configured expiration", async () => {
