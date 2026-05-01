@@ -283,10 +283,51 @@ const createNonCanonicalContent = (): CvContent => {
         ]
       },
       {
+        id: "education-1",
+        type: "education",
+        title: "Education",
+        order: 1,
+        meta: {},
+        blocks: [
+          {
+            id: "education-block-1",
+            type: "education_item",
+            order: 0,
+            visibility: "visible",
+            fields: {
+              school: "Sabancı University",
+              degree: "Computer Science"
+            },
+            meta: {}
+          }
+        ]
+      },
+      {
+        id: "experience-1",
+        type: "experience",
+        title: "Experience",
+        order: 2,
+        meta: {},
+        blocks: [
+          {
+            id: "experience-block-1",
+            type: "experience_item",
+            order: 0,
+            visibility: "visible",
+            fields: {
+              job_title: "Business Intelligence Intern",
+              company_name: "Vakıfbank",
+              city: "Istanbul"
+            },
+            meta: {}
+          }
+        ]
+      },
+      {
         id: "awards-1",
         type: "awards",
         title: "Awards",
-        order: 1,
+        order: 3,
         meta: {},
         blocks: [
           {
@@ -306,7 +347,7 @@ const createNonCanonicalContent = (): CvContent => {
         id: "languages-1",
         type: "languages",
         title: "Languages",
-        order: 2,
+        order: 4,
         meta: {},
         blocks: [
           {
@@ -610,6 +651,11 @@ describe("imports service integration checks", () => {
     );
     const awardsSection = parsedContent?.sections.find((section) => section.type === "awards");
     expect(awardsSection?.blocks[0]?.fields.issuer).toBe("TUBITAK");
+    const educationSection = parsedContent?.sections.find((section) => section.type === "education");
+    expect(educationSection?.blocks[0]?.fields.field_of_study).toBe("Computer Science");
+    const experienceSection = parsedContent?.sections.find((section) => section.type === "experience");
+    expect(experienceSection?.blocks[0]?.fields.role).toBe("Business Intelligence Intern");
+    expect(experienceSection?.blocks[0]?.fields.company).toBe("Vakıfbank");
     const languagesSection = parsedContent?.sections.find((section) => section.type === "languages");
     expect(languagesSection?.blocks).toHaveLength(2);
     expect(languagesSection?.blocks[1]?.fields.certificate).toBe("IELTS 7.5 / C1");
@@ -750,6 +796,11 @@ describe("imports service integration checks", () => {
     expect(result.parsed_content?.metadata.full_name).toBe("Alper Çamlı");
     const awardsSection = result.parsed_content?.sections.find((section) => section.type === "awards");
     expect(awardsSection?.blocks[0]?.fields.issuer).toBe("TUBITAK");
+    const educationSection = result.parsed_content?.sections.find((section) => section.type === "education");
+    expect(educationSection?.blocks[0]?.fields.field_of_study).toBe("Computer Science");
+    const experienceSection = result.parsed_content?.sections.find((section) => section.type === "experience");
+    expect(experienceSection?.blocks[0]?.fields.role).toBe("Business Intelligence Intern");
+    expect(experienceSection?.blocks[0]?.fields.company).toBe("Vakıfbank");
   });
 
   it("falls back to heuristic parser when AI flow runner fails", async () => {

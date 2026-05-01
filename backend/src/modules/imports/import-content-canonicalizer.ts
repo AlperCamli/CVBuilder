@@ -66,6 +66,9 @@ interface CanonicalSocialLink {
   url: string;
 }
 
+const DEGREE_HINT_PATTERN =
+  /\b(bachelor|master|ph\.?d|doctor|associate|b\.?sc|m\.?sc|mba|ba|bs|diploma|certificate|licen[sc]e|high school)\b/i;
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -406,6 +409,181 @@ const canonicalizeAwardFields = (
   return next;
 };
 
+const canonicalizeEducationFields = (
+  fields: Record<string, CvJsonValue>
+): Record<string, CvJsonValue> => {
+  const next = { ...fields };
+
+  const institution = firstNonEmpty(
+    getFieldValue(fields, ["institution"]) ?? "",
+    getFieldValue(fields, ["school"]) ?? "",
+    getFieldValue(fields, ["university"]) ?? "",
+    getFieldValue(fields, ["college"]) ?? ""
+  );
+  const degree = firstNonEmpty(
+    getFieldValue(fields, ["degree"]) ?? "",
+    getFieldValue(fields, ["qualification"]) ?? "",
+    getFieldValue(fields, ["title"]) ?? ""
+  );
+  const fieldOfStudy = firstNonEmpty(
+    getFieldValue(fields, ["field_of_study"]) ?? "",
+    getFieldValue(fields, ["major"]) ?? "",
+    getFieldValue(fields, ["field"]) ?? "",
+    getFieldValue(fields, ["program"]) ?? "",
+    getFieldValue(fields, ["specialization"]) ?? "",
+    getFieldValue(fields, ["focus"]) ?? ""
+  );
+  const startDate = firstNonEmpty(
+    getFieldValue(fields, ["start_date"]) ?? "",
+    getFieldValue(fields, ["start"]) ?? "",
+    getFieldValue(fields, ["from"]) ?? "",
+    getFieldValue(fields, ["from_date"]) ?? ""
+  );
+  const endDate = firstNonEmpty(
+    getFieldValue(fields, ["end_date"]) ?? "",
+    getFieldValue(fields, ["end"]) ?? "",
+    getFieldValue(fields, ["to"]) ?? "",
+    getFieldValue(fields, ["to_date"]) ?? "",
+    getFieldValue(fields, ["graduation_date"]) ?? ""
+  );
+  const description = firstNonEmpty(
+    getFieldValue(fields, ["description"]) ?? "",
+    getFieldValue(fields, ["details"]) ?? "",
+    getFieldValue(fields, ["notes"]) ?? ""
+  );
+
+  if (institution) {
+    next.institution = institution;
+  }
+  if (degree) {
+    next.degree = degree;
+  }
+  if (startDate) {
+    next.start_date = startDate;
+  }
+  if (endDate) {
+    next.end_date = endDate;
+  }
+  if (description) {
+    next.description = description;
+  }
+
+  if (fieldOfStudy) {
+    next.field_of_study = fieldOfStudy;
+  } else if (degree && !DEGREE_HINT_PATTERN.test(degree)) {
+    // If degree is likely a subject (e.g. "Computer Science"), preserve it as field_of_study.
+    next.field_of_study = degree;
+  }
+
+  return next;
+};
+
+const parseExperienceHeader = (value: string): { role: string; company: string } => {
+  const text = collapseWhitespace(value);
+  if (!text) {
+    return { role: "", company: "" };
+  }
+
+  const atMatch = text.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  if (atMatch) {
+    return {
+      role: collapseWhitespace(atMatch[1]),
+      company: collapseWhitespace(atMatch[2])
+    };
+  }
+
+  const dashMatch = text.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  if (dashMatch) {
+    return {
+      role: collapseWhitespace(dashMatch[1]),
+      company: collapseWhitespace(dashMatch[2])
+    };
+  }
+
+  return { role: "", company: "" };
+};
+
+const canonicalizeExperienceFields = (
+  fields: Record<string, CvJsonValue>
+): Record<string, CvJsonValue> => {
+  const next = { ...fields };
+
+  let role = firstNonEmpty(
+    getFieldValue(fields, ["role"]) ?? "",
+    getFieldValue(fields, ["job_title"]) ?? "",
+    getFieldValue(fields, ["jobTitle"]) ?? "",
+    getFieldValue(fields, ["position"]) ?? "",
+    getFieldValue(fields, ["position_title"]) ?? "",
+    getFieldValue(fields, ["designation"]) ?? "",
+    getFieldValue(fields, ["title"]) ?? "",
+    getFieldValue(fields, ["headline"]) ?? ""
+  );
+  let company = firstNonEmpty(
+    getFieldValue(fields, ["company"]) ?? "",
+    getFieldValue(fields, ["company_name"]) ?? "",
+    getFieldValue(fields, ["employer"]) ?? "",
+    getFieldValue(fields, ["organization"]) ?? "",
+    getFieldValue(fields, ["organization_name"]) ?? ""
+  );
+  const location = firstNonEmpty(
+    getFieldValue(fields, ["location"]) ?? "",
+    getFieldValue(fields, ["city"]) ?? "",
+    getFieldValue(fields, ["country"]) ?? ""
+  );
+  const startDate = firstNonEmpty(
+    getFieldValue(fields, ["start_date"]) ?? "",
+    getFieldValue(fields, ["start"]) ?? "",
+    getFieldValue(fields, ["from"]) ?? "",
+    getFieldValue(fields, ["from_date"]) ?? ""
+  );
+  const endDate = firstNonEmpty(
+    getFieldValue(fields, ["end_date"]) ?? "",
+    getFieldValue(fields, ["end"]) ?? "",
+    getFieldValue(fields, ["to"]) ?? "",
+    getFieldValue(fields, ["to_date"]) ?? "",
+    getFieldValue(fields, ["until"]) ?? ""
+  );
+  const description = firstNonEmpty(
+    getFieldValue(fields, ["description"]) ?? "",
+    getFieldValue(fields, ["summary"]) ?? "",
+    getFieldValue(fields, ["details"]) ?? "",
+    getFieldValue(fields, ["responsibilities"]) ?? "",
+    getFieldValue(fields, ["highlights"]) ?? "",
+    getFieldValue(fields, ["notes"]) ?? ""
+  );
+
+  const headerText = firstNonEmpty(
+    getFieldValue(fields, ["text"]) ?? "",
+    getFieldValue(fields, ["header"]) ?? ""
+  );
+  if (headerText && (!role || !company)) {
+    const parsedHeader = parseExperienceHeader(headerText);
+    role = firstNonEmpty(role ?? "", parsedHeader.role);
+    company = firstNonEmpty(company ?? "", parsedHeader.company);
+  }
+
+  if (role) {
+    next.role = role;
+  }
+  if (company) {
+    next.company = company;
+  }
+  if (location) {
+    next.location = location;
+  }
+  if (startDate) {
+    next.start_date = startDate;
+  }
+  if (endDate) {
+    next.end_date = endDate;
+  }
+  if (description) {
+    next.description = description;
+  }
+
+  return next;
+};
+
 const canonicalizeLanguageBlock = (
   block: CvBlock,
   fields: Record<string, CvJsonValue>,
@@ -481,7 +659,13 @@ const canonicalizeSections = (sections: CvSection[]): CvSection[] => {
     for (const block of section.blocks) {
       const baseFields = { ...block.fields };
       const fields =
-        sectionType === "awards" ? canonicalizeAwardFields(baseFields) : baseFields;
+        sectionType === "awards"
+          ? canonicalizeAwardFields(baseFields)
+          : sectionType === "education"
+            ? canonicalizeEducationFields(baseFields)
+            : sectionType === "experience"
+              ? canonicalizeExperienceFields(baseFields)
+              : baseFields;
 
       if (sectionType === "languages") {
         nextBlocks.push(...canonicalizeLanguageBlock(block, fields, usedBlockIds));

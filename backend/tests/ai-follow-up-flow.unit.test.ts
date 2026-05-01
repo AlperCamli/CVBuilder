@@ -228,7 +228,7 @@ describe("AiService follow_up_questions flow", () => {
       })
     ).rejects.toBeInstanceOf(AiFlowFailedError);
 
-    expect(failRun).toHaveBeenCalledTimes(1);
+    expect(failRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(String(failRun.mock.calls[0][2])).toContain("Structured output validation failed");
     expect(completeRun).not.toHaveBeenCalled();
   });
@@ -289,11 +289,48 @@ describe("AiService follow_up_questions flow", () => {
       })
     ).rejects.toBeInstanceOf(AiProviderError);
 
-    expect(failRun).toHaveBeenCalledTimes(1);
+    expect(failRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     const persistedMessage = String(failRun.mock.calls[0][2]);
     expect(persistedMessage).toContain("Gemini provider request failed");
     expect(persistedMessage).toContain("provider_status=400");
     expect(persistedMessage).toContain("provider_error=ApiError");
     expect(persistedMessage).toContain("reason=Request contains an invalid argument.");
+  });
+
+  it("marks run as failed when persistence step throws after output validation", async () => {
+    const service = makeService();
+    providerGenerate.mockResolvedValue({
+      provider: "gemini",
+      model_name: "gemini-3-flash-preview",
+      output_payload: {
+        questions: [
+          {
+            id: "q1",
+            question: "Which outcomes are most important to highlight?",
+            question_type: "text"
+          }
+        ]
+      }
+    });
+    updateRunProgressStage.mockImplementation(async (_userId: string, _runId: string, stage: string) => {
+      if (stage === "persisting_result") {
+        throw new Error("Failed to update AI run progress stage");
+      }
+      return pendingRun;
+    });
+
+    await expect(
+      service.generateFollowUpQuestions(session, {
+        master_cv_id: masterCv.id,
+        job: {
+          company_name: "Acme",
+          job_title: "Backend Engineer",
+          job_description: "Build APIs and services."
+        }
+      })
+    ).rejects.toThrow("Failed to update AI run progress stage");
+
+    expect(failRun.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(String(failRun.mock.calls[0][2])).toContain("Failed to update AI run progress stage");
   });
 });

@@ -332,38 +332,42 @@ export class AiService {
       const current = await this.aiRepository.findRunById(session.appUser.id, run.id);
       return this.toTailoringRunExecuteResponse(current ?? run);
     }
+    try {
+      const parsedInput = this.parseTailoringRunInput(
+        claimed.flow_type as TailoringRunFlowType,
+        this.readRunFlowInput(claimed)
+      );
+      const storedPrompt = await this.resolveStoredRunPrompt(claimed, parsedInput);
 
-    const parsedInput = this.parseTailoringRunInput(
-      claimed.flow_type as TailoringRunFlowType,
-      this.readRunFlowInput(claimed)
-    );
-    const storedPrompt = await this.resolveStoredRunPrompt(claimed, parsedInput);
+      let executedRun: AiRunRecord;
+      if (claimed.flow_type === "job_analysis") {
+        executedRun = await this.executeTailoringJobAnalysisRun(
+          session.appUser.id,
+          claimed,
+          parsedInput as JobAnalysisInput,
+          storedPrompt
+        );
+      } else if (claimed.flow_type === "follow_up_questions") {
+        executedRun = await this.executeTailoringFollowUpQuestionsRun(
+          session.appUser.id,
+          claimed,
+          parsedInput as FollowUpQuestionsInput,
+          storedPrompt
+        );
+      } else {
+        executedRun = await this.executeTailoringDraftRun(
+          session.appUser.id,
+          claimed,
+          parsedInput as TailoredCvDraftInput,
+          storedPrompt
+        );
+      }
 
-    let executedRun: AiRunRecord;
-    if (claimed.flow_type === "job_analysis") {
-      executedRun = await this.executeTailoringJobAnalysisRun(
-        session.appUser.id,
-        claimed,
-        parsedInput as JobAnalysisInput,
-        storedPrompt
-      );
-    } else if (claimed.flow_type === "follow_up_questions") {
-      executedRun = await this.executeTailoringFollowUpQuestionsRun(
-        session.appUser.id,
-        claimed,
-        parsedInput as FollowUpQuestionsInput,
-        storedPrompt
-      );
-    } else {
-      executedRun = await this.executeTailoringDraftRun(
-        session.appUser.id,
-        claimed,
-        parsedInput as TailoredCvDraftInput,
-        storedPrompt
-      );
+      return this.toTailoringRunExecuteResponse(executedRun);
+    } catch (error) {
+      await this.failRunBestEffort(session.appUser.id, claimed.id, error);
+      throw error;
     }
-
-    return this.toTailoringRunExecuteResponse(executedRun);
   }
 
   async getTailoringRunStatus(
@@ -1115,29 +1119,33 @@ export class AiService {
         }
       }
     });
+    try {
+      const executed = await this.executeRunFlow({
+        user_id: options.user_id,
+        ai_run_id: aiRun.id,
+        flow_type: options.flow_type,
+        prompt,
+        input_payload: options.input_payload
+      });
+      const completed = await this.completeRunWithPayload(
+        options.user_id,
+        aiRun.id,
+        executed.output_payload,
+        executed.token_usage
+      );
 
-    const executed = await this.executeRunFlow({
-      user_id: options.user_id,
-      ai_run_id: aiRun.id,
-      flow_type: options.flow_type,
-      prompt,
-      input_payload: options.input_payload
-    });
-    const completed = await this.completeRunWithPayload(
-      options.user_id,
-      aiRun.id,
-      executed.output_payload,
-      executed.token_usage
-    );
-
-    return {
-      ai_run: completed,
-      output: executed.output_payload as TOutput,
-      provider: executed.provider,
-      model_name: executed.model_name,
-      prompt_key: prompt.prompt_key,
-      prompt_version: prompt.prompt_version
-    };
+      return {
+        ai_run: completed,
+        output: executed.output_payload as TOutput,
+        provider: executed.provider,
+        model_name: executed.model_name,
+        prompt_key: prompt.prompt_key,
+        prompt_version: prompt.prompt_version
+      };
+    } catch (error) {
+      await this.failRunBestEffort(options.user_id, aiRun.id, error);
+      throw error;
+    }
   }
 
   private async executeTailoringJobAnalysisRun(
@@ -1503,6 +1511,14 @@ export class AiService {
     const message = toPersistableAiRunError(error).slice(0, 2000);
     const debugPayload = toPersistableAiRunDebugPayload(error);
     await this.aiRepository.failRun(userId, runId, message, debugPayload);
+  }
+
+  private async failRunBestEffort(userId: string, runId: string, error: unknown): Promise<void> {
+    try {
+      await this.failRunWithDiagnostics(userId, runId, error);
+    } catch {
+      // Keep the original error path; watchdog will still sweep stale pending runs.
+    }
   }
 
   private async updateRunStage(

@@ -9,6 +9,7 @@ const RETRY_DELAY_MS = [800, 1800];
 const POLL_INITIAL_INTERVAL_MS = 750;
 const POLL_MAX_INTERVAL_MS = 5000;
 const POLL_BACKOFF_FACTOR = 1.6;
+const TERMINAL_WAIT_TIMEOUT_MS = 30000;
 
 const sleep = async (ms: number, signal?: AbortSignal): Promise<void> => {
   if (signal?.aborted) {
@@ -168,6 +169,32 @@ const startProgressPoller = (
   })();
 };
 
+const waitForTerminalStatus = async (
+  api: BackendApi,
+  aiRunId: string,
+  flowType: TailoringRunFlowType,
+  onStage: ((label: string) => void) | undefined,
+  signal?: AbortSignal
+): Promise<TailoringRunStatusResponse> => {
+  const deadline = Date.now() + TERMINAL_WAIT_TIMEOUT_MS;
+  let interval = POLL_INITIAL_INTERVAL_MS;
+  let latestStatus = await withTransientRetry(() => api.getTailoringRunStatus(aiRunId), 3);
+
+  onStage?.(toStageLabel(flowType, latestStatus.progress_stage));
+  while (latestStatus.status === "pending" && Date.now() < deadline) {
+    await sleep(interval, signal);
+    if (signal?.aborted) {
+      break;
+    }
+
+    latestStatus = await withTransientRetry(() => api.getTailoringRunStatus(aiRunId), 3);
+    onStage?.(toStageLabel(flowType, latestStatus.progress_stage));
+    interval = Math.min(POLL_MAX_INTERVAL_MS, Math.floor(interval * POLL_BACKOFF_FACTOR));
+  }
+
+  return latestStatus;
+};
+
 export const runTailoringFlow = async <TResult extends Record<string, unknown>>(
   options: RunTailoringFlowOptions
 ): Promise<RunTailoringFlowResult<TResult>> => {
@@ -207,9 +234,12 @@ export const runTailoringFlow = async <TResult extends Record<string, unknown>>(
   }
 
   // Always read final status so error_message diagnostics surface uniformly.
-  const finalStatus = await withTransientRetry(
-    () => api.getTailoringRunStatus(started.ai_run_id),
-    3
+  const finalStatus = await waitForTerminalStatus(
+    api,
+    started.ai_run_id,
+    flowType,
+    onStage,
+    signal
   );
 
   if (finalStatus.status === "failed") {
@@ -220,7 +250,9 @@ export const runTailoringFlow = async <TResult extends Record<string, unknown>>(
     if (!executeOutcome.ok) {
       throw executeOutcome.error;
     }
-    throw new Error("Tailoring AI run did not reach a terminal state.");
+    throw new Error(
+      `Tailoring AI run did not reach a terminal state (status=${finalStatus.status}, stage=${finalStatus.progress_stage}).`
+    );
   }
 
   const result = await withTransientRetry(

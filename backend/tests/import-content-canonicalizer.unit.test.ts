@@ -132,4 +132,87 @@ describe("import content canonicalizer", () => {
     expect(blocks[1]?.fields.proficiency).toBe("");
     expect(blocks[1]?.fields.certificate).toBe("IELTS 7.5 / C1");
   });
+
+  it("fills education field_of_study from major alias and degree subject fallback", () => {
+    const content: CvContent = {
+      ...baseContent(),
+      sections: [
+        {
+          id: "education-1",
+          type: "education",
+          title: "Education",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "edu-block-1",
+              type: "education_item",
+              order: 0,
+              visibility: "visible",
+              fields: {
+                institution: "Sabancı University",
+                degree: "Computer Science"
+              },
+              meta: {}
+            },
+            {
+              id: "edu-block-2",
+              type: "education_item",
+              order: 1,
+              visibility: "visible",
+              fields: {
+                school: "Sabancı University",
+                qualification: "Bachelor of Science",
+                major: "Computer Science"
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const canonicalized = canonicalizeImportedCvContent(content);
+    const blocks = canonicalized.sections[0]?.blocks ?? [];
+
+    expect(blocks[0]?.fields.field_of_study).toBe("Computer Science");
+    expect(blocks[1]?.fields.field_of_study).toBe("Computer Science");
+    expect(blocks[1]?.fields.degree).toBe("Bachelor of Science");
+  });
+
+  it("fills experience role/company from alias fields", () => {
+    const content: CvContent = {
+      ...baseContent(),
+      sections: [
+        {
+          id: "experience-1",
+          type: "experience",
+          title: "Experience",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-block-1",
+              type: "experience_item",
+              order: 0,
+              visibility: "visible",
+              fields: {
+                job_title: "Business Intelligence Intern",
+                company_name: "Vakıfbank",
+                city: "Istanbul"
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const canonicalized = canonicalizeImportedCvContent(content);
+    const fields = canonicalized.sections[0]?.blocks[0]?.fields ?? {};
+
+    expect(fields.role).toBe("Business Intelligence Intern");
+    expect(fields.company).toBe("Vakıfbank");
+    expect(fields.location).toBe("Istanbul");
+  });
 });
