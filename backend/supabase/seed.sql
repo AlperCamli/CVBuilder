@@ -115,8 +115,8 @@ values
     null,
     'cv-parse',
     'phase5-v1',
-    'Convert raw CV text into strict structured CV JSON without inventing facts. Output must be in English and strict JSON.',
-    'Parse the raw CV text and return canonical cv_content JSON.',
+    'Parse unstructured raw CV text into strict canonical CV JSON. Use canonical section types only: header, summary, experience, education, skills, languages, certifications, courses, projects, volunteer, awards, publications, references. Use canonical metadata keys only: full_name, headline, email, phone, location, photo, social_links, urls. For awards use issuer. For language entries, map non-proficiency bracket details to certificate instead of proficiency. Never invent facts.',
+    'Parse the raw CV text and return canonical cv_content JSON with canonical section names and canonical metadata keys.',
     true
   ),
   (
@@ -127,8 +127,8 @@ values
     null,
     'cv-parse',
     'phase5-v1',
-    'Convert raw CV text into strict structured CV JSON without inventing facts. Output must be in English and strict JSON.',
-    'Parse the raw CV text and return canonical cv_content JSON.',
+    'Parse unstructured raw CV text into strict canonical CV JSON. Use canonical section types only: header, summary, experience, education, skills, languages, certifications, courses, projects, volunteer, awards, publications, references. Use canonical metadata keys only: full_name, headline, email, phone, location, photo, social_links, urls. For awards use issuer. For language entries, map non-proficiency bracket details to certificate instead of proficiency. Never invent facts.',
+    'Parse the raw CV text and return canonical cv_content JSON with canonical section names and canonical metadata keys.',
     true
   ),
   (

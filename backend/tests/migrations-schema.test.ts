@@ -153,4 +153,15 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/provider in \('any', 'gemini'\)/i);
     expect(migration).toMatch(/model_name = null/i);
   });
+
+  it("contains phase 6C cv_parse canonical contract prompt hardening", () => {
+    const migration = readMigration("20260502120000_phase6c_cv_parse_prompt_canonical_contract.sql");
+
+    expect(migration).toMatch(/flow_type = 'cv_parse'/i);
+    expect(migration).toMatch(/provider in \('any', 'gemini'\)/i);
+    expect(migration).toMatch(/canonical section types only/i);
+    expect(migration).toMatch(/canonical metadata keys only/i);
+    expect(migration).toMatch(/awards use issuer/i);
+    expect(migration).toMatch(/non-proficiency bracket details to certificate/i);
+  });
 });

@@ -26,6 +26,7 @@ import type {
   ParseCvFileInput,
   ParseCvFileResult
 } from "./parsers/cv-parser";
+import { canonicalizeImportedCvContent } from "./import-content-canonicalizer";
 
 const toMasterCvDetail = (row: MasterCvRecord) => {
   return {
@@ -215,12 +216,13 @@ export class ImportsService {
         original_filename: detail.sourceFile.original_filename,
         mime_type: detail.sourceFile.mime_type
       }, session.appUser.default_cv_language || "en", session);
+      const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
         parser_name: effectiveParseResult.parserName,
         raw_extracted_text: effectiveParseResult.rawExtractedText,
-        parsed_content: effectiveParseResult.parsedContent,
+        parsed_content: canonicalizedContent,
         error_message: null
       });
 
@@ -240,8 +242,8 @@ export class ImportsService {
           parser_name: effectiveParseResult.parserName,
           status: "parsed",
           raw_text_length: effectiveParseResult.rawExtractedText.length,
-          section_count: effectiveParseResult.parsedContent.sections.length,
-          block_count: countBlocks(effectiveParseResult.parsedContent),
+          section_count: canonicalizedContent.sections.length,
+          block_count: countBlocks(canonicalizedContent),
           warnings: effectiveParseResult.warnings,
           diagnostics: effectiveParseResult.diagnostics ?? null
         }

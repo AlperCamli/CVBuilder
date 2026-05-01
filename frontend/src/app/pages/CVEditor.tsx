@@ -101,6 +101,39 @@ const sectionDefaultData = (type: string): Record<string, unknown> => {
   }
 };
 
+const toSectionTitle = (type: string): string => {
+  const normalized = type.trim();
+  if (!normalized) {
+    return "Section";
+  }
+
+  const mapped: Record<string, string> = {
+    summary: "Professional Summary",
+    experience: "Work Experience",
+    education: "Education",
+    skills: "Skills",
+    languages: "Languages",
+    certifications: "Certifications",
+    courses: "Courses",
+    projects: "Projects",
+    volunteer: "Volunteer Work",
+    awards: "Awards",
+    publications: "Publications",
+    references: "References"
+  };
+
+  if (mapped[normalized]) {
+    return mapped[normalized];
+  }
+
+  return normalized
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 interface CvEditorDraft {
   version: 1;
   cvKind: "master" | "tailored";
@@ -1168,7 +1201,7 @@ export function CVEditor() {
         case "references":
           return <ReferencesSection {...commonProps} />;
         default:
-          return <GenericSection {...commonProps} sectionType={section.type} />;
+          return <GenericSection {...commonProps} title={toSectionTitle(section.type)} />;
       }
     })();
 
