@@ -320,6 +320,58 @@ class NeverCallCvParseAiProvider implements AiProvider {
   }
 }
 
+class SuccessfulCvParseAiFlowRunner {
+  async parseCvContent(
+    _session: SessionContext,
+    input: {
+      raw_text: string;
+      source_filename: string;
+      mime_type: string;
+      language_hint: string;
+    }
+  ): Promise<{
+    ai_run_id: string;
+    parsed_content: CvContent;
+    warnings: string[];
+    generation_metadata: {
+      provider: string;
+      model_name: string;
+      flow_type: "cv_parse";
+      prompt_key: string;
+      prompt_version: string;
+    };
+  }> {
+    expect(input.raw_text.length).toBeGreaterThan(0);
+
+    return {
+      ai_run_id: "ai-run-cv-parse-1",
+      parsed_content: createMinimalContent("AI flow runner parsed summary."),
+      warnings: ["AI flow runner warning."],
+      generation_metadata: {
+        provider: "stubflow",
+        model_name: "stubflow-model",
+        flow_type: "cv_parse",
+        prompt_key: "cv-parse",
+        prompt_version: "phase5-v1"
+      }
+    };
+  }
+}
+
+class FailingCvParseAiFlowRunner {
+  async parseCvContent(
+    _session: SessionContext,
+    _input: {
+      raw_text: string;
+      source_filename: string;
+      mime_type: string;
+      language_hint: string;
+    }
+  ): Promise<never> {
+    throw new Error("simulated cv_parse flow runner failure");
+  }
+}
+
 const createPromptResolver = (): AiPromptResolver => {
   const repository: AiPromptConfigRepository = {
     async listActiveByProfile(): Promise<[]> {
@@ -418,6 +470,54 @@ describe("imports service integration checks", () => {
     expect(parser.parseCalls).toBe(0);
   });
 
+  it("uses AI flow runner as primary parsing path when available", async () => {
+    const userId = randomUUID();
+    const importsRepository = new InMemoryImportsRepository(
+      userId,
+      new Uint8Array(Buffer.from("Alex Doe\nData Analyst\nBuilt BI dashboards.", "utf-8")),
+      "text/plain",
+      "resume.txt"
+    );
+    const masterCvRepository = new InMemoryMasterCvRepository();
+    const parser = new StubCvParser(
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "Alex Doe\nData Analyst\nBuilt BI dashboards.",
+        warnings: ["Extraction diagnostics warning."],
+        diagnostics: undefined
+      },
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "fallback text",
+        parsedContent: createMinimalContent("Fallback parsed summary."),
+        warnings: ["Fallback warning."],
+        diagnostics: undefined
+      },
+      true
+    );
+
+    const service = new ImportsService(
+      importsRepository,
+      masterCvRepository,
+      parser,
+      undefined,
+      undefined,
+      new SuccessfulCvParseAiFlowRunner()
+    );
+    const session = buildSession(userId);
+
+    const parsed = await service.parseImport(session, importsRepository.importId);
+
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parsed.parse_summary.parser_name).toBe("stubflow_cv_parser_v1");
+    expect(parsed.parse_summary.warnings).toEqual([
+      "Extraction diagnostics warning.",
+      "AI flow runner warning."
+    ]);
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(0);
+  });
+
   it("falls back to heuristic parser when AI parsing fails", async () => {
     const userId = randomUUID();
     const importsRepository = new InMemoryImportsRepository(
@@ -448,6 +548,53 @@ describe("imports service integration checks", () => {
       parser,
       new FailingCvParseAiProvider(),
       createPromptResolver()
+    );
+    const session = buildSession(userId);
+
+    const parsed = await service.parseImport(session, importsRepository.importId);
+
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parsed.parse_summary.parser_name).toBe("simple_cv_parser_v1");
+    expect(parsed.parse_summary.warnings).toContain("Fallback warning.");
+    expect(parsed.parse_summary.warnings.join("\n")).toMatch(
+      /AI parser failed; fallback parser output was used/i
+    );
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(1);
+  });
+
+  it("falls back to heuristic parser when AI flow runner fails", async () => {
+    const userId = randomUUID();
+    const importsRepository = new InMemoryImportsRepository(
+      userId,
+      new Uint8Array(Buffer.from("Taylor Doe\nQA Engineer\nBuilt test automation.", "utf-8")),
+      "text/plain",
+      "resume.txt"
+    );
+    const masterCvRepository = new InMemoryMasterCvRepository();
+    const parser = new StubCvParser(
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "Taylor Doe\nQA Engineer\nBuilt test automation.",
+        warnings: ["Extraction diagnostics warning."],
+        diagnostics: undefined
+      },
+      {
+        parserName: "simple_cv_parser_v1",
+        rawExtractedText: "Taylor Doe\nQA Engineer\nBuilt test automation.",
+        parsedContent: createMinimalContent("Fallback parsed summary."),
+        warnings: ["Fallback warning."],
+        diagnostics: undefined
+      }
+    );
+
+    const service = new ImportsService(
+      importsRepository,
+      masterCvRepository,
+      parser,
+      undefined,
+      undefined,
+      new FailingCvParseAiFlowRunner()
     );
     const session = buildSession(userId);
 

@@ -35,6 +35,7 @@ import type { TemplatesService } from "../templates/templates.service";
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
+import { cvParseOutputSchema } from "./flows/flow-contracts";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -600,6 +601,60 @@ export class AiService {
         provider: executed.provider,
         model_name: executed.model_name,
         flow_type: "import_improve",
+        prompt_key: executed.prompt_key,
+        prompt_version: executed.prompt_version
+      }
+    };
+  }
+
+  async parseCvContent(
+    session: SessionContext,
+    input: {
+      raw_text: string;
+      source_filename: string;
+      mime_type: string;
+      language_hint: string;
+    }
+  ): Promise<{
+    ai_run_id: string;
+    parsed_content: ReturnType<typeof cloneCvContent>;
+    warnings: string[];
+    generation_metadata: {
+      provider: string;
+      model_name: string;
+      flow_type: "cv_parse";
+      prompt_key: string;
+      prompt_version: string;
+    };
+  }> {
+    const flowInput = {
+      raw_text: input.raw_text,
+      source_filename: input.source_filename,
+      mime_type: input.mime_type,
+      language_hint: input.language_hint
+    };
+
+    const executed = await this.executeFlow({
+      flow_type: "cv_parse",
+      user_id: session.appUser.id,
+      input_payload: flowInput,
+      user_prompt: "Parse raw CV text and return canonical cv_content JSON."
+    });
+
+    const parsed = cvParseOutputSchema.parse(executed.output);
+    const normalizedContent = normalizeCvContent(
+      parsed.parsed_content,
+      parsed.parsed_content.language || input.language_hint || "en"
+    );
+
+    return {
+      ai_run_id: executed.ai_run.id,
+      parsed_content: cloneCvContent(normalizedContent),
+      warnings: asStringArray(parsed.warnings ?? []),
+      generation_metadata: {
+        provider: executed.provider,
+        model_name: executed.model_name,
+        flow_type: "cv_parse",
         prompt_key: executed.prompt_key,
         prompt_version: executed.prompt_version
       }

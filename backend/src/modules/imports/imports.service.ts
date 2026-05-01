@@ -1,3 +1,4 @@
+import type { Logger } from "pino";
 import { ConflictError, NotFoundError } from "../../shared/errors/app-error";
 import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
@@ -51,6 +52,29 @@ const DEFAULT_AI_PARSE_USER_PROMPT =
   "Convert raw CV text into strict CV content JSON without inventing facts.";
 const MAX_AI_PARSE_RAW_TEXT_LENGTH = 40_000;
 
+interface CvParseAiFlowRunner {
+  parseCvContent(
+    session: SessionContext,
+    input: {
+      raw_text: string;
+      source_filename: string;
+      mime_type: string;
+      language_hint: string;
+    }
+  ): Promise<{
+    ai_run_id: string;
+    parsed_content: CvContent;
+    warnings: string[];
+    generation_metadata: {
+      provider: string;
+      model_name: string;
+      flow_type: "cv_parse";
+      prompt_key: string;
+      prompt_version: string;
+    };
+  }>;
+}
+
 const sanitizeFilename = (value: string): string => {
   const normalized = value
     .trim()
@@ -72,7 +96,9 @@ export class ImportsService {
     private readonly masterCvRepository: MasterCvRepository,
     private readonly parser: CvParser,
     private readonly aiProvider?: AiProvider,
-    private readonly aiPromptResolver?: AiPromptResolver
+    private readonly aiPromptResolver?: AiPromptResolver,
+    private readonly aiFlowRunner?: CvParseAiFlowRunner,
+    private readonly logger?: Pick<Logger, "info" | "warn">
   ) {}
 
   async createImportSession(
@@ -188,7 +214,7 @@ export class ImportsService {
       const effectiveParseResult = await this.resolveEffectiveParseResult(parseInput, {
         original_filename: detail.sourceFile.original_filename,
         mime_type: detail.sourceFile.mime_type
-      }, session.appUser.default_cv_language || "en");
+      }, session.appUser.default_cv_language || "en", session);
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
@@ -387,14 +413,22 @@ export class ImportsService {
   private async resolveEffectiveParseResult(
     parseInput: ParseCvFileInput,
     sourceFile: { original_filename: string; mime_type: string | null },
-    defaultLanguage: string
+    defaultLanguage: string,
+    session: SessionContext
   ): Promise<ParseCvFileResult> {
-    if (!this.aiProvider || !this.aiPromptResolver) {
+    if (!this.aiProvider && !this.aiFlowRunner) {
       return this.parser.parse(parseInput);
     }
 
     const extraction = await this.extractRawTextForAi(parseInput);
-    const aiAttempt = await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage);
+    const aiAttempt = this.aiFlowRunner
+      ? await this.tryParseWithAiFlowRunner(
+          extraction.extracted,
+          sourceFile,
+          defaultLanguage,
+          session
+        )
+      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage);
     if (aiAttempt.parseResult) {
       return aiAttempt.parseResult;
     }
@@ -525,6 +559,88 @@ export class ImportsService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown AI parsing error";
+
+      return {
+        parseResult: null,
+        failureWarning: `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
+      };
+    }
+  }
+
+  private async tryParseWithAiFlowRunner(
+    extractedResult: ExtractCvRawTextResult,
+    sourceFile: { original_filename: string; mime_type: string | null },
+    defaultLanguage: string,
+    session: SessionContext
+  ): Promise<{
+    parseResult: ParseCvFileResult | null;
+    failureWarning: string | null;
+  }> {
+    if (!this.aiFlowRunner) {
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
+    }
+
+    const rawExtractedText = extractedResult.rawExtractedText.trim();
+    if (!rawExtractedText) {
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
+    }
+
+    const hasNoReadableTextSignal = extractedResult.warnings.some((warning) =>
+      /no readable text was extracted/i.test(warning)
+    );
+    if (hasNoReadableTextSignal) {
+      return {
+        parseResult: null,
+        failureWarning: null
+      };
+    }
+
+    try {
+      const aiResult = await this.aiFlowRunner.parseCvContent(session, {
+        raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
+        source_filename: sourceFile.original_filename,
+        mime_type: sourceFile.mime_type ?? "application/octet-stream",
+        language_hint: defaultLanguage || "en"
+      });
+
+      const mergedWarnings = [...extractedResult.warnings, ...aiResult.warnings];
+      this.logger?.info(
+        {
+          import_parser: "cv_parse",
+          ai_run_id: aiResult.ai_run_id,
+          provider: aiResult.generation_metadata.provider,
+          model_name: aiResult.generation_metadata.model_name,
+          prompt_key: aiResult.generation_metadata.prompt_key,
+          prompt_version: aiResult.generation_metadata.prompt_version
+        },
+        "CV parse AI flow succeeded"
+      );
+
+      return {
+        parseResult: {
+          parserName: `${aiResult.generation_metadata.provider}_cv_parser_v1`,
+          rawExtractedText: extractedResult.rawExtractedText,
+          parsedContent: aiResult.parsed_content,
+          warnings: [...new Set(mergedWarnings)],
+          diagnostics: extractedResult.diagnostics
+        },
+        failureWarning: null
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown AI parsing error";
+      this.logger?.warn(
+        {
+          import_parser: "cv_parse",
+          reason: message.slice(0, 300)
+        },
+        "CV parse AI flow failed, using fallback parser"
+      );
 
       return {
         parseResult: null,

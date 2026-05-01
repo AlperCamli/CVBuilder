@@ -134,7 +134,7 @@ export interface ServiceOverrides {
 
 export const buildDefaultServices = (
   config: AppConfig,
-  _logger: Logger,
+  logger: Logger,
   overrides?: ServiceOverrides
 ): AppServices => {
   const supabaseClients = createSupabaseClients(config);
@@ -227,13 +227,6 @@ export const buildDefaultServices = (
     downloadUrlTtlSeconds: config.exports.downloadUrlTtlSeconds
   });
   const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
-  const importsService = new ImportsService(
-    importsRepository,
-    masterCvRepository,
-    cvParser,
-    aiProvider,
-    aiPromptResolver
-  );
   const jobsService = new JobsService(jobsRepository);
   const coverLettersService = new CoverLettersService(
     coverLettersRepository,
@@ -260,6 +253,15 @@ export const buildDefaultServices = (
     templatesService,
     aiPromptResolver,
     billingService
+  );
+  const importsService = new ImportsService(
+    importsRepository,
+    masterCvRepository,
+    cvParser,
+    aiProvider,
+    aiPromptResolver,
+    aiService,
+    logger
   );
   const exportsService = new ExportsService(
     exportsRepository,

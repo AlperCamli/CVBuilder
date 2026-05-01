@@ -268,4 +268,42 @@ describe("rendering presentation mapper", () => {
     expect(mappedItem?.subtitle).toBe("Sabancı University");
     expect(mappedItem?.body).toBeNull();
   });
+
+  it("does not emit header as a section and falls back to header block metadata", () => {
+    const payload = renderingPayload();
+    payload.sections.unshift({
+      id: "header",
+      type: "header",
+      title: "Header",
+      order: -1,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "header-1",
+          type: "header",
+          normalized_fields: {
+            full_name: field("Jane Doe", "Jane Doe", ["Jane Doe"]),
+            headline: field("Data Engineer", "Data Engineer", ["Data Engineer"]),
+            email: field("jane@example.com", "jane@example.com", ["jane@example.com"]),
+            phone: field("+1 202 555 0100", "+1 202 555 0100", ["+1 202 555 0100"]),
+            location: field("Istanbul, Turkey", "Istanbul, Turkey", ["Istanbul, Turkey"]),
+            urls: field(
+              ["https://github.com/janedoe", "linkedin.com/in/janedoe"],
+              "https://github.com/janedoe linkedin.com/in/janedoe",
+              ["https://github.com/janedoe", "linkedin.com/in/janedoe"]
+            )
+          }
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+
+    expect(presentation.header.name).toBe("Jane Doe");
+    expect(presentation.header.title).toBe("Data Engineer");
+    expect(presentation.header.email).toBe("jane@example.com");
+    expect(presentation.header.social_links.length).toBeGreaterThan(0);
+    expect(presentation.sections.some((section) => section.type === "header")).toBe(false);
+  });
 });

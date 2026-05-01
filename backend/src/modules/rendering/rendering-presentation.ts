@@ -240,8 +240,12 @@ const extractTextItems = (value: CvJsonValue): string[] => {
     return normalized ? [normalized] : [];
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "number") {
     return [String(value)];
+  }
+
+  if (typeof value === "boolean") {
+    return [];
   }
 
   if (Array.isArray(value)) {
@@ -559,6 +563,10 @@ const mapSection = (section: RenderingSection): PresentationSection | null => {
   const type = section.type;
   const title = getSectionTitle(type);
 
+  if (type.toLowerCase() === "header") {
+    return null;
+  }
+
   if (type === "skills") {
     const inlineText = collectSkillsInlineText(section);
     if (!inlineText) {
@@ -772,26 +780,77 @@ const toMetadataString = (value: CvJsonValue | undefined): string | null => {
   return collapseWhitespace(items.join(" "));
 };
 
+const findHeaderSections = (rendering: RenderingPayload): RenderingSection[] => {
+  return rendering.sections.filter((section) => section.type.toLowerCase() === "header");
+};
+
+const getHeaderFallbackField = (
+  headerSections: RenderingSection[],
+  keys: string[]
+): string | null => {
+  const blocks = headerSections
+    .flatMap((section) => section.blocks)
+    .filter((block) => block.visibility === "visible")
+    .sort((a, b) => a.order - b.order);
+
+  for (const block of blocks) {
+    const value = textByKey(block, keys);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const collectHeaderUrls = (headerSections: RenderingSection[]): string[] => {
+  const blocks = headerSections
+    .flatMap((section) => section.blocks)
+    .filter((block) => block.visibility === "visible");
+
+  const urls: string[] = [];
+
+  for (const block of blocks) {
+    for (const [fieldKey, fieldValue] of Object.entries(block.normalized_fields)) {
+      if (!keyMatches(fieldKey, ["url", "urls", "linkedin", "github", "gitlab", "website"])) {
+        continue;
+      }
+
+      urls.push(...fieldValue.text_items);
+    }
+  }
+
+  return dedupeText(urls);
+};
+
 export const mapRenderingPayloadToPresentation = (
   rendering: RenderingPayload,
   metadata: Record<string, CvJsonValue>,
   template: TemplateSummary | null
 ): RenderingPresentation => {
   const theme = resolveTemplateProfile(template);
+  const headerSections = findHeaderSections(rendering);
+
+  const metadataUrls = metadata.urls ? extractTextItems(metadata.urls) : [];
+  const headerUrls = collectHeaderUrls(headerSections);
+  const mergedMetadataForLinks: Record<string, CvJsonValue> = {
+    ...metadata,
+    urls: [...new Set([...metadataUrls, ...headerUrls])]
+  };
 
   const header: PresentationHeader = {
-    name: toMetadataString(metadata.full_name) ?? null,
-    title: toMetadataString(metadata.headline) ?? null,
-    email: toMetadataString(metadata.email) ?? null,
-    phone: toMetadataString(metadata.phone) ?? null,
-    location: toMetadataString(metadata.location) ?? null,
+    name: toMetadataString(metadata.full_name) ?? getHeaderFallbackField(headerSections, ["full_name", "name"]),
+    title: toMetadataString(metadata.headline) ?? getHeaderFallbackField(headerSections, ["headline", "title"]),
+    email: toMetadataString(metadata.email) ?? getHeaderFallbackField(headerSections, ["email"]),
+    phone: toMetadataString(metadata.phone) ?? getHeaderFallbackField(headerSections, ["phone"]),
+    location: toMetadataString(metadata.location) ?? getHeaderFallbackField(headerSections, ["location", "city", "country"]),
     photo: toMetadataString(metadata.photo) ?? null,
     contact_items: [
-      toMetadataString(metadata.email),
-      toMetadataString(metadata.phone),
-      toMetadataString(metadata.location)
+      toMetadataString(metadata.email) ?? getHeaderFallbackField(headerSections, ["email"]),
+      toMetadataString(metadata.phone) ?? getHeaderFallbackField(headerSections, ["phone"]),
+      toMetadataString(metadata.location) ?? getHeaderFallbackField(headerSections, ["location", "city", "country"])
     ].filter((item): item is string => Boolean(item)),
-    social_links: extractSocialLinks(metadata)
+    social_links: extractSocialLinks(mergedMetadataForLinks)
   };
 
   const sections = rendering.sections

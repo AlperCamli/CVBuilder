@@ -30,8 +30,12 @@ const extractTextItems = (value: CvJsonValue): string[] => {
     return trimmed ? [trimmed] : [];
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "number") {
     return [String(value)];
+  }
+
+  if (typeof value === "boolean") {
+    return [];
   }
 
   if (Array.isArray(value)) {

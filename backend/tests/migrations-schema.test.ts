@@ -141,4 +141,16 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/ai_suggestions_target_scope_check/i);
     expect(migration).toMatch(/import_improve/i);
   });
+
+  it("contains phase 6B cv_parse prompt hardening and template visibility upserts", () => {
+    const migration = readMigration("20260502100000_phase6b_ai_parse_and_template_defaults.sql");
+
+    expect(migration).toMatch(/where slug = 'modern-clean'/i);
+    expect(migration).toMatch(/where slug = 'minimal-professional'/i);
+    expect(migration).toMatch(/where slug = 'executive-timeline'/i);
+    expect(migration).toMatch(/where slug = 'creative-portfolio'/i);
+    expect(migration).toMatch(/flow_type = 'cv_parse'/i);
+    expect(migration).toMatch(/provider in \('any', 'gemini'\)/i);
+    expect(migration).toMatch(/model_name = null/i);
+  });
 });
