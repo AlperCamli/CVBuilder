@@ -129,6 +129,171 @@ describe("recoverTailoredDraftEmptyFieldsFromMaster", () => {
     expect(recovered.hydrated_block_count).toBe(0);
   });
 
+  it("inserts a new canonical-typed section (e.g. summary) that master lacks", () => {
+    const master = {
+      version: "v1" as const,
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "header-1",
+          type: "header",
+          title: "Contact",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "header-block-1",
+              type: "header",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { full_name: "Alper Camli", email: "alper@example.com" },
+              meta: {}
+            }
+          ]
+        },
+        {
+          id: "experience-1",
+          type: "experience",
+          title: "Experience",
+          order: 1,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-1",
+              type: "experience",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { role: "BI Intern", company: "Vakifbank" },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const generated = {
+      version: "v1" as const,
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "summary-1",
+          type: "summary",
+          title: "Professional Summary",
+          order: 1,
+          meta: {},
+          blocks: [
+            {
+              id: "summary-block-1",
+              type: "summary",
+              order: 0,
+              visibility: "visible" as const,
+              fields: {
+                text: "Fresh CS graduate with hands-on Excel modeling and a passion for casual puzzle games."
+              },
+              meta: {}
+            }
+          ]
+        },
+        {
+          id: "experience-1",
+          type: "experience",
+          title: "Experience",
+          order: 2,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-1",
+              type: "experience",
+              order: 0,
+              visibility: "visible" as const,
+              fields: {
+                role: "BI Intern",
+                company: "Vakifbank",
+                description: "Built BI pipelines using Excel and SQL for data-driven reporting."
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const stabilized = stabilizeTailoredDraftFromMaster(generated, master);
+
+    expect(stabilized.inserted_section_count).toBe(1);
+    expect(stabilized.content.sections).toHaveLength(3);
+
+    const types = stabilized.content.sections.map((section) => section.type);
+    expect(types).toEqual(["header", "summary", "experience"]);
+
+    const orders = stabilized.content.sections.map((section) => section.order);
+    expect(orders).toEqual([0, 1, 2]);
+
+    const summarySection = stabilized.content.sections.find((s) => s.type === "summary");
+    expect(summarySection?.blocks?.[0]?.fields?.text).toContain("casual puzzle games");
+
+    const experienceSection = stabilized.content.sections.find((s) => s.type === "experience");
+    expect(experienceSection?.blocks?.[0]?.fields?.description).toContain("Excel");
+  });
+
+  it("does not insert generic-typed sections that master lacks", () => {
+    const master = {
+      version: "v1" as const,
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "header-1",
+          type: "header",
+          title: "Contact",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "header-block-1",
+              type: "header",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { full_name: "Alper Camli" },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const generated = {
+      version: "v1" as const,
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "section_1",
+          type: "section_1",
+          title: "Section 1",
+          order: 1,
+          meta: {},
+          blocks: [
+            {
+              id: "block-1",
+              type: "text",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { text: "Some content" },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const stabilized = stabilizeTailoredDraftFromMaster(generated, master);
+    expect(stabilized.inserted_section_count).toBe(0);
+    expect(stabilized.content.sections).toHaveLength(1);
+  });
+
   it("preserves master sections/blocks when generated output drops them", () => {
     const master = {
       version: "v1" as const,

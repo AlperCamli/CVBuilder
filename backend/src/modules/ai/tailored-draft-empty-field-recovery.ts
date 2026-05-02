@@ -39,6 +39,7 @@ interface StabilizeResult {
   overlayed_section_count: number;
   overlayed_block_count: number;
   hydrated_block_count: number;
+  inserted_section_count: number;
 }
 
 const GENERIC_SECTION_TYPE_PATTERN = /^section[_-]?\d+$/i;
@@ -50,6 +51,25 @@ const isGenericSectionType = (value: string): boolean => {
   }
 
   return normalized === "custom" || GENERIC_SECTION_TYPE_PATTERN.test(normalized);
+};
+
+const INSERTABLE_CANONICAL_SECTION_TYPES = new Set([
+  "summary",
+  "skills",
+  "experience",
+  "education",
+  "languages",
+  "certifications",
+  "courses",
+  "projects",
+  "volunteer",
+  "awards",
+  "publications",
+  "references"
+]);
+
+const sectionHasMeaningfulContent = (section: CvSection): boolean => {
+  return section.blocks.some((block) => hasMeaningfulFields(block.fields));
 };
 
 const cloneJson = <T,>(value: T): T => {
@@ -133,6 +153,7 @@ export const stabilizeTailoredDraftFromMaster = (
   let overlayedSectionCount = 0;
   let overlayedBlockCount = 0;
   let hydratedBlockCount = 0;
+  const sectionsToInsert: Array<{ orderHint: number; section: CvSection }> = [];
 
   for (const generatedSection of generatedSections) {
     const generatedType = generatedSection.type.trim().toLowerCase();
@@ -150,6 +171,15 @@ export const stabilizeTailoredDraftFromMaster = (
     }
 
     if (targetSectionIndex === null) {
+      if (
+        INSERTABLE_CANONICAL_SECTION_TYPES.has(generatedType) &&
+        sectionHasMeaningfulContent(generatedSection)
+      ) {
+        sectionsToInsert.push({
+          orderHint: generatedSection.order,
+          section: cloneJson(generatedSection)
+        });
+      }
       continue;
     }
 
@@ -216,10 +246,27 @@ export const stabilizeTailoredDraftFromMaster = (
     });
   }
 
+  let insertedSectionCount = 0;
+  for (const { orderHint, section } of sectionsToInsert) {
+    let insertIndex = baseline.sections.findIndex((existing) => existing.order >= orderHint);
+    if (insertIndex < 0) {
+      insertIndex = baseline.sections.length;
+    }
+    baseline.sections.splice(insertIndex, 0, section);
+    insertedSectionCount += 1;
+  }
+
+  if (insertedSectionCount > 0) {
+    baseline.sections.forEach((section, index) => {
+      section.order = index;
+    });
+  }
+
   return {
     content: baseline,
     overlayed_section_count: overlayedSectionCount,
     overlayed_block_count: overlayedBlockCount,
-    hydrated_block_count: hydratedBlockCount
+    hydrated_block_count: hydratedBlockCount,
+    inserted_section_count: insertedSectionCount
   };
 };
