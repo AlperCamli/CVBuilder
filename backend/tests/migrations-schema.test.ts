@@ -174,4 +174,15 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/preserve the source master cv section structure\/order/i);
     expect(migration).toMatch(/model_name = null/i);
   });
+
+  it("contains phase 6E tailored_draft resilience prompt update", () => {
+    const migration = readMigration("20260502170000_phase6e_tailored_draft_prompt_resilience.sql");
+
+    expect(migration).toMatch(/flow_type = 'tailored_draft'/i);
+    expect(migration).toMatch(/provider in \('any', 'gemini'\)/i);
+    expect(migration).toMatch(/return exactly one root object/i);
+    expect(migration).toMatch(/use master_content as the baseline/i);
+    expect(migration).toMatch(/never blank existing fields/i);
+    expect(migration).toMatch(/model_name = null/i);
+  });
 });
