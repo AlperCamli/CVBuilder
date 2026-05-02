@@ -36,6 +36,7 @@ import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import { cvParseOutputSchema } from "./flows/flow-contracts";
+import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -165,6 +166,7 @@ const toPersistableAiRunDebugPayload = (error: unknown): Record<string, unknown>
       provider_status: sanitizeDebugScalar(details.provider_status),
       provider_status_code: sanitizeDebugScalar(details.provider_status_code),
       provider_error_name: sanitizeDebugScalar(details.provider_error_name),
+      provider_parse_error: sanitizeDebugScalar(details.parse_error),
       provider_quota_id: sanitizeDebugScalar(details.provider_quota_id),
       provider_quota_metric: sanitizeDebugScalar(details.provider_quota_metric),
       provider_retry_delay_ms: sanitizeDebugScalar(details.provider_retry_delay_ms),
@@ -514,16 +516,7 @@ export class AiService {
         input.language ?? tailoredCv.language
       );
 
-      const totalBlocks = normalizedContent.sections.reduce(
-        (sum, sec) => sum + sec.blocks.length,
-        0
-      );
-      if (normalizedContent.sections.length === 0 || totalBlocks === 0) {
-        throw new AiFlowFailedError(
-          "The AI could not generate a valid CV from the provided content. Please ensure the job description is work-related and your master CV contains professional experience.",
-          { flow_type: "tailored_draft", reason: "empty_output" }
-        );
-      }
+      this.assertTailoredDraftSemanticContent(normalizedContent);
 
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCv.id, {
         current_content: normalizedContent,
@@ -1284,16 +1277,7 @@ export class AiService {
         input.language ?? tailoredCv.language
       );
 
-      const totalBlocks = normalizedContent.sections.reduce(
-        (sum, sec) => sum + sec.blocks.length,
-        0
-      );
-      if (normalizedContent.sections.length === 0 || totalBlocks === 0) {
-        throw new AiFlowFailedError(
-          "The AI could not generate a valid CV from the provided content. Please ensure the job description is work-related and your master CV contains professional experience.",
-          { flow_type: "tailored_draft", reason: "empty_output" }
-        );
-      }
+      this.assertTailoredDraftSemanticContent(normalizedContent);
 
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
         current_content: normalizedContent,
@@ -1386,13 +1370,15 @@ export class AiService {
 
       await this.aiRepository.failRun(options.user_id, options.ai_run_id, validationMessage.slice(0, 2000), {
         error_name: "AiFlowFailedError",
-        reason: "Output contract validation failed",
+        reason: "output_contract_invalid",
         stage: "validating_output",
+        flow_type: options.flow_type,
         validation_errors: validationDetails
       });
 
       throw new AiFlowFailedError("AI output did not match required contract", {
         flow_type: options.flow_type,
+        reason: "output_contract_invalid",
         validation_errors: validationDetails
       });
     }
@@ -1519,6 +1505,22 @@ export class AiService {
     } catch {
       // Keep the original error path; watchdog will still sweep stale pending runs.
     }
+  }
+
+  private assertTailoredDraftSemanticContent(content: TailoredCvRecord["current_content"]): void {
+    const semantic = evaluateTailoredDraftSemanticContent(content);
+    if (semantic.is_valid) {
+      return;
+    }
+
+    throw new AiFlowFailedError(
+      "The AI could not generate a meaningful tailored CV output from the provided context. Please revise job context or answers and try again.",
+      {
+        flow_type: "tailored_draft",
+        reason: "output_semantically_empty",
+        semantic_stats: semantic.stats
+      }
+    );
   }
 
   private async updateRunStage(

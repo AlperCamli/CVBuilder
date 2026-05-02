@@ -164,4 +164,14 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/awards use issuer/i);
     expect(migration).toMatch(/non-proficiency bracket details to certificate/i);
   });
+
+  it("contains phase 6D tailored_draft strict JSON prompt hardening", () => {
+    const migration = readMigration("20260502143000_phase6d_tailored_draft_prompt_contract.sql");
+
+    expect(migration).toMatch(/flow_type = 'tailored_draft'/i);
+    expect(migration).toMatch(/provider in \('any', 'gemini'\)/i);
+    expect(migration).toMatch(/strict json only/i);
+    expect(migration).toMatch(/preserve the source master cv section structure\/order/i);
+    expect(migration).toMatch(/model_name = null/i);
+  });
 });

@@ -124,9 +124,16 @@ export const toRunErrorMessage = (status: TailoringRunStatusResponse): string =>
   }
   if (
     normalized.includes("structured output validation failed") ||
-    normalized.includes("required contract")
+    normalized.includes("required contract") ||
+    normalized.includes("output_contract_invalid")
   ) {
     return "AI returned an invalid structured response. Please retry.";
+  }
+  if (normalized.includes("output_json_unparseable")) {
+    return "AI returned an unreadable response format. Please retry.";
+  }
+  if (normalized.includes("output_semantically_empty")) {
+    return "AI generated an empty tailored draft. Please adjust job context or answers and retry.";
   }
   return raw || "Tailoring AI request failed.";
 };

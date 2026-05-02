@@ -58,44 +58,185 @@ const toDebugExcerpt = (value: string): string => {
     .trim();
 };
 
-const extractJsonCandidate = (source: string): string | null => {
-  const fencedMatch = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
+const collectFencedJsonCandidates = (source: string): string[] => {
+  const candidates: string[] = [];
+  const matches = source.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi);
+  for (const match of matches) {
+    if (match[1]) {
+      candidates.push(match[1].trim());
+    }
   }
+  return candidates;
+};
 
-  const objectStart = source.indexOf("{");
-  const objectEnd = source.lastIndexOf("}");
-  const arrayStart = source.indexOf("[");
-  const arrayEnd = source.lastIndexOf("]");
+const extractBalancedJsonSegment = (
+  source: string,
+  openChar: "{" | "[",
+  closeChar: "}" | "]"
+): string | null => {
+  let startIndex = source.indexOf(openChar);
+  while (startIndex >= 0) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-  if (objectStart >= 0 && objectEnd > objectStart) {
-    return source.slice(objectStart, objectEnd + 1).trim();
-  }
+    for (let index = startIndex; index < source.length; index += 1) {
+      const character = source[index];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (character === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (character === "\"") {
+          inString = false;
+        }
+        continue;
+      }
 
-  if (arrayStart >= 0 && arrayEnd > arrayStart) {
-    return source.slice(arrayStart, arrayEnd + 1).trim();
+      if (character === "\"") {
+        inString = true;
+        continue;
+      }
+
+      if (character === openChar) {
+        depth += 1;
+        continue;
+      }
+
+      if (character === closeChar) {
+        depth -= 1;
+        if (depth === 0) {
+          return source.slice(startIndex, index + 1).trim();
+        }
+        if (depth < 0) {
+          break;
+        }
+      }
+    }
+
+    startIndex = source.indexOf(openChar, startIndex + 1);
   }
 
   return null;
 };
 
-const tryParseRecoveredJson = (source: string): unknown | null => {
-  const candidate = extractJsonCandidate(source);
-  if (!candidate) {
-    return null;
+const extractJsonCandidates = (source: string): string[] => {
+  const normalized = source.replace(/^\uFEFF/, "").trim();
+  if (!normalized) {
+    return [];
   }
 
-  const candidates = [candidate, candidate.replace(/,\s*([}\]])/g, "$1")];
-  for (const attempt of candidates) {
-    try {
-      return JSON.parse(attempt);
-    } catch {
-      // Try the next candidate.
+  const rawCandidates = [normalized, ...collectFencedJsonCandidates(normalized)];
+  const candidates: string[] = [];
+
+  for (const candidate of rawCandidates) {
+    candidates.push(candidate);
+
+    const balancedObject = extractBalancedJsonSegment(candidate, "{", "}");
+    if (balancedObject) {
+      candidates.push(balancedObject);
+    }
+
+    const balancedArray = extractBalancedJsonSegment(candidate, "[", "]");
+    if (balancedArray) {
+      candidates.push(balancedArray);
     }
   }
 
-  return null;
+  const objectStart = normalized.indexOf("{");
+  const objectEnd = normalized.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(normalized.slice(objectStart, objectEnd + 1).trim());
+  }
+
+  const arrayStart = normalized.indexOf("[");
+  const arrayEnd = normalized.lastIndexOf("]");
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    candidates.push(normalized.slice(arrayStart, arrayEnd + 1).trim());
+  }
+
+  const deduplicated = new Set(candidates.map((item) => item.trim()).filter(Boolean));
+  return [...deduplicated];
+};
+
+const removeTrailingCommasOutsideStrings = (source: string): string => {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      result += character;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (character === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = true;
+      result += character;
+      continue;
+    }
+
+    if (character === ",") {
+      let lookaheadIndex = index + 1;
+      while (lookaheadIndex < source.length && /\s/.test(source[lookaheadIndex] ?? "")) {
+        lookaheadIndex += 1;
+      }
+      const nextCharacter = source[lookaheadIndex];
+      if (nextCharacter === "}" || nextCharacter === "]") {
+        continue;
+      }
+    }
+
+    result += character;
+  }
+
+  return result;
+};
+
+const tryParseRecoveredJson = (source: string): { parsed: unknown | null; parse_error: string | null } => {
+  const candidates = extractJsonCandidates(source);
+  if (candidates.length === 0) {
+    return {
+      parsed: null,
+      parse_error: "No JSON candidate found in model response."
+    };
+  }
+
+  let lastParseError: string | null = null;
+  for (const candidate of candidates) {
+    const parseAttempts = [candidate, removeTrailingCommasOutsideStrings(candidate)];
+    for (const attempt of parseAttempts) {
+      try {
+        return {
+          parsed: JSON.parse(attempt),
+          parse_error: null
+        };
+      } catch (error) {
+        lastParseError = error instanceof Error ? error.message : "Unknown JSON parse error";
+      }
+    }
+  }
+
+  return {
+    parsed: null,
+    parse_error: lastParseError
+  };
 };
 
 export const sanitizeGeminiResponseJsonSchema = (value: unknown): unknown => {
@@ -503,18 +644,21 @@ export class GeminiAiProvider implements AiProvider {
           let parsed: unknown;
           try {
             parsed = JSON.parse(responseText);
-          } catch {
+          } catch (jsonParseError) {
             const recovered = tryParseRecoveredJson(responseText);
-            if (recovered === null) {
+            if (recovered.parsed === null) {
               throw new AiProviderError("Gemini returned non-JSON output", {
-                reason: "Unable to parse or repair model JSON output",
+                reason: "output_json_unparseable",
+                parse_error:
+                  recovered.parse_error ??
+                  (jsonParseError instanceof Error ? jsonParseError.message : "Unknown JSON parse error"),
                 recovery_attempted: true,
                 raw_output_excerpt: toDebugExcerpt(responseText),
                 attempted_models: attemptedModels
               });
             }
 
-            parsed = recovered;
+            parsed = recovered.parsed;
           }
 
           const outputPayload = asRecord(parsed);

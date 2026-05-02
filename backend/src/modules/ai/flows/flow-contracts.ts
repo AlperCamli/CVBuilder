@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { cvContentInputSchema } from "../../../shared/cv-content/cv-content.schemas";
 
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
 const normalizedHintSchema = z.preprocess((value) => {
   if (typeof value !== "string") {
     return value;
@@ -47,9 +51,57 @@ export const followUpQuestionsOutputSchema = z
   })
   .strict();
 
+const tailoredDraftContentSchema = cvContentInputSchema.superRefine((content, context) => {
+  if (!Array.isArray(content.sections) || content.sections.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sections"],
+      message: "Tailored draft output must include at least one section."
+    });
+    return;
+  }
+
+  for (const [sectionIndex, section] of content.sections.entries()) {
+    if (typeof section.type !== "string" || section.type.trim().length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sections", sectionIndex, "type"],
+        message: "Section type is required."
+      });
+    }
+
+    if (!Array.isArray(section.blocks) || section.blocks.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sections", sectionIndex, "blocks"],
+        message: "Section blocks are required."
+      });
+      continue;
+    }
+
+    for (const [blockIndex, block] of section.blocks.entries()) {
+      if (typeof block.type !== "string" || block.type.trim().length === 0) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "type"],
+          message: "Block type is required."
+        });
+      }
+
+      if (!isPlainRecord(block.fields)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "fields"],
+          message: "Block fields must be an object."
+        });
+      }
+    }
+  }
+});
+
 export const tailoredDraftOutputSchema = z
   .object({
-    current_content: cvContentInputSchema,
+    current_content: tailoredDraftContentSchema,
     generation_summary: z.string().trim().min(1).max(2000),
     changed_block_ids: z.array(z.string().trim().min(1).max(128)).max(200)
   })

@@ -182,6 +182,63 @@ describe("GeminiAiProvider", () => {
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("recovers the first balanced JSON object when response has trailing garbage", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+
+    generateContentMock.mockResolvedValue({
+      text: "Result => {\"questions\": []} trailing }}} notes"
+    });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies unrecoverable JSON output as output_json_unparseable", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+    generateContentMock.mockResolvedValue({
+      text: "This is not JSON at all."
+    });
+
+    let thrown: unknown;
+    try {
+      await provider.generate({
+        flow_type: "follow_up_questions",
+        model_name: "gemini-3-flash-preview",
+        prompt: {
+          prompt_key: "follow-up-questions",
+          prompt_version: "phase5-v1",
+          system_prompt: "Generate follow-up questions",
+          user_prompt: "Generate follow-up questions now"
+        },
+        output_schema: followUpQuestionsOutputSchema,
+        input_payload: {}
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AiProviderError);
+    expect((thrown as AiProviderError).message).toBe("Gemini returned non-JSON output");
+    expect((thrown as AiProviderError).details).toEqual(
+      expect.objectContaining({
+        reason: "output_json_unparseable"
+      })
+    );
+  });
+
   it("emits parsing_output stage callback before JSON parsing", async () => {
     const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
     const onStage = vi.fn();

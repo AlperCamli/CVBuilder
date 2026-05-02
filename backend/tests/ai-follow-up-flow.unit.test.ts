@@ -200,6 +200,33 @@ describe("AiService follow_up_questions flow", () => {
     expect(failRun).not.toHaveBeenCalled();
   });
 
+  it("keeps model selection env/provider-driven even when prompt config has model_name", async () => {
+    const service = makeService();
+    resolvePrompt.mockResolvedValue({
+      ...resolvedPrompt,
+      model_name: "db-configured-model-name"
+    });
+    providerGenerate.mockResolvedValue({
+      provider: "gemini",
+      model_name: "gemini-3-flash-preview",
+      output_payload: {
+        questions: []
+      }
+    });
+
+    await service.generateFollowUpQuestions(session, {
+      master_cv_id: masterCv.id,
+      job: {
+        company_name: "Acme",
+        job_title: "Backend Engineer",
+        job_description: "Build APIs and services."
+      }
+    });
+
+    expect(providerGenerate).toHaveBeenCalledTimes(1);
+    expect(providerGenerate.mock.calls[0]?.[0]?.model_name).toBe("gemini-3-flash-preview");
+  });
+
   it("keeps strict contract validation and fails run for invalid provider payload", async () => {
     const service = makeService();
     providerGenerate.mockResolvedValue({
