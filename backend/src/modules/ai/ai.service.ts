@@ -37,6 +37,7 @@ import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import { cvParseOutputSchema } from "./flows/flow-contracts";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
+import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -1357,8 +1358,13 @@ export class AiService {
       throw new AiFlowFailedError("AI flow execution failed", { flow_type: options.flow_type });
     }
 
+    const outputPayloadForValidation =
+      options.flow_type === "tailored_draft"
+        ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
+        : providerResult.output_payload;
+
     await this.updateRunStage(options.user_id, options.ai_run_id, "validating_output");
-    const parsed = definition.output_schema.safeParse(providerResult.output_payload);
+    const parsed = definition.output_schema.safeParse(outputPayloadForValidation);
     if (!parsed.success) {
       const validationDetails = parsed.error.issues.slice(0, 20).map((issue) => ({
         path: issue.path.join(".") || "root",
