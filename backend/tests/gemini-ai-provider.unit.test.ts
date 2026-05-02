@@ -206,6 +206,35 @@ describe("GeminiAiProvider", () => {
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("prefers schema-matching JSON candidate when multiple JSON objects are present", async () => {
+    const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
+
+    generateContentMock.mockResolvedValue({
+      text: [
+        "Header object:",
+        "{\"full_name\":\"Alper Camli\",\"email\":\"test@example.com\"}",
+        "Tailored payload:",
+        "{\"questions\":[]}"
+      ].join("\n")
+    });
+
+    const result = await provider.generate({
+      flow_type: "follow_up_questions",
+      model_name: "gemini-3-flash-preview",
+      prompt: {
+        prompt_key: "follow-up-questions",
+        prompt_version: "phase5-v1",
+        system_prompt: "Generate follow-up questions",
+        user_prompt: "Generate follow-up questions now"
+      },
+      output_schema: followUpQuestionsOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.output_payload).toEqual({ questions: [] });
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
   it("classifies unrecoverable JSON output as output_json_unparseable", async () => {
     const provider = new GeminiAiProvider("gemini-3-flash-preview", "gemini-key");
     generateContentMock.mockResolvedValue({

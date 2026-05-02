@@ -69,16 +69,18 @@ const collectFencedJsonCandidates = (source: string): string[] => {
   return candidates;
 };
 
-const extractBalancedJsonSegment = (
+const extractBalancedJsonSegments = (
   source: string,
   openChar: "{" | "[",
   closeChar: "}" | "]"
-): string | null => {
+): string[] => {
+  const segments: string[] = [];
   let startIndex = source.indexOf(openChar);
   while (startIndex >= 0) {
     let depth = 0;
     let inString = false;
     let escaped = false;
+    let matched = false;
 
     for (let index = startIndex; index < source.length; index += 1) {
       const character = source[index];
@@ -110,7 +112,13 @@ const extractBalancedJsonSegment = (
       if (character === closeChar) {
         depth -= 1;
         if (depth === 0) {
-          return source.slice(startIndex, index + 1).trim();
+          const next = source.slice(startIndex, index + 1).trim();
+          if (next) {
+            segments.push(next);
+          }
+          startIndex = source.indexOf(openChar, index + 1);
+          matched = true;
+          break;
         }
         if (depth < 0) {
           break;
@@ -118,10 +126,12 @@ const extractBalancedJsonSegment = (
       }
     }
 
-    startIndex = source.indexOf(openChar, startIndex + 1);
+    if (!matched) {
+      startIndex = source.indexOf(openChar, startIndex + 1);
+    }
   }
 
-  return null;
+  return segments;
 };
 
 const extractJsonCandidates = (source: string): string[] => {
@@ -136,13 +146,13 @@ const extractJsonCandidates = (source: string): string[] => {
   for (const candidate of rawCandidates) {
     candidates.push(candidate);
 
-    const balancedObject = extractBalancedJsonSegment(candidate, "{", "}");
-    if (balancedObject) {
+    const balancedObjects = extractBalancedJsonSegments(candidate, "{", "}");
+    for (const balancedObject of balancedObjects) {
       candidates.push(balancedObject);
     }
 
-    const balancedArray = extractBalancedJsonSegment(candidate, "[", "]");
-    if (balancedArray) {
+    const balancedArrays = extractBalancedJsonSegments(candidate, "[", "]");
+    for (const balancedArray of balancedArrays) {
       candidates.push(balancedArray);
     }
   }
@@ -209,34 +219,102 @@ const removeTrailingCommasOutsideStrings = (source: string): string => {
   return result;
 };
 
-const tryParseRecoveredJson = (source: string): { parsed: unknown | null; parse_error: string | null } => {
+const tryParseRecoveredJson = (
+  source: string,
+  isPreferredCandidate?: (candidate: unknown) => boolean
+): {
+  parsed: unknown | null;
+  parse_error: string | null;
+  matched_preferred_candidate: boolean;
+} => {
   const candidates = extractJsonCandidates(source);
   if (candidates.length === 0) {
     return {
       parsed: null,
-      parse_error: "No JSON candidate found in model response."
+      parse_error: "No JSON candidate found in model response.",
+      matched_preferred_candidate: false
     };
   }
 
+  let firstParsedCandidate: unknown | null = null;
   let lastParseError: string | null = null;
   for (const candidate of candidates) {
     const parseAttempts = [candidate, removeTrailingCommasOutsideStrings(candidate)];
     for (const attempt of parseAttempts) {
       try {
-        return {
-          parsed: JSON.parse(attempt),
-          parse_error: null
-        };
+        const parsed = JSON.parse(attempt);
+        if (firstParsedCandidate === null) {
+          firstParsedCandidate = parsed;
+        }
+
+        if (!isPreferredCandidate || isPreferredCandidate(parsed)) {
+          return {
+            parsed,
+            parse_error: null,
+            matched_preferred_candidate: Boolean(isPreferredCandidate)
+          };
+        }
+
+        continue;
       } catch (error) {
         lastParseError = error instanceof Error ? error.message : "Unknown JSON parse error";
       }
     }
   }
 
+  if (firstParsedCandidate !== null) {
+    return {
+      parsed: firstParsedCandidate,
+      parse_error: null,
+      matched_preferred_candidate: false
+    };
+  }
+
   return {
     parsed: null,
-    parse_error: lastParseError
+    parse_error: lastParseError,
+    matched_preferred_candidate: false
   };
+};
+
+const parseProviderResponseJson = (
+  responseText: string,
+  isPreferredCandidate: (candidate: unknown) => boolean
+): { parsed: unknown | null; parse_error: string | null } => {
+  try {
+    const directParsed = JSON.parse(responseText);
+    if (isPreferredCandidate(directParsed)) {
+      return { parsed: directParsed, parse_error: null };
+    }
+
+    const recovered = tryParseRecoveredJson(responseText, isPreferredCandidate);
+    if (recovered.parsed !== null && recovered.matched_preferred_candidate) {
+      return { parsed: recovered.parsed, parse_error: null };
+    }
+
+    return { parsed: directParsed, parse_error: null };
+  } catch (jsonParseError) {
+    const recovered = tryParseRecoveredJson(responseText, isPreferredCandidate);
+    if (recovered.parsed !== null) {
+      return { parsed: recovered.parsed, parse_error: null };
+    }
+
+    return {
+      parsed: null,
+      parse_error:
+        recovered.parse_error ??
+        (jsonParseError instanceof Error ? jsonParseError.message : "Unknown JSON parse error")
+    };
+  }
+};
+
+const parseOutputWithSchemaPreference = (
+  responseText: string,
+  outputSchema: {
+    safeParse: (value: unknown) => { success: true } | { success: false };
+  }
+): { parsed: unknown | null; parse_error: string | null } => {
+  return parseProviderResponseJson(responseText, (candidate) => outputSchema.safeParse(candidate).success);
 };
 
 export const sanitizeGeminiResponseJsonSchema = (value: unknown): unknown => {
@@ -641,25 +719,17 @@ export class GeminiAiProvider implements AiProvider {
 
           await request.onStage?.("parsing_output");
 
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(responseText);
-          } catch (jsonParseError) {
-            const recovered = tryParseRecoveredJson(responseText);
-            if (recovered.parsed === null) {
-              throw new AiProviderError("Gemini returned non-JSON output", {
-                reason: "output_json_unparseable",
-                parse_error:
-                  recovered.parse_error ??
-                  (jsonParseError instanceof Error ? jsonParseError.message : "Unknown JSON parse error"),
-                recovery_attempted: true,
-                raw_output_excerpt: toDebugExcerpt(responseText),
-                attempted_models: attemptedModels
-              });
-            }
-
-            parsed = recovered.parsed;
+          const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
+          if (parsedResult.parsed === null) {
+            throw new AiProviderError("Gemini returned non-JSON output", {
+              reason: "output_json_unparseable",
+              parse_error: parsedResult.parse_error,
+              recovery_attempted: true,
+              raw_output_excerpt: toDebugExcerpt(responseText),
+              attempted_models: attemptedModels
+            });
           }
+          const parsed = parsedResult.parsed;
 
           const outputPayload = asRecord(parsed);
           if (!outputPayload) {
