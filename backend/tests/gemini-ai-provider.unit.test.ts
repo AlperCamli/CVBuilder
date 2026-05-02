@@ -622,6 +622,7 @@ describe("GeminiAiProvider", () => {
       port: 4000,
       logLevel: "silent",
       frontendAppUrl: "http://localhost:5173",
+      corsAllowedOrigins: [],
       ai: {
         provider: "gemini",
         defaultModel: "gemini-3-flash-preview",

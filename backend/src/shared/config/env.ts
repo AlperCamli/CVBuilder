@@ -14,6 +14,7 @@ const envSchema = z
     PORT: z.coerce.number().int().positive().default(4000),
     LOG_LEVEL: z.string().min(1).default("info"),
     FRONTEND_APP_URL: z.string().url().default("http://localhost:5173"),
+    CORS_ALLOWED_ORIGINS: z.string().optional(),
     AI_PROVIDER: aiProviderSchema.default("mock"),
     AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
     AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
@@ -67,6 +68,7 @@ export interface AppConfig {
   port: number;
   logLevel: string;
   frontendAppUrl: string;
+  corsAllowedOrigins: string[];
   ai: {
     provider: z.infer<typeof aiProviderSchema>;
     defaultModel: string;
@@ -152,6 +154,10 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
   }
 
   const frontendAppUrl = parsed.data.FRONTEND_APP_URL;
+  const corsAllowedOrigins = (parsed.data.CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
 
   return {
     appName: parsed.data.APP_NAME,
@@ -160,6 +166,7 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
     port: parsed.data.PORT,
     logLevel: parsed.data.LOG_LEVEL,
     frontendAppUrl,
+    corsAllowedOrigins,
     ai: {
       provider: parsed.data.AI_PROVIDER,
       defaultModel: parsed.data.AI_DEFAULT_MODEL,

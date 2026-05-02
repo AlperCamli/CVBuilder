@@ -3,6 +3,16 @@ import { cvContentInputSchema } from "../../shared/cv-content/cv-content.schemas
 
 const uuidSchema = z.string().uuid();
 
+const ALLOWED_IMPORT_MIME_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-word.document.macroenabled.12",
+  "application/msword",
+  "text/plain",
+  "application/rtf",
+  "text/rtf"
+] as const;
+
 export const importIdParamSchema = z
   .object({
     importId: uuidSchema
@@ -12,13 +22,7 @@ export const importIdParamSchema = z
 export const createImportSessionSchema = z
   .object({
     original_filename: z.string().trim().min(1).max(260),
-    mime_type: z
-      .string()
-      .trim()
-      .max(160)
-      .optional()
-      .default("application/octet-stream")
-      .transform((value) => (value.length > 0 ? value : "application/octet-stream")),
+    mime_type: z.enum(ALLOWED_IMPORT_MIME_TYPES),
     size_bytes: z.coerce.number().int().min(0),
     storage_bucket: z.string().trim().min(1).max(128),
     storage_path: z.string().trim().min(1).max(512),

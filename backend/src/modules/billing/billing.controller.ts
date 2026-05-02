@@ -47,6 +47,10 @@ export class BillingController {
   postWebhooks = asyncHandler(async (request: Request, response: Response) => {
     const signature = request.header("stripe-signature");
 
+    if (!signature) {
+      throw new ValidationError("Stripe webhook endpoint requires stripe-signature header");
+    }
+
     if (!Buffer.isBuffer(request.body)) {
       throw new ValidationError("Stripe webhook endpoint requires raw request body");
     }

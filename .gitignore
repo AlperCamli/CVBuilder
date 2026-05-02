@@ -9,3 +9,6 @@
 **/.env
 **/.env.*
 !**/.env.example
+
+# Security audit (local only)
+SECURITY_AUDIT.md

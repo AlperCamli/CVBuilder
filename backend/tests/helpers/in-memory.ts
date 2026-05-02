@@ -423,6 +423,7 @@ export const createTestConfig = (): AppConfig => {
     port: 9999,
     logLevel: "silent",
     frontendAppUrl: "http://localhost:5173",
+    corsAllowedOrigins: [],
     ai: {
       provider: "mock",
       defaultModel: "mock-cv-builder-v1",

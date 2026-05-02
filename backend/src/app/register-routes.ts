@@ -1,4 +1,6 @@
 import type { Router } from "express";
+import type { AppConfig } from "../shared/config/env";
+import { createAiRateLimiter } from "../shared/middleware/rate-limit";
 import { createAuthMiddleware } from "../modules/auth/auth.middleware";
 import { AiController } from "../modules/ai/ai.controller";
 import { createAiRouter } from "../modules/ai/ai.routes";
@@ -30,8 +32,13 @@ import { BillingController } from "../modules/billing/billing.controller";
 import { createBillingRouter } from "../modules/billing/billing.routes";
 import type { AppServices } from "./build-services";
 
-export const registerV1Routes = (router: Router, services: AppServices): void => {
+export const registerV1Routes = (
+  router: Router,
+  services: AppServices,
+  config: AppConfig
+): void => {
   const authMiddleware = createAuthMiddleware(services.authService);
+  const aiRateLimiter = createAiRateLimiter(config);
 
   const systemController = new SystemController(services.systemService);
   const usersController = new UsersController(services.usersService);
@@ -57,7 +64,7 @@ export const registerV1Routes = (router: Router, services: AppServices): void =>
   router.use(createJobsRouter(jobsController, authMiddleware));
   router.use(createCoverLettersRouter(coverLettersController, authMiddleware));
   router.use(createCvRevisionsRouter(cvRevisionsController, authMiddleware));
-  router.use(createAiRouter(aiController, authMiddleware));
+  router.use(createAiRouter(aiController, authMiddleware, aiRateLimiter));
   router.use(createTemplatesRouter(templatesController, authMiddleware));
   router.use(createRenderingRouter(renderingController, authMiddleware));
   router.use(createExportsRouter(exportsController, authMiddleware));

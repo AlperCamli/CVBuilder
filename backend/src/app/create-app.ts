@@ -1,10 +1,12 @@
 import cors from "cors";
 import express, { Router, type Express } from "express";
+import helmet from "helmet";
 import type { Logger } from "pino";
 import { getConfig, type AppConfig } from "../shared/config/env";
 import { createLogger, createRequestLogger } from "../shared/logging/logger";
 import { createErrorHandler } from "../shared/middleware/error-handler";
 import { notFoundMiddleware } from "../shared/middleware/not-found";
+import { createGlobalRateLimiter } from "../shared/middleware/rate-limit";
 import { buildDefaultServices, type AppServices, type ServiceOverrides } from "./build-services";
 import { registerV1Routes } from "./register-routes";
 
@@ -71,24 +73,42 @@ export const createApp = (options?: CreateAppOptions): Express => {
   const app = express();
 
   app.disable("x-powered-by");
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(createRequestLogger(logger));
   app.use("/api/v1/billing/webhooks", express.raw({ type: "application/json" }));
   app.use(express.json());
 
+  const allowedOrigins = new Set<string>([
+    config.frontendAppUrl,
+    ...config.corsAllowedOrigins
+  ]);
+  if (config.appEnv === "development" || config.appEnv === "test") {
+    allowedOrigins.add("http://localhost:5173");
+    allowedOrigins.add("http://localhost:3000");
+    allowedOrigins.add("http://127.0.0.1:5173");
+  }
+
   app.use(
     cors({
-      origin: config.appEnv === "production" ? config.frontendAppUrl : true,
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.has(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error(`Origin not allowed by CORS: ${origin}`));
+      },
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"]
     })
   );
 
   const v1Router = Router();
-  registerV1Routes(v1Router, services);
+  v1Router.use(createGlobalRateLimiter(config));
+  registerV1Routes(v1Router, services, config);
   app.use("/api/v1", v1Router);
 
   app.use(notFoundMiddleware);
-  app.use(createErrorHandler());
+  app.use(createErrorHandler(config));
 
   return app;
 };
