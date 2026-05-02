@@ -41,6 +41,39 @@ const SECTION_TYPE_ALIASES: Record<string, string> = {
 
 const GENERIC_SECTION_TYPE_PATTERN = /^section[_-]?\d+$/i;
 
+const HEADER_LIKE_ROOT_KEYS = new Set([
+  "full_name",
+  "name",
+  "headline",
+  "title",
+  "email",
+  "phone",
+  "location",
+  "city",
+  "country",
+  "social_links",
+  "urls",
+  "links",
+  "github",
+  "linkedin",
+  "website",
+  "photo",
+  "avatar"
+]);
+
+const ROOT_RESERVED_KEYS = new Set([
+  "current_content",
+  "generation_summary",
+  "changed_block_ids",
+  "sections",
+  "version",
+  "language",
+  "metadata"
+]);
+
+const RECOVERY_GENERATION_SUMMARY =
+  "Tailored draft recovered from incomplete model output; master CV preserved as baseline.";
+
 const SECTION_STRUCTURAL_KEYS = new Set([
   "id",
   "type",
@@ -335,11 +368,117 @@ const coerceSection = (value: unknown, index: number): Record<string, unknown> =
   };
 };
 
+const countHeaderLikeRootSignals = (payload: Record<string, unknown>): number => {
+  let count = 0;
+  for (const key of Object.keys(payload)) {
+    if (HEADER_LIKE_ROOT_KEYS.has(key.toLowerCase())) {
+      count += 1;
+    }
+  }
+  return count;
+};
+
+const collectHeaderRootFields = (payload: Record<string, unknown>): Record<string, unknown> => {
+  const fields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (ROOT_RESERVED_KEYS.has(key.toLowerCase())) {
+      continue;
+    }
+    if (key.startsWith("_")) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        fields[key] = value;
+      }
+      continue;
+    }
+    if (typeof value === "object" && value !== null) {
+      fields[key] = value;
+      continue;
+    }
+    if (isMeaningfulScalar(value)) {
+      fields[key] = value;
+    }
+  }
+  return fields;
+};
+
+const resolveRecoveredGenerationSummary = (payload: Record<string, unknown>): string => {
+  const provided = asTrimmedString(payload.generation_summary);
+  return provided || RECOVERY_GENERATION_SUMMARY;
+};
+
+const resolveRecoveredChangedBlockIds = (payload: Record<string, unknown>): string[] => {
+  if (!Array.isArray(payload.changed_block_ids)) {
+    return [];
+  }
+  return payload.changed_block_ids
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+};
+
+const buildContentFromRootSections = (
+  payload: Record<string, unknown>
+): Record<string, unknown> => {
+  const sections = Array.isArray(payload.sections) ? payload.sections : [];
+  const language = asTrimmedString(payload.language);
+  const version = asTrimmedString(payload.version);
+  return {
+    version: version || "v1",
+    ...(language ? { language } : {}),
+    metadata: asRecord(payload.metadata),
+    sections: sections.map((section, index) => coerceSection(section, index))
+  };
+};
+
+const buildContentFromHeaderRoot = (
+  payload: Record<string, unknown>
+): Record<string, unknown> => {
+  const headerFields = collectHeaderRootFields(payload);
+  const language = asTrimmedString(payload.language);
+  return {
+    version: "v1",
+    ...(language ? { language } : {}),
+    metadata: asRecord(payload.metadata),
+    sections: [
+      {
+        type: "header",
+        order: 0,
+        blocks: [
+          {
+            type: "contact",
+            order: 0,
+            fields: headerFields
+          }
+        ]
+      }
+    ]
+  };
+};
+
 export const coerceTailoredDraftOutputPayload = (
   outputPayload: Record<string, unknown>
 ): Record<string, unknown> => {
   const currentContent = asRecord(outputPayload.current_content);
+
   if (Object.keys(currentContent).length === 0) {
+    if (Array.isArray(outputPayload.sections)) {
+      return {
+        current_content: buildContentFromRootSections(outputPayload),
+        generation_summary: resolveRecoveredGenerationSummary(outputPayload),
+        changed_block_ids: resolveRecoveredChangedBlockIds(outputPayload)
+      };
+    }
+
+    if (countHeaderLikeRootSignals(outputPayload) >= 2) {
+      return {
+        current_content: buildContentFromHeaderRoot(outputPayload),
+        generation_summary: resolveRecoveredGenerationSummary(outputPayload),
+        changed_block_ids: resolveRecoveredChangedBlockIds(outputPayload)
+      };
+    }
+
     return outputPayload;
   }
 

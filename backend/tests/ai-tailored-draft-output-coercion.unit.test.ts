@@ -118,6 +118,62 @@ describe("coerceTailoredDraftOutputPayload", () => {
     }
   });
 
+  it("recovers a header-only root payload by wrapping it as a header section", () => {
+    const coerced = coerceTailoredDraftOutputPayload({
+      full_name: "Alper Camli",
+      headline: "Senior Engineer",
+      email: "alper@example.com",
+      phone: "+90 500 000 0000",
+      location: "Istanbul, Turkey",
+      social_links: ["github.com/alpercamli"],
+      urls: ["https://example.com"],
+      photo: "https://cdn/example.png"
+    });
+
+    const parsed = tailoredDraftOutputSchema.safeParse(coerced);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const sections = parsed.data.current_content.sections ?? [];
+      expect(sections).toHaveLength(1);
+      expect(sections[0]?.type).toBe("header");
+      expect(sections[0]?.blocks?.[0]?.fields).toEqual(
+        expect.objectContaining({
+          full_name: "Alper Camli",
+          email: "alper@example.com",
+          social_links: ["github.com/alpercamli"]
+        })
+      );
+      expect(parsed.data.generation_summary.length).toBeGreaterThan(0);
+      expect(parsed.data.changed_block_ids).toEqual([]);
+    }
+  });
+
+  it("hoists root-level sections into current_content when wrapper is missing", () => {
+    const coerced = coerceTailoredDraftOutputPayload({
+      sections: [
+        {
+          type: "summary",
+          blocks: [
+            {
+              type: "summary",
+              fields: { text: "Data professional with BI experience." }
+            }
+          ]
+        }
+      ],
+      generation_summary: "Tailored draft generated.",
+      changed_block_ids: ["summary-1"]
+    });
+
+    const parsed = tailoredDraftOutputSchema.safeParse(coerced);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.current_content.sections?.[0]?.type).toBe("summary");
+      expect(parsed.data.generation_summary).toBe("Tailored draft generated.");
+      expect(parsed.data.changed_block_ids).toEqual(["summary-1"]);
+    }
+  });
+
   it("infers header section type from contact-like field keys", () => {
     const coerced = coerceTailoredDraftOutputPayload({
       current_content: {
