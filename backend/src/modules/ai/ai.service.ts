@@ -38,7 +38,7 @@ import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import { cvParseOutputSchema } from "./flows/flow-contracts";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
-import { recoverTailoredDraftEmptyFieldsFromMaster } from "./tailored-draft-empty-field-recovery";
+import { stabilizeTailoredDraftFromMaster } from "./tailored-draft-empty-field-recovery";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -1279,17 +1279,11 @@ export class AiService {
         input.language ?? tailoredCv.language
       );
 
-      const initialSemantic = evaluateTailoredDraftSemanticContent(normalizedContent);
-      if (!initialSemantic.is_valid) {
-        const recovered = recoverTailoredDraftEmptyFieldsFromMaster(
-          normalizedContent,
-          masterCv.current_content
-        );
-
-        if (recovered.hydrated_block_count > 0) {
-          normalizedContent = recovered.content;
-        }
-      }
+      const stabilized = stabilizeTailoredDraftFromMaster(
+        normalizedContent,
+        masterCv.current_content
+      );
+      normalizedContent = stabilized.content;
 
       this.assertTailoredDraftSemanticContent(normalizedContent);
 

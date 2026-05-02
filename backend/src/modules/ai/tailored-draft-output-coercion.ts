@@ -39,6 +39,8 @@ const SECTION_TYPE_ALIASES: Record<string, string> = {
   work_experience: "experience"
 };
 
+const GENERIC_SECTION_TYPE_PATTERN = /^section[_-]?\d+$/i;
+
 const SECTION_STRUCTURAL_KEYS = new Set([
   "id",
   "type",
@@ -77,6 +79,15 @@ const isMeaningfulScalar = (value: unknown): boolean => {
     return true;
   }
   return value !== null && value !== undefined;
+};
+
+const isGenericSectionType = (value: string): boolean => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return normalized === "custom" || GENERIC_SECTION_TYPE_PATTERN.test(normalized);
 };
 
 const extractLooseFields = (
@@ -123,10 +134,67 @@ const resolveSectionType = (section: Record<string, unknown>, index: number): st
       section.name,
       section.label,
       section.title
-    ) || `section_${index + 1}`;
+    ) || "custom";
 
-  const slug = slugify(rawType) || `section_${index + 1}`;
+  const slug = slugify(rawType) || "custom";
   return SECTION_TYPE_ALIASES[slug] ?? slug;
+};
+
+const inferSectionTypeFromFields = (
+  section: Record<string, unknown>,
+  blocks: Array<Record<string, unknown>>
+): string | null => {
+  const fieldKeys = new Set<string>();
+
+  for (const [key, value] of Object.entries(section)) {
+    if (SECTION_STRUCTURAL_KEYS.has(key)) {
+      continue;
+    }
+    if (isMeaningfulScalar(value) || Array.isArray(value) || (typeof value === "object" && value !== null)) {
+      fieldKeys.add(key.toLowerCase());
+    }
+  }
+
+  for (const block of blocks) {
+    const fields = asRecord(block.fields);
+    for (const key of Object.keys(fields)) {
+      fieldKeys.add(key.toLowerCase());
+    }
+  }
+
+  const hasAny = (keys: string[]): boolean => keys.some((key) => fieldKeys.has(key));
+  const hasHeaderSignals =
+    hasAny(["full_name", "name", "email", "phone", "location", "github", "linkedin", "social_links", "urls"]) &&
+    hasAny(["email", "phone", "location"]);
+  if (hasHeaderSignals) {
+    return "header";
+  }
+
+  if (hasAny(["institution", "school", "university", "degree", "field_of_study", "major", "gpa"])) {
+    return "education";
+  }
+
+  if (hasAny(["role", "company", "organization", "employer", "responsibilities", "achievements"])) {
+    return "experience";
+  }
+
+  if (hasAny(["language", "proficiency", "level", "certificate", "score"])) {
+    return "languages";
+  }
+
+  if (hasAny(["skills", "skill", "tools", "technologies", "stack"])) {
+    return "skills";
+  }
+
+  if (hasAny(["issuer", "award", "awarded_by"])) {
+    return "awards";
+  }
+
+  if (hasAny(["reference_name", "referee", "relationship"]) && hasAny(["email", "phone"])) {
+    return "references";
+  }
+
+  return null;
 };
 
 const resolveBlockType = (block: Record<string, unknown>, fallbackSectionType: string): string => {
@@ -255,9 +323,13 @@ const coerceSection = (value: unknown, index: number): Record<string, unknown> =
       ? coercedBlocks
       : [deriveSectionFallbackBlock(section, sectionType)];
 
+  const inferredType =
+    isGenericSectionType(sectionType) ? inferSectionTypeFromFields(section, blocks) : null;
+  const finalSectionType = inferredType ?? sectionType;
+
   return {
     ...section,
-    type: sectionType,
+    type: finalSectionType,
     order: sectionOrder,
     blocks
   };

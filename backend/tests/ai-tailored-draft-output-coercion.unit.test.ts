@@ -117,4 +117,39 @@ describe("coerceTailoredDraftOutputPayload", () => {
       });
     }
   });
+
+  it("infers header section type from contact-like field keys", () => {
+    const coerced = coerceTailoredDraftOutputPayload({
+      current_content: {
+        version: "v1",
+        language: "en",
+        metadata: {},
+        sections: [
+          {
+            name: "Section 1",
+            full_name: "Alper Camli",
+            email: "alper@example.com",
+            phone: "+90 500 000 0000",
+            location: "Istanbul, Turkey",
+            github: "github.com/alpercamli"
+          }
+        ]
+      },
+      generation_summary: "Tailored draft generated.",
+      changed_block_ids: []
+    });
+
+    const parsed = tailoredDraftOutputSchema.safeParse(coerced);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const section = parsed.data.current_content.sections?.[0];
+      expect(section?.type).toBe("header");
+      expect(section?.blocks?.[0]?.fields).toEqual(
+        expect.objectContaining({
+          full_name: "Alper Camli",
+          email: "alper@example.com"
+        })
+      );
+    }
+  });
 });

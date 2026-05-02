@@ -170,6 +170,8 @@ const SECTION_TITLE_OVERRIDES: Record<string, string> = {
   references: "References"
 };
 
+const GENERIC_SECTION_TYPE_PATTERN = /^section[_-]?\d+$/i;
+
 const asRecord = (value: unknown): Record<string, unknown> => {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -324,6 +326,10 @@ const buildMetadataLine = (dateRange: string | null, location: string | null): s
 };
 
 const getSectionTitle = (sectionType: string): string => {
+  if (sectionType.toLowerCase() === "custom" || GENERIC_SECTION_TYPE_PATTERN.test(sectionType)) {
+    return "Additional Information";
+  }
+
   if (SECTION_TITLE_OVERRIDES[sectionType]) {
     return SECTION_TITLE_OVERRIDES[sectionType];
   }
@@ -562,9 +568,32 @@ const collectLanguagesInlineText = (section: RenderingSection): string | null =>
 const mapSection = (section: RenderingSection): PresentationSection | null => {
   const type = section.type;
   const title = getSectionTitle(type);
+  const normalizedType = type.toLowerCase();
 
-  if (type.toLowerCase() === "header") {
+  if (normalizedType === "header") {
     return null;
+  }
+
+  if (!SECTION_TITLE_OVERRIDES[normalizedType]) {
+    const fieldKeys = new Set<string>();
+    for (const block of section.blocks) {
+      if (block.visibility !== "visible") {
+        continue;
+      }
+      for (const key of Object.keys(block.normalized_fields)) {
+        fieldKeys.add(key.toLowerCase());
+      }
+    }
+
+    const isHeaderLike =
+      fieldKeys.has("full_name") ||
+      fieldKeys.has("name") ||
+      fieldKeys.has("social_links") ||
+      ((fieldKeys.has("email") || fieldKeys.has("phone")) && fieldKeys.has("location"));
+
+    if (isHeaderLike) {
+      return null;
+    }
   }
 
   if (type === "skills") {

@@ -306,4 +306,53 @@ describe("rendering presentation mapper", () => {
     expect(presentation.header.social_links.length).toBeGreaterThan(0);
     expect(presentation.sections.some((section) => section.type === "header")).toBe(false);
   });
+
+  it("filters header-like generic sections and maps generic section title safely", () => {
+    const payload = renderingPayload();
+    payload.sections.unshift({
+      id: "section-1",
+      type: "section_1",
+      title: "Section 1",
+      order: -1,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "section-1-block-1",
+          type: "text",
+          normalized_fields: {
+            full_name: field("Alper Çamlı", "Alper Çamlı", ["Alper Çamlı"]),
+            email: field("alper@example.com", "alper@example.com", ["alper@example.com"]),
+            phone: field("+90 500 000 00 00", "+90 500 000 00 00", ["+90 500 000 00 00"]),
+            location: field("Istanbul, Turkey", "Istanbul, Turkey", ["Istanbul, Turkey"])
+          }
+        })
+      ]
+    });
+
+    payload.sections.push({
+      id: "section-custom",
+      type: "section_9",
+      title: "Section 9",
+      order: 99,
+      meta: {},
+      plain_text: "Some additional info",
+      blocks: [
+        block({
+          id: "section-custom-block-1",
+          type: "text",
+          normalized_fields: {
+            text: field("Some additional info", "Some additional info", ["Some additional info"])
+          },
+          plain_text: "Some additional info"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+
+    expect(presentation.sections.some((section) => section.id === "section-1")).toBe(false);
+    const additionalSection = presentation.sections.find((section) => section.id === "section-custom");
+    expect(additionalSection?.title).toBe("Additional Information");
+  });
 });
