@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import { ConflictError, NotFoundError } from "../../shared/errors/app-error";
+import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
@@ -106,6 +106,8 @@ export class ImportsService {
     session: SessionContext,
     input: CreateImportSessionInput
   ): Promise<ImportDetail> {
+    this.assertImportStorageLocation(session.appUser.id, input.storage_bucket, input.storage_path);
+
     const sourceFile = await this.importsRepository.createFile({
       user_id: session.appUser.id,
       file_type: "source_upload",
@@ -376,6 +378,26 @@ export class ImportsService {
         updated_at: updatedImport.updated_at
       }
     };
+  }
+
+  private assertImportStorageLocation(
+    userId: string,
+    storageBucket: string,
+    storagePath: string
+  ): void {
+    const expectedPrefix = `users/${userId}/imports/`;
+
+    if (
+      storageBucket !== DEFAULT_IMPORTS_STORAGE_BUCKET ||
+      typeof storagePath !== "string" ||
+      !storagePath.startsWith(expectedPrefix) ||
+      storagePath.length <= expectedPrefix.length ||
+      storagePath.includes("..") ||
+      storagePath.includes("\\") ||
+      storagePath.includes(" ")
+    ) {
+      throw new ValidationError("Invalid storage location for import session");
+    }
   }
 
   private async requireImportDetail(userId: string, importId: string) {

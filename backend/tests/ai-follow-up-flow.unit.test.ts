@@ -129,6 +129,11 @@ describe("AiService follow_up_questions flow", () => {
       resolve: resolvePrompt
     } as unknown as AiPromptResolver;
 
+    const billingService = {
+      assertActionAllowed: vi.fn().mockResolvedValue(undefined),
+      recordAiActionUsage: vi.fn().mockResolvedValue(undefined)
+    } as unknown as BillingService;
+
     return new AiService(
       aiRepository,
       aiProvider,
@@ -138,7 +143,7 @@ describe("AiService follow_up_questions flow", () => {
       {} as CvRevisionsService,
       {} as TemplatesService,
       promptResolver,
-      {} as BillingService
+      billingService
     );
   };
 

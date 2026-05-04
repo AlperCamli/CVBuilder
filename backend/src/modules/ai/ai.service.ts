@@ -277,6 +277,11 @@ export class AiService {
     session: SessionContext,
     input: TailoringRunStartInput
   ): Promise<TailoringRunStartResponse> {
+    await this.billingService.assertActionAllowed(
+      session.appUser.id,
+      input.flow_type === "tailored_draft" ? "tailored_cv_generation" : "ai_action"
+    );
+
     const parsedInput = this.parseTailoringRunInput(input.flow_type, input.input);
     const runtimeContext = await this.assertTailoringRunInput(
       session.appUser.id,
@@ -413,6 +418,8 @@ export class AiService {
   }
 
   async analyzeJob(session: SessionContext, input: JobAnalysisInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
     const masterCv = await this.requireMasterCv(session.appUser.id, input.master_cv_id);
 
     const flowInput = {
@@ -431,6 +438,8 @@ export class AiService {
       user_prompt: `Analyze role fit for ${input.job.job_title} at ${input.job.company_name}.`
     });
 
+    await this.billingService.recordAiActionUsage(session.appUser.id);
+
     return {
       ai_run_id: executed.ai_run.id,
       ...asRecord(executed.output)
@@ -438,6 +447,8 @@ export class AiService {
   }
 
   async generateFollowUpQuestions(session: SessionContext, input: FollowUpQuestionsInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
     await this.requireMasterCv(session.appUser.id, input.master_cv_id);
 
     const priorAnalysis = asRecord(input.prior_analysis);
@@ -456,6 +467,8 @@ export class AiService {
       input_payload: flowInput,
       user_prompt: `Generate follow-up questions for ${input.job.job_title} at ${input.job.company_name}.`
     });
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
 
     return {
       ai_run_id: executed.ai_run.id,
@@ -775,6 +788,8 @@ export class AiService {
   }
 
   async compareBlock(session: SessionContext, input: BlockCompareInput) {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+
     const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
     const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
     const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
@@ -805,6 +820,8 @@ export class AiService {
       },
       user_prompt: `Compare block ${input.block_id} to job requirements.`
     });
+
+    await this.billingService.recordAiActionUsage(session.appUser.id);
 
     return {
       ai_run_id: executed.ai_run.id,
@@ -1178,12 +1195,16 @@ export class AiService {
           : null
     };
 
-    return this.completeRunWithPayload(
+    const completed = await this.completeRunWithPayload(
       userId,
       run.id,
       resultPayload as unknown as Record<string, unknown>,
       executed.token_usage
     );
+
+    await this.billingService.recordAiActionUsage(userId);
+
+    return completed;
   }
 
   private async executeTailoringFollowUpQuestionsRun(
@@ -1216,12 +1237,16 @@ export class AiService {
         : []
     };
 
-    return this.completeRunWithPayload(
+    const completed = await this.completeRunWithPayload(
       userId,
       run.id,
       resultPayload as unknown as Record<string, unknown>,
       executed.token_usage
     );
+
+    await this.billingService.recordAiActionUsage(userId);
+
+    return completed;
   }
 
   private async executeTailoringDraftRun(
