@@ -198,7 +198,7 @@ export function CVPresentationPreview({
     observer.observe(node);
 
     return () => observer.disconnect();
-  }, [presentation, mode]);
+  }, [presentation, mode, resolvedFontScale, resolvedSpacingScale, resolvedLayoutScale]);
 
   const rootScaleStyle = {
     "--cv-font-scale": String(resolvedFontScale)
@@ -352,7 +352,8 @@ export function CVPresentationPreview({
     );
   }
 
-  const pageCount = Math.max(1, Math.ceil(contentHeight / PAGE_HEIGHT_PX));
+  const pagedContentHeight = Math.max(1, contentHeight - padY);
+  const pageCount = Math.max(1, Math.ceil((pagedContentHeight + 0.5) / PAGE_HEIGHT_PX));
 
   return (
     <div style={{ ...rootScaleStyle, position: "relative" }}>

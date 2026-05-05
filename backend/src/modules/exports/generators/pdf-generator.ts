@@ -22,6 +22,7 @@ interface DrawWrappedTextOptions {
   maxWidth: number;
   x: number;
   leadingGap?: number;
+  align?: "left" | "right";
 }
 
 export const normalizePdfText = (value: string): string => value.replace(/\s+/g, " ").trim();
@@ -180,40 +181,88 @@ const renderSectionDefault = (
   }
 
   for (const block of section.blocks) {
-    if (block.headline) {
-      drawWrappedText({
-        text: block.headline,
-        font: fonts.bold,
-        size: bodyFontSize,
-        color: colors.body,
-        lineHeight: bodyFontSize + 4,
-        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-        x: PAGE_MARGIN
-      });
-    }
+    const hasInlineMetaHeader = Boolean(block.metadata_line && (block.headline || block.subheadline));
+    if (hasInlineMetaHeader) {
+      const headerStartY = drawContext.cursorY;
+      const metadataWidth = 110;
+      const headerGap = 16;
+      const contentWidth = PAGE_WIDTH - PAGE_MARGIN * 2 - metadataWidth - headerGap;
+      const metadataX = PAGE_WIDTH - PAGE_MARGIN - metadataWidth;
 
-    if (block.subheadline) {
       drawWrappedText({
-        text: block.subheadline,
-        font: fonts.regular,
-        size: bodyFontSize - 1,
-        color: colors.body,
-        lineHeight: bodyFontSize + 3,
-        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-        x: PAGE_MARGIN
-      });
-    }
-
-    if (block.metadata_line) {
-      drawWrappedText({
-        text: block.metadata_line,
+        text: block.metadata_line ?? "",
         font: fonts.regular,
         size: Math.max(9, bodyFontSize - 2),
         color: colors.muted,
         lineHeight: bodyFontSize + 2,
-        maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
-        x: PAGE_MARGIN
+        maxWidth: metadataWidth,
+        x: metadataX,
+        align: "right"
       });
+      const metadataEndY = drawContext.cursorY;
+      drawContext.cursorY = headerStartY;
+
+      if (block.headline) {
+        drawWrappedText({
+          text: block.headline,
+          font: fonts.bold,
+          size: bodyFontSize,
+          color: colors.body,
+          lineHeight: bodyFontSize + 4,
+          maxWidth: contentWidth,
+          x: PAGE_MARGIN
+        });
+      }
+
+      if (block.subheadline) {
+        drawWrappedText({
+          text: block.subheadline,
+          font: fonts.regular,
+          size: bodyFontSize - 1,
+          color: colors.body,
+          lineHeight: bodyFontSize + 3,
+          maxWidth: contentWidth,
+          x: PAGE_MARGIN
+        });
+      }
+
+      drawContext.cursorY = Math.min(drawContext.cursorY, metadataEndY);
+    } else {
+      if (block.headline) {
+        drawWrappedText({
+          text: block.headline,
+          font: fonts.bold,
+          size: bodyFontSize,
+          color: colors.body,
+          lineHeight: bodyFontSize + 4,
+          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+          x: PAGE_MARGIN
+        });
+      }
+
+      if (block.subheadline) {
+        drawWrappedText({
+          text: block.subheadline,
+          font: fonts.regular,
+          size: bodyFontSize - 1,
+          color: colors.body,
+          lineHeight: bodyFontSize + 3,
+          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+          x: PAGE_MARGIN
+        });
+      }
+
+      if (block.metadata_line) {
+        drawWrappedText({
+          text: block.metadata_line,
+          font: fonts.regular,
+          size: Math.max(9, bodyFontSize - 2),
+          color: colors.muted,
+          lineHeight: bodyFontSize + 2,
+          maxWidth: PAGE_WIDTH - PAGE_MARGIN * 2,
+          x: PAGE_MARGIN
+        });
+      }
     }
 
     if (block.bullets.length > 0) {
@@ -410,8 +459,12 @@ export const generatePdfDocument = async (documentModel: ExportDocumentModel): P
 
       for (const line of wrappedLines) {
         ensureSpace(options.lineHeight);
+        const drawX =
+          options.align === "right"
+            ? options.x + Math.max(0, options.maxWidth - options.font.widthOfTextAtSize(line, options.size))
+            : options.x;
         drawContext.page.drawText(line, {
-          x: options.x,
+          x: drawX,
           y: drawContext.cursorY,
           size: options.size,
           font: options.font,
