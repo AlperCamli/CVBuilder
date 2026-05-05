@@ -6,7 +6,10 @@ export type PresentationTemplateLayout =
   | "modern-clean"
   | "minimal-professional"
   | "executive-timeline"
-  | "creative-portfolio";
+  | "creative-portfolio"
+  | "academic-classic"
+  | "tech-compact"
+  | "two-column-modern";
 
 export type PresentationLayoutMode =
   | "classic-single-column"
@@ -149,6 +152,54 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       page_background_hex: "#ffffff",
       section_spacing: 14,
       block_spacing: 10,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "academic-classic": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    tokens: {
+      font_family: "Times New Roman, Georgia, serif",
+      heading_color_hex: "#111827",
+      accent_color_hex: "#334155",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 16,
+      block_spacing: 12,
+      body_text_size: 12,
+      compact_density: true
+    }
+  },
+  "tech-compact": {
+    layout: "tech-compact",
+    mode: "compact-single-column",
+    tokens: {
+      font_family: "Verdana, Tahoma, sans-serif",
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#0d9488",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 11,
+      block_spacing: 8,
+      body_text_size: 10.5,
+      compact_density: true
+    }
+  },
+  "two-column-modern": {
+    layout: "two-column-modern",
+    mode: "portfolio-two-column",
+    tokens: {
+      font_family: "Helvetica, Arial, sans-serif",
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#0f766e",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
       body_text_size: 11,
       compact_density: true
     }
@@ -710,6 +761,102 @@ const mapSection = (section: RenderingSection): PresentationSection | null => {
           !item.metadata_line &&
           !item.body
         ) {
+          return null;
+        }
+
+        return item;
+      })
+      .filter((item): item is PresentationItem => item !== null);
+
+    if (items.length === 0) {
+      return null;
+    }
+
+    return {
+      id: section.id,
+      type,
+      title,
+      inline_text: null,
+      items
+    };
+  }
+
+  if (type === "awards" || type === "publications") {
+    const items = section.blocks
+      .filter((block) => block.visibility === "visible")
+      .map((block) => {
+        const titleValue =
+          type === "awards"
+            ? textByKey(block, ["name", "title", "award"]) || normalizeLine(block.derived.headline)
+            : textByKey(block, ["title", "name"]) || normalizeLine(block.derived.headline);
+        const subtitle =
+          type === "awards"
+            ? textByKey(block, ["issuer", "organization", "institution"])
+            : textByKey(block, ["publisher", "journal", "issuer", "organization", "institution"]);
+        const dateRange =
+          textByKey(block, ["date", "awarded_on", "published_on"]) || normalizeLine(block.derived.date_range);
+        const description = textByKey(block, ["description", "details", "notes"]);
+
+        const item: PresentationItem = {
+          id: block.id,
+          title: titleValue,
+          subtitle,
+          date_range: dateRange,
+          location: null,
+          metadata_line: dateRange,
+          body: description,
+          bullets: []
+        };
+
+        if (!item.title && !item.subtitle && !item.date_range && !item.metadata_line && !item.body) {
+          return null;
+        }
+
+        return item;
+      })
+      .filter((item): item is PresentationItem => item !== null);
+
+    if (items.length === 0) {
+      return null;
+    }
+
+    return {
+      id: section.id,
+      type,
+      title,
+      inline_text: null,
+      items
+    };
+  }
+
+  if (type === "references") {
+    const items = section.blocks
+      .filter((block) => block.visibility === "visible")
+      .map((block) => {
+        const name = textByKey(block, ["name", "full_name", "reference"]);
+        const jobTitle = textByKey(block, ["job_title", "title", "role", "position"]);
+        const organization = textByKey(block, ["organization", "company", "institution"]);
+        const email = textByKey(block, ["email"]);
+        const phone = textByKey(block, ["phone", "telephone", "mobile"]);
+
+        const subtitleParts = [jobTitle, organization]
+          .filter((value): value is string => Boolean(value))
+          .filter((value, index, values) => values.findIndex((item) => collapseForCompare(item) === collapseForCompare(value)) === index);
+
+        const bodyParts = [email, phone].filter((value): value is string => Boolean(value));
+
+        const item: PresentationItem = {
+          id: block.id,
+          title: name || normalizeLine(block.derived.headline),
+          subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : null,
+          date_range: null,
+          location: null,
+          metadata_line: null,
+          body: bodyParts.length > 0 ? bodyParts.join("\n") : null,
+          bullets: []
+        };
+
+        if (!item.title && !item.subtitle && !item.body) {
           return null;
         }
 

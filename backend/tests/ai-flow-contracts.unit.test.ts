@@ -27,6 +27,31 @@ const validCvContent = {
   ]
 };
 
+const validEducationContent = {
+  version: "v1",
+  language: "en",
+  metadata: {},
+  sections: [
+    {
+      id: "education",
+      type: "education",
+      order: 0,
+      blocks: [
+        {
+          id: "edu-1",
+          type: "education_item",
+          order: 0,
+          fields: {
+            institution: "Example University",
+            degree: "Bachelor",
+            field_of_study: "Computer Science"
+          }
+        }
+      ]
+    }
+  ]
+};
+
 describe("AI flow output contracts", () => {
   it("requires structured CV content for tailored_draft outputs", () => {
     const parsed = tailoredDraftOutputSchema.safeParse({
@@ -94,5 +119,71 @@ describe("AI flow output contracts", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("rejects tailored_draft output when education fields are not explicitly structured", () => {
+    const parsed = tailoredDraftOutputSchema.safeParse({
+      current_content: {
+        ...validEducationContent,
+        sections: [
+          {
+            ...validEducationContent.sections[0],
+            blocks: [
+              {
+                id: "edu-1",
+                type: "education_item",
+                order: 0,
+                fields: {
+                  institution: "Example University",
+                  degree: "Bachelor"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      generation_summary: "Generated draft.",
+      changed_block_ids: ["edu-1"]
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects import_improve output when education degree or field_of_study are missing", () => {
+    const parsed = importImproveOutputSchema.safeParse({
+      improved_content: {
+        ...validEducationContent,
+        sections: [
+          {
+            ...validEducationContent.sections[0],
+            blocks: [
+              {
+                id: "edu-1",
+                type: "education_item",
+                order: 0,
+                fields: {
+                  institution: "Example University",
+                  text: "Bachelor in Computer Science"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      generation_summary: "Improved imported CV.",
+      changed_block_ids: ["edu-1"]
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts import_improve output with structured education fields", () => {
+    const parsed = importImproveOutputSchema.safeParse({
+      improved_content: validEducationContent,
+      generation_summary: "Improved imported CV.",
+      changed_block_ids: ["edu-1"]
+    });
+
+    expect(parsed.success).toBe(true);
   });
 });

@@ -714,7 +714,7 @@ export class AiService {
       master_cv_id: actualMasterCvId,
       tailored_cv_id: input.tailored_cv_id ?? null,
       input_payload: flowInput,
-      user_prompt: `Generate a cover letter for the role of ${input.job_title} at ${input.company_name}.`
+      user_prompt: `Generate a cover letter for the role of ${input.job_title} at ${input.company_name}. Use real paragraph newlines and end with Sincerely, and the candidate name on separate lines.`
     });
 
     await this.billingService.recordAiActionUsage(session.appUser.id);

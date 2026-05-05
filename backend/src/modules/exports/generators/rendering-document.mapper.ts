@@ -5,7 +5,14 @@ import type {
 } from "../../rendering/rendering-presentation";
 
 export interface ExportDocumentTheme {
-  layout: "modern-clean" | "minimal-professional" | "executive-timeline" | "creative-portfolio";
+  layout:
+    | "modern-clean"
+    | "minimal-professional"
+    | "executive-timeline"
+    | "creative-portfolio"
+    | "academic-classic"
+    | "tech-compact"
+    | "two-column-modern";
   mode: "classic-single-column" | "compact-single-column" | "timeline-split" | "portfolio-two-column";
   heading_color_hex: string;
   accent_color_hex: string;

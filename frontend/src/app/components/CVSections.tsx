@@ -807,6 +807,18 @@ interface EducationItemProps {
   moveItem: (dragIndex: number, hoverIndex: number) => void;
 }
 
+const DEGREE_OPTIONS = [
+  "Associate",
+  "Bachelor",
+  "Master",
+  "PhD",
+  "MBA",
+  "Diploma",
+  "Certificate",
+  "High School",
+  "Other"
+] as const;
+
 function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: EducationItemProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -831,6 +843,12 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
   drag(drop(ref));
 
   const isCollapsed = item.collapsed;
+  const normalizedDegree = typeof item.degree === "string" ? item.degree.trim() : "";
+  const knownDegree = DEGREE_OPTIONS.find(
+    (option) => option.toLowerCase() === normalizedDegree.toLowerCase()
+  );
+  const degreeSelectValue = knownDegree ?? (normalizedDegree ? "Other" : "");
+  const showCustomDegreeInput = degreeSelectValue === "Other";
 
   return (
     <div
@@ -889,17 +907,45 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
             }}
           />
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              placeholder="Degree"
-              value={item.degree}
-              onChange={(e) => updateItem(index, { ...item, degree: e.target.value })}
-              className="px-2 py-1.5 rounded border"
-              style={{
-                fontSize: "13px",
-                borderColor: "var(--color-border-secondary)",
-              }}
-            />
+            <div className="space-y-2">
+              <select
+                value={degreeSelectValue}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  if (nextValue === "Other") {
+                    updateItem(index, { ...item, degree: knownDegree ? "" : item.degree });
+                    return;
+                  }
+
+                  updateItem(index, { ...item, degree: nextValue });
+                }}
+                className="w-full px-2 py-1.5 rounded border"
+                style={{
+                  fontSize: "13px",
+                  borderColor: "var(--color-border-secondary)",
+                }}
+              >
+                <option value="">Degree</option>
+                {DEGREE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              {showCustomDegreeInput && (
+                <input
+                  type="text"
+                  placeholder="Custom degree"
+                  value={item.degree || ""}
+                  onChange={(e) => updateItem(index, { ...item, degree: e.target.value })}
+                  className="w-full px-2 py-1.5 rounded border"
+                  style={{
+                    fontSize: "13px",
+                    borderColor: "var(--color-border-secondary)",
+                  }}
+                />
+              )}
+            </div>
             <input
               type="text"
               placeholder="Field of Study / Major *"

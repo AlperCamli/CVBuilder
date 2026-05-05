@@ -5,6 +5,35 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
+const flattenTextValues = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return [String(value)];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => flattenTextValues(entry));
+  }
+
+  if (isPlainRecord(value)) {
+    return Object.values(value).flatMap((entry) => flattenTextValues(entry));
+  }
+
+  return [];
+};
+
+const hasNonEmptyField = (fields: Record<string, unknown>, key: string): boolean => {
+  if (!(key in fields)) {
+    return false;
+  }
+
+  return flattenTextValues(fields[key]).some((value) => value.trim().length > 0);
+};
+
 const normalizedHintSchema = z.preprocess((value) => {
   if (typeof value !== "string") {
     return value;
@@ -94,6 +123,67 @@ const tailoredDraftContentSchema = cvContentInputSchema.superRefine((content, co
           path: ["sections", sectionIndex, "blocks", blockIndex, "fields"],
           message: "Block fields must be an object."
         });
+        continue;
+      }
+
+      const normalizedSectionType =
+        typeof section.type === "string"
+          ? section.type.trim().toLowerCase().replace(/[\s-]+/g, "_")
+          : "";
+      if (normalizedSectionType === "education") {
+        if (!hasNonEmptyField(block.fields, "degree")) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sections", sectionIndex, "blocks", blockIndex, "fields", "degree"],
+            message: "Education blocks must include a non-empty degree field."
+          });
+        }
+
+        if (!hasNonEmptyField(block.fields, "field_of_study")) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sections", sectionIndex, "blocks", blockIndex, "fields", "field_of_study"],
+            message: "Education blocks must include a non-empty field_of_study field."
+          });
+        }
+      }
+    }
+  }
+});
+
+const importImproveContentSchema = cvContentInputSchema.superRefine((content, context) => {
+  if (!Array.isArray(content.sections)) {
+    return;
+  }
+
+  for (const [sectionIndex, section] of content.sections.entries()) {
+    const normalizedSectionType =
+      typeof section.type === "string"
+        ? section.type.trim().toLowerCase().replace(/[\s-]+/g, "_")
+        : "";
+    if (normalizedSectionType !== "education" || !Array.isArray(section.blocks)) {
+      continue;
+    }
+
+    for (const [blockIndex, block] of section.blocks.entries()) {
+      if (!isPlainRecord(block.fields)) {
+        continue;
+      }
+
+      if (!hasNonEmptyField(block.fields, "degree")) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "fields", "degree"],
+          message: "Education blocks must include a non-empty degree field."
+        });
+      }
+
+      if (!hasNonEmptyField(block.fields, "field_of_study")) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "fields", "field_of_study"],
+          message: "Education blocks must include a non-empty field_of_study field."
+        });
       }
     }
   }
@@ -109,7 +199,7 @@ export const tailoredDraftOutputSchema = z
 
 export const importImproveOutputSchema = z
   .object({
-    improved_content: cvContentInputSchema,
+    improved_content: importImproveContentSchema,
     generation_summary: z.string().trim().min(1).max(2000),
     changed_block_ids: z.array(z.string().trim().min(1).max(128)).max(200)
   })

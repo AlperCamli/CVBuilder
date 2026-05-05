@@ -48,6 +48,10 @@ export interface DownloadAccess {
   expires_in_seconds: number;
 }
 
+interface SignedDownloadOptions {
+  forcedDownloadFilename?: string;
+}
+
 export interface UploadedExportObject {
   storage_bucket: string;
   storage_path: string;
@@ -177,7 +181,10 @@ export class FilesService {
     return this.filesRepository.findById(userId, fileId);
   }
 
-  async createSignedDownloadAccess(file: FileRecord): Promise<DownloadAccess> {
+  async createSignedDownloadAccess(
+    file: FileRecord,
+    options: SignedDownloadOptions = {}
+  ): Promise<DownloadAccess> {
     const ttl = this.options.downloadUrlTtlSeconds;
 
     let downloadUrl: string;
@@ -185,7 +192,8 @@ export class FilesService {
       downloadUrl = await this.filesRepository.createSignedDownloadUrl(
         file.storage_bucket,
         file.storage_path,
-        ttl
+        ttl,
+        options.forcedDownloadFilename
       );
     } catch (error) {
       throw new ExportStorageFailedError("Failed to prepare export download URL", {

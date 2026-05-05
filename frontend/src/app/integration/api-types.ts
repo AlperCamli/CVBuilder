@@ -316,7 +316,10 @@ export type PresentationTemplateLayout =
   | "modern-clean"
   | "minimal-professional"
   | "executive-timeline"
-  | "creative-portfolio";
+  | "creative-portfolio"
+  | "academic-classic"
+  | "tech-compact"
+  | "two-column-modern";
 
 export type PresentationLayoutMode =
   | "classic-single-column"

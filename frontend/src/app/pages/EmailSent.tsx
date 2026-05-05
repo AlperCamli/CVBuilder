@@ -53,54 +53,46 @@ export function EmailSent() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-8"
-      style={{
-        background:
-          "linear-gradient(135deg, var(--color-slate-950) 0%, var(--color-teal-900) 50%, var(--color-teal-600) 100%)"
-      }}
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: "var(--color-background-secondary)" }}
     >
       <div
-        className="w-full max-w-md p-8 rounded-2xl border text-center"
+        className="w-full max-w-md rounded-2xl border p-7 text-center"
         style={{
-          background: "rgba(255, 255, 255, 0.95)",
-          backdropFilter: "blur(20px)",
-          borderColor: "rgba(255, 255, 255, 0.2)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 80px rgba(29, 158, 117, 0.15)"
+          background: "var(--color-background-primary)",
+          borderColor: "var(--color-border-tertiary)"
         }}
       >
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-5">
           <div
-            className="w-20 h-20 rounded-full flex items-center justify-center"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-teal-100) 100%)",
-              animation: "emailPulse 2s ease-in-out infinite"
-            }}
+            className="w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ background: "var(--color-teal-50)" }}
           >
-            <Mail size={36} style={{ color: "var(--color-teal-600)" }} />
+            <Mail size={28} style={{ color: "var(--color-teal-700)" }} />
           </div>
         </div>
 
-        <h1 className="font-semibold mb-2" style={{ fontSize: "24px", color: "var(--color-text-primary)" }}>
+        <h1 style={{ fontSize: "24px", color: "var(--color-text-primary)", fontWeight: 600 }}>
           Check your email
         </h1>
-        <p className="mb-2" style={{ fontSize: "14px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
-          We've sent a verification link to
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", marginTop: "6px", lineHeight: "1.6" }}>
+          We sent a verification link to:
         </p>
         {email && (
-          <p className="mb-6 font-medium" style={{ fontSize: "15px", color: "var(--color-teal-700)" }}>
+          <p style={{ fontSize: "14px", color: "var(--color-teal-700)", marginTop: "6px", fontWeight: 600 }}>
             {email}
           </p>
         )}
-        <p className="mb-8" style={{ fontSize: "13px", color: "var(--color-slate-400)", lineHeight: "1.6" }}>
-          Click the link in the email to verify your account and get started.
-          If you don't see it, check your spam folder.
+
+        <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginTop: "16px", lineHeight: "1.6" }}>
+          Open the email and click the verification link. If it is not in your inbox, check your spam folder.
         </p>
 
         {error && (
           <div
-            className="mb-4 p-3 rounded-lg text-left"
+            className="mt-4 p-3 rounded-lg border text-left"
             style={{
+              borderColor: "var(--color-red-200)",
               background: "var(--color-red-50)",
               color: "var(--color-red-700)",
               fontSize: "13px"
@@ -112,14 +104,15 @@ export function EmailSent() {
 
         {resent && !error && (
           <div
-            className="mb-4 p-3 rounded-lg"
+            className="mt-4 p-3 rounded-lg border"
             style={{
+              borderColor: "var(--color-teal-200)",
               background: "var(--color-teal-50)",
-              color: "var(--color-teal-700)",
+              color: "var(--color-teal-800)",
               fontSize: "13px"
             }}
           >
-            Verification email resent successfully!
+            Verification email resent successfully.
           </div>
         )}
 
@@ -127,15 +120,15 @@ export function EmailSent() {
           type="button"
           onClick={() => void handleResend()}
           disabled={cooldown > 0 || resending || !email}
-          className="w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 mb-4"
+          className="w-full mt-5 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
           style={{
-            fontSize: "14px",
-            background: cooldown > 0 || resending ? "var(--color-slate-200)" : "var(--color-teal-600)",
-            color: cooldown > 0 || resending ? "var(--color-slate-400)" : "var(--color-teal-50)",
+            fontSize: "13px",
+            background: cooldown > 0 || resending ? "var(--color-background-secondary)" : "var(--color-teal-600)",
+            color: cooldown > 0 || resending ? "var(--color-text-secondary)" : "var(--color-teal-50)",
             cursor: cooldown > 0 || resending ? "not-allowed" : "pointer"
           }}
         >
-          <RefreshCw size={16} className={resending ? "animate-spin" : ""} />
+          <RefreshCw size={14} className={resending ? "animate-spin" : ""} />
           {resending
             ? "Resending..."
             : cooldown > 0
@@ -145,26 +138,13 @@ export function EmailSent() {
 
         <Link
           to="/signin"
-          className="inline-flex items-center gap-2 font-medium transition-colors"
+          className="inline-flex items-center gap-2 mt-4"
           style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
         >
           <ArrowLeft size={14} />
           Back to sign in
         </Link>
       </div>
-
-      <style>{`
-        @keyframes emailPulse {
-          0%, 100% {
-            transform: scale(1);
-            box-shadow: 0 0 0 0 rgba(29, 158, 117, 0.3);
-          }
-          50% {
-            transform: scale(1.05);
-            box-shadow: 0 0 0 16px rgba(29, 158, 117, 0);
-          }
-        }
-      `}</style>
     </div>
   );
 }

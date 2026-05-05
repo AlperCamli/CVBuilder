@@ -295,7 +295,7 @@ export function TailoringFlow() {
                   ATS keywords and follow-up context
                 </h2>
                 <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Select keywords and optionally answer follow-up questions before generating the draft.
+                  Select keywords (you can choose more than one) and optionally answer follow-up questions before generating the draft.
                 </p>
               </div>
 

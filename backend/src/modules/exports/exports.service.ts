@@ -72,6 +72,53 @@ const isTemplateFormatEnabled = (template: TemplateSummary, format: ExportFormat
   return true;
 };
 
+const FONT_SCALE_MIN = 0.85;
+const FONT_SCALE_MAX = 1.15;
+const DEFAULT_FONT_SCALE = 1;
+
+const fileExtensionByFormat: Record<ExportFormat, string> = {
+  pdf: "pdf",
+  docx: "docx"
+};
+
+const clampFontScale = (value: number): number => {
+  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value));
+};
+
+const parseFontScale = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return clampFontScale(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return clampFontScale(parsed);
+    }
+  }
+
+  return null;
+};
+
+const sanitizeFilenameSegment = (value: string): string => {
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[<>:"/\\|?*]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "cv";
+  }
+
+  return cleaned.slice(0, 80);
+};
+
+const buildExportDownloadFilename = (title: string | null | undefined, format: ExportFormat): string => {
+  const safeTitle = sanitizeFilenameSegment(title ?? "").replace(/\.(pdf|docx)$/i, "");
+  return `${safeTitle}.${fileExtensionByFormat[format]}`;
+};
+
 export class ExportsService {
   constructor(
     private readonly exportsRepository: ExportsRepository,
@@ -195,7 +242,13 @@ export class ExportsService {
 
     let download = null;
     if (exportRow.status === "completed" && file) {
-      download = await this.filesService.createSignedDownloadAccess(file);
+      const filename = buildExportDownloadFilename(
+        tailoredCv?.title ?? masterCv?.title ?? file.original_filename,
+        exportRow.format
+      );
+      download = await this.filesService.createSignedDownloadAccess(file, {
+        forcedDownloadFilename: filename
+      });
     }
 
     const resolvedTemplate: ResolvedTemplateSummary = template
@@ -230,7 +283,19 @@ export class ExportsService {
       });
     }
 
-    const download = await this.filesService.createSignedDownloadAccess(file);
+    const cvTitle =
+      exportRow.tailored_cv_id
+        ? (await this.tailoredCvRepository.findById(session.appUser.id, exportRow.tailored_cv_id))?.title ?? null
+        : exportRow.master_cv_id
+          ? (await this.masterCvRepository.findById(session.appUser.id, exportRow.master_cv_id))?.title ?? null
+          : null;
+
+    const download = await this.filesService.createSignedDownloadAccess(file, {
+      forcedDownloadFilename: buildExportDownloadFilename(
+        cvTitle ?? file.original_filename,
+        exportRow.format
+      )
+    });
 
     return {
       export_id: exportRow.id,
@@ -320,9 +385,24 @@ export class ExportsService {
         });
       }
 
+      const metadataScale = parseFontScale(exportTarget.row.current_content.metadata?.font_scale);
+      const requestedScale = parseFontScale(input.font_scale);
+      const resolvedFontScale = requestedScale ?? metadataScale ?? DEFAULT_FONT_SCALE;
+      const scaledPresentation = {
+        ...renderingResult.presentation,
+        theme: {
+          ...renderingResult.presentation.theme,
+          tokens: {
+            ...renderingResult.presentation.theme.tokens,
+            body_text_size:
+              renderingResult.presentation.theme.tokens.body_text_size * resolvedFontScale
+          }
+        }
+      };
+
       const generatedBytes = await this.renderingExportGenerator.generate(
         format,
-        renderingResult.presentation
+        scaledPresentation
       );
 
       const uploaded = await this.filesService.uploadExportObject({
@@ -375,7 +455,9 @@ export class ExportsService {
 
       let download = null;
       try {
-        download = await this.filesService.createSignedDownloadAccess(fileRecord);
+        download = await this.filesService.createSignedDownloadAccess(fileRecord, {
+          forcedDownloadFilename: buildExportDownloadFilename(exportTarget.row.title, format)
+        });
       } catch {
         download = null;
       }

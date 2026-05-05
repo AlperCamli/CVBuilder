@@ -29,7 +29,8 @@ export interface FilesRepository {
   createSignedDownloadUrl(
     storageBucket: string,
     storagePath: string,
-    expiresInSeconds: number
+    expiresInSeconds: number,
+    forcedDownloadFilename?: string
   ): Promise<string>;
 }
 
@@ -143,11 +144,16 @@ export class SupabaseFilesRepository implements FilesRepository {
   async createSignedDownloadUrl(
     storageBucket: string,
     storagePath: string,
-    expiresInSeconds: number
+    expiresInSeconds: number,
+    forcedDownloadFilename?: string
   ): Promise<string> {
     const { data, error } = await this.supabaseClient.storage
       .from(storageBucket)
-      .createSignedUrl(storagePath, expiresInSeconds);
+      .createSignedUrl(
+        storagePath,
+        expiresInSeconds,
+        forcedDownloadFilename ? { download: forcedDownloadFilename } : undefined
+      );
 
     if (error || !data?.signedUrl) {
       throw new InternalServerError("Failed to create download URL", {

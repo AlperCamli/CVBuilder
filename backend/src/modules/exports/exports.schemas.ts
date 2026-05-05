@@ -22,6 +22,7 @@ export const exportIdParamSchema = z
 
 export const createExportSchema = z
   .object({
-    template_id: uuidSchema.nullable().optional()
+    template_id: uuidSchema.nullable().optional(),
+    font_scale: z.number().min(0.85).max(1.15).optional()
   })
   .strict();

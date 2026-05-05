@@ -34,7 +34,7 @@ const parseDataUriImage = (dataUri: string): { data: Uint8Array; extension: "png
 export const generateDocxDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
   const headingColor = rgbToHex(documentModel.theme.heading_color_hex);
   const accentColor = rgbToHex(documentModel.theme.accent_color_hex);
-  const bodySize = Math.max(20, documentModel.theme.body_text_size * 2);
+  const bodySize = Math.max(20, Math.round(documentModel.theme.body_text_size * 2));
 
   const body: Paragraph[] = [];
 
@@ -106,7 +106,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           })
         ],
         spacing: {
-          after: 80
+          after: 120
         }
       })
     );
@@ -123,7 +123,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           })
         ],
         spacing: {
-          after: 200
+          after: 260
         }
       })
     );

@@ -7,7 +7,7 @@ const nowIso = (): string => new Date().toISOString();
 
 class FakeFilesRepository implements FilesRepository {
   uploadedPayload: UploadStorageObjectPayload | null = null;
-  signedUrlInput: { bucket: string; path: string; expires: number } | null = null;
+  signedUrlInput: { bucket: string; path: string; expires: number; filename?: string } | null = null;
 
   async createFile(_payload: CreateFilePayload): Promise<FileRecord> {
     return {
@@ -44,12 +44,14 @@ class FakeFilesRepository implements FilesRepository {
   async createSignedDownloadUrl(
     storageBucket: string,
     storagePath: string,
-    expiresInSeconds: number
+    expiresInSeconds: number,
+    forcedDownloadFilename?: string
   ): Promise<string> {
     this.signedUrlInput = {
       bucket: storageBucket,
       path: storagePath,
-      expires: expiresInSeconds
+      expires: expiresInSeconds,
+      filename: forcedDownloadFilename
     };
 
     return "https://example.com/signed-url";
@@ -119,12 +121,42 @@ describe("files service", () => {
     expect(repository.signedUrlInput).toEqual({
       bucket: "exports",
       path: "users/user-1/tailored-cvs/tailored-1/exports/export-1.pdf",
-      expires: 900
+      expires: 900,
+      filename: undefined
     });
     expect(response.download_url).toBe("https://example.com/signed-url");
     expect(response.expires_in_seconds).toBe(900);
     expect(response.expires_at).toBe("2026-04-18T12:15:00.000Z");
 
     vi.useRealTimers();
+  });
+
+  it("passes forced download filename when requested", async () => {
+    const repository = new FakeFilesRepository();
+    const service = new FilesService(repository, {
+      storageBucket: "exports",
+      downloadUrlTtlSeconds: 900
+    });
+
+    await service.createSignedDownloadAccess(
+      {
+        id: "file-1",
+        user_id: "user-1",
+        file_type: "export_pdf",
+        storage_bucket: "exports",
+        storage_path: "users/user-1/tailored-cvs/tailored-1/exports/export-1.pdf",
+        original_filename: "cv.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 1234,
+        checksum: "abc",
+        is_deleted: false,
+        created_at: nowIso()
+      },
+      {
+        forcedDownloadFilename: "Senior Engineer CV.pdf"
+      }
+    );
+
+    expect(repository.signedUrlInput?.filename).toBe("Senior Engineer CV.pdf");
   });
 });

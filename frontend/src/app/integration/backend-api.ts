@@ -255,6 +255,7 @@ export interface CoverLetterGenerationInput {
 
 export interface CreateExportInput {
   template_id?: string | null;
+  font_scale?: number;
 }
 
 export interface UpdateCoverLetterContentInput {

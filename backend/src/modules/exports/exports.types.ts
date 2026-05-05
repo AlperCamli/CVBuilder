@@ -13,6 +13,7 @@ export type SessionContext = AuthenticatedRequestContext;
 
 export interface CreateExportInput {
   template_id?: string | null;
+  font_scale?: number;
 }
 
 export interface ExportSummaryItem {

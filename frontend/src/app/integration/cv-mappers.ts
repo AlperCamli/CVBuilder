@@ -861,6 +861,11 @@ const normalizeSectionType = (value: string): string => {
     case "contact_info":
       return "header";
     case "profile":
+    case "professional_summary":
+    case "personal_profile":
+    case "about":
+    case "about_me":
+    case "summary_text":
     case "objective":
       return "summary";
     case "work_experience":
@@ -1235,7 +1240,9 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (sectionType === "summary") {
       const block = sortedBlocks[0];
-      const rawSummaryText = block ? getField(block, "text", "summary", "description") : "";
+      const rawSummaryText = block
+        ? getField(block, "text", "summary", "description", "summary_text", "profile", "objective")
+        : "";
       const fullName = asString(normalizedMetadata.full_name);
       const summaryText = (() => {
         const lines = rawSummaryText
@@ -1845,6 +1852,37 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       order: section.order,
       data: { items }
     });
+  }
+
+  const summaryAlreadyExists = sections.some((section) => section.type === "summary");
+  if (!summaryAlreadyExists) {
+    const metadataSummaryText = firstNonEmpty(
+      asString(normalizedMetadata.summary_text),
+      asString(normalizedMetadata.summary),
+      asString(normalizedMetadata.profile),
+      asString(normalizedMetadata.objective)
+    );
+
+    if (metadataSummaryText) {
+      const summaryOrder = Math.max(
+        0,
+        ...sections.filter((section) => section.type !== "header").map((section) => section.order + 1)
+      );
+
+      sections.push({
+        id: "summary-metadata-fallback",
+        type: "summary",
+        hidden: false,
+        order: summaryOrder,
+        data: {
+          text: metadataSummaryText,
+          blockId: "",
+          blockType: "summary",
+          rawFields: {},
+          rawMeta: {}
+        }
+      });
+    }
   }
 
   return sections;

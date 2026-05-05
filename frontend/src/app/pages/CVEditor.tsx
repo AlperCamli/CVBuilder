@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import {
   ChevronLeft,
@@ -18,6 +18,7 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import { AddContentModal } from "../components/AddContentModal";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
+import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
 import { useSidebar } from "../contexts/SidebarContext";
 import {
   Dialog,
@@ -42,9 +43,11 @@ import {
   ReferencesSection,
   VolunteerSection
 } from "../components/CVSections";
+import { toast } from "sonner";
 import { useAuth } from "../integration/auth-context";
 import type {
   AiBlockVersionChain,
+  CvContent,
   CvAiHistoryResponse,
   AiBlockCompareResult,
   AiSuggestionSummary,
@@ -77,6 +80,71 @@ const formatDateTime = (value: string | null | undefined): string => {
     hour: "2-digit",
     minute: "2-digit"
   });
+};
+
+const FONT_SCALE_MIN = 0.85;
+const FONT_SCALE_MAX = 1.15;
+const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
+
+const clampFontScale = (value: number): number => {
+  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value));
+};
+
+const resolveFontScaleFromContent = (content: CvContent | null | undefined): number => {
+  const rawValue = (content?.metadata as Record<string, unknown> | undefined)?.font_scale;
+
+  if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+    return clampFontScale(rawValue);
+  }
+
+  if (typeof rawValue === "string") {
+    const parsed = Number.parseFloat(rawValue);
+    if (Number.isFinite(parsed)) {
+      return clampFontScale(parsed);
+    }
+  }
+
+  return 1;
+};
+
+const withFontScaleMetadata = (
+  content: CvContent,
+  fontScale: number
+): CvContent => {
+  const metadata = {
+    ...(content.metadata ?? {}),
+    font_scale: clampFontScale(fontScale)
+  };
+
+  return {
+    ...content,
+    metadata
+  };
+};
+
+const sanitizeFilenameSegment = (value: string): string => {
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[<>:"/\\|?*]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned || "cv";
+};
+
+const buildExportFilename = (title: string, format: "pdf" | "docx"): string => {
+  const safeTitle = sanitizeFilenameSegment(title).replace(/\.(pdf|docx)$/i, "");
+  return `${safeTitle}.${format}`;
+};
+
+const triggerDownload = (url: string, filename: string) => {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 };
 
 const sectionDefaultData = (type: string): Record<string, unknown> => {
@@ -134,13 +202,80 @@ const toSectionTitle = (type: string): string => {
     .join(" ");
 };
 
+const asTrimmedString = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+
+  return "";
+};
+
+const hasNonEmptyArrayValue = (value: unknown): boolean => {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.some((item) => asTrimmedString(item).length > 0);
+};
+
+const hasContentForAi = (section: EditorSection, blockId?: string): boolean => {
+  const data = (section.data ?? {}) as Record<string, unknown>;
+
+  if (section.type === "summary") {
+    return asTrimmedString(data.text).length > 0;
+  }
+
+  if (section.type === "skills") {
+    return hasNonEmptyArrayValue(data.skills);
+  }
+
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (items.length === 0) {
+    return false;
+  }
+
+  const targetItem = (() => {
+    if (!blockId) {
+      return items[0] as Record<string, unknown>;
+    }
+
+    const matched = items.find((item) => {
+      const itemRecord = item as Record<string, unknown>;
+      return asTrimmedString(itemRecord.blockId) === blockId;
+    });
+
+    return (matched ?? items[0]) as Record<string, unknown>;
+  })();
+
+  const keysBySection: Record<string, string[]> = {
+    experience: ["role", "company", "description"],
+    education: ["institution", "degree", "fieldOfStudy", "description"],
+    languages: ["language", "proficiency", "certificate", "notes"],
+    certifications: ["name", "url", "verificationId"],
+    courses: ["title", "institution", "description"],
+    projects: ["title", "subtitle", "description"],
+    volunteer: ["organization", "role", "description"],
+    awards: ["name", "issuer", "date", "description"],
+    publications: ["title", "publisher", "date", "description"],
+    references: ["name", "jobTitle", "organization", "email", "phone"]
+  };
+
+  const candidateKeys = keysBySection[section.type] ?? Object.keys(targetItem);
+  return candidateKeys.some((key) => asTrimmedString(targetItem[key]).length > 0);
+};
+
 interface CvEditorDraft {
-  version: 1;
+  version: 2;
   cvKind: "master" | "tailored";
   cvId: string;
   title: string;
   language: string;
   templateId: string | null;
+  fontScale: number;
   sections: EditorSection[];
   updatedAt: string;
 }
@@ -159,15 +294,24 @@ const readDraft = (cvKind: "master" | "tailored", cvId: string): CvEditorDraft |
   }
 
   try {
-    const parsed = JSON.parse(raw) as CvEditorDraft;
+    const parsed = JSON.parse(raw) as CvEditorDraft | (Omit<CvEditorDraft, "version" | "fontScale"> & { version: 1 });
     if (
       parsed &&
-      parsed.version === 1 &&
+      (parsed.version === 1 || parsed.version === 2) &&
       parsed.cvKind === cvKind &&
       parsed.cvId === cvId &&
       Array.isArray(parsed.sections)
     ) {
-      return parsed;
+      const maybeFontScale =
+        "fontScale" in parsed && typeof parsed.fontScale === "number"
+          ? parsed.fontScale
+          : 1;
+
+      return {
+        ...parsed,
+        version: 2,
+        fontScale: clampFontScale(maybeFontScale)
+      };
     }
   } catch {
     // ignore malformed drafts
@@ -277,6 +421,7 @@ export function CVEditor() {
   const [title, setTitle] = useState("CV");
   const [language, setLanguage] = useState("en");
   const [templateId, setTemplateId] = useState<string | null>(null);
+  const [fontScale, setFontScale] = useState(1);
   const [sections, setSections] = useState<EditorSection[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -315,6 +460,10 @@ export function CVEditor() {
   const [revisionLoading, setRevisionLoading] = useState(false);
 
   const [tailoredJobData, setTailoredJobData] = useState<{ role: string; company: string } | null>(null);
+  const [showTemplateGallery, setShowTemplateGallery] = useState(false);
+  const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
+  const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
+  const templateGalleryLoadedRef = useRef(false);
 
   useEffect(() => {
     setSidebarVisible(false);
@@ -331,6 +480,7 @@ export function CVEditor() {
     setTitle(master.title);
     setLanguage(master.language);
     setTemplateId(master.template_id);
+    setFontScale(resolveFontScaleFromContent(master.current_content));
     setSections(cvContentToEditorSections(master.current_content));
     setLastSavedAt(master.updated_at);
   };
@@ -341,6 +491,7 @@ export function CVEditor() {
     setTitle(tailored.title);
     setLanguage(tailored.language);
     setTemplateId(tailored.template_id);
+    setFontScale(resolveFontScaleFromContent(tailored.current_content));
     setSections(cvContentToEditorSections(tailored.current_content));
     setLastSavedAt(tailored.updated_at);
     setTailoredJobData(
@@ -386,6 +537,10 @@ export function CVEditor() {
     setRestoredDraftAt(null);
   };
 
+  const buildCurrentContent = useCallback(() => {
+    return withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
+  }, [fontScale, language, sections]);
+
   const restoreDraftIfAvailable = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
     const draft = readDraft(nextCvKind, nextCvId);
     if (!draft) {
@@ -397,6 +552,7 @@ export function CVEditor() {
     setTitle(draft.title);
     setLanguage(draft.language);
     setTemplateId(draft.templateId);
+    setFontScale(clampFontScale(draft.fontScale));
     setSections(draft.sections);
     setDirty(true);
     setRestoredDraftAt(draft.updatedAt);
@@ -508,7 +664,7 @@ export function CVEditor() {
 
     let cancelled = false;
     const timeout = setTimeout(() => {
-      const content = editorSectionsToCvContent(sections, language);
+      const content = buildCurrentContent();
       void api
         .postRenderingPreview({
           cv_kind: cvKind,
@@ -530,7 +686,7 @@ export function CVEditor() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [api, cvId, cvKind, language, sections, templateId]);
+  }, [api, buildCurrentContent, cvId, cvKind, language, templateId]);
 
   useEffect(() => {
     if (!templateId) {
@@ -563,16 +719,17 @@ export function CVEditor() {
     }
 
     writeDraft({
-      version: 1,
+      version: 2,
       cvKind,
       cvId,
       title,
       language,
       templateId,
+      fontScale,
       sections,
       updatedAt: new Date().toISOString()
     });
-  }, [cvId, cvKind, dirty, language, sections, templateId, title]);
+  }, [cvId, cvKind, dirty, fontScale, language, sections, templateId, title]);
 
   const addSection = (sectionType: string) => {
     setSections((prev) => {
@@ -643,7 +800,7 @@ export function CVEditor() {
     }
 
     try {
-      const content = editorSectionsToCvContent(sections, language);
+      const content = withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
 
       if (targetCvKind === "master") {
         const updated = await api.putMasterCvContent(targetCvId, content);
@@ -652,6 +809,7 @@ export function CVEditor() {
         setTitle(updated.title);
         setLanguage(updated.language);
         setTemplateId(updated.template_id);
+        setFontScale(resolveFontScaleFromContent(updated.current_content));
         setLastSavedAt(updated.updated_at);
       } else {
         const updated = await api.putTailoredCvContent(targetCvId, content);
@@ -660,6 +818,7 @@ export function CVEditor() {
         setTitle(updated.title);
         setLanguage(updated.language);
         setTemplateId(updated.template_id);
+        setFontScale(resolveFontScaleFromContent(updated.current_content));
         setLastSavedAt(updated.updated_at);
         setTailoredJobData(
           updated.job
@@ -707,7 +866,7 @@ export function CVEditor() {
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autoSaving, cvId, cvKind, dirty, language, loading, saving, sections]);
+  }, [autoSaving, cvId, cvKind, dirty, fontScale, language, loading, saving, sections]);
 
   const assignTemplate = async (nextTemplateId: string | null) => {
     if (!cvId) {
@@ -730,6 +889,69 @@ export function CVEditor() {
       }
     }
   };
+
+  useEffect(() => {
+    if (!showTemplateGallery || templates.length === 0) {
+      if (!showTemplateGallery) {
+        templateGalleryLoadedRef.current = false;
+        setTemplatePreviewsByTemplateId({});
+        setTemplatePreviewLoadingIds([]);
+      }
+      return;
+    }
+
+    if (templateGalleryLoadedRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    templateGalleryLoadedRef.current = true;
+    const templateIds = ["__default__", ...templates.map((template) => template.id)];
+    setTemplatePreviewLoadingIds(templateIds);
+    setTemplatePreviewsByTemplateId({});
+
+    void Promise.all(
+      [
+        (async () => {
+          try {
+            const preview = await api.postRenderingPreview({
+              cv_kind: cvKind,
+              current_content: buildCurrentContent(),
+              template_id: null,
+              language
+            });
+            return ["__default__", preview.presentation] as const;
+          } catch {
+            return ["__default__", null] as const;
+          }
+        })(),
+        ...templates.map(async (template) => {
+          try {
+            const preview = await api.postRenderingPreview({
+              cv_kind: cvKind,
+              current_content: buildCurrentContent(),
+              template_id: template.id,
+              language
+            });
+            return [template.id, preview.presentation] as const;
+          } catch {
+            return [template.id, null] as const;
+          }
+        })
+      ]
+    ).then((entries) => {
+      if (cancelled) {
+        return;
+      }
+
+      setTemplatePreviewsByTemplateId(Object.fromEntries(entries));
+      setTemplatePreviewLoadingIds([]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api, buildCurrentContent, cvKind, language, showTemplateGallery, templates]);
 
   const openExportDialog = async () => {
     if (!cvId) {
@@ -772,21 +994,22 @@ export function CVEditor() {
     }
 
     try {
+      const filename = buildExportFilename(title, format);
       const detail =
         cvKind === "tailored"
           ? format === "pdf"
-            ? await api.createPdfExport(cvId, { template_id: templateId })
-            : await api.createDocxExport(cvId, { template_id: templateId })
+            ? await api.createPdfExport(cvId, { template_id: templateId, font_scale: fontScale })
+            : await api.createDocxExport(cvId, { template_id: templateId, font_scale: fontScale })
           : format === "pdf"
-            ? await api.createMasterCvPdfExport(cvId, { template_id: templateId })
-            : await api.createMasterCvDocxExport(cvId, { template_id: templateId });
+            ? await api.createMasterCvPdfExport(cvId, { template_id: templateId, font_scale: fontScale })
+            : await api.createMasterCvDocxExport(cvId, { template_id: templateId, font_scale: fontScale });
 
       const directUrl = detail.download?.download_url;
       if (directUrl) {
-        window.open(directUrl, "_blank", "noopener,noreferrer");
+        triggerDownload(directUrl, filename);
       } else {
         const fallback = await api.getExportDownload(detail.export.id);
-        window.open(fallback.download_url, "_blank", "noopener,noreferrer");
+        triggerDownload(fallback.download_url, filename);
       }
 
       const history =
@@ -794,6 +1017,17 @@ export function CVEditor() {
           ? await api.listTailoredCvExports(cvId)
           : await api.listMasterCvExports(cvId);
       setExportHistory(history.exports);
+
+      if (
+        cvKind === "master" &&
+        history.exports.length === 1 &&
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(MASTER_EXPORT_GUIDE_FLAG) !== "true"
+      ) {
+        window.localStorage.setItem(MASTER_EXPORT_GUIDE_FLAG, "true");
+        toast.success("Now let's tailor this CV for a job!");
+        navigate(`/app/tailor/${cvId}`);
+      }
     } catch (err) {
       if (err instanceof Error) {
         setExportError(err.message);
@@ -805,10 +1039,10 @@ export function CVEditor() {
     }
   };
 
-  const downloadExistingExport = async (exportId: string) => {
+  const downloadExistingExport = async (exportId: string, format: "pdf" | "docx") => {
     try {
       const download = await api.getExportDownload(exportId);
-      window.open(download.download_url, "_blank", "noopener,noreferrer");
+      triggerDownload(download.download_url, buildExportFilename(title, format));
     } catch (err) {
       if (err instanceof Error) {
         setExportError(err.message);
@@ -878,8 +1112,22 @@ export function CVEditor() {
   };
 
   const openAiForSection = async (sectionId: string, blockId?: string) => {
+    const targetSection = sections.find((section) => section.id === sectionId);
+    if (!targetSection) {
+      setError("Section could not be resolved for AI action.");
+      return;
+    }
+
+    const resolvedBlockId = blockId ?? getSectionFirstBlockId(targetSection) ?? undefined;
+    const isEmpty = !hasContentForAi(targetSection, resolvedBlockId);
+
+    if (isEmpty) {
+      toast.error("This block is empty. Please add some content before asking the AI to improve it.");
+      return;
+    }
+
     setAiTargetSectionId(sectionId);
-    setAiTargetBlockId(blockId ?? null);
+    setAiTargetBlockId(resolvedBlockId ?? null);
     setAiCompareResult(null);
     setAiSuggestions([]);
     setShowAIPopup(true);
@@ -1028,7 +1276,7 @@ export function CVEditor() {
   };
 
   const replaceBlockFromSnapshot = (blockId: string, snapshot: Record<string, unknown>): boolean => {
-    const currentContent = editorSectionsToCvContent(sections, language);
+    const currentContent = withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
     const nextSections = currentContent.sections.map((section) => {
       const nextBlocks = section.blocks.map((block) => {
         if (block.id !== blockId) {
@@ -1287,28 +1535,48 @@ export function CVEditor() {
                 <span style={{ fontSize: "12px", color: "var(--color-red-700)" }}>{error}</span>
               )}
 
-              <select
-                value={templateId ?? ""}
-                onChange={(event) => {
-                  const value = event.target.value || null;
-                  void assignTemplate(value);
-                }}
-                className="px-2 py-1.5 rounded-lg border"
+              <button
+                onClick={() => setShowTemplateGallery(true)}
+                className="px-3 py-1.5 rounded-lg border"
                 style={{
                   fontSize: "12px",
                   borderColor: "var(--color-border-secondary)",
                   background: "var(--color-background-primary)",
-                  color: "var(--color-text-secondary)"
+                  color: "var(--color-text-primary)"
                 }}
                 title={`Selected template: ${selectedTemplateName}`}
               >
-                <option value="">Default template</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
+                Choose template: {selectedTemplateName}
+              </button>
+
+              <div
+                className="px-3 py-1.5 rounded-lg border flex items-center gap-2"
+                style={{
+                  borderColor: "var(--color-border-secondary)",
+                  background: "var(--color-background-primary)"
+                }}
+                title="Preview and export font size"
+              >
+                <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                  Font
+                </span>
+                <input
+                  type="range"
+                  min={FONT_SCALE_MIN}
+                  max={FONT_SCALE_MAX}
+                  step={0.05}
+                  value={fontScale}
+                  onChange={(event) => {
+                    const next = clampFontScale(Number(event.target.value));
+                    setFontScale(next);
+                    markDirty();
+                  }}
+                  style={{ accentColor: "var(--color-teal-600)" }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", minWidth: "32px", textAlign: "right" }}>
+                  {fontScale.toFixed(2)}x
+                </span>
+              </div>
 
               {selectedTemplateDetail && (
                 <span
@@ -1436,10 +1704,27 @@ export function CVEditor() {
               <p className="uppercase tracking-wider mb-4" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
                 Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
               </p>
-              <CVPresentationPreview presentation={renderingPreview?.presentation ?? null} />
+              <CVPresentationPreview
+                presentation={renderingPreview?.presentation ?? null}
+                fontScale={fontScale}
+              />
             </div>
           </div>
         </div>
+
+        <TemplateGalleryDialog
+          open={showTemplateGallery}
+          onOpenChange={setShowTemplateGallery}
+          templates={templates}
+          selectedTemplateId={templateId}
+          previewsByTemplateId={templatePreviewsByTemplateId}
+          loadingTemplateIds={templatePreviewLoadingIds}
+          onSelectTemplate={(nextTemplateId) => {
+            void assignTemplate(nextTemplateId);
+            setShowTemplateGallery(false);
+          }}
+          fontScale={fontScale}
+        />
 
         <AddContentModal
           isOpen={showAddContentModal}
@@ -1670,7 +1955,7 @@ export function CVEditor() {
                       </div>
                       {item.download_available ? (
                         <button
-                          onClick={() => void downloadExistingExport(item.id)}
+                          onClick={() => void downloadExistingExport(item.id, item.format)}
                           className="px-2 py-1 rounded border"
                           style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                         >

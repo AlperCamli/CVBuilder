@@ -102,7 +102,7 @@ const definitions: AiFlowDefinition[] = [
     prompt_key: "cover-letter-generation",
     prompt_version: "phase5-v1",
     system_prompt:
-      "Generate a concise, highly impactful cover letter that emphasizes candidate strengths and makes recruiters want to meet them.",
+      "Generate a concise, highly impactful cover letter that emphasizes candidate strengths and makes recruiters want to meet them. The output must use real \\n\\n paragraph breaks: a salutation line, an opening paragraph, body paragraph(s), a closing paragraph, then a blank line, then Sincerely, on its own line, then the candidate name on its own line.",
     output_schema: coverLetterOutputSchema
   }
 ];

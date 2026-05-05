@@ -504,7 +504,7 @@ export const generatePdfDocument = async (documentModel: ExportDocumentModel): P
 
   drawContext.cursorY -= 6;
   drawDivider(drawContext.page, drawContext.cursorY, mutedColor);
-  drawContext.cursorY -= 12;
+  drawContext.cursorY -= 18;
 
   const sections = documentModel.sections;
 

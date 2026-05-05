@@ -29,6 +29,27 @@ values
     '{"pdf": {"enabled": true}, "docx": {"enabled": false}}'::jsonb
   ),
   (
+    'Academic Classic',
+    'academic-classic',
+    'active',
+    '{"preview": "v1", "theme": "classic"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Tech Compact',
+    'tech-compact',
+    'active',
+    '{"preview": "v1", "theme": "compact"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Two Column Modern',
+    'two-column-modern',
+    'active',
+    '{"preview": "v2", "theme": "light"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": false}}'::jsonb
+  ),
+  (
     'Template Playground',
     'template-playground',
     'inactive',
@@ -91,8 +112,8 @@ values
     'gemini-2.5-flash',
     'tailored-draft',
     'phase5-v1',
-    'Generate a complete tailored CV snapshot while preserving factual integrity. Output must be in English and strict JSON.',
-    'Use master CV + job context + answers to generate an ATS-aware tailored draft.',
+    'Generate a complete tailored CV snapshot while preserving factual integrity. Output must be in English and strict JSON. For every education block include explicit degree and field_of_study fields in block.fields; do not hide education structure only in free text.',
+    'Use master CV + job context + answers to generate an ATS-aware tailored draft. Keep education structured with explicit degree and field_of_study values per education block.',
     true
   ),
   (
@@ -103,8 +124,8 @@ values
     'gemini-2.5-flash',
     'import-improve',
     'phase5-v1',
-    'Improve imported CV content for clarity and impact without fabricating facts. Output must be in English and strict JSON.',
-    'Improve parsed imported content and return full improved content snapshot.',
+    'Improve imported CV content for clarity and impact without fabricating facts. Output must be in English and strict JSON. For every education block include explicit degree and field_of_study fields in block.fields; do not keep education data only inside a generic text field.',
+    'Improve parsed imported content and return full improved content snapshot. Preserve structured education data by always outputting degree and field_of_study.',
     true
   ),
   (
@@ -139,8 +160,8 @@ values
     'gemini-2.5-flash',
     'cover-letter-generation',
     'phase5-v1',
-    'Generate concise, high-impact cover letters tailored to the target role and company. Output must be in English and strict JSON.',
-    'Generate a tailored cover letter with persuasive and factual language.',
+    'Generate concise, high-impact cover letters tailored to the target role and company. Output must be in English and strict JSON. Use real \\n\\n paragraph breaks: salutation line, opening paragraph, body paragraph(s), closing paragraph, then a blank line, then Sincerely, on its own line, then candidate name on its own line.',
+    'Generate a tailored cover letter with persuasive and factual language and preserve the required paragraph/newline structure.',
     true
   ),
   (

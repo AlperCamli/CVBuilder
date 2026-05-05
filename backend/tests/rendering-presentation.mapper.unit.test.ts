@@ -355,4 +355,75 @@ describe("rendering presentation mapper", () => {
     const additionalSection = presentation.sections.find((section) => section.id === "section-custom");
     expect(additionalSection?.title).toBe("Additional Information");
   });
+
+  it("maps awards without duplicating date into subtitle", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "awards",
+      type: "awards",
+      title: "Awards",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "award-1",
+          type: "award_item",
+          normalized_fields: {
+            name: field("Top Performer Award", "Top Performer Award", ["Top Performer Award"]),
+            date: field("2024", "2024", ["2024"])
+          },
+          derived: {
+            headline: "Top Performer Award",
+            subheadline: null,
+            bullets: [],
+            date_range: "2024",
+            location: null
+          }
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const awardsSection = presentation.sections.find((section) => section.type === "awards");
+    const award = awardsSection?.items[0];
+
+    expect(award?.title).toBe("Top Performer Award");
+    expect(award?.subtitle).toBeNull();
+    expect(award?.metadata_line).toBe("2024");
+  });
+
+  it("maps references with role, organization, and contact lines", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "references",
+      type: "references",
+      title: "References",
+      order: 6,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "ref-1",
+          type: "reference_item",
+          normalized_fields: {
+            name: field("Jane Doe", "Jane Doe", ["Jane Doe"]),
+            job_title: field("Lead Engineer", "Lead Engineer", ["Lead Engineer"]),
+            organization: field("Acme Corp", "Acme Corp", ["Acme Corp"]),
+            email: field("jane@acme.com", "jane@acme.com", ["jane@acme.com"]),
+            phone: field("+1 202 555 0101", "+1 202 555 0101", ["+1 202 555 0101"])
+          }
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const referencesSection = presentation.sections.find((section) => section.type === "references");
+    const reference = referencesSection?.items[0];
+
+    expect(reference?.title).toBe("Jane Doe");
+    expect(reference?.subtitle).toBe("Lead Engineer • Acme Corp");
+    expect(reference?.metadata_line).toBeNull();
+    expect(reference?.body).toBe("jane@acme.com\n+1 202 555 0101");
+  });
 });

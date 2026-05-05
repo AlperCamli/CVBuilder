@@ -185,4 +185,16 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/never blank existing fields/i);
     expect(migration).toMatch(/model_name = null/i);
   });
+
+  it("contains phase 7 template registrations and prompt contract updates", () => {
+    const migration = readMigration("20260505110000_phase7_template_gallery_and_prompt_contracts.sql");
+
+    expect(migration).toMatch(/academic-classic/i);
+    expect(migration).toMatch(/tech-compact/i);
+    expect(migration).toMatch(/two-column-modern/i);
+    expect(migration).toMatch(/flow_type = 'cover_letter_generation'/i);
+    expect(migration).toMatch(/sincerely/i);
+    expect(migration).toMatch(/flow_type in \('tailored_draft', 'import_improve'\)/i);
+    expect(migration).toMatch(/degree and field_of_study/i);
+  });
 });

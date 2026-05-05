@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { Sparkles, Zap, Target, TrendingUp, Loader2, RefreshCw } from "lucide-react";
+import { Sparkles, Zap, Target, TrendingUp, Loader2, RefreshCw, CheckCircle2 } from "lucide-react";
 import type { CvContent } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 
@@ -23,7 +23,7 @@ export function AIImproving() {
       { icon: Sparkles, label: "Analyzing imported sections", sublabel: "Scanning structure and content quality", duration: 1400 },
       { icon: Target, label: "Strengthening achievements", sublabel: "Enhancing impact statements and metrics", duration: 1500 },
       { icon: Zap, label: "Improving clarity", sublabel: "Refining language and readability", duration: 1300 },
-      { icon: TrendingUp, label: "Optimizing for ATS", sublabel: "Adding keywords and formatting", duration: 1200 }
+      { icon: TrendingUp, label: "Optimizing for ATS", sublabel: "Highlighting relevant keywords and impact", duration: 1200 }
     ],
     []
   );
@@ -78,7 +78,7 @@ export function AIImproving() {
                   await api.deleteMasterCv(cv.id);
                 }
               } catch {
-                // Proceed even if cleanup fails — backend will create the new CV
+                // Continue and create a new master CV even if cleanup is partial.
               }
 
               const converted = await api.createMasterCvFromImport(importId, {});
@@ -112,283 +112,131 @@ export function AIImproving() {
 
   const currentStepData = steps[currentStep];
 
-  const progressRadius = 54;
-  const progressCircumference = 2 * Math.PI * progressRadius;
-  const progressOffset = progressCircumference - (progress / 100) * progressCircumference;
-
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, var(--color-slate-950) 0%, var(--color-teal-900) 40%, var(--color-teal-800) 70%, var(--color-slate-800) 100%)"
-      }}
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: "var(--color-background-secondary)" }}
     >
-      {/* Floating particles */}
-      <div className="absolute inset-0 overflow-hidden">
-        {[...Array(30)].map((_, i) => (
-          <div
-            key={i}
-            className="ai-particle absolute rounded-full"
-            style={{
-              width: `${Math.random() * 4 + 2}px`,
-              height: `${Math.random() * 4 + 2}px`,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              background: `hsla(${170 + Math.random() * 30}, 80%, 70%, ${0.3 + Math.random() * 0.4})`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 6}s`
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Ambient glow */}
       <div
-        className="absolute rounded-full"
+        className="w-full max-w-xl rounded-2xl border p-7"
         style={{
-          width: "600px",
-          height: "600px",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          background: "radial-gradient(circle, rgba(29, 158, 117, 0.12) 0%, transparent 70%)",
-          animation: "ambientGlow 4s ease-in-out infinite"
+          background: "var(--color-background-primary)",
+          borderColor: "var(--color-border-tertiary)"
         }}
-      />
+      >
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <h1 style={{ fontSize: "24px", color: "var(--color-text-primary)", fontWeight: 600 }}>
+              AI is improving your CV
+            </h1>
+            <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
+              {currentStepData.sublabel}
+            </p>
+          </div>
+          <div
+            className="px-3 py-1 rounded-full"
+            style={{
+              fontSize: "12px",
+              background: "var(--color-teal-50)",
+              color: "var(--color-teal-800)",
+              fontWeight: 600
+            }}
+          >
+            {Math.round(progress)}%
+          </div>
+        </div>
 
-      <div className="max-w-lg w-full relative z-10">
         <div
-          className="p-10 rounded-3xl text-center"
-          style={{
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(24px)",
-            border: "1px solid rgba(29, 158, 117, 0.15)",
-            boxShadow: "0 25px 60px -12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          }}
+          className="w-full rounded-full"
+          style={{ height: "8px", background: "var(--color-background-secondary)" }}
         >
-          {/* Animated progress ring */}
-          <div className="flex justify-center mb-8">
-            <div className="relative">
-              <svg width="128" height="128" className="transform -rotate-90">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={progressRadius}
-                  fill="none"
-                  stroke="rgba(255, 255, 255, 0.06)"
-                  strokeWidth="4"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r={progressRadius}
-                  fill="none"
-                  stroke="url(#progressGradient)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray={progressCircumference}
-                  strokeDashoffset={progressOffset}
-                  className="transition-all duration-300"
-                />
-                <defs>
-                  <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="var(--color-teal-200)" />
-                    <stop offset="50%" stopColor="var(--color-teal-400)" />
-                    <stop offset="100%" stopColor="var(--color-teal-600)" />
-                  </linearGradient>
-                </defs>
-              </svg>
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{ width: `${progress}%`, background: "var(--color-teal-600)" }}
+          />
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            const isDone = index < currentStep;
+            const isActive = index === currentStep;
+
+            return (
               <div
-                className="absolute inset-0 flex items-center justify-center ai-icon-float"
+                key={step.label}
+                className="flex items-center gap-3 rounded-lg border px-3 py-2"
+                style={{
+                  borderColor: isActive ? "var(--color-teal-300)" : "var(--color-border-tertiary)",
+                  background: isActive ? "var(--color-teal-50)" : "var(--color-background-primary)"
+                }}
               >
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{
-                    background: "linear-gradient(135deg, rgba(29, 158, 117, 0.2) 0%, rgba(93, 202, 165, 0.1) 100%)",
-                    border: "1px solid rgba(29, 158, 117, 0.3)"
+                    background: isDone || isActive ? "var(--color-teal-100)" : "var(--color-background-secondary)"
                   }}
                 >
-                  <Sparkles size={28} style={{ color: "var(--color-teal-200)" }} />
+                  {isDone ? (
+                    <CheckCircle2 size={16} style={{ color: "var(--color-teal-700)" }} />
+                  ) : (
+                    <Icon size={16} style={{ color: isActive ? "var(--color-teal-700)" : "var(--color-text-secondary)" }} />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p style={{ fontSize: "14px", color: "var(--color-text-primary)", fontWeight: 500 }}>
+                    {step.label}
+                  </p>
                 </div>
               </div>
-            </div>
+            );
+          })}
+        </div>
+
+        {isFinalizing && (
+          <div
+            className="mt-6 flex items-center gap-2 rounded-lg border px-3 py-2"
+            style={{
+              borderColor: "var(--color-teal-200)",
+              background: "var(--color-teal-50)",
+              color: "var(--color-teal-800)",
+              fontSize: "13px"
+            }}
+          >
+            <Loader2 size={14} className="animate-spin" />
+            Applying improvements and creating your Master CV...
           </div>
+        )}
 
-          <h2
-            className="font-semibold mb-2"
-            style={{ fontSize: "22px", color: "var(--color-slate-50)", letterSpacing: "-0.01em" }}
-          >
-            AI is improving your CV
-          </h2>
-          <p
-            className="mb-1 font-medium ai-step-text"
-            key={currentStep}
-            style={{ fontSize: "15px", color: "var(--color-teal-200)" }}
-          >
-            {currentStepData.label}
-          </p>
-          <p
-            className="mb-8"
-            style={{ fontSize: "13px", color: "var(--color-slate-400)" }}
-          >
-            {currentStepData.sublabel}
-          </p>
-
-          {/* Step indicators */}
-          <div className="flex items-center justify-center gap-3 mb-6">
-            {steps.map((step, index) => {
-              const StepIcon = step.icon;
-              const isComplete = index < currentStep;
-              const isCurrent = index === currentStep;
-
-              return (
-                <div
-                  key={step.label}
-                  className="flex flex-col items-center gap-2"
-                >
-                  <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-500 ${
-                      isCurrent ? "scale-110" : "scale-100"
-                    }`}
-                    style={{
-                      background: isComplete
-                        ? "rgba(29, 158, 117, 0.15)"
-                        : isCurrent
-                          ? "rgba(29, 158, 117, 0.2)"
-                          : "rgba(255, 255, 255, 0.03)",
-                      border: `1.5px solid ${
-                        isComplete
-                          ? "rgba(29, 158, 117, 0.4)"
-                          : isCurrent
-                            ? "rgba(93, 202, 165, 0.5)"
-                            : "rgba(255, 255, 255, 0.06)"
-                      }`,
-                      boxShadow: isCurrent ? "0 0 20px rgba(29, 158, 117, 0.2)" : "none"
-                    }}
-                  >
-                    <StepIcon
-                      size={16}
-                      style={{
-                        color: isComplete || isCurrent ? "var(--color-teal-200)" : "var(--color-slate-600)",
-                        transition: "color 0.5s"
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Progress percentage */}
-          <p style={{ fontSize: "12px", color: "var(--color-slate-400)" }}>
-            {Math.round(progress)}% complete
-          </p>
-
-          {isFinalizing && (
+        {error && (
+          <div className="mt-6">
             <div
-              className="mt-6 flex items-center justify-center gap-2 p-3 rounded-xl"
+              className="p-3 rounded-lg border"
               style={{
-                fontSize: "13px",
-                color: "var(--color-teal-200)",
-                background: "rgba(29, 158, 117, 0.08)",
-                border: "1px solid rgba(29, 158, 117, 0.15)"
+                borderColor: "var(--color-red-200)",
+                background: "var(--color-red-50)",
+                color: "var(--color-red-700)",
+                fontSize: "13px"
               }}
             >
-              <Loader2 size={14} className="animate-spin" />
-              Applying improvements and creating Master CV...
+              {error}
             </div>
-          )}
-
-          {error && (
-            <div className="mt-6 space-y-3">
-              <div
-                className="p-4 rounded-xl text-left"
-                style={{
-                  background: "rgba(226, 75, 74, 0.12)",
-                  border: "1px solid rgba(226, 75, 74, 0.25)",
-                  color: "var(--color-red-200)",
-                  fontSize: "13px"
-                }}
-              >
-                {error}
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate("/app/create")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all"
-                style={{
-                  fontSize: "13px",
-                  background: "rgba(255, 255, 255, 0.06)",
-                  color: "var(--color-slate-400)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)"
-                }}
-              >
-                <RefreshCw size={14} />
-                Try again
-              </button>
-            </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => navigate("/app/create")}
+              className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg border"
+              style={{
+                fontSize: "13px",
+                borderColor: "var(--color-border-secondary)",
+                color: "var(--color-text-secondary)"
+              }}
+            >
+              <RefreshCw size={14} />
+              Try again
+            </button>
+          </div>
+        )}
       </div>
-
-      <style>{`
-        @keyframes particleFloat {
-          0%, 100% {
-            transform: translateY(0) translateX(0);
-            opacity: 0.3;
-          }
-          25% {
-            transform: translateY(-30px) translateX(10px);
-            opacity: 0.8;
-          }
-          50% {
-            transform: translateY(-15px) translateX(-10px);
-            opacity: 0.5;
-          }
-          75% {
-            transform: translateY(-40px) translateX(5px);
-            opacity: 0.7;
-          }
-        }
-        .ai-particle {
-          animation: particleFloat 6s ease-in-out infinite;
-        }
-        @keyframes ambientGlow {
-          0%, 100% {
-            opacity: 0.6;
-            transform: translate(-50%, -50%) scale(1);
-          }
-          50% {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1.1);
-          }
-        }
-        @keyframes iconFloat {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-6px);
-          }
-        }
-        .ai-icon-float {
-          animation: iconFloat 3s ease-in-out infinite;
-        }
-        @keyframes stepFadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .ai-step-text {
-          animation: stepFadeIn 0.4s ease-out;
-        }
-      `}</style>
     </div>
   );
 }
