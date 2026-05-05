@@ -279,6 +279,16 @@ const coerceBlockFields = (block: Record<string, unknown>): Record<string, unkno
   return {};
 };
 
+const coerceNonNegativeOrder = (rawOrder: unknown, index: number): number => {
+  if (Number.isInteger(rawOrder)) {
+    const numeric = Number(rawOrder);
+    if (numeric >= 0) {
+      return numeric;
+    }
+  }
+  return Math.max(0, index);
+};
+
 const coerceBlock = (
   value: unknown,
   fallbackSectionType: string,
@@ -288,7 +298,7 @@ const coerceBlock = (
     const text = value.trim();
     return {
       type: "text",
-      order: index,
+      order: Math.max(0, index),
       fields: text ? { text } : {}
     };
   }
@@ -297,7 +307,7 @@ const coerceBlock = (
   return {
     ...block,
     type: resolveBlockType(block, fallbackSectionType),
-    order: Number.isInteger(block.order) ? Number(block.order) : index,
+    order: coerceNonNegativeOrder(block.order, index),
     fields: coerceBlockFields(block)
   };
 };
@@ -334,7 +344,7 @@ const deriveSectionFallbackBlock = (
 const coerceSection = (value: unknown, index: number): Record<string, unknown> => {
   const section = asRecord(value);
   const sectionType = resolveSectionType(section, index);
-  const sectionOrder = Number.isInteger(section.order) ? Number(section.order) : index;
+  const sectionOrder = coerceNonNegativeOrder(section.order, index);
 
   const sectionItems =
     Array.isArray(section.blocks)

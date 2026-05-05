@@ -21,6 +21,13 @@ const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "multi_option"
 ]);
 
+const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
+  "tailored_draft",
+  "import_improve",
+  "multi_option",
+  "cover_letter_generation"
+]);
+
 const DEFAULT_SAFETY_SETTINGS: SafetySetting[] = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -607,7 +614,7 @@ export class GeminiAiProvider implements AiProvider {
   }
 
   private resolveMaxOutputTokens(flowType: AiFlowType): number {
-    return HEAVY_MODEL_FLOW_TYPES.has(flowType)
+    return LARGE_OUTPUT_FLOW_TYPES.has(flowType)
       ? this.maxOutputTokensHeavy
       : this.maxOutputTokensLight;
   }
