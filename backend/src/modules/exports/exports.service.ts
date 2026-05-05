@@ -75,6 +75,12 @@ const isTemplateFormatEnabled = (template: TemplateSummary, format: ExportFormat
 const FONT_SCALE_MIN = 0.85;
 const FONT_SCALE_MAX = 1.15;
 const DEFAULT_FONT_SCALE = 1;
+const SPACING_SCALE_MIN = 0.7;
+const SPACING_SCALE_MAX = 1.4;
+const DEFAULT_SPACING_SCALE = 1;
+const LAYOUT_SCALE_MIN = 0.7;
+const LAYOUT_SCALE_MAX = 1.3;
+const DEFAULT_LAYOUT_SCALE = 1;
 
 const fileExtensionByFormat: Record<ExportFormat, string> = {
   pdf: "pdf",
@@ -94,6 +100,25 @@ const parseFontScale = (value: unknown): number | null => {
     const parsed = Number.parseFloat(value);
     if (Number.isFinite(parsed)) {
       return clampFontScale(parsed);
+    }
+  }
+
+  return null;
+};
+
+const clampInRange = (value: number, min: number, max: number): number => {
+  return Math.min(max, Math.max(min, value));
+};
+
+const parseScaleInRange = (value: unknown, min: number, max: number): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return clampInRange(value, min, max);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return clampInRange(parsed, min, max);
     }
   }
 
@@ -388,6 +413,21 @@ export class ExportsService {
       const metadataScale = parseFontScale(exportTarget.row.current_content.metadata?.font_scale);
       const requestedScale = parseFontScale(input.font_scale);
       const resolvedFontScale = requestedScale ?? metadataScale ?? DEFAULT_FONT_SCALE;
+      const metadataSpacingScale = parseScaleInRange(
+        exportTarget.row.current_content.metadata?.spacing_scale,
+        SPACING_SCALE_MIN,
+        SPACING_SCALE_MAX
+      );
+      const requestedSpacingScale = parseScaleInRange(input.spacing_scale, SPACING_SCALE_MIN, SPACING_SCALE_MAX);
+      const resolvedSpacingScale = requestedSpacingScale ?? metadataSpacingScale ?? DEFAULT_SPACING_SCALE;
+      const metadataLayoutScale = parseScaleInRange(
+        exportTarget.row.current_content.metadata?.layout_scale,
+        LAYOUT_SCALE_MIN,
+        LAYOUT_SCALE_MAX
+      );
+      const requestedLayoutScale = parseScaleInRange(input.layout_scale, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX);
+      const resolvedLayoutScale = requestedLayoutScale ?? metadataLayoutScale ?? DEFAULT_LAYOUT_SCALE;
+      const layoutDensityFactor = 1 + (resolvedLayoutScale - 1) * 0.12;
       const scaledPresentation = {
         ...renderingResult.presentation,
         theme: {
@@ -395,7 +435,17 @@ export class ExportsService {
           tokens: {
             ...renderingResult.presentation.theme.tokens,
             body_text_size:
-              renderingResult.presentation.theme.tokens.body_text_size * resolvedFontScale
+              renderingResult.presentation.theme.tokens.body_text_size *
+              resolvedFontScale *
+              layoutDensityFactor,
+            section_spacing:
+              renderingResult.presentation.theme.tokens.section_spacing *
+              resolvedSpacingScale *
+              layoutDensityFactor,
+            block_spacing:
+              renderingResult.presentation.theme.tokens.block_spacing *
+              resolvedSpacingScale *
+              layoutDensityFactor
           }
         }
       };

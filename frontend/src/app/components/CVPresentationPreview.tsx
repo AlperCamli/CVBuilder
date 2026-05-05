@@ -399,23 +399,6 @@ export function CVPresentationPreview({
             >
               {renderInner()}
             </div>
-            {pageCount > 1 ? (
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: "8px",
-                  right: "12px",
-                  fontSize: "10px",
-                  color: "#6B7280",
-                  background: "rgba(255,255,255,0.8)",
-                  padding: "2px 6px",
-                  borderRadius: "4px",
-                  pointerEvents: "none"
-                }}
-              >
-                Page {pageIndex + 1} / {pageCount}
-              </div>
-            ) : null}
           </div>
         ))}
       </div>

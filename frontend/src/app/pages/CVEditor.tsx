@@ -474,8 +474,10 @@ export function CVEditor() {
   const [layoutScale, setLayoutScale] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [autoFitting, setAutoFitting] = useState(false);
+  const [autoFitPreparing, setAutoFitPreparing] = useState(false);
   const autoFitAttemptsRef = useRef(0);
   const autoFitInitializedRef = useRef(false);
+  const autoFitChangedRef = useRef(false);
   const [sections, setSections] = useState<EditorSection[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -935,6 +937,14 @@ export function CVEditor() {
   }, []);
 
   useEffect(() => {
+    autoFitInitializedRef.current = false;
+    autoFitAttemptsRef.current = 0;
+    autoFitChangedRef.current = false;
+    setAutoFitting(false);
+    setAutoFitPreparing(false);
+  }, [cvKind, cvId]);
+
+  useEffect(() => {
     if (loading || !cvId || !renderingPreview) {
       return;
     }
@@ -955,12 +965,9 @@ export function CVEditor() {
 
     autoFitInitializedRef.current = true;
     autoFitAttemptsRef.current = 0;
-
-    const handle = window.setTimeout(() => {
-      setAutoFitting(true);
-    }, 400);
-
-    return () => window.clearTimeout(handle);
+    autoFitChangedRef.current = false;
+    setAutoFitPreparing(true);
+    setAutoFitting(true);
   }, [cvId, cvKind, isAiImprovedFlow, isTailoredFlow, isUploadedFlow, loading, renderingPreview]);
 
   useEffect(() => {
@@ -970,8 +977,11 @@ export function CVEditor() {
 
     const finish = () => {
       setAutoFitting(false);
-      setDirty(true);
-      setRestoredDraftAt(null);
+      setAutoFitPreparing(false);
+      if (autoFitChangedRef.current) {
+        setDirty(true);
+        setRestoredDraftAt(null);
+      }
       if (typeof window !== "undefined" && cvId) {
         window.sessionStorage.setItem(`cv-editor:auto-fit:${cvKind}:${cvId}`, "done");
       }
@@ -990,10 +1000,13 @@ export function CVEditor() {
     const timeoutId = window.setTimeout(() => {
       autoFitAttemptsRef.current += 1;
       if (spacingScale > SPACING_SCALE_MIN + 0.001) {
+        autoFitChangedRef.current = true;
         setSpacingScale((prev) => Math.max(SPACING_SCALE_MIN, prev - 0.05));
       } else if (layoutScale > LAYOUT_SCALE_MIN + 0.001) {
+        autoFitChangedRef.current = true;
         setLayoutScale((prev) => Math.max(LAYOUT_SCALE_MIN, prev - 0.05));
       } else if (fontScale > FONT_SCALE_MIN + 0.001) {
+        autoFitChangedRef.current = true;
         setFontScale((prev) => Math.max(FONT_SCALE_MIN, prev - 0.02));
       } else {
         finish();
@@ -1144,14 +1157,20 @@ export function CVEditor() {
 
     try {
       const filename = buildExportFilename(title, format);
+      const exportPayload = {
+        template_id: templateId,
+        font_scale: fontScale,
+        spacing_scale: spacingScale,
+        layout_scale: layoutScale
+      };
       const detail =
         cvKind === "tailored"
           ? format === "pdf"
-            ? await api.createPdfExport(cvId, { template_id: templateId, font_scale: fontScale })
-            : await api.createDocxExport(cvId, { template_id: templateId, font_scale: fontScale })
+            ? await api.createPdfExport(cvId, exportPayload)
+            : await api.createDocxExport(cvId, exportPayload)
           : format === "pdf"
-            ? await api.createMasterCvPdfExport(cvId, { template_id: templateId, font_scale: fontScale })
-            : await api.createMasterCvDocxExport(cvId, { template_id: templateId, font_scale: fontScale });
+            ? await api.createMasterCvPdfExport(cvId, exportPayload)
+            : await api.createMasterCvDocxExport(cvId, exportPayload);
 
       const directUrl = detail.download?.download_url;
       if (directUrl) {
@@ -1958,19 +1977,6 @@ export function CVEditor() {
                   Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
                 </p>
                 <div className="flex items-center gap-2">
-                  {autoFitting ? (
-                    <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
-                      style={{
-                        fontSize: "10px",
-                        background: "var(--color-teal-50)",
-                        color: "var(--color-teal-800)"
-                      }}
-                    >
-                      <Loader2 size={10} className="animate-spin" />
-                      Auto-fitting to one page
-                    </span>
-                  ) : null}
                   <span
                     className="px-2 py-0.5 rounded-full"
                     style={{
@@ -1986,13 +1992,34 @@ export function CVEditor() {
                   </span>
                 </div>
               </div>
-              <CVPresentationPreview
-                presentation={renderingPreview?.presentation ?? null}
-                fontScale={fontScale}
-                spacingScale={spacingScale}
-                layoutScale={layoutScale}
-                onPageCountChange={handlePageCountChange}
-              />
+              <div style={{ position: "relative" }}>
+                <div style={{ visibility: autoFitPreparing ? "hidden" : "visible" }}>
+                  <CVPresentationPreview
+                    presentation={renderingPreview?.presentation ?? null}
+                    fontScale={fontScale}
+                    spacingScale={spacingScale}
+                    layoutScale={layoutScale}
+                    onPageCountChange={handlePageCountChange}
+                  />
+                </div>
+                {autoFitPreparing ? (
+                  <div
+                    className="rounded-lg border flex items-center justify-center gap-2"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      minHeight: "220px",
+                      borderColor: "var(--color-border-tertiary)",
+                      background: "var(--color-background-primary)",
+                      color: "var(--color-text-secondary)",
+                      fontSize: "12px"
+                    }}
+                  >
+                    <Loader2 size={14} className="animate-spin" />
+                    Preparing preview...
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

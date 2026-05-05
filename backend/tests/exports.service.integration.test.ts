@@ -443,12 +443,16 @@ class FakeFilesService {
 class FakeRenderingExportGenerator implements RenderingExportGenerator {
   shouldFail = false;
   lastBodyTextSize: number | null = null;
+  lastSectionSpacing: number | null = null;
+  lastBlockSpacing: number | null = null;
 
   async generate(
     _format: ExportFormat,
     presentation: Parameters<RenderingExportGenerator["generate"]>[1]
   ): Promise<Uint8Array> {
     this.lastBodyTextSize = presentation.theme.tokens.body_text_size;
+    this.lastSectionSpacing = presentation.theme.tokens.section_spacing;
+    this.lastBlockSpacing = presentation.theme.tokens.block_spacing;
     if (this.shouldFail) {
       throw new Error("generator failed");
     }
@@ -645,6 +649,57 @@ describe("exports service integration checks", () => {
 
     expect(generator.lastBodyTextSize).toBeCloseTo(13.8, 5);
     expect(filesService.lastForcedDownloadFilename).toBe("Tailored CV.pdf");
+  });
+
+  it("applies spacing and layout scales to section and block spacing before generation", async () => {
+    const userId = randomUUID();
+    const session = buildSession(userId);
+
+    const exportsRepository = new InMemoryExportsRepository();
+    const tailoredRepository = new InMemoryTailoredCvRepository();
+    tailoredRepository.seed(buildTailoredCv(userId));
+    const masterRepository = new InMemoryMasterCvRepository();
+    masterRepository.seed(buildMasterCv(userId));
+
+    const template: TemplateSummary = {
+      id: "template-override",
+      name: "Modern Clean",
+      slug: "modern-clean",
+      status: "active",
+      preview_config: null,
+      export_config: {
+        pdf: { enabled: true },
+        docx: { enabled: true }
+      },
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+
+    const templatesService = new FakeTemplatesService(new Set(["template-override"]), new Map([[template.id, template]]));
+    const renderingService = new FakeRenderingService();
+    renderingService.template = template;
+    const filesService = new FakeFilesService();
+    const generator = new FakeRenderingExportGenerator();
+
+    const service = new ExportsService(
+      exportsRepository,
+      tailoredRepository,
+      masterRepository,
+      templatesService as unknown as TemplatesService,
+      renderingService as unknown as RenderingService,
+      filesService as unknown as FilesService,
+      generator,
+      noopBillingService
+    );
+
+    await service.createPdfExport(session, "tailored-1", {
+      template_id: "template-override",
+      spacing_scale: 1.2,
+      layout_scale: 1.3
+    });
+
+    expect(generator.lastSectionSpacing).toBeCloseTo(19.8912, 4);
+    expect(generator.lastBlockSpacing).toBeCloseTo(14.9184, 4);
   });
 
   it("creates completed master CV export and stores it under master scope", async () => {
