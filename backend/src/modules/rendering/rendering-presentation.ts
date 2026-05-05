@@ -376,6 +376,32 @@ const buildMetadataLine = (dateRange: string | null, location: string | null): s
   return items.join(" • ");
 };
 
+const combineExperienceHeading = (
+  headline: string | null,
+  subheadline: string | null
+): { title: string | null; subtitle: string | null } => {
+  if (!headline && !subheadline) {
+    return { title: null, subtitle: null };
+  }
+
+  if (!headline) {
+    return { title: subheadline, subtitle: null };
+  }
+
+  if (!subheadline) {
+    return { title: headline, subtitle: null };
+  }
+
+  if (collapseForCompare(headline) === collapseForCompare(subheadline)) {
+    return { title: headline, subtitle: null };
+  }
+
+  return {
+    title: `${headline}, ${subheadline}`,
+    subtitle: null
+  };
+};
+
 const getSectionTitle = (sectionType: string): string => {
   if (sectionType.toLowerCase() === "custom" || GENERIC_SECTION_TYPE_PATTERN.test(sectionType)) {
     return "Additional Information";
@@ -473,6 +499,10 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
 
   let body = pickBodyText(sectionType, block);
   const mergedHeading = [headline, subheadline].filter(Boolean).join(" ");
+  const headingValues =
+    sectionType === "experience"
+      ? combineExperienceHeading(headline, subheadline)
+      : { title: headline, subtitle: subheadline };
 
   if (
     body &&
@@ -499,8 +529,8 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
 
   const item: PresentationItem = {
     id: block.id,
-    title: sectionType === "summary" ? null : headline,
-    subtitle: sectionType === "summary" ? null : subheadline,
+    title: sectionType === "summary" ? null : headingValues.title,
+    subtitle: sectionType === "summary" ? null : headingValues.subtitle,
     date_range: dateRange,
     location,
     metadata_line: sectionType === "summary" ? null : metadataLine,

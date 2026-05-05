@@ -18,6 +18,8 @@ interface TemplateGalleryDialogProps {
   loadingTemplateIds: string[];
   onSelectTemplate: (templateId: string | null) => void;
   fontScale: number;
+  spacingScale: number;
+  layoutScale: number;
 }
 
 const PREVIEW_SCALE = 0.34;
@@ -30,7 +32,9 @@ export function TemplateGalleryDialog({
   previewsByTemplateId,
   loadingTemplateIds,
   onSelectTemplate,
-  fontScale
+  fontScale,
+  spacingScale,
+  layoutScale
 }: TemplateGalleryDialogProps) {
   const loadingIds = new Set(loadingTemplateIds);
   const cards: Array<{
@@ -108,6 +112,8 @@ export function TemplateGalleryDialog({
                         <CVPresentationPreview
                           presentation={preview}
                           fontScale={fontScale}
+                          spacingScale={spacingScale}
+                          layoutScale={layoutScale}
                           mode="thumbnail"
                         />
                       </div>

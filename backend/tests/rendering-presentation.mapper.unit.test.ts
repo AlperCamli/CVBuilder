@@ -226,6 +226,11 @@ describe("rendering presentation mapper", () => {
     expect(presentation.sections[0]?.title).toBe("Professional Summary");
     expect(presentation.sections[1]?.title).toBe("Work Experience");
 
+    const experienceSection = presentation.sections.find((section) => section.type === "experience");
+    const experienceItem = experienceSection?.items[0];
+    expect(experienceItem?.title?.startsWith("Business Intelligence Intern, ")).toBe(true);
+    expect(experienceItem?.subtitle).toBeNull();
+
     const skillsSection = presentation.sections.find((section) => section.type === "skills");
     expect(skillsSection?.inline_text).toBe("PostgreSQL, Spark, Informatica");
 

@@ -298,7 +298,7 @@ const hasContentForAi = (section: EditorSection, blockId?: string): boolean => {
 };
 
 interface CvEditorDraft {
-  version: 3;
+  version: 1 | 2 | 3;
   cvKind: "master" | "tailored";
   cvId: string;
   title: string;
@@ -1425,7 +1425,12 @@ export function CVEditor() {
   };
 
   const replaceBlockFromSnapshot = (blockId: string, snapshot: Record<string, unknown>): boolean => {
-    const currentContent = withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
+    const currentContent = withDisplayMetadata(
+      editorSectionsToCvContent(sections, language),
+      fontScale,
+      spacingScale,
+      layoutScale
+    );
     const nextSections = currentContent.sections.map((section) => {
       const nextBlocks = section.blocks.map((block) => {
         if (block.id !== blockId) {
@@ -2004,6 +2009,8 @@ export function CVEditor() {
             setShowTemplateGallery(false);
           }}
           fontScale={fontScale}
+          spacingScale={spacingScale}
+          layoutScale={layoutScale}
         />
 
         <AddContentModal
