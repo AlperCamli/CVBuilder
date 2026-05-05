@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Globe, Github, Linkedin } from "lucide-react";
 import type {
   PresentationItem,
@@ -10,15 +11,25 @@ type PreviewMode = "full" | "thumbnail";
 interface CVPresentationPreviewProps {
   presentation: RenderingPresentation | null;
   fontScale?: number;
+  spacingScale?: number;
+  layoutScale?: number;
   mode?: PreviewMode;
+  onPageCountChange?: (pageCount: number) => void;
 }
 
 const MIN_FONT_SCALE = 0.85;
 const MAX_FONT_SCALE = 1.15;
+const MIN_SPACING_SCALE = 0.7;
+const MAX_SPACING_SCALE = 1.4;
+const MIN_LAYOUT_SCALE = 0.7;
+const MAX_LAYOUT_SCALE = 1.3;
 
-const clampFontScale = (value: number): number => {
-  return Math.min(MAX_FONT_SCALE, Math.max(MIN_FONT_SCALE, value));
-};
+const PAGE_WIDTH_PX = 595;
+const PAGE_HEIGHT_PX = 842;
+const PAGE_GAP_PX = 24;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
 const scaledPx = (px: number): string => `calc(${px}px * var(--cv-font-scale))`;
 
@@ -156,11 +167,41 @@ const renderTimelineSection = (
 export function CVPresentationPreview({
   presentation,
   fontScale = 1,
-  mode = "full"
+  spacingScale = 1,
+  layoutScale = 1,
+  mode = "full",
+  onPageCountChange
 }: CVPresentationPreviewProps) {
-  const resolvedScale = clampFontScale(fontScale);
+  const resolvedFontScale = clamp(fontScale, MIN_FONT_SCALE, MAX_FONT_SCALE);
+  const resolvedSpacingScale = clamp(spacingScale, MIN_SPACING_SCALE, MAX_SPACING_SCALE);
+  const resolvedLayoutScale = clamp(layoutScale, MIN_LAYOUT_SCALE, MAX_LAYOUT_SCALE);
+
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number>(PAGE_HEIGHT_PX);
+
+  useLayoutEffect(() => {
+    const node = measureRef.current;
+    if (!node) {
+      return;
+    }
+
+    const update = () => {
+      const next = node.getBoundingClientRect().height;
+      if (next > 0) {
+        setContentHeight(next);
+      }
+    };
+
+    update();
+
+    const observer = new ResizeObserver(() => update());
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [presentation, mode]);
+
   const rootScaleStyle = {
-    "--cv-font-scale": String(resolvedScale)
+    "--cv-font-scale": String(resolvedFontScale)
   } as React.CSSProperties;
 
   if (!presentation) {
@@ -169,8 +210,8 @@ export function CVPresentationPreview({
         className={mode === "thumbnail" ? "bg-white shadow-sm" : "bg-white shadow-lg"}
         style={{
           ...rootScaleStyle,
-          width: "595px",
-          minHeight: "842px",
+          width: `${PAGE_WIDTH_PX}px`,
+          minHeight: `${PAGE_HEIGHT_PX}px`,
           padding: scaledPx(40)
         }}
       >
@@ -188,24 +229,21 @@ export function CVPresentationPreview({
     muted: tokens.muted_color_hex
   };
 
+  const scaledSectionSpacing = tokens.section_spacing * resolvedSpacingScale;
+  const scaledBlockSpacing = tokens.block_spacing * resolvedSpacingScale;
+
+  const basePadY = theme.mode === "compact-single-column" ? 38 : 46;
+  const basePadX = theme.mode === "compact-single-column" ? 34 : 38;
+  const padY = basePadY * resolvedLayoutScale;
+  const padX = basePadX * resolvedLayoutScale;
+
   const header = presentation.header;
   const sideSectionTypes = new Set(["skills", "languages", "references", "certifications", "courses"]);
   const sidebarSections = presentation.sections.filter((section) => sideSectionTypes.has(section.type));
   const mainSections = presentation.sections.filter((section) => !sideSectionTypes.has(section.type));
 
-  return (
-    <div
-      className={mode === "thumbnail" ? "shadow-sm" : "shadow-lg"}
-      style={{
-        ...rootScaleStyle,
-        width: "595px",
-        minHeight: "842px",
-        padding: theme.mode === "compact-single-column" ? `${scaledPx(38)} ${scaledPx(34)}` : `${scaledPx(46)} ${scaledPx(38)}`,
-        fontFamily: tokens.font_family,
-        background: tokens.page_background_hex,
-        color: colors.body
-      }}
-    >
+  const renderInner = () => (
+    <>
       <div className="flex items-start gap-4">
         {header.photo ? (
           <img
@@ -261,25 +299,140 @@ export function CVPresentationPreview({
             }}
           >
             {sidebarSections.map((section) =>
-              renderDefaultSection(section, colors, Math.max(10, tokens.section_spacing - 3), Math.max(6, tokens.block_spacing - 3))
+              renderDefaultSection(section, colors, Math.max(10, scaledSectionSpacing - 3), Math.max(6, scaledBlockSpacing - 3))
             )}
           </aside>
 
           <main>
             {mainSections.map((section) =>
-              renderDefaultSection(section, colors, tokens.section_spacing, tokens.block_spacing)
+              renderDefaultSection(section, colors, scaledSectionSpacing, scaledBlockSpacing)
             )}
           </main>
         </div>
       ) : theme.mode === "timeline-split" ? (
         <div>
-          {presentation.sections.map((section) => renderTimelineSection(section, colors, tokens.section_spacing, tokens.block_spacing))}
+          {presentation.sections.map((section) => renderTimelineSection(section, colors, scaledSectionSpacing, scaledBlockSpacing))}
         </div>
       ) : (
         <div>
-          {presentation.sections.map((section) => renderDefaultSection(section, colors, tokens.section_spacing, tokens.block_spacing))}
+          {presentation.sections.map((section) => renderDefaultSection(section, colors, scaledSectionSpacing, scaledBlockSpacing))}
         </div>
       )}
+    </>
+  );
+
+  const sheetBaseStyle: React.CSSProperties = {
+    width: `${PAGE_WIDTH_PX}px`,
+    fontFamily: tokens.font_family,
+    background: tokens.page_background_hex,
+    color: colors.body,
+    boxSizing: "border-box"
+  };
+
+  const sheetPaddingStyle: React.CSSProperties = {
+    paddingTop: scaledPx(padY),
+    paddingBottom: scaledPx(padY),
+    paddingLeft: scaledPx(padX),
+    paddingRight: scaledPx(padX)
+  };
+
+  if (mode === "thumbnail") {
+    return (
+      <div
+        className="shadow-sm"
+        style={{
+          ...rootScaleStyle,
+          ...sheetBaseStyle,
+          ...sheetPaddingStyle,
+          minHeight: `${PAGE_HEIGHT_PX}px`
+        }}
+      >
+        {renderInner()}
+      </div>
+    );
+  }
+
+  const pageCount = Math.max(1, Math.ceil(contentHeight / PAGE_HEIGHT_PX));
+
+  return (
+    <div style={{ ...rootScaleStyle, position: "relative" }}>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "-99999px",
+          top: 0,
+          width: `${PAGE_WIDTH_PX}px`,
+          visibility: "hidden",
+          pointerEvents: "none"
+        }}
+      >
+        <div ref={measureRef} style={{ ...sheetBaseStyle, ...sheetPaddingStyle }}>
+          {renderInner()}
+        </div>
+      </div>
+
+      <PageCountReporter pageCount={pageCount} onChange={onPageCountChange} />
+
+      <div className="flex flex-col items-center" style={{ gap: `${PAGE_GAP_PX}px` }}>
+        {Array.from({ length: pageCount }).map((_, pageIndex) => (
+          <div
+            key={pageIndex}
+            className="shadow-lg"
+            style={{
+              ...sheetBaseStyle,
+              height: `${PAGE_HEIGHT_PX}px`,
+              overflow: "hidden",
+              position: "relative"
+            }}
+          >
+            <div
+              style={{
+                ...sheetPaddingStyle,
+                position: "absolute",
+                top: `${-pageIndex * PAGE_HEIGHT_PX}px`,
+                left: 0,
+                right: 0,
+                width: "100%",
+                boxSizing: "border-box"
+              }}
+            >
+              {renderInner()}
+            </div>
+            {pageCount > 1 ? (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "8px",
+                  right: "12px",
+                  fontSize: "10px",
+                  color: "#6B7280",
+                  background: "rgba(255,255,255,0.8)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  pointerEvents: "none"
+                }}
+              >
+                Page {pageIndex + 1} / {pageCount}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
+}
+
+function PageCountReporter({
+  pageCount,
+  onChange
+}: {
+  pageCount: number;
+  onChange?: (pageCount: number) => void;
+}) {
+  useEffect(() => {
+    onChange?.(pageCount);
+  }, [pageCount, onChange]);
+
+  return null;
 }

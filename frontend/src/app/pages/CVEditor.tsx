@@ -28,6 +28,11 @@ import {
   DialogDescription
 } from "../components/ui/dialog";
 import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent
+} from "../components/ui/hover-card";
+import {
   HeaderSection,
   SummarySection,
   ExperienceSection,
@@ -84,36 +89,60 @@ const formatDateTime = (value: string | null | undefined): string => {
 
 const FONT_SCALE_MIN = 0.85;
 const FONT_SCALE_MAX = 1.15;
+const SPACING_SCALE_MIN = 0.7;
+const SPACING_SCALE_MAX = 1.4;
+const LAYOUT_SCALE_MIN = 0.7;
+const LAYOUT_SCALE_MAX = 1.3;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
 
-const clampFontScale = (value: number): number => {
-  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value));
-};
+const clampInRange = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
-const resolveFontScaleFromContent = (content: CvContent | null | undefined): number => {
-  const rawValue = (content?.metadata as Record<string, unknown> | undefined)?.font_scale;
+const clampFontScale = (value: number): number => clampInRange(value, FONT_SCALE_MIN, FONT_SCALE_MAX);
+const clampSpacingScale = (value: number): number => clampInRange(value, SPACING_SCALE_MIN, SPACING_SCALE_MAX);
+const clampLayoutScale = (value: number): number => clampInRange(value, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX);
+
+const resolveScaleFromMetadata = (
+  content: CvContent | null | undefined,
+  key: string,
+  clamp: (value: number) => number
+): number => {
+  const rawValue = (content?.metadata as Record<string, unknown> | undefined)?.[key];
 
   if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-    return clampFontScale(rawValue);
+    return clamp(rawValue);
   }
 
   if (typeof rawValue === "string") {
     const parsed = Number.parseFloat(rawValue);
     if (Number.isFinite(parsed)) {
-      return clampFontScale(parsed);
+      return clamp(parsed);
     }
   }
 
   return 1;
 };
 
-const withFontScaleMetadata = (
+const resolveFontScaleFromContent = (content: CvContent | null | undefined): number =>
+  resolveScaleFromMetadata(content, "font_scale", clampFontScale);
+
+const resolveSpacingScaleFromContent = (content: CvContent | null | undefined): number =>
+  resolveScaleFromMetadata(content, "spacing_scale", clampSpacingScale);
+
+const resolveLayoutScaleFromContent = (content: CvContent | null | undefined): number =>
+  resolveScaleFromMetadata(content, "layout_scale", clampLayoutScale);
+
+const withDisplayMetadata = (
   content: CvContent,
-  fontScale: number
+  fontScale: number,
+  spacingScale: number,
+  layoutScale: number
 ): CvContent => {
   const metadata = {
     ...(content.metadata ?? {}),
-    font_scale: clampFontScale(fontScale)
+    font_scale: clampFontScale(fontScale),
+    spacing_scale: clampSpacingScale(spacingScale),
+    layout_scale: clampLayoutScale(layoutScale)
   };
 
   return {
@@ -269,13 +298,15 @@ const hasContentForAi = (section: EditorSection, blockId?: string): boolean => {
 };
 
 interface CvEditorDraft {
-  version: 2;
+  version: 3;
   cvKind: "master" | "tailored";
   cvId: string;
   title: string;
   language: string;
   templateId: string | null;
   fontScale: number;
+  spacingScale: number;
+  layoutScale: number;
   sections: EditorSection[];
   updatedAt: string;
 }
@@ -294,23 +325,38 @@ const readDraft = (cvKind: "master" | "tailored", cvId: string): CvEditorDraft |
   }
 
   try {
-    const parsed = JSON.parse(raw) as CvEditorDraft | (Omit<CvEditorDraft, "version" | "fontScale"> & { version: 1 });
+    const parsed = JSON.parse(raw) as Partial<CvEditorDraft> & {
+      version?: number;
+      cvKind?: "master" | "tailored";
+      cvId?: string;
+      sections?: EditorSection[];
+    };
     if (
       parsed &&
-      (parsed.version === 1 || parsed.version === 2) &&
+      (parsed.version === 1 || parsed.version === 2 || parsed.version === 3) &&
       parsed.cvKind === cvKind &&
       parsed.cvId === cvId &&
       Array.isArray(parsed.sections)
     ) {
       const maybeFontScale =
-        "fontScale" in parsed && typeof parsed.fontScale === "number"
-          ? parsed.fontScale
-          : 1;
+        typeof parsed.fontScale === "number" ? parsed.fontScale : 1;
+      const maybeSpacingScale =
+        typeof parsed.spacingScale === "number" ? parsed.spacingScale : 1;
+      const maybeLayoutScale =
+        typeof parsed.layoutScale === "number" ? parsed.layoutScale : 1;
 
       return {
-        ...parsed,
-        version: 2,
-        fontScale: clampFontScale(maybeFontScale)
+        cvKind,
+        cvId,
+        title: parsed.title ?? "",
+        language: parsed.language ?? "en",
+        templateId: parsed.templateId ?? null,
+        sections: parsed.sections,
+        updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+        version: 3,
+        fontScale: clampFontScale(maybeFontScale),
+        spacingScale: clampSpacingScale(maybeSpacingScale),
+        layoutScale: clampLayoutScale(maybeLayoutScale)
       };
     }
   } catch {
@@ -416,12 +462,20 @@ export function CVEditor() {
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
   const isUploadedFlow = Boolean(location.state?.isUploaded);
+  const isAiImprovedFlow = Boolean(location.state?.aiImproved);
+  const isTailoredFlow = Boolean(location.state?.isTailored);
   const [cvKind, setCvKind] = useState<"master" | "tailored">("master");
   const [cvId, setCvId] = useState<string | null>(null);
   const [title, setTitle] = useState("CV");
   const [language, setLanguage] = useState("en");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [fontScale, setFontScale] = useState(1);
+  const [spacingScale, setSpacingScale] = useState(1);
+  const [layoutScale, setLayoutScale] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [autoFitting, setAutoFitting] = useState(false);
+  const autoFitAttemptsRef = useRef(0);
+  const autoFitInitializedRef = useRef(false);
   const [sections, setSections] = useState<EditorSection[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -481,6 +535,8 @@ export function CVEditor() {
     setLanguage(master.language);
     setTemplateId(master.template_id);
     setFontScale(resolveFontScaleFromContent(master.current_content));
+    setSpacingScale(resolveSpacingScaleFromContent(master.current_content));
+    setLayoutScale(resolveLayoutScaleFromContent(master.current_content));
     setSections(cvContentToEditorSections(master.current_content));
     setLastSavedAt(master.updated_at);
   };
@@ -492,6 +548,8 @@ export function CVEditor() {
     setLanguage(tailored.language);
     setTemplateId(tailored.template_id);
     setFontScale(resolveFontScaleFromContent(tailored.current_content));
+    setSpacingScale(resolveSpacingScaleFromContent(tailored.current_content));
+    setLayoutScale(resolveLayoutScaleFromContent(tailored.current_content));
     setSections(cvContentToEditorSections(tailored.current_content));
     setLastSavedAt(tailored.updated_at);
     setTailoredJobData(
@@ -538,8 +596,13 @@ export function CVEditor() {
   };
 
   const buildCurrentContent = useCallback(() => {
-    return withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
-  }, [fontScale, language, sections]);
+    return withDisplayMetadata(
+      editorSectionsToCvContent(sections, language),
+      fontScale,
+      spacingScale,
+      layoutScale
+    );
+  }, [fontScale, language, layoutScale, sections, spacingScale]);
 
   const restoreDraftIfAvailable = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
     const draft = readDraft(nextCvKind, nextCvId);
@@ -553,6 +616,8 @@ export function CVEditor() {
     setLanguage(draft.language);
     setTemplateId(draft.templateId);
     setFontScale(clampFontScale(draft.fontScale));
+    setSpacingScale(clampSpacingScale(draft.spacingScale));
+    setLayoutScale(clampLayoutScale(draft.layoutScale));
     setSections(draft.sections);
     setDirty(true);
     setRestoredDraftAt(draft.updatedAt);
@@ -719,17 +784,19 @@ export function CVEditor() {
     }
 
     writeDraft({
-      version: 2,
+      version: 3,
       cvKind,
       cvId,
       title,
       language,
       templateId,
       fontScale,
+      spacingScale,
+      layoutScale,
       sections,
       updatedAt: new Date().toISOString()
     });
-  }, [cvId, cvKind, dirty, fontScale, language, sections, templateId, title]);
+  }, [cvId, cvKind, dirty, fontScale, language, layoutScale, sections, spacingScale, templateId, title]);
 
   const addSection = (sectionType: string) => {
     setSections((prev) => {
@@ -800,7 +867,12 @@ export function CVEditor() {
     }
 
     try {
-      const content = withFontScaleMetadata(editorSectionsToCvContent(sections, language), fontScale);
+      const content = withDisplayMetadata(
+        editorSectionsToCvContent(sections, language),
+        fontScale,
+        spacingScale,
+        layoutScale
+      );
 
       if (targetCvKind === "master") {
         const updated = await api.putMasterCvContent(targetCvId, content);
@@ -810,6 +882,8 @@ export function CVEditor() {
         setLanguage(updated.language);
         setTemplateId(updated.template_id);
         setFontScale(resolveFontScaleFromContent(updated.current_content));
+        setSpacingScale(resolveSpacingScaleFromContent(updated.current_content));
+        setLayoutScale(resolveLayoutScaleFromContent(updated.current_content));
         setLastSavedAt(updated.updated_at);
       } else {
         const updated = await api.putTailoredCvContent(targetCvId, content);
@@ -819,6 +893,8 @@ export function CVEditor() {
         setLanguage(updated.language);
         setTemplateId(updated.template_id);
         setFontScale(resolveFontScaleFromContent(updated.current_content));
+        setSpacingScale(resolveSpacingScaleFromContent(updated.current_content));
+        setLayoutScale(resolveLayoutScaleFromContent(updated.current_content));
         setLastSavedAt(updated.updated_at);
         setTailoredJobData(
           updated.job
@@ -854,8 +930,81 @@ export function CVEditor() {
     await persistCv("manual");
   };
 
+  const handlePageCountChange = useCallback((next: number) => {
+    setPageCount((prev) => (prev === next ? prev : next));
+  }, []);
+
   useEffect(() => {
-    if (!cvId || !dirty || loading || saving || autoSaving) {
+    if (loading || !cvId || !renderingPreview) {
+      return;
+    }
+    if (autoFitInitializedRef.current) {
+      return;
+    }
+
+    const shouldFit = isUploadedFlow || isAiImprovedFlow || isTailoredFlow;
+    if (!shouldFit) {
+      return;
+    }
+
+    const sessionKey = `cv-editor:auto-fit:${cvKind}:${cvId}`;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(sessionKey) === "done") {
+      autoFitInitializedRef.current = true;
+      return;
+    }
+
+    autoFitInitializedRef.current = true;
+    autoFitAttemptsRef.current = 0;
+
+    const handle = window.setTimeout(() => {
+      setAutoFitting(true);
+    }, 400);
+
+    return () => window.clearTimeout(handle);
+  }, [cvId, cvKind, isAiImprovedFlow, isTailoredFlow, isUploadedFlow, loading, renderingPreview]);
+
+  useEffect(() => {
+    if (!autoFitting) {
+      return;
+    }
+
+    const finish = () => {
+      setAutoFitting(false);
+      setDirty(true);
+      setRestoredDraftAt(null);
+      if (typeof window !== "undefined" && cvId) {
+        window.sessionStorage.setItem(`cv-editor:auto-fit:${cvKind}:${cvId}`, "done");
+      }
+    };
+
+    if (pageCount <= 1) {
+      finish();
+      return;
+    }
+
+    if (autoFitAttemptsRef.current >= 16) {
+      finish();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      autoFitAttemptsRef.current += 1;
+      if (spacingScale > SPACING_SCALE_MIN + 0.001) {
+        setSpacingScale((prev) => Math.max(SPACING_SCALE_MIN, prev - 0.05));
+      } else if (layoutScale > LAYOUT_SCALE_MIN + 0.001) {
+        setLayoutScale((prev) => Math.max(LAYOUT_SCALE_MIN, prev - 0.05));
+      } else if (fontScale > FONT_SCALE_MIN + 0.001) {
+        setFontScale((prev) => Math.max(FONT_SCALE_MIN, prev - 0.02));
+      } else {
+        finish();
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [autoFitting, cvId, cvKind, fontScale, layoutScale, pageCount, spacingScale]);
+
+  useEffect(() => {
+    if (!cvId || !dirty || loading || saving || autoSaving || autoFitting) {
       return;
     }
 
@@ -866,7 +1015,7 @@ export function CVEditor() {
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autoSaving, cvId, cvKind, dirty, fontScale, language, loading, saving, sections]);
+  }, [autoFitting, autoSaving, cvId, cvKind, dirty, fontScale, language, layoutScale, loading, saving, sections, spacingScale]);
 
   const assignTemplate = async (nextTemplateId: string | null) => {
     if (!cvId) {
@@ -1549,34 +1698,132 @@ export function CVEditor() {
                 Choose template: {selectedTemplateName}
               </button>
 
-              <div
-                className="px-3 py-1.5 rounded-lg border flex items-center gap-2"
-                style={{
-                  borderColor: "var(--color-border-secondary)",
-                  background: "var(--color-background-primary)"
-                }}
-                title="Preview and export font size"
-              >
-                <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                  Font
-                </span>
-                <input
-                  type="range"
-                  min={FONT_SCALE_MIN}
-                  max={FONT_SCALE_MAX}
-                  step={0.05}
-                  value={fontScale}
-                  onChange={(event) => {
-                    const next = clampFontScale(Number(event.target.value));
-                    setFontScale(next);
-                    markDirty();
-                  }}
-                  style={{ accentColor: "var(--color-teal-600)" }}
-                />
-                <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", minWidth: "32px", textAlign: "right" }}>
-                  {fontScale.toFixed(2)}x
-                </span>
-              </div>
+              <HoverCard openDelay={120} closeDelay={150}>
+                <HoverCardTrigger asChild>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg border flex items-center gap-2"
+                    style={{
+                      borderColor: "var(--color-border-secondary)",
+                      background: "var(--color-background-primary)",
+                      color: "var(--color-text-primary)",
+                      fontSize: "12px"
+                    }}
+                    title="Adjust font, spacing and layout"
+                  >
+                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>Font</span>
+                    <span>{fontScale.toFixed(2)}x</span>
+                    <span style={{ color: "var(--color-text-secondary)" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                      {pageCount} {pageCount === 1 ? "page" : "pages"}
+                    </span>
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent
+                  align="end"
+                  sideOffset={10}
+                  className="w-72"
+                  style={{ background: "var(--color-background-primary)" }}
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                          Font size
+                        </label>
+                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                          {fontScale.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={FONT_SCALE_MIN}
+                        max={FONT_SCALE_MAX}
+                        step={0.05}
+                        value={fontScale}
+                        onChange={(event) => {
+                          const next = clampFontScale(Number(event.target.value));
+                          setFontScale(next);
+                          markDirty();
+                        }}
+                        style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                          Spacing
+                        </label>
+                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                          {spacingScale.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={SPACING_SCALE_MIN}
+                        max={SPACING_SCALE_MAX}
+                        step={0.05}
+                        value={spacingScale}
+                        onChange={(event) => {
+                          const next = clampSpacingScale(Number(event.target.value));
+                          setSpacingScale(next);
+                          markDirty();
+                        }}
+                        style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
+                      />
+                      <p style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
+                        Vertical gap between sections and entries.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                          Layout
+                        </label>
+                        <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                          {layoutScale.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={LAYOUT_SCALE_MIN}
+                        max={LAYOUT_SCALE_MAX}
+                        step={0.05}
+                        value={layoutScale}
+                        onChange={(event) => {
+                          const next = clampLayoutScale(Number(event.target.value));
+                          setLayoutScale(next);
+                          markDirty();
+                        }}
+                        style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
+                      />
+                      <p style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
+                        Page padding and overall density.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t flex items-center justify-between" style={{ borderColor: "var(--color-border-tertiary)" }}>
+                      <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                        Preview length: {pageCount} {pageCount === 1 ? "page" : "pages"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFontScale(1);
+                          setSpacingScale(1);
+                          setLayoutScale(1);
+                          markDirty();
+                        }}
+                        style={{ fontSize: "11px", color: "var(--color-teal-600)" }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
 
               {selectedTemplateDetail && (
                 <span
@@ -1701,12 +1948,45 @@ export function CVEditor() {
             }}
           >
             <div>
-              <p className="uppercase tracking-wider mb-4" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
-                Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="uppercase tracking-wider" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
+                  Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
+                </p>
+                <div className="flex items-center gap-2">
+                  {autoFitting ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                      style={{
+                        fontSize: "10px",
+                        background: "var(--color-teal-50)",
+                        color: "var(--color-teal-800)"
+                      }}
+                    >
+                      <Loader2 size={10} className="animate-spin" />
+                      Auto-fitting to one page
+                    </span>
+                  ) : null}
+                  <span
+                    className="px-2 py-0.5 rounded-full"
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 500,
+                      background: pageCount === 1 ? "var(--color-teal-50)" : "var(--color-background-primary)",
+                      color: pageCount === 1 ? "var(--color-teal-800)" : "var(--color-text-secondary)",
+                      border: pageCount === 1 ? "none" : "1px solid var(--color-border-tertiary)"
+                    }}
+                    title={pageCount === 1 ? "Fits on one page" : `Will export as ${pageCount} pages`}
+                  >
+                    {pageCount} {pageCount === 1 ? "page" : "pages"}
+                  </span>
+                </div>
+              </div>
               <CVPresentationPreview
                 presentation={renderingPreview?.presentation ?? null}
                 fontScale={fontScale}
+                spacingScale={spacingScale}
+                layoutScale={layoutScale}
+                onPageCountChange={handlePageCountChange}
               />
             </div>
           </div>

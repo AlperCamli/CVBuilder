@@ -17,7 +17,8 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\user\\\\Desktop\\\\CVBuilder\\\\CVBuilder\" -Recurse -Force)",
       "Bash(Select-Object -First 50)",
       "Bash(xargs grep *)",
-      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(./node_modules/.bin/vite build *)"
     ]
   }
 }
