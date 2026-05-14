@@ -1,21 +1,35 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
+import { useAuth } from "../integration/auth-context";
+import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
+import { hasSupabaseConfig } from "../integration/config";
 
 export function ForgotPassword() {
+  const { requestPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+
+    try {
+      await requestPasswordReset(email);
       setIsSubmitted(true);
-    }, 1000);
+    } catch (error) {
+      const mappedMessage = mapAuthErrorMessage("forgot_password", error);
+      if (mappedMessage === "If an account exists for that email, reset instructions will be sent.") {
+        setIsSubmitted(true);
+      } else {
+        setErrorMessage(mappedMessage);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isSubmitted) {
@@ -137,6 +151,35 @@ export function ForgotPassword() {
 
           {/* Reset Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {!hasSupabaseConfig && (
+              <div
+                className="p-3 rounded-lg border"
+                style={{
+                  borderColor: "var(--color-red-200)",
+                  background: "var(--color-red-50)",
+                  color: "var(--color-red-700)",
+                  fontSize: "13px"
+                }}
+              >
+                Missing frontend Supabase env vars. Set `VITE_SUPABASE_URL` and
+                `VITE_SUPABASE_ANON_KEY`.
+              </div>
+            )}
+
+            {errorMessage && (
+              <div
+                className="p-3 rounded-lg border"
+                style={{
+                  borderColor: "var(--color-red-200)",
+                  background: "var(--color-red-50)",
+                  color: "var(--color-red-700)",
+                  fontSize: "13px"
+                }}
+              >
+                {errorMessage}
+              </div>
+            )}
+
             {/* Email Field */}
             <div>
               <label 
@@ -178,13 +221,17 @@ export function ForgotPassword() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !hasSupabaseConfig}
               className="w-full py-3 rounded-lg font-medium transition-all"
               style={{
                 fontSize: "14px",
-                background: isLoading ? "var(--color-text-tertiary)" : "var(--color-teal-600)",
+                background:
+                  isLoading || !hasSupabaseConfig
+                    ? "var(--color-text-tertiary)"
+                    : "var(--color-teal-600)",
                 color: "white",
-                cursor: isLoading ? "not-allowed" : "pointer",
+                cursor: isLoading || !hasSupabaseConfig ? "not-allowed" : "pointer",
+                opacity: isLoading || !hasSupabaseConfig ? 0.75 : 1
               }}
             >
               {isLoading ? "Sending..." : "Send reset link"}

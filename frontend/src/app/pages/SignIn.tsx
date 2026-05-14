@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
 export function SignIn() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,19 +15,25 @@ export function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { message?: string } | null;
+    if (state?.message) {
+      setSuccessMessage(state.message);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsGoogleLoading(true);
 
     try {
       await signInWithGoogle();
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Google sign-in failed. Please try again.");
-      }
+      setErrorMessage(mapAuthErrorMessage("google_oauth", error));
       setIsGoogleLoading(false);
     }
   };
@@ -33,17 +41,14 @@ export function SignIn() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsLoading(true);
 
     try {
       await signIn(email, password);
       navigate("/app", { replace: true });
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Sign-in failed. Please try again.");
-      }
+      setErrorMessage(mapAuthErrorMessage("sign_in", error));
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +100,20 @@ export function SignIn() {
               }}
             >
               {errorMessage}
+            </div>
+          )}
+
+          {successMessage && (
+            <div
+              className="mb-5 p-3 rounded-lg border"
+              style={{
+                borderColor: "var(--color-teal-200)",
+                background: "var(--color-teal-50)",
+                color: "var(--color-teal-800)",
+                fontSize: "13px"
+              }}
+            >
+              {successMessage}
             </div>
           )}
 

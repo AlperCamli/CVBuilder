@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
 export function SignUp() {
@@ -23,11 +24,7 @@ export function SignUp() {
     try {
       await signInWithGoogle();
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Google sign-in failed. Please try again.");
-      }
+      setErrorMessage(mapAuthErrorMessage("google_oauth", error));
       setIsGoogleLoading(false);
     }
   };
@@ -47,11 +44,7 @@ export function SignUp() {
         navigate("/app", { replace: true });
       }
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Sign-up failed. Please try again.");
-      }
+      setErrorMessage(mapAuthErrorMessage("sign_up", error));
     } finally {
       setIsLoading(false);
     }

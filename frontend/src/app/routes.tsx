@@ -5,6 +5,7 @@ import { Landing } from "./pages/Landing";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
 import { EmailSent } from "./pages/EmailSent";
 import { AuthCallback } from "./pages/AuthCallback";
 import { Dashboard } from "./pages/Dashboard";
@@ -55,6 +56,10 @@ export const router = createBrowserRouter([
   {
     path: "/forgot-password",
     Component: ForgotPassword
+  },
+  {
+    path: "/reset-password",
+    Component: ResetPassword
   },
   {
     path: "/email-sent",

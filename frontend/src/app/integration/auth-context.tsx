@@ -31,6 +31,8 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (fullName: string, email: string, password: string) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<MeResponseData | null>;
   clearAuthMessage: () => void;
@@ -168,6 +170,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    ensureSupabaseConfigured();
+    setAuthMessage(null);
+
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+
+    if (error) {
+      throw error;
+    }
+  }, []);
+
+  const updatePassword = useCallback(async (password: string) => {
+    ensureSupabaseConfigured();
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      throw error;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     setAuthMessage(null);
     setMe(null);
@@ -242,6 +266,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signIn,
       signUp,
       signInWithGoogle,
+      requestPasswordReset,
+      updatePassword,
       signOut,
       refreshMe,
       clearAuthMessage
@@ -256,6 +282,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signIn,
       signUp,
       signInWithGoogle,
+      requestPasswordReset,
+      updatePassword,
       signOut,
       refreshMe,
       clearAuthMessage
