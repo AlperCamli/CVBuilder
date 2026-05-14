@@ -85,6 +85,11 @@ export const hasContentForAi = (section: EditorSection, blockReference?: string)
 };
 
 export const canUseAiForSectionBlock = (section: EditorSection, blockReference?: string): boolean => {
+  if (section.type === "skills") {
+    // Skills AI should be allowed even when the current skill list is empty.
+    return true;
+  }
+
   if (!hasContentForAi(section, blockReference)) {
     return false;
   }

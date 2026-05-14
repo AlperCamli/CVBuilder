@@ -25,12 +25,14 @@ describe("cv-editor-ai-guard", () => {
     expect(canUseAiForSectionBlock(filledSummary)).toBe(true);
   });
 
-  it("requires at least one non-empty skill value", () => {
+  it("keeps skill-content detection but allows AI even for empty skills", () => {
     const emptySkills = makeSection("skills", { skills: ["", "   "] });
     const filledSkills = makeSection("skills", { skills: ["TypeScript"] });
 
     expect(hasContentForAi(emptySkills)).toBe(false);
     expect(hasContentForAi(filledSkills)).toBe(true);
+    expect(canUseAiForSectionBlock(emptySkills)).toBe(true);
+    expect(canUseAiForSectionBlock(filledSkills)).toBe(true);
   });
 
   it("blocks AI on experience item when description is empty", () => {
