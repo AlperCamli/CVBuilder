@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { DateInputHelper } from "./DateInputHelper";
 
@@ -1127,6 +1127,7 @@ interface SkillsSectionProps {
   onChange: (data: any) => void;
   onAIAssist?: (blockId?: string) => void;
   aiVersionNavigator?: AiVersionNavigatorState;
+  suggestionPoolPanel?: ReactNode;
 }
 
 export function SkillsSection({
@@ -1136,7 +1137,8 @@ export function SkillsSection({
   onRemove,
   onChange,
   onAIAssist,
-  aiVersionNavigator
+  aiVersionNavigator,
+  suggestionPoolPanel
 }: SkillsSectionProps) {
   const skills = data.skills || [];
 
@@ -1198,6 +1200,7 @@ export function SkillsSection({
       </div>
       {!isHidden && (
         <div className="space-y-3">
+          {suggestionPoolPanel}
           <div className="flex flex-wrap gap-2">
             {skills.map((skill: string, index: number) => (
               <span

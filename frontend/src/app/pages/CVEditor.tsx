@@ -1842,6 +1842,7 @@ export function CVEditor() {
             <SkillsSection
               {...commonProps}
               aiVersionNavigator={getAiVersionNavigator(getSectionFirstBlockId(section) ?? undefined)}
+              suggestionPoolPanel={renderSkillsPoolPanel(section)}
             />
           );
         case "languages":
@@ -1901,20 +1902,132 @@ export function CVEditor() {
     return lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet";
   })();
 
-  const activeSkillsSection = skillsPoolSectionId
-    ? sections.find((section) => section.id === skillsPoolSectionId && section.type === "skills") ?? null
-    : null;
-  const activeSkillsPool = activeSkillsSection ? resolveSkillPoolState(activeSkillsSection) : null;
-  const activeSkillValues = new Set(
-    (
-      (activeSkillsSection?.data as Record<string, unknown> | null)?.skills &&
-      Array.isArray((activeSkillsSection?.data as Record<string, unknown>).skills)
-        ? ((activeSkillsSection?.data as Record<string, unknown>).skills as unknown[])
+  const renderSkillsPoolPanel = (section: EditorSection) => {
+    if (section.type !== "skills") {
+      return null;
+    }
+
+    if (!showSkillsPoolDialog || skillsPoolSectionId !== section.id) {
+      return null;
+    }
+
+    const sectionPool = resolveSkillPoolState(section);
+    const sectionSkillValues = new Set(
+      (Array.isArray((section.data as Record<string, unknown>)?.skills)
+        ? ((section.data as Record<string, unknown>).skills as unknown[])
         : []
-    )
-      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
-      .filter((value) => value.length > 0)
-  );
+      )
+        .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+        .filter((value) => value.length > 0)
+    );
+
+    return (
+      <div
+        className="rounded-lg border p-3 space-y-3"
+        style={{
+          borderColor: "var(--color-teal-200)",
+          background: "var(--color-teal-50)"
+        }}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-primary)" }}>
+              Skills Suggestion Pool
+            </p>
+            <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              Click a skill to toggle it in your Skills section.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refreshSkillsPool()}
+              disabled={skillsPoolLoading || skillsPoolRefreshing || sectionPool.items.length === 0}
+              className="px-2.5 py-1 rounded border inline-flex items-center gap-1"
+              style={{
+                fontSize: "11px",
+                borderColor: "var(--color-border-secondary)",
+                color: "var(--color-text-secondary)",
+                background: "var(--color-background-primary)",
+                opacity: skillsPoolLoading || skillsPoolRefreshing ? 0.7 : 1
+              }}
+            >
+              <RefreshCw size={12} />
+              Refresh pool
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSkillsPoolDialog(false);
+                setSkillsPoolError(null);
+              }}
+              className="px-2.5 py-1 rounded border"
+              style={{
+                fontSize: "11px",
+                borderColor: "var(--color-border-secondary)",
+                color: "var(--color-text-secondary)",
+                background: "var(--color-background-primary)"
+              }}
+            >
+              Hide
+            </button>
+          </div>
+        </div>
+
+        {skillsPoolError ? (
+          <div
+            className="p-2.5 rounded-lg border"
+            style={{
+              borderColor: "var(--color-red-200)",
+              background: "var(--color-red-50)",
+              color: "var(--color-red-700)",
+              fontSize: "12px"
+            }}
+          >
+            {skillsPoolError}
+          </div>
+        ) : null}
+
+        {(skillsPoolLoading || skillsPoolRefreshing) && (
+          <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+            <Loader2 size={14} className="animate-spin" />
+            {skillsPoolLoading ? "Generating skills pool..." : "Refreshing skills pool..."}
+          </div>
+        )}
+
+        <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+          {sectionPool.items.length} skills in pool
+        </p>
+
+        {sectionPool.items.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {sectionPool.items.map((skill) => {
+              const isActive = sectionSkillValues.has(skill.trim().toLowerCase());
+              return (
+                <button
+                  key={skill}
+                  onClick={() => toggleSkillFromPool(skill)}
+                  className="px-3 py-1.5 rounded-full border transition-colors"
+                  style={{
+                    fontSize: "12px",
+                    borderColor: isActive ? "var(--color-teal-500)" : "var(--color-border-secondary)",
+                    background: isActive ? "var(--color-teal-50)" : "var(--color-background-primary)",
+                    color: isActive ? "var(--color-teal-800)" : "var(--color-text-primary)"
+                  }}
+                >
+                  {skill}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+            No skills in the pool yet.
+          </p>
+        )}
+      </div>
+    );
+  };
 
 
   if (loading) {
@@ -2420,97 +2533,6 @@ export function CVEditor() {
                     Pending: {aiHistory.suggestions.filter((item: AiSuggestionSummary) => item.status === "pending").length}
                   </p>
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
-          open={showSkillsPoolDialog}
-          onOpenChange={(open) => {
-            setShowSkillsPoolDialog(open);
-            if (!open) {
-              setSkillsPoolError(null);
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle style={{ fontSize: "17px", color: "var(--color-text-primary)" }}>
-                Skills Suggestion Pool
-              </DialogTitle>
-              <DialogDescription style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Click a skill to toggle it in your Skills section.
-              </DialogDescription>
-            </DialogHeader>
-
-            {skillsPoolError ? (
-              <div
-                className="p-2.5 rounded-lg border"
-                style={{
-                  borderColor: "var(--color-red-200)",
-                  background: "var(--color-red-50)",
-                  color: "var(--color-red-700)",
-                  fontSize: "12px"
-                }}
-              >
-                {skillsPoolError}
-              </div>
-            ) : null}
-
-            {(skillsPoolLoading || skillsPoolRefreshing) && (
-              <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                <Loader2 size={14} className="animate-spin" />
-                {skillsPoolLoading ? "Generating skills pool..." : "Refreshing skills pool..."}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                {activeSkillsPool?.items.length ?? 0} skills in pool
-              </p>
-              <button
-                onClick={() => void refreshSkillsPool()}
-                disabled={skillsPoolLoading || skillsPoolRefreshing || !activeSkillsPool || activeSkillsPool.items.length === 0}
-                className="px-2.5 py-1 rounded border inline-flex items-center gap-1"
-                style={{
-                  fontSize: "11px",
-                  borderColor: "var(--color-border-secondary)",
-                  color: "var(--color-text-secondary)",
-                  opacity: skillsPoolLoading || skillsPoolRefreshing ? 0.7 : 1
-                }}
-              >
-                <RefreshCw size={12} />
-                Refresh pool
-              </button>
-            </div>
-
-            <div className="max-h-[280px] overflow-auto">
-              {activeSkillsPool && activeSkillsPool.items.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {activeSkillsPool.items.map((skill) => {
-                    const isActive = activeSkillValues.has(skill.trim().toLowerCase());
-                    return (
-                      <button
-                        key={skill}
-                        onClick={() => toggleSkillFromPool(skill)}
-                        className="px-3 py-1.5 rounded-full border transition-colors"
-                        style={{
-                          fontSize: "12px",
-                          borderColor: isActive ? "var(--color-teal-500)" : "var(--color-border-secondary)",
-                          background: isActive ? "var(--color-teal-50)" : "var(--color-background-primary)",
-                          color: isActive ? "var(--color-teal-800)" : "var(--color-text-primary)"
-                        }}
-                      >
-                        {skill}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  No skills in the pool yet.
-                </p>
               )}
             </div>
           </DialogContent>
