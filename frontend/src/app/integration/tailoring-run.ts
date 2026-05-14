@@ -135,6 +135,9 @@ export const toRunErrorMessage = (status: TailoringRunStatusResponse): string =>
   if (normalized.includes("output_semantically_empty")) {
     return "AI generated an empty tailored draft. Please adjust job context or answers and retry.";
   }
+  if (normalized.includes("output_master_verbatim")) {
+    return "AI returned the master CV unchanged. Add a more specific job description or fill in more follow-up answers, then retry.";
+  }
   return raw || "Tailoring AI request failed.";
 };
 

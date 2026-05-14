@@ -39,6 +39,7 @@ import { cvParseOutputSchema } from "./flows/flow-contracts";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
 import { stabilizeTailoredDraftFromMaster } from "./tailored-draft-empty-field-recovery";
+import { evaluateTailoredDraftMasterDivergence } from "./tailored-draft-master-divergence";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -139,6 +140,15 @@ const toPersistableAiRunError = (error: unknown): string => {
       return `${error.message} (${diagnostics.join("; ")})`;
     }
 
+    return error.message;
+  }
+
+  if (error instanceof AiFlowFailedError) {
+    const details = asRecord(error.details);
+    const reason = typeof details.reason === "string" ? details.reason.trim() : "";
+    if (reason) {
+      return `${error.message} (reason=${reason})`;
+    }
     return error.message;
   }
 
@@ -1311,6 +1321,7 @@ export class AiService {
       normalizedContent = stabilized.content;
 
       this.assertTailoredDraftSemanticContent(normalizedContent);
+      this.assertTailoredDraftDivergesFromMaster(normalizedContent, masterCv.current_content);
 
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(userId, tailoredCv.id, {
         current_content: normalizedContent,
@@ -1557,6 +1568,30 @@ export class AiService {
         flow_type: "tailored_draft",
         reason: "output_semantically_empty",
         semantic_stats: semantic.stats
+      }
+    );
+  }
+
+  private assertTailoredDraftDivergesFromMaster(
+    tailored: TailoredCvRecord["current_content"],
+    master: MasterCvRecord["current_content"]
+  ): void {
+    const divergence = evaluateTailoredDraftMasterDivergence(tailored, master);
+    if (divergence.diverges) {
+      return;
+    }
+
+    // The AI completed and returned schema-valid content, but the content is
+    // functionally identical to the master CV (no field changes, no added
+    // sections, no title rewrites). This is a known Gemini-flash failure mode
+    // — surface it as an explicit failure instead of saving a tailored CV
+    // that looks unchanged to the user.
+    throw new AiFlowFailedError(
+      "The AI returned the master CV unchanged. Try again with a more specific job description or fill in more follow-up answers so the model has clearer signal to tailor against.",
+      {
+        flow_type: "tailored_draft",
+        reason: "output_master_verbatim",
+        divergence_stats: divergence.stats
       }
     );
   }
