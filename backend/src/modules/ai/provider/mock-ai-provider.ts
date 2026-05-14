@@ -550,8 +550,45 @@ const generateBlockSuggestions = (
   const block = asRecord(input.block);
   const userInstruction = asString(input.user_instruction);
   const jobDescription = asString(input.job_description);
+  const skillsPoolContext = asRecord(input.skills_pool_context);
   const keywords = tokenizeKeywords(jobDescription, 6);
   const primary = extractPrimaryTextField(block);
+
+  if (Object.keys(skillsPoolContext).length > 0) {
+    const existingSkills = asArray(skillsPoolContext.existing_skills)
+      .map((item) => asString(item).trim())
+      .filter(Boolean);
+    const experienceDescriptions = asArray(skillsPoolContext.work_experience)
+      .map((item) => asString(asRecord(item).description))
+      .filter(Boolean)
+      .join(" ");
+    const educationDescriptions = asArray(skillsPoolContext.education)
+      .flatMap((item) => {
+        const row = asRecord(item);
+        return [asString(row.degree), asString(row.field_of_study), asString(row.description)];
+      })
+      .filter(Boolean)
+      .join(" ");
+    const inferred = tokenizeKeywords(`${experienceDescriptions} ${educationDescriptions}`, 20).map((token) => capitalize(token));
+    const mergedSkills = [...new Set([...existingSkills, ...inferred])].slice(0, 20);
+    const suggestedBlock = {
+      ...block,
+      fields: {
+        ...asRecord(block.fields),
+        skills: mergedSkills
+      }
+    };
+
+    return {
+      suggestions: [
+        {
+          label: "Skills Pool",
+          rationale: "Derived from existing skills, experience descriptions, and education context.",
+          suggested_block: suggestedBlock
+        }
+      ]
+    };
+  }
 
   const suggestions = Array.from({ length: optionCount }).map((_, index) => {
     const nextText = buildSuggestionText(primary.text, actionType, keywords, userInstruction, index);

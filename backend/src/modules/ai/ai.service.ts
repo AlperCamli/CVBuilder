@@ -80,11 +80,31 @@ import {
   aiJobAnalysisSchema,
   aiTailoredDraftSchema
 } from "./ai.schemas";
+import {
+  buildSkillsPoolMetaForGeneration,
+  buildSkillsPoolMetaForRealRefresh,
+  collectSkillsPoolContext,
+  dedupeSkills,
+  extractPoolSkillsFromSuggestedBlock,
+  extractSkillsPoolMetadata,
+  SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT,
+  toUtcDateKey
+} from "./skills-pool";
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+};
+
+const asString = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+  return "";
 };
 
 const asStringArray = (value: unknown): string[] => {
@@ -742,9 +762,138 @@ export class AiService {
 
     const target = await this.resolveAiBlockTarget(session.appUser.id, input);
     const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
+    const blockType = asString(currentBlock.block.type).toLowerCase();
+    const isSkillsBlock = blockType.includes("skill");
+
+    if (isSkillsBlock) {
+      const currentPoolMeta = extractSkillsPoolMetadata(currentBlock.block.meta);
+      const hasExistingPool = currentPoolMeta.skill_pool_items.length > 0;
+      const plan = await this.billingService.getCurrentPlanSummary(session.appUser.id);
+      const planCode = asString(plan.plan_code).toLowerCase();
+
+      if (hasExistingPool) {
+        if (planCode === "free") {
+          throw new ConflictError("Skills pool refresh is available only for Pro users.");
+        }
+
+        if (!currentPoolMeta.skill_pool_shuffle_used) {
+          throw new ConflictError("First refresh requires in-editor shuffle before real refresh.");
+        }
+
+        const dayKey = toUtcDateKey(new Date());
+        const usedToday =
+          currentPoolMeta.skill_pool_refresh_count_day === dayKey
+            ? currentPoolMeta.skill_pool_refresh_count_value
+            : 0;
+        if (usedToday >= SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT) {
+          throw new ConflictError("Daily skills pool refresh limit reached for this CV.");
+        }
+      }
+
+      const optionCount = 1;
+      const skillsPoolContext = collectSkillsPoolContext(target.current_content, currentBlock.block);
+      const userInstruction = input.user_instruction ?? "";
+
+      const executed = await this.executeFlow({
+        flow_type: "block_suggest",
+        action_type: input.action_type,
+        user_id: session.appUser.id,
+        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+        job_id: target.linked_job?.id ?? null,
+        input_payload: {
+          action_type: input.action_type,
+          block: currentBlock.block,
+          user_instruction: userInstruction,
+          job_description: target.linked_job?.job_description ?? "",
+          option_count: optionCount,
+          skills_pool_mode: hasExistingPool ? "refresh" : "generate",
+          skills_pool_context: skillsPoolContext
+        },
+        user_prompt:
+          "Generate a final non-duplicate skills pool from existing skills, work experience descriptions, and education context. Return only valid structured suggested_block with fields.skills as string array (max 20)."
+      });
+
+      const output = asRecord(executed.output);
+      const outputSuggestions = Array.isArray(output.suggestions)
+        ? output.suggestions.map((item) => asRecord(item))
+        : [];
+
+      if (outputSuggestions.length === 0) {
+        throw new AiFlowFailedError("Skills pool generation produced no suggestions", {
+          flow_type: "block_suggest",
+          reason: "skills_pool_empty"
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const utcDay = toUtcDateKey(new Date());
+
+      const normalizedSuggestions = outputSuggestions.map((variant) => {
+        const suggestedBlockInput = asRecord(variant.suggested_block);
+        const parsedSkills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
+        if (parsedSkills.length === 0) {
+          throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
+            flow_type: "block_suggest",
+            reason: "skills_pool_parse_failed"
+          });
+        }
+
+        const nextPoolMeta = hasExistingPool
+          ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, parsedSkills, nowIso, utcDay)
+          : buildSkillsPoolMetaForGeneration(parsedSkills, nowIso);
+
+        const suggestedBlock = normalizeCvBlock(
+          {
+            ...currentBlock.block,
+            fields: {
+              ...asRecord(currentBlock.block.fields),
+              skills: parsedSkills
+            },
+            meta: {
+              ...asRecord(currentBlock.block.meta),
+              ...nextPoolMeta
+            }
+          },
+          currentBlock.block
+        );
+
+        return {
+          ...variant,
+          suggested_block: asRecord(suggestedBlock),
+          rationale: asString(variant.rationale)
+        };
+      });
+
+      const persistedSuggestions = await this.aiRepository.createSuggestions(
+        normalizedSuggestions.map((variant) => ({
+          ai_run_id: executed.ai_run.id,
+          user_id: session.appUser.id,
+          master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+          tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+          block_id: input.block_id,
+          action_type: input.action_type,
+          before_content: asRecord(currentBlock.block),
+          suggested_content: asRecord(variant.suggested_block),
+          option_group_key: null
+        }))
+      );
+
+      await this.billingService.recordAiActionUsage(session.appUser.id);
+
+      return {
+        ai_run_id: executed.ai_run.id,
+        suggestion_ids: persistedSuggestions.map((item) => item.id),
+        suggestions: persistedSuggestions.map((item, index) => ({
+          ...this.toSuggestionSummary(item),
+          before_content: item.before_content,
+          suggested_content: item.suggested_content,
+          rationale: String(normalizedSuggestions[index]?.rationale ?? "")
+        }))
+      };
+    }
 
     const optionCount = input.action_type === "options" ? 3 : 1;
-
     const executed = await this.executeFlow({
       flow_type: "block_suggest",
       action_type: input.action_type,

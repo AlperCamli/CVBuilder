@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cvContentToEditorSections } from "../../frontend/src/app/integration/cv-mappers";
+import {
+  cvContentToEditorSections,
+  editorSectionsToCvContent
+} from "../../frontend/src/app/integration/cv-mappers";
 
 const visible = "visible" as const;
 
@@ -127,5 +130,50 @@ describe("cv-mappers experience compatibility", () => {
     expect(String(items[0]?.company ?? "")).toBe("Gamma");
     expect(String(items[0]?.description ?? "")).toContain("Built reporting dashboards");
     expect(String(items[0]?.description ?? "")).toContain("Maintained analytics workflows");
+  });
+
+  it("round-trips skills pool metadata through editor mapping", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "skills-section",
+          type: "skills",
+          title: "Skills",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "skills-block",
+              type: "skills",
+              order: 0,
+              visibility: visible,
+              fields: {
+                skills: ["TypeScript", "React"]
+              },
+              meta: {
+                skill_pool_items: ["Node.js", "AWS"],
+                skill_pool_last_generated_at: "2026-05-14T10:00:00.000Z",
+                skill_pool_refresh_count_day: "2026-05-14",
+                skill_pool_refresh_count_value: 1,
+                skill_pool_shuffle_used: true
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const skillsSection = sections.find((section) => section.type === "skills");
+    expect((skillsSection?.data as any)?.skillPoolItems).toEqual(["Node.js", "AWS"]);
+    expect((skillsSection?.data as any)?.skillPoolShuffleUsed).toBe(true);
+
+    const restored = editorSectionsToCvContent(sections, "en");
+    const restoredMeta = restored.sections[0]?.blocks[0]?.meta as Record<string, unknown>;
+    expect(restoredMeta.skill_pool_items).toEqual(["Node.js", "AWS"]);
+    expect(restoredMeta.skill_pool_shuffle_used).toBe(true);
   });
 });

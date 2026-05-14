@@ -77,6 +77,13 @@ import {
   matchesBlockReference,
   resolveCanonicalAiBlockId
 } from "./cv-editor-ai-guard";
+import {
+  buildSkillsPoolDataPatch,
+  parseSkillsPoolItemsFromSuggestedContent,
+  parseSkillsPoolMetadata,
+  parseSkillsPoolMetadataFromBlockMeta,
+  shuffleSkillsPoolItems
+} from "./cv-editor-skills-pool";
 
 const formatDateTime = (value: string | null | undefined): string => {
   if (!value) {
@@ -393,11 +400,19 @@ interface SuggestionCard {
   suggested_content: Record<string, unknown>;
 }
 
+interface SkillPoolState {
+  items: string[];
+  lastGeneratedAt: string | null;
+  refreshCountDay: string;
+  refreshCountValue: number;
+  shuffleUsed: boolean;
+}
+
 export function CVEditor() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
-  const { api } = useAuth();
+  const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
@@ -440,6 +455,11 @@ export function CVEditor() {
   const [aiSuggestions, setAiSuggestions] = useState<SuggestionCard[]>([]);
   const [aiHistory, setAiHistory] = useState<CvAiHistoryResponse | null>(null);
   const [aiBlockVersions, setAiBlockVersions] = useState<Record<string, AiBlockVersionChain>>({});
+  const [showSkillsPoolDialog, setShowSkillsPoolDialog] = useState(false);
+  const [skillsPoolSectionId, setSkillsPoolSectionId] = useState<string | null>(null);
+  const [skillsPoolLoading, setSkillsPoolLoading] = useState(false);
+  const [skillsPoolRefreshing, setSkillsPoolRefreshing] = useState(false);
+  const [skillsPoolError, setSkillsPoolError] = useState<string | null>(null);
 
   const [showAddContentModal, setShowAddContentModal] = useState(false);
   const [showTipsDrawer, setShowTipsDrawer] = useState(false);
@@ -530,6 +550,60 @@ export function CVEditor() {
       setAiHistory(null);
       setAiBlockVersions({});
     }
+  };
+
+  const resolveSkillPoolState = (section: EditorSection): SkillPoolState => {
+    const fromData = parseSkillsPoolMetadata(section.data);
+    if (fromData.items.length > 0) {
+      return fromData;
+    }
+
+    const fromMeta = parseSkillsPoolMetadataFromBlockMeta((section.data as Record<string, unknown>)?.meta ?? {});
+    return fromMeta;
+  };
+
+  const updateSkillSectionData = (
+    sectionId: string,
+    updater: (current: Record<string, unknown>) => Record<string, unknown>
+  ) => {
+    setSections((prev) =>
+      prev.map((section) => {
+        if (section.id !== sectionId) {
+          return section;
+        }
+
+        const currentData = (section.data ?? {}) as Record<string, unknown>;
+        return {
+          ...section,
+          data: updater(currentData)
+        };
+      })
+    );
+    markDirty();
+  };
+
+  const syncSkillPoolFromSuggestedBlock = (
+    sectionId: string,
+    suggestedContent: Record<string, unknown>
+  ): boolean => {
+    const poolItems = parseSkillsPoolItemsFromSuggestedContent(suggestedContent);
+    if (poolItems.length === 0) {
+      return false;
+    }
+
+    const suggestedMeta = parseSkillsPoolMetadataFromBlockMeta(
+      (suggestedContent as Record<string, unknown>).meta ?? {}
+    );
+
+    updateSkillSectionData(sectionId, (currentData) => ({
+      ...currentData,
+      ...buildSkillsPoolDataPatch({
+        ...suggestedMeta,
+        items: poolItems
+      })
+    }));
+
+    return true;
   };
 
   const markDirty = () => {
@@ -1219,10 +1293,201 @@ export function CVEditor() {
     }
   };
 
+  const buildAiTargetPayload = (): { tailored_cv_id?: string; master_cv_id?: string } | null => {
+    if (!cvId) {
+      return null;
+    }
+
+    return cvKind === "tailored" ? { tailored_cv_id: cvId } : { master_cv_id: cvId };
+  };
+
+  const openSkillsPool = async (sectionId: string, blockId?: string) => {
+    const targetSection = sections.find((section) => section.id === sectionId);
+    if (!targetSection) {
+      setError("Skills section could not be resolved.");
+      return;
+    }
+
+    const resolvedBlockId = resolveCanonicalAiBlockId(
+      targetSection,
+      blockId ?? getSectionFirstBlockId(targetSection) ?? undefined
+    );
+
+    if (!resolvedBlockId) {
+      setError("No block is available for skills suggestions in this section. Save and try again.");
+      return;
+    }
+
+    setSkillsPoolSectionId(sectionId);
+    setSkillsPoolError(null);
+
+    const poolState = resolveSkillPoolState(targetSection);
+    if (poolState.items.length > 0) {
+      setShowSkillsPoolDialog(true);
+      return;
+    }
+
+    setSkillsPoolLoading(true);
+    try {
+      if (dirty) {
+        const persisted = await persistCv("auto");
+        if (!persisted) {
+          setSkillsPoolError("Failed to save current edits before generating skills pool.");
+          return;
+        }
+      }
+
+      const targetPayload = buildAiTargetPayload();
+      if (!targetPayload) {
+        setSkillsPoolError("CV id is missing.");
+        return;
+      }
+
+      const suggested = await api.postBlockSuggest({
+        ...targetPayload,
+        block_id: resolvedBlockId,
+        action_type: "improve",
+        user_instruction: "Generate a reusable skills suggestion pool from this CV context."
+      });
+
+      const firstSuggestion = suggested.suggestions[0]?.suggested_content;
+      if (!firstSuggestion || !syncSkillPoolFromSuggestedBlock(sectionId, firstSuggestion)) {
+        setSkillsPoolError("AI returned an invalid skills pool.");
+        return;
+      }
+
+      setShowSkillsPoolDialog(true);
+    } catch (err) {
+      if (err instanceof Error) {
+        setSkillsPoolError(err.message);
+      } else {
+        setSkillsPoolError("Skills pool generation failed.");
+      }
+    } finally {
+      setSkillsPoolLoading(false);
+    }
+  };
+
+  const refreshSkillsPool = async () => {
+    if (!skillsPoolSectionId) {
+      return;
+    }
+
+    const section = sections.find((item) => item.id === skillsPoolSectionId);
+    if (!section) {
+      return;
+    }
+
+    const poolState = resolveSkillPoolState(section);
+    if (poolState.items.length === 0) {
+      setSkillsPoolError("Skills pool is empty. Generate suggestions first.");
+      return;
+    }
+
+    const planCode = (me?.current_plan?.plan_code ?? "free").toLowerCase();
+    if (planCode === "free") {
+      setSkillsPoolError("Refresh is available on the Pro plan.");
+      return;
+    }
+
+    const resolvedBlockId = resolveCanonicalAiBlockId(section, getSectionFirstBlockId(section) ?? undefined);
+    if (!resolvedBlockId) {
+      setSkillsPoolError("No block is available for refresh.");
+      return;
+    }
+
+    setSkillsPoolError(null);
+    if (!poolState.shuffleUsed) {
+      const shuffled = shuffleSkillsPoolItems(poolState.items);
+      updateSkillSectionData(skillsPoolSectionId, (currentData) => ({
+        ...currentData,
+        ...buildSkillsPoolDataPatch({
+          ...poolState,
+          items: shuffled,
+          shuffleUsed: true
+        })
+      }));
+      return;
+    }
+
+    setSkillsPoolRefreshing(true);
+    try {
+      if (dirty) {
+        const persisted = await persistCv("auto");
+        if (!persisted) {
+          setSkillsPoolError("Failed to save current edits before refresh.");
+          return;
+        }
+      }
+
+      const targetPayload = buildAiTargetPayload();
+      if (!targetPayload) {
+        setSkillsPoolError("CV id is missing.");
+        return;
+      }
+
+      const suggested = await api.postBlockSuggest({
+        ...targetPayload,
+        block_id: resolvedBlockId,
+        action_type: "improve",
+        user_instruction: "Refresh the existing skills suggestion pool using CV context."
+      });
+
+      const firstSuggestion = suggested.suggestions[0]?.suggested_content;
+      if (!firstSuggestion || !syncSkillPoolFromSuggestedBlock(skillsPoolSectionId, firstSuggestion)) {
+        setSkillsPoolError("AI returned an invalid refreshed pool.");
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setSkillsPoolError(err.message);
+      } else {
+        setSkillsPoolError("Skills pool refresh failed.");
+      }
+    } finally {
+      setSkillsPoolRefreshing(false);
+    }
+  };
+
+  const toggleSkillFromPool = (skillValue: string) => {
+    if (!skillsPoolSectionId) {
+      return;
+    }
+
+    updateSkillSectionData(skillsPoolSectionId, (currentData) => {
+      const nextSkill = skillValue.trim();
+      if (!nextSkill) {
+        return currentData;
+      }
+
+      const existingSkills = Array.isArray(currentData.skills)
+        ? (currentData.skills as unknown[])
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter((value) => value.length > 0)
+        : [];
+
+      const activeSet = new Set(existingSkills.map((item) => item.toLowerCase()));
+      const normalized = nextSkill.toLowerCase();
+
+      const nextSkills = activeSet.has(normalized)
+        ? existingSkills.filter((item) => item.toLowerCase() !== normalized)
+        : [...existingSkills, nextSkill];
+
+      return {
+        ...currentData,
+        skills: nextSkills
+      };
+    });
+  };
+
   const openAiForSection = async (sectionId: string, blockId?: string) => {
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
       setError("Section could not be resolved for AI action.");
+      return;
+    }
+
+    if (targetSection.type === "skills") {
+      await openSkillsPool(sectionId, blockId);
       return;
     }
 
@@ -1635,6 +1900,21 @@ export function CVEditor() {
 
     return lastSavedAt ? `Last saved ${formatDateTime(lastSavedAt)}` : "Not saved yet";
   })();
+
+  const activeSkillsSection = skillsPoolSectionId
+    ? sections.find((section) => section.id === skillsPoolSectionId && section.type === "skills") ?? null
+    : null;
+  const activeSkillsPool = activeSkillsSection ? resolveSkillPoolState(activeSkillsSection) : null;
+  const activeSkillValues = new Set(
+    (
+      (activeSkillsSection?.data as Record<string, unknown> | null)?.skills &&
+      Array.isArray((activeSkillsSection?.data as Record<string, unknown>).skills)
+        ? ((activeSkillsSection?.data as Record<string, unknown>).skills as unknown[])
+        : []
+    )
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter((value) => value.length > 0)
+  );
 
 
   if (loading) {
@@ -2140,6 +2420,97 @@ export function CVEditor() {
                     Pending: {aiHistory.suggestions.filter((item: AiSuggestionSummary) => item.status === "pending").length}
                   </p>
                 </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={showSkillsPoolDialog}
+          onOpenChange={(open) => {
+            setShowSkillsPoolDialog(open);
+            if (!open) {
+              setSkillsPoolError(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle style={{ fontSize: "17px", color: "var(--color-text-primary)" }}>
+                Skills Suggestion Pool
+              </DialogTitle>
+              <DialogDescription style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                Click a skill to toggle it in your Skills section.
+              </DialogDescription>
+            </DialogHeader>
+
+            {skillsPoolError ? (
+              <div
+                className="p-2.5 rounded-lg border"
+                style={{
+                  borderColor: "var(--color-red-200)",
+                  background: "var(--color-red-50)",
+                  color: "var(--color-red-700)",
+                  fontSize: "12px"
+                }}
+              >
+                {skillsPoolError}
+              </div>
+            ) : null}
+
+            {(skillsPoolLoading || skillsPoolRefreshing) && (
+              <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                <Loader2 size={14} className="animate-spin" />
+                {skillsPoolLoading ? "Generating skills pool..." : "Refreshing skills pool..."}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                {activeSkillsPool?.items.length ?? 0} skills in pool
+              </p>
+              <button
+                onClick={() => void refreshSkillsPool()}
+                disabled={skillsPoolLoading || skillsPoolRefreshing || !activeSkillsPool || activeSkillsPool.items.length === 0}
+                className="px-2.5 py-1 rounded border inline-flex items-center gap-1"
+                style={{
+                  fontSize: "11px",
+                  borderColor: "var(--color-border-secondary)",
+                  color: "var(--color-text-secondary)",
+                  opacity: skillsPoolLoading || skillsPoolRefreshing ? 0.7 : 1
+                }}
+              >
+                <RefreshCw size={12} />
+                Refresh pool
+              </button>
+            </div>
+
+            <div className="max-h-[280px] overflow-auto">
+              {activeSkillsPool && activeSkillsPool.items.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {activeSkillsPool.items.map((skill) => {
+                    const isActive = activeSkillValues.has(skill.trim().toLowerCase());
+                    return (
+                      <button
+                        key={skill}
+                        onClick={() => toggleSkillFromPool(skill)}
+                        className="px-3 py-1.5 rounded-full border transition-colors"
+                        style={{
+                          fontSize: "12px",
+                          borderColor: isActive ? "var(--color-teal-500)" : "var(--color-border-secondary)",
+                          background: isActive ? "var(--color-teal-50)" : "var(--color-background-primary)",
+                          color: isActive ? "var(--color-teal-800)" : "var(--color-text-primary)"
+                        }}
+                      >
+                        {skill}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                  No skills in the pool yet.
+                </p>
               )}
             </div>
           </DialogContent>

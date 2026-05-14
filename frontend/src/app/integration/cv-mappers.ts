@@ -1,4 +1,8 @@
 import type { CvBlock, CvContent, CvJsonValue, CvSection, CvVisibility } from "./api-types";
+import {
+  buildSkillsPoolBlockMetaPatch,
+  parseSkillsPoolMetadataFromBlockMeta
+} from "../pages/cv-editor-skills-pool";
 
 export interface EditorHeaderData {
   name: string;
@@ -1440,6 +1444,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     }
 
     if (sectionType === "skills") {
+      const skillsPoolMeta = parseSkillsPoolMetadataFromBlockMeta(sortedBlocks[0]?.meta ?? {});
       const skills = sortedBlocks
         .flatMap((block) => {
           const direct = [getField(block, "skill", "name", "text")].filter(Boolean);
@@ -1457,7 +1462,12 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         order: section.order,
         data: {
           skills,
-          blockId: sortedBlocks[0]?.id ?? ""
+          blockId: sortedBlocks[0]?.id ?? "",
+          skillPoolItems: skillsPoolMeta.items,
+          skillPoolLastGeneratedAt: skillsPoolMeta.lastGeneratedAt,
+          skillPoolRefreshCountDay: skillsPoolMeta.refreshCountDay,
+          skillPoolRefreshCountValue: skillsPoolMeta.refreshCountValue,
+          skillPoolShuffleUsed: skillsPoolMeta.shuffleUsed
         }
       });
       continue;
@@ -2041,6 +2051,18 @@ export const editorSectionsToCvContent = (
 
       if (sectionType === "skills") {
         const skillValues = asStringArray(asRecord(section.data).skills);
+        const poolMetaPatch = buildSkillsPoolBlockMetaPatch({
+          items: asStringArray(asRecord(section.data).skillPoolItems),
+          lastGeneratedAt: asString(asRecord(section.data).skillPoolLastGeneratedAt) || null,
+          refreshCountDay: asString(asRecord(section.data).skillPoolRefreshCountDay),
+          refreshCountValue:
+            typeof asRecord(section.data).skillPoolRefreshCountValue === "number"
+              ? Number(asRecord(section.data).skillPoolRefreshCountValue)
+              : Number.parseInt(asString(asRecord(section.data).skillPoolRefreshCountValue), 10) || 0,
+          shuffleUsed:
+            asString(asRecord(section.data).skillPoolShuffleUsed).toLowerCase() === "true" ||
+            asRecord(section.data).skillPoolShuffleUsed === true
+        });
         const preferredBlockId = asString(asRecord(section.data).blockId);
         const sectionId = section.backendSectionId || deterministicSectionId("skills", sectionIndex);
         const blockId = preferredBlockId || `${normalizeIdPart(sectionId) || "skills"}-skills`;
@@ -2060,7 +2082,7 @@ export const editorSectionsToCvContent = (
               fields: {
                 skills: toJsonValue(skillValues)
               },
-              meta: {}
+              meta: poolMetaPatch
             }
           ]
         };
