@@ -1240,9 +1240,39 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (sectionType === "summary") {
       const block = sortedBlocks[0];
-      const rawSummaryText = block
-        ? getField(block, "text", "summary", "description", "summary_text", "profile", "objective")
-        : "";
+      const summaryFieldKeys = [
+        "text",
+        "summary",
+        "description",
+        "summary_text",
+        "profile",
+        "objective",
+        "details",
+        "notes",
+        "highlights",
+        "responsibilities",
+        "content",
+        "body"
+      ] as const;
+
+      const rawSummaryText = (() => {
+        const fromBlocks = sortedBlocks
+          .map((summaryBlock) => getField(summaryBlock, ...summaryFieldKeys))
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+          .join("\n");
+
+        if (fromBlocks.length > 0) {
+          return fromBlocks;
+        }
+
+        return firstNonEmpty(
+          asString(normalizedMetadata.summary_text),
+          asString(normalizedMetadata.summary),
+          asString(normalizedMetadata.profile),
+          asString(normalizedMetadata.objective)
+        );
+      })();
       const fullName = asString(normalizedMetadata.full_name);
       const summaryText = (() => {
         const lines = rawSummaryText

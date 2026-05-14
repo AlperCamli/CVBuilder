@@ -57,14 +57,23 @@ const buildTailoredExportFilename = (
     : `001-${name}-${surname}.pdf`;
 };
 
-const triggerDownload = (url: string, filename: string) => {
+const triggerDownload = async (url: string, filename: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download export file (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+
   const link = document.createElement("a");
-  link.href = url;
+  link.href = objectUrl;
   link.download = filename;
   link.rel = "noopener noreferrer";
   document.body.appendChild(link);
   link.click();
   link.remove();
+  window.URL.revokeObjectURL(objectUrl);
 };
 
 export function Resumes() {
@@ -144,10 +153,10 @@ export function Resumes() {
       const downloadUrl = result.download?.download_url;
 
       if (downloadUrl) {
-        triggerDownload(downloadUrl, filename);
+        await triggerDownload(downloadUrl, filename);
       } else {
         const fallback = await api.getExportDownload(result.export.id);
-        triggerDownload(fallback.download_url, filename);
+        await triggerDownload(fallback.download_url, filename);
       }
       await load();
     } catch (err) {

@@ -72,6 +72,11 @@ import {
   getSectionFirstBlockId,
   type EditorSection
 } from "../integration/cv-mappers";
+import {
+  canUseAiForSectionBlock,
+  matchesBlockReference,
+  resolveCanonicalAiBlockId
+} from "./cv-editor-ai-guard";
 
 const formatDateTime = (value: string | null | undefined): string => {
   if (!value) {
@@ -230,72 +235,6 @@ const toSectionTitle = (type: string): string => {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-};
-
-const asTrimmedString = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value).trim();
-  }
-
-  return "";
-};
-
-const hasNonEmptyArrayValue = (value: unknown): boolean => {
-  if (!Array.isArray(value)) {
-    return false;
-  }
-
-  return value.some((item) => asTrimmedString(item).length > 0);
-};
-
-const hasContentForAi = (section: EditorSection, blockId?: string): boolean => {
-  const data = (section.data ?? {}) as Record<string, unknown>;
-
-  if (section.type === "summary") {
-    return asTrimmedString(data.text).length > 0;
-  }
-
-  if (section.type === "skills") {
-    return hasNonEmptyArrayValue(data.skills);
-  }
-
-  const items = Array.isArray(data.items) ? data.items : [];
-  if (items.length === 0) {
-    return false;
-  }
-
-  const targetItem = (() => {
-    if (!blockId) {
-      return items[0] as Record<string, unknown>;
-    }
-
-    const matched = items.find((item) => {
-      const itemRecord = item as Record<string, unknown>;
-      return asTrimmedString(itemRecord.blockId) === blockId;
-    });
-
-    return (matched ?? items[0]) as Record<string, unknown>;
-  })();
-
-  const keysBySection: Record<string, string[]> = {
-    experience: ["role", "company", "description"],
-    education: ["institution", "degree", "fieldOfStudy", "description"],
-    languages: ["language", "proficiency", "certificate", "notes"],
-    certifications: ["name", "url", "verificationId"],
-    courses: ["title", "institution", "description"],
-    projects: ["title", "subtitle", "description"],
-    volunteer: ["organization", "role", "description"],
-    awards: ["name", "issuer", "date", "description"],
-    publications: ["title", "publisher", "date", "description"],
-    references: ["name", "jobTitle", "organization", "email", "phone"]
-  };
-
-  const candidateKeys = keysBySection[section.type] ?? Object.keys(targetItem);
-  return candidateKeys.some((key) => asTrimmedString(targetItem[key]).length > 0);
 };
 
 interface CvEditorDraft {
@@ -1287,11 +1226,17 @@ export function CVEditor() {
       return;
     }
 
-    const resolvedBlockId = blockId ?? getSectionFirstBlockId(targetSection) ?? undefined;
-    const isEmpty = !hasContentForAi(targetSection, resolvedBlockId);
+    const resolvedBlockReference = blockId ?? getSectionFirstBlockId(targetSection) ?? undefined;
+    const isEmpty = !canUseAiForSectionBlock(targetSection, resolvedBlockReference);
 
     if (isEmpty) {
       toast.error(EMPTY_AI_BLOCK_MESSAGE);
+      return;
+    }
+
+    const resolvedBlockId = resolveCanonicalAiBlockId(targetSection, resolvedBlockReference);
+    if (!resolvedBlockId) {
+      setError("No block is available for AI action in this section. Save and try again.");
       return;
     }
 
@@ -1307,12 +1252,8 @@ export function CVEditor() {
   };
 
   const resolveAiBlockId = (): string | null => {
-    if (aiTargetBlockId) {
-      return aiTargetBlockId;
-    }
-
     if (!aiTargetSectionId) {
-      return null;
+      return aiTargetBlockId;
     }
 
     const target = sections.find((section) => section.id === aiTargetSectionId);
@@ -1320,7 +1261,7 @@ export function CVEditor() {
       return null;
     }
 
-    return getSectionFirstBlockId(target);
+    return resolveCanonicalAiBlockId(target, aiTargetBlockId ?? undefined);
   };
 
   const resolveSectionForAiBlock = (blockId: string): EditorSection | null => {
@@ -1340,7 +1281,7 @@ export function CVEditor() {
       const data = (section.data ?? {}) as Record<string, unknown>;
       const items = Array.isArray(data.items) ? data.items : [];
       if (
-        items.some((item) => asTrimmedString((item as Record<string, unknown>).blockId) === blockId)
+        items.some((item) => matchesBlockReference(item as Record<string, unknown>, blockId))
       ) {
         return section;
       }
@@ -1372,7 +1313,7 @@ export function CVEditor() {
     }
 
     const targetSection = resolveSectionForAiBlock(blockId);
-    if (!targetSection || !hasContentForAi(targetSection, blockId)) {
+    if (!targetSection || !canUseAiForSectionBlock(targetSection, aiTargetBlockId ?? blockId)) {
       toast.error(EMPTY_AI_BLOCK_MESSAGE);
       return;
     }

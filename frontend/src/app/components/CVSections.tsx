@@ -655,7 +655,7 @@ function ExperienceItem({
           />
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onAIAssist(item.blockId)}
+              onClick={() => onAIAssist(item.blockId ?? String(item.id ?? ""))}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",
