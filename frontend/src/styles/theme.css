@@ -288,7 +288,7 @@
     line-height: 1.5;
   }
 
-  button {
+  :where(button, .interactive-button) {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
@@ -296,22 +296,31 @@
     transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease, opacity 120ms ease;
   }
 
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
+  .interactive-button {
+    text-decoration: none;
   }
 
-  button:not(:disabled):hover {
+  button:disabled,
+  .interactive-button[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  button:not(:disabled):hover,
+  .interactive-button:not([aria-disabled="true"]):hover {
     transform: translateY(-0.5px);
     filter: brightness(0.98);
     box-shadow: 0 1px 2px color-mix(in oklab, var(--color-foreground) 12%, transparent);
   }
 
-  button:not(:disabled):active {
+  button:not(:disabled):active,
+  .interactive-button:not([aria-disabled="true"]):active {
     transform: translateY(1px) scale(0.99);
   }
 
-  button:focus-visible {
+  button:focus-visible,
+  .interactive-button:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 35%, transparent);
   }

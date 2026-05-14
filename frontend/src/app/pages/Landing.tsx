@@ -19,7 +19,7 @@ export function Landing() {
           <div className="flex items-center gap-3">
             <Link
               to="/signin"
-              className="px-4 py-2 rounded-lg font-medium transition-colors"
+              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
               style={{
                 fontSize: "13px",
                 color: "var(--color-teal-600)",
@@ -29,7 +29,7 @@ export function Landing() {
             </Link>
             <Link
               to="/app/create"
-              className="px-4 py-2 rounded-lg font-medium transition-colors"
+              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
               style={{
                 fontSize: "13px",
                 background: "var(--color-teal-600)",
@@ -61,7 +61,7 @@ export function Landing() {
           <div className="flex items-center justify-center gap-3">
             <Link
               to="/app/create"
-              className="px-6 py-3 rounded-lg font-medium transition-colors"
+              className="interactive-button px-6 py-3 rounded-lg font-medium transition-colors"
               style={{
                 fontSize: "13px",
                 background: "var(--color-teal-600)",
@@ -209,7 +209,7 @@ export function Landing() {
           </p>
           <Link
             to="/app/create"
-            className="inline-block px-6 py-3 rounded-lg font-medium transition-colors"
+            className="interactive-button inline-block px-6 py-3 rounded-lg font-medium transition-colors"
             style={{
               fontSize: "13px",
               background: "var(--color-teal-600)",

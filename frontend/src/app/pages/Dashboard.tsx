@@ -420,7 +420,7 @@ export function Dashboard() {
             </p>
             <Link
               to="/app/create"
-              className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
+              className="interactive-button mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
               style={{
                 fontSize: "13px",
                 background: "var(--color-teal-600)",
@@ -469,7 +469,7 @@ export function Dashboard() {
               <Link
                 to={`/app/cv/${primaryMaster.id}`}
                 state={{ cvKind: "master", masterCvId: primaryMaster.id }}
-                className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                 style={{
                   fontSize: "13px",
                   background: "var(--color-teal-600)",
@@ -481,7 +481,7 @@ export function Dashboard() {
               </Link>
               <Link
                 to={`/app/tailor/${primaryMaster.id}`}
-                className="px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
+                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
                 style={{
                   fontSize: "13px",
                   background: "var(--color-teal-50)",

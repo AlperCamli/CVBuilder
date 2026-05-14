@@ -312,7 +312,7 @@ export function Resumes() {
                 </p>
                 <Link
                   to="/app/create"
-                  className="inline-flex mt-3 px-4 py-2 rounded-lg font-medium"
+                  className="interactive-button inline-flex mt-3 px-4 py-2 rounded-lg font-medium"
                   style={{
                     fontSize: "13px",
                     background: "var(--color-teal-600)",
@@ -358,7 +358,7 @@ export function Resumes() {
                   <Link
                     to={`/app/cv/${primaryMaster.id}`}
                     state={{ cvKind: "master", masterCvId: primaryMaster.id }}
-                    className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                    className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                     style={{
                       fontSize: "13px",
                       background: "var(--color-teal-600)",
@@ -370,7 +370,7 @@ export function Resumes() {
                   </Link>
                   <Link
                     to={`/app/tailor/${primaryMaster.id}`}
-                    className="px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
+                    className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
                     style={{
                       fontSize: "13px",
                       background: "var(--color-teal-50)",
@@ -482,7 +482,7 @@ export function Resumes() {
                           <Link
                             to={`/app/cv/${cv.id}`}
                             state={{ cvKind: "tailored" }}
-                            className="px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+                            className="interactive-button px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
                             style={{
                               fontSize: "12px",
                               background: "var(--color-teal-600)",

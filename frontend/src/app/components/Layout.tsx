@@ -75,7 +75,7 @@ export function Layout() {
                     key={item.path}
                     to={item.path}
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors"
+                    className="interactive-button flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors"
                     style={{
                       background: active ? "var(--color-teal-50)" : "transparent",
                       color: active ? "var(--color-teal-800)" : "var(--color-text-secondary)"
