@@ -32,6 +32,7 @@ import {
   HoverCardTrigger,
   HoverCardContent
 } from "../components/ui/hover-card";
+import { Button } from "../components/ui/button";
 import {
   HeaderSection,
   SummarySection,
@@ -1925,8 +1926,8 @@ export function CVEditor() {
       <div
         className="rounded-lg border p-3 space-y-3"
         style={{
-          borderColor: "var(--color-teal-200)",
-          background: "var(--color-teal-50)"
+          borderColor: "var(--color-border-tertiary)",
+          background: "var(--color-background-secondary)"
         }}
       >
         <div className="flex items-start justify-between gap-2">
@@ -1939,11 +1940,13 @@ export function CVEditor() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void refreshSkillsPool()}
               disabled={skillsPoolLoading || skillsPoolRefreshing || sectionPool.items.length === 0}
-              className="px-2.5 py-1 rounded border inline-flex items-center gap-1"
+              className="h-7 px-2.5 gap-1"
               style={{
                 fontSize: "11px",
                 borderColor: "var(--color-border-secondary)",
@@ -1954,14 +1957,16 @@ export function CVEditor() {
             >
               <RefreshCw size={12} />
               Refresh pool
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setShowSkillsPoolDialog(false);
                 setSkillsPoolError(null);
               }}
-              className="px-2.5 py-1 rounded border"
+              className="h-7 px-2.5"
               style={{
                 fontSize: "11px",
                 borderColor: "var(--color-border-secondary)",
@@ -1970,7 +1975,7 @@ export function CVEditor() {
               }}
             >
               Hide
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -2004,10 +2009,13 @@ export function CVEditor() {
             {sectionPool.items.map((skill) => {
               const isActive = sectionSkillValues.has(skill.trim().toLowerCase());
               return (
-                <button
+                <Button
                   key={skill}
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => toggleSkillFromPool(skill)}
-                  className="px-3 py-1.5 rounded-full border transition-colors"
+                  className="h-auto py-1.5 px-3 rounded-full transition-colors"
                   style={{
                     fontSize: "12px",
                     borderColor: isActive ? "var(--color-teal-500)" : "var(--color-border-secondary)",
@@ -2016,7 +2024,7 @@ export function CVEditor() {
                   }}
                 >
                   {skill}
-                </button>
+                </Button>
               );
             })}
           </div>
