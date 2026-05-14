@@ -301,6 +301,12 @@
     opacity: 0.6;
   }
 
+  button:not(:disabled):hover {
+    transform: translateY(-0.5px);
+    filter: brightness(0.98);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--color-foreground) 12%, transparent);
+  }
+
   button:not(:disabled):active {
     transform: translateY(1px) scale(0.99);
   }
