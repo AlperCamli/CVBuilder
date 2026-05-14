@@ -24,137 +24,144 @@ export const createAiRouter = (
   aiRateLimiter: RequestHandler
 ): Router => {
   const router = Router();
-  const guard: RequestHandler[] = [authMiddleware, aiRateLimiter];
+  // Apply the AI rate limiter only to endpoints that actually invoke model
+  // inference. Read-only status/result/history endpoints are cheap DB reads
+  // and are polled aggressively by the tailoring UI; the global limiter
+  // already protects them. Keeping them under the AI limiter caused the
+  // multi-stage "Tailor for a Job" flow to exhaust the per-user AI budget
+  // via UX polling, even when the underlying AI runs succeeded.
+  const inferenceGuard: RequestHandler[] = [authMiddleware, aiRateLimiter];
+  const readGuard: RequestHandler[] = [authMiddleware];
 
   router.post(
     "/ai/tailoring-runs/start",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiTailoringRunStartSchema }),
     aiController.postTailoringRunStart
   );
 
   router.post(
     "/ai/tailoring-runs/:aiRunId/execute",
-    ...guard,
+    ...inferenceGuard,
     validate({ params: aiRunIdParamsSchema }),
     aiController.postTailoringRunExecute
   );
 
   router.get(
     "/ai/tailoring-runs/:aiRunId/status",
-    ...guard,
+    ...readGuard,
     validate({ params: aiRunIdParamsSchema }),
     aiController.getTailoringRunStatus
   );
 
   router.get(
     "/ai/tailoring-runs/:aiRunId/result",
-    ...guard,
+    ...readGuard,
     validate({ params: aiRunIdParamsSchema }),
     aiController.getTailoringRunResult
   );
 
   router.post(
     "/ai/job-analysis",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiJobAnalysisSchema }),
     aiController.postJobAnalysis
   );
 
   router.post(
     "/ai/follow-up-questions",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiFollowUpQuestionsSchema }),
     aiController.postFollowUpQuestions
   );
 
   router.post(
     "/ai/tailored-cv-draft",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiTailoredDraftSchema }),
     aiController.postTailoredCvDraft
   );
 
   router.post(
     "/ai/import-improve",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiImportImproveSchema }),
     aiController.postImportImprove
   );
 
   router.post(
     "/ai/cover-letters/generate",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiCoverLetterGenerationSchema }),
     aiController.postGenerateCoverLetter
   );
 
   router.post(
     "/ai/blocks/suggest",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiBlockSuggestSchema }),
     aiController.postBlockSuggest
   );
 
   router.post(
     "/ai/blocks/compare",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiBlockCompareSchema }),
     aiController.postBlockCompare
   );
 
   router.post(
     "/ai/blocks/options",
-    ...guard,
+    ...inferenceGuard,
     validate({ body: aiBlockOptionsSchema }),
     aiController.postBlockOptions
   );
 
   router.get(
     "/ai/suggestions/:suggestionId",
-    ...guard,
+    ...readGuard,
     validate({ params: suggestionIdParamsSchema }),
     aiController.getSuggestion
   );
 
   router.post(
     "/ai/suggestions/:suggestionId/apply",
-    ...guard,
+    ...readGuard,
     validate({ params: suggestionIdParamsSchema }),
     aiController.postApplySuggestion
   );
 
   router.post(
     "/ai/suggestions/:suggestionId/reject",
-    ...guard,
+    ...readGuard,
     validate({ params: suggestionIdParamsSchema }),
     aiController.postRejectSuggestion
   );
 
   router.get(
     "/tailored-cvs/:tailoredCvId/ai-history",
-    ...guard,
+    ...readGuard,
     validate({ params: tailoredCvAiHistoryParamsSchema }),
     aiController.getTailoredCvAiHistory
   );
 
   router.get(
     "/master-cvs/:masterCvId/ai-history",
-    ...guard,
+    ...readGuard,
     validate({ params: masterCvAiHistoryParamsSchema }),
     aiController.getMasterCvAiHistory
   );
 
   router.get(
     "/tailored-cvs/:tailoredCvId/ai-block-versions",
-    ...guard,
+    ...readGuard,
     validate({ params: tailoredCvAiHistoryParamsSchema }),
     aiController.getTailoredCvAiBlockVersions
   );
 
   router.get(
     "/master-cvs/:masterCvId/ai-block-versions",
-    ...guard,
+    ...readGuard,
     validate({ params: masterCvAiHistoryParamsSchema }),
     aiController.getMasterCvAiBlockVersions
   );
