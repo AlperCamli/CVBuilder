@@ -94,6 +94,7 @@ const SPACING_SCALE_MAX = 1.4;
 const LAYOUT_SCALE_MIN = 0.7;
 const LAYOUT_SCALE_MAX = 1.3;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
+const EMPTY_AI_BLOCK_MESSAGE = "This block is empty, please provide some information.";
 
 const clampInRange = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -1290,7 +1291,7 @@ export function CVEditor() {
     const isEmpty = !hasContentForAi(targetSection, resolvedBlockId);
 
     if (isEmpty) {
-      toast.error("This block is empty. Please add some content before asking the AI to improve it.");
+      toast.error(EMPTY_AI_BLOCK_MESSAGE);
       return;
     }
 
@@ -1322,6 +1323,32 @@ export function CVEditor() {
     return getSectionFirstBlockId(target);
   };
 
+  const resolveSectionForAiBlock = (blockId: string): EditorSection | null => {
+    if (aiTargetSectionId) {
+      const target = sections.find((section) => section.id === aiTargetSectionId);
+      if (target) {
+        return target;
+      }
+    }
+
+    for (const section of sections) {
+      const sectionBlockId = getSectionFirstBlockId(section);
+      if (sectionBlockId === blockId) {
+        return section;
+      }
+
+      const data = (section.data ?? {}) as Record<string, unknown>;
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (
+        items.some((item) => asTrimmedString((item as Record<string, unknown>).blockId) === blockId)
+      ) {
+        return section;
+      }
+    }
+
+    return null;
+  };
+
   const runAiAction = async (
     action:
       | "improve"
@@ -1341,6 +1368,12 @@ export function CVEditor() {
     const blockId = resolveAiBlockId();
     if (!blockId) {
       setError("No block is available for AI action in this section. Save and try again.");
+      return;
+    }
+
+    const targetSection = resolveSectionForAiBlock(blockId);
+    if (!targetSection || !hasContentForAi(targetSection, blockId)) {
+      toast.error(EMPTY_AI_BLOCK_MESSAGE);
       return;
     }
 

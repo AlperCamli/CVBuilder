@@ -1,10 +1,20 @@
-import { Link } from "react-router";
-import { FileText, ExternalLink, Target, Download, MoreVertical, Trash2, Copy } from "lucide-react";
+import { Link, useNavigate } from "react-router";
+import { FileText, ExternalLink, Target, Download, MoreVertical, Trash2, Copy, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { MasterCvSummary, TailoredCvSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "../components/ui/alert-dialog";
 
 const formatDate = (value: string): string =>
   new Date(value).toLocaleDateString("en-US", {
@@ -13,9 +23,54 @@ const formatDate = (value: string): string =>
     year: "numeric"
   });
 
+const sanitizeFilenameSegment = (value: string): string =>
+  value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[<>:"/\\|?*]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "-");
+
+const extractNameSurname = (value: string): { name: string; surname: string } => {
+  const normalized = value
+    .replace(/\.(pdf|docx)$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  const name = sanitizeFilenameSegment(tokens[0] ?? "Name") || "Name";
+  const surname = sanitizeFilenameSegment(tokens[1] ?? "Surname") || "Surname";
+
+  return { name, surname };
+};
+
+const buildTailoredExportFilename = (
+  masterTitle: string | null | undefined,
+  tailoredTitle: string,
+  companyName: string | null | undefined
+): string => {
+  const sourceTitle = masterTitle?.trim() ? masterTitle : tailoredTitle;
+  const { name, surname } = extractNameSurname(sourceTitle);
+  const company = sanitizeFilenameSegment(companyName ?? "");
+
+  return company.length > 0
+    ? `001-${name}-${surname}-${company}.pdf`
+    : `001-${name}-${surname}.pdf`;
+};
+
+const triggerDownload = (url: string, filename: string) => {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
 export function Resumes() {
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
+  const navigate = useNavigate();
   const [masterCvs, setMasterCvs] = useState<MasterCvSummary[]>([]);
   const [tailoredCvs, setTailoredCvs] = useState<TailoredCvSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +78,7 @@ export function Resumes() {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [busyMasterId, setBusyMasterId] = useState<string | null>(null);
   const [busyTailoredId, setBusyTailoredId] = useState<string | null>(null);
+  const [showNewCvDialog, setShowNewCvDialog] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -54,17 +110,44 @@ export function Resumes() {
 
   const primaryMaster = masterCvs[0] ?? null;
 
-  const exportTailoredCv = async (tailoredCvId: string) => {
-    setExportingId(tailoredCvId);
+  const removeMasterCv = async (masterCvId: string): Promise<boolean> => {
+    setBusyMasterId(masterCvId);
     try {
-      const result = await api.createPdfExport(tailoredCvId);
+      await api.deleteMasterCv(masterCvId);
+      // Immediately remove from local state to prevent stale UI
+      setMasterCvs((prev) => prev.filter((cv) => cv.id !== masterCvId));
+      setTailoredCvs((prev) => prev.filter((cv) => cv.master_cv_id !== masterCvId));
+      await load();
+      return true;
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to delete master CV.");
+      }
+      return false;
+    } finally {
+      setBusyMasterId(null);
+    }
+  };
+
+  const exportTailoredCv = async (tailoredCv: TailoredCvSummary) => {
+    setExportingId(tailoredCv.id);
+    const filename = buildTailoredExportFilename(
+      primaryMaster?.title,
+      tailoredCv.title,
+      tailoredCv.job?.company_name ?? null
+    );
+
+    try {
+      const result = await api.createPdfExport(tailoredCv.id);
       const downloadUrl = result.download?.download_url;
 
       if (downloadUrl) {
-        window.open(downloadUrl, "_blank", "noopener,noreferrer");
+        triggerDownload(downloadUrl, filename);
       } else {
         const fallback = await api.getExportDownload(result.export.id);
-        window.open(fallback.download_url, "_blank", "noopener,noreferrer");
+        triggerDownload(fallback.download_url, filename);
       }
       await load();
     } catch (err) {
@@ -100,21 +183,28 @@ export function Resumes() {
       return;
     }
 
-    setBusyMasterId(masterCvId);
-    try {
-      await api.deleteMasterCv(masterCvId);
-      // Immediately remove from local state to prevent stale UI
-      setMasterCvs((prev) => prev.filter((cv) => cv.id !== masterCvId));
-      setTailoredCvs((prev) => prev.filter((cv) => cv.master_cv_id !== masterCvId));
-      await load();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to delete master CV.");
-      }
-    } finally {
-      setBusyMasterId(null);
+    await removeMasterCv(masterCvId);
+  };
+
+  const startNewCvFlow = async () => {
+    if (!primaryMaster) {
+      navigate("/app/create");
+      return;
+    }
+    setShowNewCvDialog(true);
+  };
+
+  const confirmNewCvFlow = async () => {
+    if (!primaryMaster) {
+      setShowNewCvDialog(false);
+      navigate("/app/create");
+      return;
+    }
+
+    const deleted = await removeMasterCv(primaryMaster.id);
+    if (deleted) {
+      setShowNewCvDialog(false);
+      navigate("/app/create");
     }
   };
 
@@ -141,13 +231,30 @@ export function Resumes() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          My CVs
-        </h1>
-        <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          Manage your master CV and tailored versions
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
+            My CVs
+          </h1>
+          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+            Manage your master CV and tailored versions
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void startNewCvFlow()}
+          disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors"
+          style={{
+            fontSize: "13px",
+            background: "var(--color-teal-600)",
+            color: "var(--color-teal-50)",
+            opacity: primaryMaster && busyMasterId === primaryMaster.id ? 0.6 : 1
+          }}
+        >
+          <Plus size={14} />
+          + New CV
+        </button>
       </div>
 
       {error && (
@@ -377,7 +484,7 @@ export function Resumes() {
                             Open
                           </Link>
                           <button
-                            onClick={() => void exportTailoredCv(cv.id)}
+                            onClick={() => void exportTailoredCv(cv)}
                             disabled={exportingId === cv.id}
                             className="px-3 py-1.5 rounded-lg font-medium transition-colors border flex items-center gap-1.5"
                             style={{
@@ -414,6 +521,34 @@ export function Resumes() {
           </div>
         </>
       )}
+
+      <AlertDialog open={showNewCvDialog} onOpenChange={setShowNewCvDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add a new CV</AlertDialogTitle>
+            <AlertDialogDescription>
+              To add a new CV you should first Delete your existing Master CV.
+              <br />
+              Are you sure you want to delete your CV?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmNewCvFlow();
+              }}
+              disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}
+              className="bg-[var(--color-red-600)] text-[var(--color-red-50)] hover:bg-[var(--color-red-700)]"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
