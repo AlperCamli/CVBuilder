@@ -5,17 +5,31 @@ import { generateDocxDocument } from "./docx-generator";
 import { generatePdfDocument } from "./pdf-generator";
 import { mapPresentationToExportDocument } from "./rendering-document.mapper";
 
+export interface ExportScales {
+  font_scale: number;
+  spacing_scale: number;
+  layout_scale: number;
+}
+
 export interface RenderingExportGenerator {
-  generate(format: ExportFormat, presentation: RenderingPresentation): Promise<Uint8Array>;
+  generate(
+    format: ExportFormat,
+    presentation: RenderingPresentation,
+    scales: ExportScales
+  ): Promise<Uint8Array>;
 }
 
 export class DefaultRenderingExportGenerator implements RenderingExportGenerator {
-  async generate(format: ExportFormat, presentation: RenderingPresentation): Promise<Uint8Array> {
+  async generate(
+    format: ExportFormat,
+    presentation: RenderingPresentation,
+    scales: ExportScales
+  ): Promise<Uint8Array> {
     const documentModel = mapPresentationToExportDocument(presentation);
 
     try {
       if (format === "pdf") {
-        return await generatePdfDocument(documentModel);
+        return await generatePdfDocument(documentModel, scales);
       }
 
       if (format === "docx") {

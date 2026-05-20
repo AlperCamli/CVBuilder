@@ -427,8 +427,12 @@ export class ExportsService {
       );
       const requestedLayoutScale = parseScaleInRange(input.layout_scale, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX);
       const resolvedLayoutScale = requestedLayoutScale ?? metadataLayoutScale ?? DEFAULT_LAYOUT_SCALE;
+
+      // PDF mirrors the preview's math (margins, font sizes, atomic block pagination) and applies
+      // the scales itself, so it must receive the raw presentation + the scales.
+      // DOCX still bakes the scales into the tokens to preserve its existing layout behavior.
       const layoutDensityFactor = 1 + (resolvedLayoutScale - 1) * 0.12;
-      const scaledPresentation = {
+      const docxPresentation = {
         ...renderingResult.presentation,
         theme: {
           ...renderingResult.presentation.theme,
@@ -450,9 +454,17 @@ export class ExportsService {
         }
       };
 
+      const presentationForGenerator =
+        format === "pdf" ? renderingResult.presentation : docxPresentation;
+
       const generatedBytes = await this.renderingExportGenerator.generate(
         format,
-        scaledPresentation
+        presentationForGenerator,
+        {
+          font_scale: resolvedFontScale,
+          spacing_scale: resolvedSpacingScale,
+          layout_scale: resolvedLayoutScale
+        }
       );
 
       const uploaded = await this.filesService.uploadExportObject({

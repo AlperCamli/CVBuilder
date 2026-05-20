@@ -442,17 +442,26 @@ class FakeFilesService {
 
 class FakeRenderingExportGenerator implements RenderingExportGenerator {
   shouldFail = false;
+  lastFormat: ExportFormat | null = null;
   lastBodyTextSize: number | null = null;
   lastSectionSpacing: number | null = null;
   lastBlockSpacing: number | null = null;
+  lastFontScale: number | null = null;
+  lastSpacingScale: number | null = null;
+  lastLayoutScale: number | null = null;
 
   async generate(
-    _format: ExportFormat,
-    presentation: Parameters<RenderingExportGenerator["generate"]>[1]
+    format: ExportFormat,
+    presentation: Parameters<RenderingExportGenerator["generate"]>[1],
+    scales: Parameters<RenderingExportGenerator["generate"]>[2]
   ): Promise<Uint8Array> {
+    this.lastFormat = format;
     this.lastBodyTextSize = presentation.theme.tokens.body_text_size;
     this.lastSectionSpacing = presentation.theme.tokens.section_spacing;
     this.lastBlockSpacing = presentation.theme.tokens.block_spacing;
+    this.lastFontScale = scales.font_scale;
+    this.lastSpacingScale = scales.spacing_scale;
+    this.lastLayoutScale = scales.layout_scale;
     if (this.shouldFail) {
       throw new Error("generator failed");
     }
@@ -647,7 +656,9 @@ describe("exports service integration checks", () => {
       font_scale: 1.15
     });
 
-    expect(generator.lastBodyTextSize).toBeCloseTo(13.8, 5);
+    // PDF receives raw tokens + scales so the generator can mirror the preview math itself.
+    expect(generator.lastBodyTextSize).toBe(12);
+    expect(generator.lastFontScale).toBeCloseTo(1.15, 5);
     expect(filesService.lastForcedDownloadFilename).toBe("Tailored CV.pdf");
   });
 
@@ -698,8 +709,10 @@ describe("exports service integration checks", () => {
       layout_scale: 1.3
     });
 
-    expect(generator.lastSectionSpacing).toBeCloseTo(19.8912, 4);
-    expect(generator.lastBlockSpacing).toBeCloseTo(14.9184, 4);
+    expect(generator.lastSectionSpacing).toBe(16);
+    expect(generator.lastBlockSpacing).toBe(12);
+    expect(generator.lastSpacingScale).toBeCloseTo(1.2, 5);
+    expect(generator.lastLayoutScale).toBeCloseTo(1.3, 5);
   });
 
   it("creates completed master CV export and stores it under master scope", async () => {
