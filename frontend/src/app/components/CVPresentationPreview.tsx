@@ -767,7 +767,7 @@ export function CVPresentationPreview({
           <div
             key={`m-${block.key}`}
             ref={setBlockRef(block.key)}
-            style={{ width: `${built.innerWidth}px` }}
+            style={{ width: `${built.innerWidth}px`, display: "flow-root" }}
           >
             {block.node}
           </div>
@@ -776,7 +776,7 @@ export function CVPresentationPreview({
           <div
             key={`m-${block.key}`}
             ref={setBlockRef(block.key)}
-            style={{ width: `${built.innerWidth}px` }}
+            style={{ width: `${built.innerWidth}px`, display: "flow-root" }}
           >
             {block.node}
           </div>
@@ -785,7 +785,7 @@ export function CVPresentationPreview({
           <div
             key={`m-${block.key}`}
             ref={setBlockRef(block.key)}
-            style={{ width: `${built.sidebarInnerWidth}px` }}
+            style={{ width: `${built.sidebarInnerWidth}px`, display: "flow-root" }}
           >
             {block.node}
           </div>
@@ -794,7 +794,7 @@ export function CVPresentationPreview({
           <div
             key={`m-${block.key}`}
             ref={setBlockRef(block.key)}
-            style={{ width: `${built.mainColumnWidth}px` }}
+            style={{ width: `${built.mainColumnWidth}px`, display: "flow-root" }}
           >
             {block.node}
           </div>
