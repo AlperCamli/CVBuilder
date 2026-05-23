@@ -196,7 +196,7 @@ export function Landing() {
           <div className="flex items-center gap-3">
             {isAuthenticated ? (
               <Link
-                to="/app/dashboard"
+                to="/app"
                 className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
                 style={{
                   fontSize: "13px",
