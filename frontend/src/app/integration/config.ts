@@ -7,7 +7,8 @@ export interface IntegrationConfig {
 
 const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, "");
 
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api/v1";
+const defaultApiBaseUrl = import.meta.env.PROD ? "/api/v1" : "http://localhost:4000/api/v1";
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl;
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const rawImportsBucket = import.meta.env.VITE_SUPABASE_IMPORTS_BUCKET ?? "imports";

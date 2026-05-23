@@ -22,7 +22,8 @@
       "Bash(grep -E \"^\\(tsc|vite|vitest\\)$\")",
       "Bash(grep -E \"^\\(tsc|vue-tsc|vite\\)$\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(echo \"backend_exit=$?\")"
+      "Bash(echo \"backend_exit=$?\")",
+      "Bash(grep -v \"^$\\\\|^#\")"
     ]
   }
 }
