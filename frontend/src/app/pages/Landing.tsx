@@ -12,6 +12,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
+import { useAuth } from "../integration/auth-context";
 
 type Step = {
   number: string;
@@ -176,6 +177,8 @@ const WHY_BENEFITS = [
 ];
 
 export function Landing() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -191,16 +194,30 @@ export function Landing() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link
-              to="/signin"
-              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-              style={{
-                fontSize: "13px",
-                color: "var(--color-teal-600)",
-              }}
-            >
-              Sign in
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                to="/app/dashboard"
+                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
+                style={{
+                  fontSize: "13px",
+                  background: "#E1F5EF",
+                  color: "var(--color-teal-600)",
+                }}
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                to="/signin"
+                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
+                style={{
+                  fontSize: "13px",
+                  color: "var(--color-teal-600)",
+                }}
+              >
+                Sign in
+              </Link>
+            )}
             <Link
               to="/app/create"
               className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
