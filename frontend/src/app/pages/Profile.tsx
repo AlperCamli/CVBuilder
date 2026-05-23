@@ -128,6 +128,15 @@ export function Profile() {
       });
       window.location.href = response.portal_url;
     } catch (err) {
+      if (
+        err instanceof ApiClientError &&
+        err.code === "VALIDATION_ERROR" &&
+        err.message.includes("Start checkout again")
+      ) {
+        await openCheckout();
+        return;
+      }
+
       if (err instanceof Error) {
         setError(err.message);
       } else {

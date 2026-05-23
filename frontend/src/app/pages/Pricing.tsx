@@ -151,6 +151,15 @@ export function Pricing() {
       });
       window.location.href = response.portal_url;
     } catch (err) {
+      if (
+        err instanceof ApiClientError &&
+        err.code === "VALIDATION_ERROR" &&
+        err.message.includes("Start checkout again")
+      ) {
+        await startCheckout("pro");
+        return;
+      }
+
       setError(err instanceof Error ? err.message : "Failed to open billing portal.");
       setBusyTarget(null);
     }

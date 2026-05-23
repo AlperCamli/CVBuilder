@@ -281,6 +281,13 @@ export class BillingService {
       throw new ValidationError("Stripe customer linkage was not found for this account");
     }
 
+    const customer = await stripeGateway.retrieveCustomer(customerId);
+    if (!customer) {
+      throw new ValidationError("Stripe customer linkage is stale. Start checkout again to reconnect billing.", {
+        reason: "provider_customer_not_found"
+      });
+    }
+
     const portalSession = await stripeGateway.createPortalSession({
       customer_id: customerId,
       return_url: input.return_url ?? this.options.portalReturnUrl
@@ -519,7 +526,10 @@ export class BillingService {
     );
 
     if (existingCustomerId) {
-      return existingCustomerId;
+      const existingCustomer = await stripeGateway.retrieveCustomer(existingCustomerId);
+      if (existingCustomer) {
+        return existingCustomerId;
+      }
     }
 
     const createdCustomer = await stripeGateway.createCustomer({

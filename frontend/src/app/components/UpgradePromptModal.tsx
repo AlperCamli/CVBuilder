@@ -1,7 +1,7 @@
 import { Check, Loader2, Sparkles, Zap } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Dialog, DialogContent } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { useAuth } from "../integration/auth-context";
 import type { UpgradePromptOptions, UpgradePromptVariant } from "../contexts/UpgradePromptContext";
 
@@ -141,15 +141,19 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
             </span>
           </div>
 
-          <h2
-            className="font-semibold mb-2"
-            style={{ fontSize: "22px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
-          >
-            {copy.title}
-          </h2>
-          <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-            {copy.body}
-          </p>
+          <DialogTitle asChild>
+            <h2
+              className="font-semibold mb-2"
+              style={{ fontSize: "22px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
+            >
+              {copy.title}
+            </h2>
+          </DialogTitle>
+          <DialogDescription asChild>
+            <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
+              {copy.body}
+            </p>
+          </DialogDescription>
         </div>
 
         <div className="px-7 py-5">

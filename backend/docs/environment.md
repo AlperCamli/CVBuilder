@@ -22,6 +22,9 @@
 - `STRIPE_PRO_PRICE_ID`
   - Stripe price id mapped to backend `pro` plan.
 
+- `STRIPE_LIFETIME_PRICE_ID`
+  - Stripe price id mapped to backend `lifetime` plan.
+
 ## Recommended / Optional
 
 - `APP_NAME` (default: `cv-builder-backend`)

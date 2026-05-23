@@ -123,7 +123,7 @@ export class StripeBillingGateway implements StripeGateway {
   constructor(secretKey: string) {
     this.stripe = new Stripe(secretKey, {
       // Keep Stripe API behavior stable and explicit across environments.
-      apiVersion: "2026-03-25.dahlia" as unknown as Stripe.LatestApiVersion
+      apiVersion: "2024-06-20"
     });
   }
 
@@ -283,6 +283,10 @@ export class StripeBillingGateway implements StripeGateway {
         metadata: toMetadataRecord(customer.metadata)
       };
     } catch (error) {
+      if (error instanceof Error && /No such customer/i.test(error.message)) {
+        return null;
+      }
+
       throw new BillingProviderError("Failed to retrieve Stripe customer", {
         reason: error instanceof Error ? error.message : "unknown_stripe_customer_retrieve_error",
         customer_id: customerId
