@@ -1,6 +1,7 @@
 import type { UsageCounterRecord } from "../../shared/types/domain";
 import {
   DEFAULT_FREE_PLAN_CODE,
+  DEFAULT_LIFETIME_PLAN_CODE,
   DEFAULT_PRO_PLAN_CODE
 } from "./plan-definitions";
 import type {
@@ -41,6 +42,10 @@ export class EntitlementsService {
     const normalized = planCode.toLowerCase();
     if (normalized === DEFAULT_PRO_PLAN_CODE) {
       return this.planCatalog.pro;
+    }
+
+    if (normalized === DEFAULT_LIFETIME_PLAN_CODE) {
+      return this.planCatalog.lifetime;
     }
 
     return this.planCatalog.free;

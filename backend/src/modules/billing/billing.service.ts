@@ -41,6 +41,7 @@ interface BillingServiceOptions {
   checkoutCancelUrl: string;
   portalReturnUrl: string;
   stripeWebhookSecret: string | null;
+  trialPeriodDays: number;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => {
@@ -83,9 +84,13 @@ const resolveObjectId = (value: unknown): string | null => {
   return null;
 };
 
+interface ParsedWebhookCheckoutSession extends StripeCheckoutSessionSummary {
+  mode: string | null;
+}
+
 const parseCheckoutSessionFromWebhookObject = (
   object: unknown
-): StripeCheckoutSessionSummary | null => {
+): ParsedWebhookCheckoutSession | null => {
   const row = asRecord(object);
   const id = typeof row.id === "string" ? row.id : null;
 
@@ -98,7 +103,8 @@ const parseCheckoutSessionFromWebhookObject = (
     url: typeof row.url === "string" ? row.url : null,
     customer_id: resolveObjectId(row.customer),
     subscription_id: resolveObjectId(row.subscription),
-    metadata: normalizeMetadata(row.metadata)
+    metadata: normalizeMetadata(row.metadata),
+    mode: typeof row.mode === "string" ? row.mode : null
   };
 };
 
@@ -229,12 +235,18 @@ export class BillingService {
 
     const customerId = await this.ensureStripeCustomerId(user);
 
+    const isLifetime = plan.code === "lifetime";
+    const trialPeriodDays =
+      !isLifetime && this.options.trialPeriodDays > 0 ? this.options.trialPeriodDays : null;
+
     const checkoutSession = await stripeGateway.createCheckoutSession({
       customer_id: customerId,
       price_id: plan.stripe_price_id,
       success_url: input.success_url ?? this.options.checkoutSuccessUrl,
       cancel_url: input.cancel_url ?? this.options.checkoutCancelUrl,
       client_reference_id: user.id,
+      mode: isLifetime ? "payment" : "subscription",
+      trial_period_days: trialPeriodDays,
       metadata: {
         app_user_id: user.id,
         plan_code: plan.code
@@ -358,6 +370,16 @@ export class BillingService {
       });
     }
 
+    if (session.mode === "payment") {
+      const metadataPlanCode = (session.metadata.plan_code as string | undefined) ?? null;
+      if (metadataPlanCode === "lifetime") {
+        await this.recordLifetimePurchase(userId, session);
+        return true;
+      }
+
+      return true;
+    }
+
     if (!session.subscription_id) {
       return true;
     }
@@ -369,6 +391,23 @@ export class BillingService {
 
     await this.syncStripeSubscription(userId, subscription);
     return true;
+  }
+
+  private async recordLifetimePurchase(
+    userId: string,
+    session: ParsedWebhookCheckoutSession
+  ): Promise<void> {
+    await this.subscriptionsRepository.upsertProviderSubscription({
+      user_id: userId,
+      provider: this.options.provider,
+      provider_customer_id: session.customer_id,
+      provider_subscription_id: `lifetime_${session.id}`,
+      plan_code: "lifetime",
+      status: "active",
+      current_period_start: new Date().toISOString(),
+      current_period_end: null,
+      cancel_at_period_end: false
+    });
   }
 
   private async handleSubscriptionUpdated(object: unknown): Promise<boolean> {

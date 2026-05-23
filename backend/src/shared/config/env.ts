@@ -34,6 +34,8 @@ const envSchema = z
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
     STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
+    STRIPE_LIFETIME_PRICE_ID: z.string().min(1).optional(),
+    BILLING_TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).max(90).default(3),
     BILLING_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
     BILLING_CHECKOUT_CANCEL_URL: z.string().url().optional(),
     BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
@@ -94,6 +96,8 @@ export interface AppConfig {
     stripeSecretKey: string | null;
     stripeWebhookSecret: string | null;
     stripeProPriceId: string | null;
+    stripeLifetimePriceId: string | null;
+    trialPeriodDays: number;
     checkoutSuccessUrl: string;
     checkoutCancelUrl: string;
     portalReturnUrl: string;
@@ -192,6 +196,8 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       stripeSecretKey: parsed.data.STRIPE_SECRET_KEY ?? null,
       stripeWebhookSecret: parsed.data.STRIPE_WEBHOOK_SECRET ?? null,
       stripeProPriceId: parsed.data.STRIPE_PRO_PRICE_ID ?? null,
+      stripeLifetimePriceId: parsed.data.STRIPE_LIFETIME_PRICE_ID ?? null,
+      trialPeriodDays: parsed.data.BILLING_TRIAL_PERIOD_DAYS,
       checkoutSuccessUrl:
         parsed.data.BILLING_CHECKOUT_SUCCESS_URL ??
         `${frontendAppUrl.replace(/\/$/, "")}/app/pricing?checkout=success`,

@@ -1,6 +1,6 @@
 import type { UsageCounterRecord } from "../../shared/types/domain";
 
-export type PlanCode = "free" | "pro";
+export type PlanCode = "free" | "pro" | "lifetime";
 
 export interface UsageLimits {
   tailored_cv_generations: number | null;

@@ -20,6 +20,7 @@ import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import {
   Dialog,
   DialogContent,
@@ -107,6 +108,7 @@ const SPACING_SCALE_MAX = 1.4;
 const LAYOUT_SCALE_MIN = 0.7;
 const LAYOUT_SCALE_MAX = 1.3;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
+const EXPORT_UPSELL_SESSION_KEY = "cv-editor:export-upsell-shown";
 const EMPTY_AI_BLOCK_MESSAGE = "This block is empty, please provide some information.";
 
 const clampInRange = (value: number, min: number, max: number): number =>
@@ -415,6 +417,7 @@ export function CVEditor() {
   const location = useLocation();
   const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
   const isUploadedFlow = Boolean(location.state?.isUploaded);
@@ -1130,6 +1133,20 @@ export function CVEditor() {
     };
   }, [api, buildCurrentContent, cvKind, language, showTemplateGallery, templates]);
 
+  const maybeShowExportUpsell = async (): Promise<void> => {
+    if (typeof window === "undefined") return;
+    if (window.sessionStorage.getItem(EXPORT_UPSELL_SESSION_KEY) === "true") return;
+
+    try {
+      const plan = await api.getBillingPlan();
+      if (plan.plan_code === "pro" || plan.plan_code === "lifetime") return;
+      window.sessionStorage.setItem(EXPORT_UPSELL_SESSION_KEY, "true");
+      showUpgradePrompt("export_first_in_session");
+    } catch {
+      // Don't block export on a billing-plan fetch failure.
+    }
+  };
+
   const openExportDialog = async () => {
     if (!cvId) {
       setExportError("CV id is missing.");
@@ -1138,6 +1155,8 @@ export function CVEditor() {
     }
 
     setExportError(null);
+
+    void maybeShowExportUpsell();
 
     try {
       const history =
@@ -1212,7 +1231,13 @@ export function CVEditor() {
         navigate(`/app/tailor/${cvId}`);
       }
     } catch (err) {
-      if (err instanceof Error) {
+      if (err instanceof ApiClientError && err.code === "ENTITLEMENT_EXCEEDED") {
+        showUpgradePrompt("limit_reached", {
+          feature: format === "pdf" ? "export_pdf" : "export_docx",
+          reason: err.message
+        });
+        setExportError(err.message);
+      } else if (err instanceof Error) {
         setExportError(err.message);
       } else {
         setExportError("Export failed.");

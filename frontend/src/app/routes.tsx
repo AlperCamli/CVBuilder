@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { SidebarProvider } from "./contexts/SidebarContext";
+import { UpgradePromptProvider } from "./contexts/UpgradePromptContext";
 import { Layout } from "./components/Layout";
 import { Landing } from "./pages/Landing";
 import { SignIn } from "./pages/SignIn";
@@ -27,7 +28,9 @@ import { RedirectIfAuthenticated, RequireAuth } from "./integration/auth-route-g
 function LayoutWrapper() {
   return (
     <SidebarProvider>
-      <Layout />
+      <UpgradePromptProvider>
+        <Layout />
+      </UpgradePromptProvider>
     </SidebarProvider>
   );
 }

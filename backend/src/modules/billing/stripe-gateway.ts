@@ -49,6 +49,8 @@ export interface CreateStripeCheckoutInput {
   cancel_url: string;
   client_reference_id: string;
   metadata: Record<string, string>;
+  mode?: "subscription" | "payment";
+  trial_period_days?: number | null;
 }
 
 export interface CreateStripePortalInput {
@@ -148,8 +150,10 @@ export class StripeBillingGateway implements StripeGateway {
 
   async createCheckoutSession(input: CreateStripeCheckoutInput): Promise<StripeCheckoutSessionSummary> {
     try {
-      const session = await this.stripe.checkout.sessions.create({
-        mode: "subscription",
+      const mode = input.mode ?? "subscription";
+
+      const baseParams: Stripe.Checkout.SessionCreateParams = {
+        mode,
         customer: input.customer_id,
         success_url: input.success_url,
         cancel_url: input.cancel_url,
@@ -160,11 +164,26 @@ export class StripeBillingGateway implements StripeGateway {
             quantity: 1
           }
         ],
-        metadata: input.metadata,
-        subscription_data: {
+        metadata: input.metadata
+      };
+
+      if (mode === "subscription") {
+        const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
           metadata: input.metadata
+        };
+
+        if (input.trial_period_days && input.trial_period_days > 0) {
+          subscriptionData.trial_period_days = input.trial_period_days;
         }
-      });
+
+        baseParams.subscription_data = subscriptionData;
+      } else {
+        baseParams.payment_intent_data = {
+          metadata: input.metadata
+        };
+      }
+
+      const session = await this.stripe.checkout.sessions.create(baseParams);
 
       return {
         id: session.id,

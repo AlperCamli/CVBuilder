@@ -267,7 +267,7 @@ export interface UpdateCoverLetterContentInput {
 }
 
 export interface BillingCheckoutInput {
-  plan_code: "free" | "pro";
+  plan_code: "free" | "pro" | "lifetime";
   success_url?: string;
   cancel_url?: string;
 }

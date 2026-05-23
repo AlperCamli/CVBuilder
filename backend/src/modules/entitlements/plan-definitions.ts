@@ -2,9 +2,24 @@ import type { PlanCatalog } from "./entitlements.types";
 
 interface CreatePlanCatalogOptions {
   proStripePriceId?: string | null;
+  lifetimeStripePriceId?: string | null;
 }
 
 const FREE_STORAGE_BYTES = 25 * 1024 * 1024;
+
+const UNLIMITED_LIMITS = {
+  tailored_cv_generations: null,
+  exports: null,
+  ai_actions: null,
+  storage_bytes: null
+} as const;
+
+const UNLIMITED_FEATURES = {
+  can_generate_tailored_cv: true,
+  can_export_pdf: true,
+  can_export_docx: true,
+  can_use_ai_actions: true
+} as const;
 
 export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatalog => {
   return {
@@ -29,21 +44,19 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
       code: "pro",
       name: "Pro",
       stripe_price_id: options?.proStripePriceId ?? null,
-      limits: {
-        tailored_cv_generations: null,
-        exports: null,
-        ai_actions: null,
-        storage_bytes: null
-      },
-      features: {
-        can_generate_tailored_cv: true,
-        can_export_pdf: true,
-        can_export_docx: true,
-        can_use_ai_actions: true
-      }
+      limits: { ...UNLIMITED_LIMITS },
+      features: { ...UNLIMITED_FEATURES }
+    },
+    lifetime: {
+      code: "lifetime",
+      name: "Lifetime Pro",
+      stripe_price_id: options?.lifetimeStripePriceId ?? null,
+      limits: { ...UNLIMITED_LIMITS },
+      features: { ...UNLIMITED_FEATURES }
     }
   };
 };
 
 export const DEFAULT_FREE_PLAN_CODE = "free" as const;
 export const DEFAULT_PRO_PLAN_CODE = "pro" as const;
+export const DEFAULT_LIFETIME_PLAN_CODE = "lifetime" as const;

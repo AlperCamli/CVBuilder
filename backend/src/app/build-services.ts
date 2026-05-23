@@ -190,7 +190,12 @@ export const buildDefaultServices = (
 
   const entitlementsService =
     overrides?.entitlementsService ??
-    new EntitlementsService(createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId }));
+    new EntitlementsService(
+      createPlanCatalog({
+        proStripePriceId: config.billing.stripeProPriceId,
+        lifetimeStripePriceId: config.billing.stripeLifetimePriceId
+      })
+    );
   const usageService = overrides?.usageService ?? new UsageService(usageRepository);
   const stripeGateway =
     overrides?.stripeGateway === undefined
@@ -212,7 +217,8 @@ export const buildDefaultServices = (
         checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
         checkoutCancelUrl: config.billing.checkoutCancelUrl,
         portalReturnUrl: config.billing.portalReturnUrl,
-        stripeWebhookSecret: config.billing.stripeWebhookSecret
+        stripeWebhookSecret: config.billing.stripeWebhookSecret,
+        trialPeriodDays: config.billing.trialPeriodDays
       }
     );
 

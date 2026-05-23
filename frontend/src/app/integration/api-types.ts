@@ -1094,7 +1094,7 @@ export interface BillingProviderSummary {
 }
 
 export interface BillingPlanResponseData {
-  plan_code: "free" | "pro";
+  plan_code: "free" | "pro" | "lifetime";
   subscription_status: string;
   current_period_start: string | null;
   current_period_end: string | null;
@@ -1106,7 +1106,7 @@ export interface BillingPlanResponseData {
 export interface CreateCheckoutResponseData {
   checkout_url: string;
   checkout_session_id: string;
-  plan_code: "free" | "pro";
+  plan_code: "free" | "pro" | "lifetime";
   plan_name: string;
 }
 

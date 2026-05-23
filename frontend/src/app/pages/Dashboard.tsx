@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { FileText, ExternalLink, Target, Plus, MoreVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type {
@@ -206,9 +207,12 @@ const DroppableDashboardColumn = ({ column, group, onDrop }: { column: any, grou
   );
 };
 
+const WELCOME_PROMPT_STORAGE_KEY = "upgrade_welcome_prompt_shown";
+
 export function Dashboard() {
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const [dashboard, setDashboard] = useState<DashboardResponseData | null>(null);
   const [jobBoard, setJobBoard] = useState<JobBoardResponse | null>(null);
   const [activity, setActivity] = useState<DashboardActivityResponseData | null>(null);
@@ -218,6 +222,31 @@ export function Dashboard() {
   useEffect(() => {
     setSidebarVisible(true);
   }, [setSidebarVisible]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(WELCOME_PROMPT_STORAGE_KEY) === "true") return;
+
+    let cancelled = false;
+    void api
+      .getBillingPlan()
+      .then((plan) => {
+        if (cancelled) return;
+        if (plan.plan_code === "pro" || plan.plan_code === "lifetime") {
+          window.localStorage.setItem(WELCOME_PROMPT_STORAGE_KEY, "true");
+          return;
+        }
+        window.localStorage.setItem(WELCOME_PROMPT_STORAGE_KEY, "true");
+        showUpgradePrompt("welcome");
+      })
+      .catch(() => {
+        // Don't block the dashboard on a billing-plan fetch failure.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api, showUpgradePrompt]);
 
   useEffect(() => {
     let cancelled = false;
