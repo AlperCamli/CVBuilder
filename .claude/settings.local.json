@@ -19,7 +19,8 @@
       "Bash(xargs grep *)",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Bash(./node_modules/.bin/vite build *)",
-      "Bash(grep -E \"^\\(tsc|vite|vitest\\)$\")"
+      "Bash(grep -E \"^\\(tsc|vite|vitest\\)$\")",
+      "Bash(grep -E \"^\\(tsc|vue-tsc|vite\\)$\")"
     ]
   }
 }
