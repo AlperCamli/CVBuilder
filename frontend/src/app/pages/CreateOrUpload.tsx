@@ -43,7 +43,7 @@ export function CreateOrUpload() {
               Let's build your CV
             </h1>
             <p className="mb-8" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-              Start by creating a comprehensive master CV or uploading an existing one.
+              Start by creating a comprehensive main CV or uploading an existing one.
               You'll be able to customize it for specific jobs later.
             </p>
 
@@ -57,7 +57,7 @@ export function CreateOrUpload() {
 
               {[
                 { step: "1", title: "Build or upload your base CV", desc: "Add your complete experience and skills" },
-                { step: "2", title: "Customize for a specific job", desc: "Tailor content based on job requirements" },
+                { step: "2", title: "Customize for a specific job", desc: "Customize content based on job requirements" },
                 { step: "3", title: "Export and apply", desc: "Download polished, ATS-friendly versions" },
               ].map((item) => (
                 <div key={item.step} className="flex items-start gap-3">
@@ -100,7 +100,7 @@ export function CreateOrUpload() {
                 Create a CV
               </h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Start building your master CV with our comprehensive editor. Add your experience, skills, and education with AI assistance.
+                Start building your main CV with our comprehensive editor. Add your experience, skills, and education with AI assistance.
               </p>
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} style={{ color: "var(--color-teal-600)" }} />

@@ -157,7 +157,7 @@ export function CVScore() {
       const existing = await api.listMasterCvs();
       if (existing.length > 0) {
         const confirmed = window.confirm(
-          "You already have a master CV. Creating a new one will permanently delete the existing one. Continue?"
+          "You already have a main CV. Creating a new one will permanently delete the existing one. Continue?"
         );
         if (!confirmed) {
           return;
@@ -187,7 +187,7 @@ export function CVScore() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to convert import to master CV.");
+        setError("Failed to convert import to main CV.");
       }
       setConverting(false);
     }
@@ -286,7 +286,7 @@ export function CVScore() {
                 {score >= 80 ? "Great CV foundation" : score >= 60 ? "Good foundation" : "Needs improvement"}
               </h3>
               <p style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Parsed result review is complete. You can continue directly or apply AI-assisted improvements before converting to your master CV.
+                Parsed result review is complete. You can continue directly or apply AI-assisted improvements before converting to your main CV.
               </p>
             </div>
           </div>

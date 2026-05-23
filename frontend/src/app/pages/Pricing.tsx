@@ -27,7 +27,7 @@ const PLAN_CARDS: PlanCard[] = [
     period: "forever",
     description: "Try the basics, no card required.",
     features: [
-      "3 tailored CVs per month",
+      "3 customized CVs per month",
       "5 exports per month",
       "20 AI actions per month",
       "25 MB storage"
@@ -42,7 +42,7 @@ const PLAN_CARDS: PlanCard[] = [
     highlighted: true,
     badge: "3-day free trial",
     features: [
-      "Unlimited tailored CVs",
+      "Unlimited customized CVs",
       "Unlimited exports (PDF + DOCX)",
       "Unlimited AI actions",
       "Unlimited storage",
@@ -377,7 +377,7 @@ export function Pricing() {
                 style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
               >
                 <div>
-                  Tailored generations: {usage.tailored_cv_generations_count}
+                  Customized generations: {usage.tailored_cv_generations_count}
                   {usage.limits.tailored_cv_generations !== null
                     ? ` / ${usage.limits.tailored_cv_generations}`
                     : " / unlimited"}

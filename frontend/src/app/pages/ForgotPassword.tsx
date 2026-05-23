@@ -46,7 +46,7 @@ export function ForgotPassword() {
               className="font-semibold" 
               style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
             >
-              Resumé
+              jobspecificCV
             </span>
           </Link>
 
@@ -117,7 +117,7 @@ export function ForgotPassword() {
             className="font-semibold" 
             style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
           >
-            Resumé
+            jobspecificCV
           </span>
         </Link>
 

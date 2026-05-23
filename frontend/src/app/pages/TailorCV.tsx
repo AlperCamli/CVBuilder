@@ -25,7 +25,7 @@ export function TailorCV() {
   const prefillJob = state.prefillJob;
 
   const [masterCvId, setMasterCvId] = useState<string | null>(null);
-  const [masterCvTitle, setMasterCvTitle] = useState<string>("Master CV");
+  const [masterCvTitle, setMasterCvTitle] = useState<string>("Main CV");
   const [formData, setFormData] = useState({
     role: prefillJob?.role ?? "",
     company: prefillJob?.company ?? "",
@@ -51,7 +51,7 @@ export function TailorCV() {
           const masters = await api.listMasterCvs();
           const primary = masters[0];
           if (!primary) {
-            throw new Error("Create a master CV first before tailoring.");
+            throw new Error("Create a main CV first before customizing.");
           }
 
           if (!cancelled) {
@@ -74,7 +74,7 @@ export function TailorCV() {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Failed to load source master CV.");
+          setError("Failed to load source main CV.");
         }
       } finally {
         if (!cancelled) {
@@ -206,7 +206,7 @@ export function TailorCV() {
                 <Target size={20} style={{ color: "var(--color-teal-600)" }} />
               </div>
               <h1 className="font-medium" style={{ fontSize: "28px", lineHeight: "1.2", color: "var(--color-text-primary)" }}>
-                Tailor your CV for this role
+                Customize your CV for this role
               </h1>
             </div>
 
@@ -218,7 +218,7 @@ export function TailorCV() {
               <h3 className="uppercase tracking-wider" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
                 What happens next
               </h3>
-              {["AI analyzes the job description", "Follow-up questions are generated", "Tailored CV draft is created", "You review every AI change before applying"].map((item) => (
+              {["AI analyzes the job description", "Follow-up questions are generated", "Customized CV draft is created", "You review every AI change before applying"].map((item) => (
                 <div key={item} className="flex items-start gap-3">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: "var(--color-teal-600)" }} />
                   <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>{item}</p>

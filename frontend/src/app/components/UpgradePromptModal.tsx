@@ -22,7 +22,7 @@ interface VariantCopy {
 }
 
 const PRO_FEATURES = [
-  "Unlimited tailored CVs",
+  "Unlimited customized CVs",
   "Unlimited PDF + DOCX exports",
   "Unlimited AI rewrites & suggestions",
   "Unlimited storage"
@@ -34,7 +34,7 @@ const featureLabel = (feature: string | undefined): string => {
     case "export_docx":
       return "exports";
     case "tailored_cv_generation":
-      return "tailored CVs";
+      return "customized CVs";
     case "ai_action":
       return "AI actions";
     default:
@@ -46,10 +46,10 @@ const getCopy = (variant: UpgradePromptVariant, options: UpgradePromptOptions): 
   switch (variant) {
     case "welcome":
       return {
-        eyebrow: "Welcome — let's get you a tailored CV",
+        eyebrow: "Welcome — let's get you a customized CV",
         title: "Try Pro free for 3 days",
         body:
-          "Unlock unlimited tailored CVs, exports, and AI rewrites for 3 days. Cancel any time before the trial ends — no charge.",
+          "Unlock unlimited customized CVs, exports, and AI rewrites for 3 days. Cancel any time before the trial ends — no charge.",
         ctaPrimary: "Start 3-day free trial",
         ctaSecondary: "Get Lifetime — $99",
         dismiss: "Maybe later"

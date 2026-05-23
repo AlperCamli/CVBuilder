@@ -433,7 +433,7 @@ export function Dashboard() {
           className="uppercase tracking-wider mb-3"
           style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
         >
-          Master CV
+          Main CV
         </p>
 
         {!primaryMaster && (
@@ -445,7 +445,7 @@ export function Dashboard() {
             }}
           >
             <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              You don&apos;t have a master CV yet.
+              You don&apos;t have a main CV yet.
             </p>
             <Link
               to="/app/create"
@@ -491,7 +491,7 @@ export function Dashboard() {
                 className="px-2.5 py-1 rounded-full text-xs font-medium"
                 style={{ background: "var(--color-teal-50)", color: "var(--color-teal-800)" }}
               >
-                Master CV
+                Main CV
               </span>
             </div>
             <div className="flex gap-2">
@@ -519,7 +519,7 @@ export function Dashboard() {
                 }}
               >
                 <Target size={14} />
-                Tailor for a job
+                Customize for a job
               </Link>
             </div>
           </div>

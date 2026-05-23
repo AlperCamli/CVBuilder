@@ -80,14 +80,14 @@ export function TailoringFlow() {
       <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
         <div className="max-w-md w-full p-6 rounded-xl border" style={{ borderColor: "var(--color-border-tertiary)", background: "var(--color-background-primary)" }}>
           <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            Tailoring context was not found. Start again from the Tailor page.
+            Customization context was not found. Start again from the Customize page.
           </p>
           <button
             onClick={() => navigate(`/app/tailor/${id ?? "master"}`)}
             className="mt-4 px-4 py-2 rounded-lg font-medium"
             style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "white" }}
           >
-            Back to Tailor CV
+            Back to Customize CV
           </button>
         </div>
       </div>
@@ -168,7 +168,7 @@ export function TailoringFlow() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to generate tailored CV draft.");
+        setError("Failed to generate customized CV draft.");
       }
       setGenerating(false);
       setProgressMessage(null);
@@ -242,7 +242,7 @@ export function TailoringFlow() {
                   Priority topics from job analysis
                 </h2>
                 <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Select the topics that should be emphasized in your tailored CV.
+                  Select the topics that should be emphasized in your customized CV.
                 </p>
               </div>
 
@@ -366,7 +366,7 @@ export function TailoringFlow() {
                   }}
                 >
                   {generating ? <Loader2 size={14} className="animate-spin" /> : null}
-                  {generating ? "Generating tailored CV..." : "Generate tailored CV"}
+                  {generating ? "Generating customized CV..." : "Generate customized CV"}
                 </button>
               </div>
               {generating && progressMessage ? (

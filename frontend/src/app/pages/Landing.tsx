@@ -33,7 +33,7 @@ const STEPS: Step[] = [
   {
     number: "02",
     icon: Target,
-    title: "Tailor for a job",
+    title: "Customize for a job",
     description:
       "Enter the role, the company, and paste the job description. The app builds a focused brief so every later step is grounded in what this employer actually wants.",
     videoSrc: "/videos/step-2-tailor.mp4",
@@ -51,7 +51,7 @@ const STEPS: Step[] = [
     icon: Download,
     title: "Export your CV",
     description:
-      "Preview the tailored CV, tweak anything that needs a final touch, then export a polished, ATS-friendly PDF in seconds. Keep a fresh version for every application.",
+      "Preview the customized CV, tweak anything that needs a final touch, then export a polished, ATS-friendly PDF in seconds. Keep a fresh version for every application.",
     videoSrc: "/videos/step-4-export.mp4",
   },
 ];
@@ -164,7 +164,7 @@ const STATS: { icon: LucideIcon; value: string; label: string }[] = [
   {
     icon: TrendingUp,
     value: "3x",
-    label: "more interviews when your CV is tailored to the role",
+    label: "more interviews when your CV is customized to the role",
   },
 ];
 
@@ -187,7 +187,7 @@ export function Landing() {
               style={{ background: "var(--color-teal-600)" }}
             />
             <span className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-              Resumé
+              jobspecificCV
             </span>
           </Link>
           <div className="flex items-center gap-3">
@@ -223,7 +223,7 @@ export function Landing() {
             className="font-medium mb-4"
             style={{ fontSize: "32px", lineHeight: "1.2", color: "var(--color-text-primary)" }}
           >
-            Build one CV. Tailor it for every job.
+            Build one CV. Customize it for every job.
           </h1>
           <p
             className="mb-8"
@@ -352,14 +352,14 @@ export function Landing() {
               className="font-medium mb-4"
               style={{ fontSize: "24px", color: "var(--color-teal-800)" }}
             >
-              Why a tailored CV beats a generic one
+              Why a customized CV beats a generic one
             </h2>
             <p
               className="mx-auto mb-8"
               style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-teal-800)" }}
             >
               Recruiters and ATS systems are matching your CV against a specific job —
-              not your career. A tailored CV speaks their language and proves you're the
+              not your career. A customized CV speaks their language and proves you're the
               right fit before anyone reads a single sentence in full.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left max-w-2xl mx-auto">
@@ -392,7 +392,7 @@ export function Landing() {
             className="mb-6"
             style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
           >
-            Create your first tailored CV in minutes.
+            Create your first customized CV in minutes.
           </p>
           <Link
             to="/app/create"
@@ -418,11 +418,11 @@ export function Landing() {
                 style={{ background: "var(--color-teal-600)" }}
               />
               <span className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Resumé
+                jobspecificCV
               </span>
             </div>
             <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              © 2026 Resumé. All rights reserved.
+              © 2026 jobspecificCV. All rights reserved.
             </p>
           </div>
         </div>

@@ -79,7 +79,7 @@ export const toFlowLabel = (flowType: TailoringRunFlowType): string => {
   if (flowType === "follow_up_questions") {
     return "Follow-up questions";
   }
-  return "Tailored CV draft";
+  return "Customized CV draft";
 };
 
 export const toStageLabel = (
@@ -133,12 +133,12 @@ export const toRunErrorMessage = (status: TailoringRunStatusResponse): string =>
     return "AI returned an unreadable response format. Please retry.";
   }
   if (normalized.includes("output_semantically_empty")) {
-    return "AI generated an empty tailored draft. Please adjust job context or answers and retry.";
+    return "AI generated an empty customized draft. Please adjust job context or answers and retry.";
   }
   if (normalized.includes("output_master_verbatim")) {
-    return "AI returned the master CV unchanged. Add a more specific job description or fill in more follow-up answers, then retry.";
+    return "AI returned the main CV unchanged. Add a more specific job description or fill in more follow-up answers, then retry.";
   }
-  return raw || "Tailoring AI request failed.";
+  return raw || "Customization AI request failed.";
 };
 
 export interface RunTailoringFlowOptions {
@@ -261,7 +261,7 @@ export const runTailoringFlow = async <TResult extends Record<string, unknown>>(
       throw executeOutcome.error;
     }
     throw new Error(
-      `Tailoring AI run did not reach a terminal state (status=${finalStatus.status}, stage=${finalStatus.progress_stage}).`
+      `Customization AI run did not reach a terminal state (status=${finalStatus.status}, stage=${finalStatus.progress_stage}).`
     );
   }
 

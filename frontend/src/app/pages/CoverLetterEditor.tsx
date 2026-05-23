@@ -289,7 +289,7 @@ export function CoverLetterEditor() {
 
   const handleGenerateWithAi = async () => {
     if (!coverLetter?.job?.tailored_cv_id) {
-      setError("A tailored CV must be linked to this job to generate a cover letter.");
+      setError("A customized CV must be linked to this job to generate a cover letter.");
       return;
     }
 
@@ -410,7 +410,7 @@ export function CoverLetterEditor() {
                 opacity: generating || !coverLetter?.job?.tailored_cv_id ? 0.7 : 1,
                 cursor: generating || !coverLetter?.job?.tailored_cv_id ? "not-allowed" : "pointer"
               }}
-              title={!coverLetter?.job?.tailored_cv_id ? "A tailored CV must be linked to the job first." : "Generate with AI"}
+              title={!coverLetter?.job?.tailored_cv_id ? "A customized CV must be linked to the job first." : "Generate with AI"}
             >
               {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {generating ? "Generating..." : "Generate with AI"}

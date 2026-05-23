@@ -57,7 +57,7 @@ export function SignUp() {
           <Link to="/" className="flex items-center gap-2 mb-12">
             <div className="w-8 h-8 rounded-md" style={{ background: "var(--color-teal-600)" }} />
             <span className="font-semibold" style={{ fontSize: "20px", color: "var(--color-text-primary)" }}>
-              Resumé
+              jobspecificCV
             </span>
           </Link>
 
@@ -257,7 +257,7 @@ export function SignUp() {
             Join thousands of job seekers
           </h2>
           <p className="mb-8" style={{ fontSize: "16px", lineHeight: "1.6", opacity: 0.9 }}>
-            Create your account and start building professional resumes tailored for each role.
+            Create your account and start building professional resumes customized for each role.
           </p>
         </div>
       </div>

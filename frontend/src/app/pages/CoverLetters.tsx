@@ -71,7 +71,7 @@ export function CoverLetters() {
       id: job.id,
       title: job.job_title,
       company: job.company_name,
-      cvName: job.tailored_cv_title ?? "Tailored CV",
+      cvName: job.tailored_cv_title ?? "Customized CV",
       hasCoverLetter: Boolean(job.cover_letter_id),
       date: formatDate(job.updated_at)
     }));
@@ -266,13 +266,13 @@ export function CoverLetters() {
                 <FileText size={32} style={{ color: "var(--color-text-secondary)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                No jobs with tailored CV yet
+                No jobs with customized CV yet
               </h3>
               <p
                 className="mb-6 max-w-md mx-auto"
                 style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}
               >
-                Create a tailored CV for a job first, then generate and manage its cover letter here.
+                Create a customized CV for a job first, then generate and manage its cover letter here.
               </p>
             </div>
           </div>

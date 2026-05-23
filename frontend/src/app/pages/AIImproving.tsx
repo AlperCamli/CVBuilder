@@ -204,7 +204,7 @@ export function AIImproving() {
             }}
           >
             <Loader2 size={14} className="animate-spin" />
-            Applying improvements and creating your Master CV...
+            Applying improvements and creating your Main CV...
           </div>
         )}
 

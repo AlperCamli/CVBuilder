@@ -242,7 +242,7 @@ const DraggableJobCard = ({
         >
           <span className="inline-flex items-center gap-1">
             <FileText size={12} />
-            {job.tailoredCvId ? "View Tailored CV" : "Create a Customized CV for this job"}
+            {job.tailoredCvId ? "View Customized CV" : "Create a Customized CV for this job"}
           </span>
         </button>
 
@@ -566,7 +566,7 @@ export function JobTracker() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open tailored CV flow.");
+        setError("Failed to open customized CV flow.");
       }
     } finally {
       setActionLoadingJobId(null);
@@ -626,7 +626,7 @@ export function JobTracker() {
             <Info size={20} style={{ color: "var(--color-teal-600)", flexShrink: 0, marginTop: "2px" }} />
             <div className="flex-1">
               <h4 className="font-medium mb-1" style={{ fontSize: "14px", color: "var(--color-teal-800)" }}>
-                Tailored CV created!
+                Customized CV created!
               </h4>
               <p style={{ fontSize: "13px", color: "var(--color-teal-800)", lineHeight: "1.5" }}>
                 Your job entry is now tracked here. Drag cards between columns to keep statuses updated.
@@ -675,7 +675,7 @@ export function JobTracker() {
                 cursor: "not-allowed"
               }}
               disabled
-              title="New jobs are created from Tailored CV flow in this phase"
+              title="New jobs are created from Customized CV flow in this phase"
             >
               <Plus size={16} />
               Add application

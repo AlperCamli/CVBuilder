@@ -274,7 +274,7 @@ export function Profile() {
                 </p>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                   {usage
-                    ? `${usage.remaining.tailored_cv_generations ?? "∞"} tailored CV generations remaining this month`
+                    ? `${usage.remaining.tailored_cv_generations ?? "∞"} customized CV generations remaining this month`
                     : "Loading usage..."}
                 </p>
                 {planCode !== "free" && meData?.current_plan.current_period_end && (

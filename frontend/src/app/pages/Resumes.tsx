@@ -132,7 +132,7 @@ export function Resumes() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to delete master CV.");
+        setError("Failed to delete main CV.");
       }
       return false;
     } finally {
@@ -179,7 +179,7 @@ export function Resumes() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to duplicate master CV.");
+        setError("Failed to duplicate main CV.");
       }
     } finally {
       setBusyMasterId(null);
@@ -187,7 +187,7 @@ export function Resumes() {
   };
 
   const deleteMaster = async (masterCvId: string) => {
-    const confirmed = window.confirm("Delete this master CV? This action can be reversed only from backups.");
+    const confirmed = window.confirm("Delete this main CV? This action can be reversed only from backups.");
     if (!confirmed) {
       return;
     }
@@ -218,7 +218,7 @@ export function Resumes() {
   };
 
   const deleteTailored = async (tailoredCvId: string) => {
-    const confirmed = window.confirm("Delete this tailored CV?");
+    const confirmed = window.confirm("Delete this customized CV?");
     if (!confirmed) {
       return;
     }
@@ -231,7 +231,7 @@ export function Resumes() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to delete tailored CV.");
+        setError("Failed to delete customized CV.");
       }
     } finally {
       setBusyTailoredId(null);
@@ -246,7 +246,7 @@ export function Resumes() {
             My CVs
           </h1>
           <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-            Manage your master CV and tailored versions
+            Manage your main CV and customized versions
           </p>
         </div>
         <button
@@ -262,7 +262,7 @@ export function Resumes() {
           }}
         >
           <Plus size={14} />
-          + New CV
+          New CV
         </button>
       </div>
 
@@ -299,7 +299,7 @@ export function Resumes() {
               className="uppercase tracking-wider mb-3"
               style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
             >
-              Master CV
+              Main CV
             </p>
 
             {!primaryMaster && (
@@ -308,7 +308,7 @@ export function Resumes() {
                 style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}
               >
                 <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                  You don&apos;t have a master CV yet.
+                  You don&apos;t have a main CV yet.
                 </p>
                 <Link
                   to="/app/create"
@@ -350,7 +350,7 @@ export function Resumes() {
                     className="px-2.5 py-1 rounded-full text-xs font-medium"
                     style={{ background: "var(--color-teal-50)", color: "var(--color-teal-800)" }}
                   >
-                    Master CV
+                    Main CV
                   </span>
                 </div>
 
@@ -379,7 +379,7 @@ export function Resumes() {
                     }}
                   >
                     <Target size={14} />
-                    Tailor for a job
+                    Customize for a job
                   </Link>
                   <button
                     onClick={() => void duplicateMaster(primaryMaster.id)}
@@ -419,7 +419,7 @@ export function Resumes() {
               className="uppercase tracking-wider mb-3"
               style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
             >
-              Tailored CVs ({tailoredCvs.length})
+              Customized CVs ({tailoredCvs.length})
             </p>
 
             {tailoredCvs.length === 0 && (
@@ -428,7 +428,7 @@ export function Resumes() {
                 style={{ borderColor: "var(--color-border-tertiary)" }}
               >
                 <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                  No tailored CVs yet. Create one from your master CV.
+                  No customized CVs yet. Create one from your main CV.
                 </p>
               </div>
             )}
@@ -536,7 +536,7 @@ export function Resumes() {
           <AlertDialogHeader>
             <AlertDialogTitle>Add a new CV</AlertDialogTitle>
             <AlertDialogDescription>
-              To add a new CV you should first Delete your existing Master CV.
+              To add a new CV you should first Delete your existing Main CV.
               <br />
               Are you sure you want to delete your CV?
             </AlertDialogDescription>

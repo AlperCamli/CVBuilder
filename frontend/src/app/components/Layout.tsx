@@ -61,7 +61,7 @@ export function Layout() {
           <Link to="/" className="flex items-center gap-2 p-6">
             <div className="w-6 h-6 rounded-md" style={{ background: "var(--color-teal-600)" }} />
             <span className="font-medium" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-              Resumé
+              jobspecificCV
             </span>
           </Link>
 

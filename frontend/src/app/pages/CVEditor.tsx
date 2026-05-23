@@ -678,7 +678,7 @@ export function CVEditor() {
 
         if (!targetMasterId) {
           const created = await api.createMasterCv({
-            title: "My Master CV",
+            title: "My Main CV",
             language: "en"
           });
           hydrateFromMaster(created);
@@ -1227,7 +1227,7 @@ export function CVEditor() {
         window.localStorage.getItem(MASTER_EXPORT_GUIDE_FLAG) !== "true"
       ) {
         window.localStorage.setItem(MASTER_EXPORT_GUIDE_FLAG, "true");
-        toast.success("Now let's tailor this CV for a job!");
+        toast.success("Now let's customize this CV for a job!");
         navigate(`/app/tailor/${cvId}`);
       }
     } catch (err) {
@@ -1627,7 +1627,7 @@ export function CVEditor() {
 
       if (action === "compare") {
         if (cvKind !== "tailored") {
-          setError("Compare to job is available only for tailored CVs.");
+          setError("Compare to job is available only for customized CVs.");
           return;
         }
 
@@ -2094,7 +2094,7 @@ export function CVEditor() {
                       color: "var(--color-teal-800)"
                     }}
                   >
-                    {cvKind === "master" ? "Master CV" : "Tailored CV"}
+                    {cvKind === "master" ? "Main CV" : "Customized CV"}
                   </span>
                 </div>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
@@ -2285,7 +2285,7 @@ export function CVEditor() {
                   }}
                 >
                   <Target size={14} />
-                  Tailor for a job
+                  Customize for a job
                 </button>
               )}
 
@@ -2691,7 +2691,7 @@ export function CVEditor() {
               style={{ fontSize: "12px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
             >
               <Target size={14} />
-              {cvKind === "tailored" ? "Go to Job Tracker" : "Tailor this CV"}
+              {cvKind === "tailored" ? "Go to Job Tracker" : "Customize this CV"}
             </button>
           </DialogContent>
         </Dialog>

@@ -61,7 +61,7 @@ export function SignIn() {
           <Link to="/" className="flex items-center gap-2 mb-12">
             <div className="w-8 h-8 rounded-md" style={{ background: "var(--color-teal-600)" }} />
             <span className="font-semibold" style={{ fontSize: "20px", color: "var(--color-text-primary)" }}>
-              Resumé
+              jobspecificCV
             </span>
           </Link>
 
