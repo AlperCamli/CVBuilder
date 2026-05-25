@@ -24,7 +24,8 @@
       "Bash(echo \"exit=$?\")",
       "Bash(echo \"backend_exit=$?\")",
       "Bash(grep -v \"^$\\\\|^#\")",
-      "Bash(grep -E \"\\(\\\\\\\\\\\\$|USD|EUR|GBP|TRY|price|Price|PRICE|/month|/mo|lifetime|trial\\)\" /Users/alpercamli/Desktop/CV_Builder/frontend/src/app/pages/Pricing.tsx)"
+      "Bash(grep -E \"\\(\\\\\\\\\\\\$|USD|EUR|GBP|TRY|price|Price|PRICE|/month|/mo|lifetime|trial\\)\" /Users/alpercamli/Desktop/CV_Builder/frontend/src/app/pages/Pricing.tsx)",
+      "Bash(git check-ignore *)"
     ]
   }
 }
