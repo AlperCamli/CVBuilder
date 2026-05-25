@@ -94,7 +94,12 @@ async function prerenderRoute(browser, route) {
     errors.forEach((e) => console.warn(`  - ${e}`));
   }
 
-  return innerHTML;
+  // Strip <video> tags from the snapshot. Crawlers don't index video bytes
+  // for text SEO, but leaving these in causes the browser to start fetching
+  // 5 videos before the JS bundle arrives — bandwidth competition + jank
+  // when React later wipes/remounts the same DOM. The parent gradient
+  // placeholder remains, so layout is preserved until React mounts.
+  return innerHTML.replace(/<video\b[^>]*>[\s\S]*?<\/video>/gi, "");
 }
 
 function injectIntoHtml(html, innerHTML) {
