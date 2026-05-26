@@ -5,6 +5,7 @@ import { extname, join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
 import { ROUTES } from "./routes.mjs";
+import { injectRouteMetadata } from "./seo-html.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = resolve(__dirname, "..");
@@ -153,7 +154,7 @@ async function main() {
         route.path === "/" ? DIST_DIR : join(DIST_DIR, route.path);
       await mkdir(distTargetDir, { recursive: true });
       const distTarget = join(distTargetDir, "index.html");
-      const patched = injectIntoHtml(baseHtml, innerHTML);
+      const patched = injectRouteMetadata(injectIntoHtml(baseHtml, innerHTML), route);
       await writeFile(distTarget, patched, "utf8");
       console.log(`  patched ${distTarget}`);
     }

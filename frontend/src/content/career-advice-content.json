@@ -1,0 +1,150 @@
+{
+  "categories": [
+    {
+      "slug": "resume-cv-basics",
+      "name": "Resume / CV Basics",
+      "navLabel": "CV Basics",
+      "description": "Foundational guides for writing clear resumes and CVs that are easy for recruiters to understand."
+    },
+    {
+      "slug": "job-specific-cv-tailoring",
+      "name": "Job-Specific CV Tailoring",
+      "navLabel": "Tailoring for a Job",
+      "description": "Guides for adapting one strong CV or resume to each role without starting from scratch."
+    },
+    {
+      "slug": "ats-friendly-resume-optimization",
+      "name": "ATS-Friendly Resume Optimization",
+      "navLabel": "What is ATS?",
+      "description": "Practical advice for formatting, keywords, and structure that applicant tracking systems can parse."
+    },
+    {
+      "slug": "examples-templates-checklists",
+      "name": "Examples, Templates & Checklists",
+      "navLabel": "CV Tricks",
+      "description": "Checklists and templates you can use to review and improve a resume before applying."
+    }
+  ],
+  "articles": [
+    {
+      "slug": "how-to-write-a-resume-that-gets-interviews",
+      "title": "How to Write a Resume That Gets Interviews: A Step-by-Step Guide",
+      "description": "A planned guide for building a focused resume that helps recruiters quickly understand your fit.",
+      "categorySlug": "resume-cv-basics",
+      "priorityRule": "Top 2 High Priority",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "cv-vs-resume-whats-the-difference",
+      "title": "CV vs Resume: What's the Difference and Which One Should You Use?",
+      "description": "A planned guide explaining when to use a CV, when to use a resume, and how expectations differ by market.",
+      "categorySlug": "resume-cv-basics",
+      "priorityRule": "Top 2 High Priority",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "how-to-tailor-your-resume-to-a-job-description",
+      "title": "How to Tailor Your Resume to a Job Description Without Rewriting Everything",
+      "description": "A planned guide for adapting a resume to a job description while keeping your experience accurate.",
+      "categorySlug": "job-specific-cv-tailoring",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "how-to-customize-your-cv-for-every-job-in-minutes",
+      "title": "How to Customize Your CV for Every Job in Minutes",
+      "description": "A planned guide for creating job-specific CV versions quickly without losing consistency.",
+      "categorySlug": "job-specific-cv-tailoring",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "job-specific-resume-why-one-generic-cv-is-not-enough",
+      "title": "The Job-Specific Resume: Why One Generic CV Is Not Enough Anymore",
+      "description": "A planned guide on why targeted resumes usually outperform one generic CV across applications.",
+      "categorySlug": "job-specific-cv-tailoring",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "what-is-an-ats-resume",
+      "title": "What Is an ATS Resume? How to Make Your CV Pass Applicant Tracking Systems",
+      "description": "A planned guide to ATS resumes, how parsing works, and what to fix before applying.",
+      "categorySlug": "ats-friendly-resume-optimization",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "ats-friendly-resume-format",
+      "title": "ATS-Friendly Resume Format: The Simple Layout Recruiters and Software Can Read",
+      "description": "A planned guide to resume structure, section order, and formatting that stays readable.",
+      "categorySlug": "ats-friendly-resume-optimization",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "resume-keywords-for-ats",
+      "title": "Resume Keywords for ATS: How to Use Them Without Keyword Stuffing",
+      "description": "A planned guide for using resume keywords naturally and accurately.",
+      "categorySlug": "ats-friendly-resume-optimization",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "resume-checklist-25-things-to-fix-before-you-apply",
+      "title": "Resume Checklist: 25 Things to Fix Before You Apply",
+      "description": "A planned checklist for catching common resume issues before sending an application.",
+      "categorySlug": "examples-templates-checklists",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    },
+    {
+      "slug": "ats-resume-template-simple-structure",
+      "title": "ATS Resume Template: A Simple Structure You Can Use Today",
+      "description": "A planned template guide for a simple ATS-friendly resume structure.",
+      "categorySlug": "examples-templates-checklists",
+      "priorityRule": "Very High",
+      "publishedDate": "2026-05-26",
+      "updatedDate": "2026-05-26",
+      "readingTime": "Draft",
+      "heroImage": "https://jobspecificcv.com/images/og-image.png",
+      "body": []
+    }
+  ]
+}

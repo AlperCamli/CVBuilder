@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROUTES } from "./routes.mjs";
+import { injectRouteMetadata } from "./seo-html.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = resolve(__dirname, "..");
@@ -43,7 +44,7 @@ async function main() {
       );
     }
 
-    const patched = injectIntoHtml(baseHtml, innerHTML);
+    const patched = injectRouteMetadata(injectIntoHtml(baseHtml, innerHTML), route);
 
     const targetDir =
       route.path === "/" ? DIST_DIR : join(DIST_DIR, route.path);

@@ -17,6 +17,12 @@ This doc tracks the SEO improvements made to [frontend/index.html](../../fronten
 
 **Verify:** paste your URL into [Google's Rich Results Test](https://search.google.com/test/rich-results) after deploying.
 
+### 3. Public career-advice pages + route-specific prerender metadata
+- Added unsigned public routes for `/career-advice` and initial article pages
+- Extended prerender route configuration so public pages can receive unique titles, descriptions, canonicals, Open Graph/Twitter tags, and JSON-LD
+- Added `BlogPosting` schema for article pages and `BreadcrumbList` schema for the career-advice hierarchy
+- Added the career-advice hub and articles to `sitemap.xml`
+
 ---
 
 ## 📝 What You Need to Provide
@@ -125,7 +131,7 @@ These don't require info from you but are worth tracking:
 | Favicon | 🟡 You're handling | Confirm `.ico`, `.svg`, and `apple-touch-icon.png` all referenced |
 | `robots.txt` | ✅ Done | Configured at [frontend/public/robots.txt](../../frontend/public/robots.txt) |
 | `sitemap.xml` | ✅ Done | Configured + submitted to Search Console |
-| Pre-rendering / SSR | ❌ Skipped per your decision | Re-evaluate if organic traffic plateaus |
+| Pre-rendering / SSR | ✅ Partial prerendering | Landing page and public career-advice pages are prerendered; authenticated app remains client-only and noindexed |
 | OG image file size | 🟡 1.6MB → could compress to ~400KB | Faster preview rendering on mobile |
 | Core Web Vitals audit | ⏳ TODO | Run [PageSpeed Insights](https://pagespeed.web.dev/) on production URL |
 | Internal linking strategy | ⏳ TODO | Once you have blog/feature pages |
@@ -150,3 +156,5 @@ After implementing any of the above and deploying:
 When you're ready to add the Organization schema (the highest-impact item that needs your input), reply with the `logo_url`, `legal_name`, and `social_profiles` block from section A and I'll implement it.
 
 For FAQ schema, the prerequisite is adding a visible FAQ section to the landing page — let me know when you're ready and I can draft the section and the schema together.
+
+For blog growth, add new article entries to `frontend/src/content/career-advice-content.json`, regenerate prerender snapshots with `npm run build`, and add the URL to `frontend/public/sitemap.xml` once the article body is no longer empty. Article prerender routes and route-level metadata are derived from the content JSON; empty draft articles are prerendered but marked `noindex, follow`.

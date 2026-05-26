@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import {
+  ArrowRight,
   CheckCircle,
   FileText,
   Target,
@@ -12,7 +13,8 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
-import { useAuth } from "../integration/auth-context";
+import { CAREER_ARTICLES, getCareerArticlePath } from "../../content/career-advice";
+import { PublicHeader } from "../components/PublicHeader";
 
 type Step = {
   number: string;
@@ -177,58 +179,9 @@ const WHY_BENEFITS = [
 ];
 
 export function Landing() {
-  const { isAuthenticated } = useAuth();
-
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="border-b" style={{ borderColor: "var(--color-border-tertiary)" }}>
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/images/logo.png" alt="" className="w-7 h-7 rounded-lg object-contain shrink-0" />
-            <span className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-              jobspecificCV
-            </span>
-          </Link>
-          <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <Link
-                to="/app"
-                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-                style={{
-                  fontSize: "13px",
-                  background: "#E1F5EF",
-                  color: "var(--color-teal-600)",
-                }}
-              >
-                Dashboard
-              </Link>
-            ) : (
-              <Link
-                to="/signin"
-                className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-                style={{
-                  fontSize: "13px",
-                  color: "var(--color-teal-600)",
-                }}
-              >
-                Sign in
-              </Link>
-            )}
-            <Link
-              to="/app/create"
-              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-              style={{
-                fontSize: "13px",
-                background: "var(--color-teal-600)",
-                color: "var(--color-teal-50)",
-              }}
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-6 pt-20 pb-16">
@@ -390,6 +343,85 @@ export function Landing() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Career Advice */}
+      <section id="career-advice" className="max-w-7xl mx-auto px-6 py-16 scroll-mt-20">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8">
+          <div className="max-w-2xl">
+            <p
+              className="uppercase tracking-wider mb-3"
+              style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
+            >
+              Career advice
+            </p>
+            <h2
+              className="font-medium mb-3"
+              style={{ fontSize: "26px", color: "var(--color-text-primary)" }}
+            >
+              Learn how to build and tailor a better CV
+            </h2>
+            <p style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}>
+              Practical guides for creating a readable CV, matching job descriptions, and
+              making every application more focused.
+            </p>
+          </div>
+          <Link
+            to="/career-advice"
+            className="inline-flex items-center gap-2 font-medium"
+            style={{ fontSize: "13px", color: "var(--color-teal-700)" }}
+          >
+            View all guides <ArrowRight size={15} />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {CAREER_ARTICLES.slice(0, 4).map((article) => (
+            <article
+              key={article.slug}
+              className="border rounded-lg p-6 flex flex-col"
+              style={{
+                borderColor: "var(--color-border-tertiary)",
+                background: "var(--color-background-primary)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <span
+                  className="rounded-full px-3 py-1"
+                  style={{
+                    fontSize: "12px",
+                    background: "var(--color-teal-50)",
+                    color: "var(--color-teal-800)",
+                  }}
+                >
+                  {article.category}
+                </span>
+                <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                  {article.readingTime}
+                </span>
+              </div>
+              <h3
+                className="font-medium mb-3"
+                style={{ fontSize: "20px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
+              >
+                <Link to={getCareerArticlePath(article)}>{article.title}</Link>
+              </h3>
+              <p
+                className="mb-5 grow"
+                style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}
+              >
+                {article.description}
+              </p>
+              <Link
+                to={getCareerArticlePath(article)}
+                className="inline-flex items-center gap-2 font-medium"
+                style={{ fontSize: "13px", color: "var(--color-teal-700)" }}
+              >
+                Open draft <ArrowRight size={15} />
+              </Link>
+            </article>
+          ))}
         </div>
       </section>
 

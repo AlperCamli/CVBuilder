@@ -3,6 +3,9 @@ import { SidebarProvider } from "./contexts/SidebarContext";
 import { UpgradePromptProvider } from "./contexts/UpgradePromptContext";
 import { Layout } from "./components/Layout";
 import { Landing } from "./pages/Landing";
+import { CareerAdvice } from "./pages/CareerAdvice";
+import { CareerCategory } from "./pages/CareerCategory";
+import { CareerArticle } from "./pages/CareerArticle";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { ForgotPassword } from "./pages/ForgotPassword";
@@ -39,6 +42,18 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: Landing
+  },
+  {
+    path: "/career-advice",
+    Component: CareerAdvice
+  },
+  {
+    path: "/career-advice/:categorySlug",
+    Component: CareerCategory
+  },
+  {
+    path: "/career-advice/:categorySlug/:articleSlug",
+    Component: CareerArticle
   },
   {
     path: "/signin",
