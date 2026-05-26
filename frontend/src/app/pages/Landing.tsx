@@ -185,10 +185,7 @@ export function Landing() {
       <header className="border-b" style={{ borderColor: "var(--color-border-tertiary)" }}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-md"
-              style={{ background: "var(--color-teal-600)" }}
-            />
+            <img src="/images/logo.png" alt="" className="w-7 h-7 rounded-lg object-contain shrink-0" />
             <span className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
               jobspecificCV
             </span>
@@ -430,10 +427,7 @@ export function Landing() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div
-                className="w-5 h-5 rounded"
-                style={{ background: "var(--color-teal-600)" }}
-              />
+              <img src="/images/logo.png" alt="" className="w-5 h-5 rounded-lg object-contain shrink-0" />
               <span className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
                 jobspecificCV
               </span>

@@ -213,10 +213,7 @@ export function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 mb-12">
-          <div
-            className="w-8 h-8 rounded-md"
-            style={{ background: "var(--color-teal-600)" }}
-          />
+          <img src="/images/logo.png" alt="" className="w-8 h-8 rounded-lg object-contain shrink-0" />
           <span
             className="font-semibold"
             style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
