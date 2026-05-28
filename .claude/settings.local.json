@@ -25,7 +25,8 @@
       "Bash(echo \"backend_exit=$?\")",
       "Bash(grep -v \"^$\\\\|^#\")",
       "Bash(grep -E \"\\(\\\\\\\\\\\\$|USD|EUR|GBP|TRY|price|Price|PRICE|/month|/mo|lifetime|trial\\)\" /Users/alpercamli/Desktop/CV_Builder/frontend/src/app/pages/Pricing.tsx)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(node -e \"const c = require\\('./src/content/career-advice-content.json'\\); const a = c.articles.find\\(x => x.slug === 'cv-vs-resume-whats-the-difference'\\); console.log\\('body blocks:', a.body.length\\); console.log\\('first:', a.body[0]\\); console.log\\('last:', a.body[a.body.length - 1]\\);\")"
     ]
   }
 }

@@ -1,13 +1,31 @@
 import content from "./career-advice-content.json";
 
+export type ArticleTextLink = {
+  text: string;
+  href: string;
+};
+
 export type ArticleBodyBlock =
   | {
       type: "paragraph" | "heading";
       text: string;
+      links?: ArticleTextLink[];
     }
   | {
       type: "list";
       items: string[];
+    }
+  | {
+      type: "table";
+      headers: string[];
+      rows: string[][];
+    }
+  | {
+      type: "cta";
+      heading: string;
+      text: string;
+      buttonText: string;
+      href: string;
     };
 
 export type CareerArticle = {

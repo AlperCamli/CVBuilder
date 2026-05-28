@@ -1,13 +1,64 @@
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { PublicHeader } from "../components/PublicHeader";
 import {
+  type ArticleTextLink,
   getCareerArticle,
   getCareerArticlePath,
   getCareerArticlesByCategory,
   getCareerCategory,
   getCareerCategoryPath,
 } from "../../content/career-advice";
+
+function renderLinkedText(text: string, links: ArticleTextLink[] = []): ReactNode {
+  if (links.length === 0) {
+    return text;
+  }
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  links.forEach((link) => {
+    const start = text.indexOf(link.text, cursor);
+
+    if (start === -1) {
+      return;
+    }
+
+    if (start > cursor) {
+      parts.push(text.slice(cursor, start));
+    }
+
+    const linkStyle = {
+      color: "var(--color-teal-700)",
+      textDecoration: "underline",
+      textUnderlineOffset: "3px",
+    };
+
+    if (link.href.startsWith("/")) {
+      parts.push(
+        <Link key={`${link.href}-${start}`} to={link.href} style={linkStyle}>
+          {link.text}
+        </Link>
+      );
+    } else {
+      parts.push(
+        <a key={`${link.href}-${start}`} href={link.href} style={linkStyle}>
+          {link.text}
+        </a>
+      );
+    }
+
+    cursor = start + link.text.length;
+  });
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts.length > 0 ? parts : text;
+}
 
 export function CareerArticle() {
   const { categorySlug, articleSlug } = useParams();
@@ -134,8 +185,46 @@ export function CareerArticle() {
                     className="font-medium mt-9 mb-3"
                     style={{ fontSize: "22px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
                   >
-                    {block.text}
+                    {renderLinkedText(block.text, block.links)}
                   </h2>
+                );
+              }
+
+              if (block.type === "cta") {
+                return (
+                  <div
+                    key={`${block.type}-${index}`}
+                    className="my-8 rounded-lg border p-6"
+                    style={{
+                      borderColor: "var(--color-border-tertiary)",
+                      background: "var(--color-teal-50)",
+                    }}
+                  >
+                    <h2
+                      className="font-medium mb-2"
+                      style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
+                    >
+                      {block.heading}
+                    </h2>
+                    <p
+                      className="mb-4"
+                      style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}
+                    >
+                      {block.text}
+                    </p>
+                    <Link
+                      to={block.href}
+                      className="inline-flex items-center gap-2 rounded-md px-4 py-2"
+                      style={{
+                        fontSize: "14px",
+                        background: "var(--color-teal-700)",
+                        color: "white",
+                      }}
+                    >
+                      {block.buttonText}
+                      <ArrowRight size={15} />
+                    </Link>
+                  </div>
                 );
               }
 
@@ -154,13 +243,61 @@ export function CareerArticle() {
                 );
               }
 
+              if (block.type === "table") {
+                return (
+                  <div key={`${block.type}-${index}`} className="my-6 overflow-x-auto">
+                    <table
+                      className="w-full border-collapse overflow-hidden rounded-lg border"
+                      style={{ borderColor: "var(--color-border-tertiary)" }}
+                    >
+                      <thead>
+                        <tr style={{ background: "var(--color-slate-50)" }}>
+                          {block.headers.map((header) => (
+                            <th
+                              key={header}
+                              className="border px-4 py-3 text-left font-medium"
+                              style={{
+                                borderColor: "var(--color-border-tertiary)",
+                                fontSize: "13px",
+                                color: "var(--color-text-primary)",
+                              }}
+                            >
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {block.rows.map((row) => (
+                          <tr key={row.join("-")}>
+                            {row.map((cell, cellIndex) => (
+                              <td
+                                key={`${cell}-${cellIndex}`}
+                                className="border px-4 py-3"
+                                style={{
+                                  borderColor: "var(--color-border-tertiary)",
+                                  fontSize: "14px",
+                                  color: "var(--color-text-secondary)",
+                                }}
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+
               return (
                 <p
                   key={`${block.type}-${index}`}
                   className="mb-5"
                   style={{ fontSize: "15px", lineHeight: "1.75", color: "var(--color-text-secondary)" }}
                 >
-                  {block.text}
+                  {renderLinkedText(block.text, block.links)}
                 </p>
               );
             })}

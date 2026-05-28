@@ -418,7 +418,7 @@ export function Landing() {
                 className="inline-flex items-center gap-2 font-medium"
                 style={{ fontSize: "13px", color: "var(--color-teal-700)" }}
               >
-                Open draft <ArrowRight size={15} />
+                Read the Article <ArrowRight size={15} />
               </Link>
             </article>
           ))}
