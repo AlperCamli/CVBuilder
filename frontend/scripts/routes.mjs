@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 
 const SITE_URL = "https://jobspecificcv.com";
-const OG_IMAGE = `${SITE_URL}/images/og-image.png`;
+const OG_IMAGE = `${SITE_URL}/images/og-image-social.jpg`;
+const DEFAULT_IMAGE_ALT = "jobspecificCV - AI CV builder for job-specific resumes";
 
 const content = JSON.parse(
   readFileSync(new URL("../src/content/career-advice-content.json", import.meta.url), "utf8")
@@ -50,9 +51,11 @@ function categoryRoute(category) {
     ogTitle: category.name,
     ogDescription: category.description,
     ogImage: OG_IMAGE,
+    ogImageAlt: `${category.name} - jobspecificCV career advice`,
     twitterTitle: category.name,
     twitterDescription: category.description,
     twitterImage: OG_IMAGE,
+    twitterImageAlt: `${category.name} - jobspecificCV career advice`,
     lastmod: "2026-05-26",
     includeInSitemap: true,
     jsonLd: [
@@ -87,9 +90,11 @@ function articleRoute(article) {
     ogTitle: article.title,
     ogDescription: article.description,
     ogImage: article.heroImage || OG_IMAGE,
+    ogImageAlt: article.title,
     twitterTitle: article.title,
     twitterDescription: article.description,
     twitterImage: article.heroImage || OG_IMAGE,
+    twitterImageAlt: article.title,
     lastmod: article.updatedDate,
     includeInSitemap: hasBody,
     jsonLd: [

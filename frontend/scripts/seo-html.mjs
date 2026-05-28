@@ -80,6 +80,11 @@ export function injectRouteMetadata(html, route) {
   );
   next = replaceTag(
     next,
+    /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/>/,
+    `<meta property="og:image:alt" content="${escapeAttribute(route.ogImageAlt || route.ogTitle || route.title)}" />`
+  );
+  next = replaceTag(
+    next,
     /<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/>/,
     `<meta name="twitter:title" content="${escapeAttribute(route.twitterTitle || route.title)}" />`
   );
@@ -92,6 +97,11 @@ export function injectRouteMetadata(html, route) {
     next,
     /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/>/,
     `<meta name="twitter:image" content="${escapeAttribute(route.twitterImage || route.ogImage)}" />`
+  );
+  next = replaceTag(
+    next,
+    /<meta\s+name="twitter:image:alt"\s+content="[^"]*"\s*\/>/,
+    `<meta name="twitter:image:alt" content="${escapeAttribute(route.twitterImageAlt || route.ogImageAlt || route.twitterTitle || route.title)}" />`
   );
 
   const scripts = routeJsonLdScripts(route);

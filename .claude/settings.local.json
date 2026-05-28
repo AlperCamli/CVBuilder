@@ -26,7 +26,18 @@
       "Bash(grep -v \"^$\\\\|^#\")",
       "Bash(grep -E \"\\(\\\\\\\\\\\\$|USD|EUR|GBP|TRY|price|Price|PRICE|/month|/mo|lifetime|trial\\)\" /Users/alpercamli/Desktop/CV_Builder/frontend/src/app/pages/Pricing.tsx)",
       "Bash(git check-ignore *)",
-      "Bash(node -e \"const c = require\\('./src/content/career-advice-content.json'\\); const a = c.articles.find\\(x => x.slug === 'cv-vs-resume-whats-the-difference'\\); console.log\\('body blocks:', a.body.length\\); console.log\\('first:', a.body[0]\\); console.log\\('last:', a.body[a.body.length - 1]\\);\")"
+      "Bash(node -e \"const c = require\\('./src/content/career-advice-content.json'\\); const a = c.articles.find\\(x => x.slug === 'cv-vs-resume-whats-the-difference'\\); console.log\\('body blocks:', a.body.length\\); console.log\\('first:', a.body[0]\\); console.log\\('last:', a.body[a.body.length - 1]\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(curl -sI \"https://jobspecificcv.com/images/og-image.png\")",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/alpercamli/Desktop/CV_Builder/frontend/public/images/og-image.png)",
+      "Read(//private/tmp/**)",
+      "Bash(cp /Users/alpercamli/Desktop/CV_Builder/frontend/public/images/og-image.png og-test.png)",
+      "Bash(sips -Z 1200 og-test.png --out og-resized.png)",
+      "Bash(sips -s format jpeg -s formatOptions 85 og-resized.png --out og-resized.jpg)",
+      "Bash(sips -Z 1200 og-image.png --out og-image-social.jpg -s format jpeg -s formatOptions 85)",
+      "Bash(sips -g pixelWidth -g pixelHeight og-image-social.jpg)",
+      "Bash(sips -g pixelWidth -g pixelHeight logo.png)",
+      "Bash(curl -sI \"https://jobspecificcv.com/images/logo.png\")"
     ]
   }
 }

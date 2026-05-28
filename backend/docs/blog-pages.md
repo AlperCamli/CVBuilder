@@ -221,3 +221,67 @@ After adding or updating blog content:
 6. Confirm draft articles have `noindex, follow`.
 7. Confirm `frontend/public/sitemap.xml` contains only indexable public pages.
 8. After deployment, validate important URLs with Google Rich Results Test and Search Console URL Inspection.
+
+## Article Hero Images
+
+Each article has its own hero image. The same image powers two surfaces:
+
+- The visible cover at the top of the article page (rendered by `frontend/src/app/pages/CareerArticle.tsx`).
+- The Open Graph / Twitter / `BlogPosting` JSON-LD image emitted by `frontend/scripts/routes.mjs`.
+
+### Field shape
+
+`heroImage` is stored as an absolute URL on `jobspecificcv.com`:
+
+```json
+"heroImage": "https://jobspecificcv.com/images/cover-cv-vs-resume.png"
+```
+
+The absolute URL is required for social metadata. The article page strips the protocol and host at render time so the same value resolves to a local path in development:
+
+```tsx
+<img
+  src={article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png"}
+  alt=""
+  className="w-full h-full object-cover"
+/>
+```
+
+If `heroImage` is empty, the renderer falls back to `/images/og-image.png`. The fallback does not cover the case where the file is missing on disk; a wrong filename will 404 in the browser and on social previews.
+
+### File location and naming
+
+Hero images live in:
+
+```text
+frontend/public/images/
+```
+
+Naming convention: `cover-<short-topic>.png`, lowercase, hyphen-separated. Short topical names are preferred over the full slug so file names stay easy to type.
+
+### Recommended dimensions
+
+Use **1200x630 PNG**. That matches Open Graph / Twitter Card expectations and crops cleanly to the 16:9 frame on the article page (`object-cover`).
+
+### Adding or changing a hero image
+
+1. Drop the PNG into `frontend/public/images/` using the agreed `cover-...` filename.
+2. Update the article's `heroImage` in `career-advice-content.json` to the matching absolute URL: `https://jobspecificcv.com/images/<filename>.png`.
+3. Run `npm run build` from `frontend` to regenerate prerendered HTML and refresh OG/JSON-LD metadata.
+4. Confirm the article page renders the new image and that the generated HTML's `og:image`, `twitter:image`, and `BlogPosting` `image` all point to the new URL.
+
+### Current article to image map
+
+| Article slug | Hero image filename |
+|---|---|
+| `how-to-write-a-resume-that-gets-interviews` | `cover-write-resume.png` |
+| `cv-vs-resume-whats-the-difference` | `cover-cv-vs-resume.png` |
+| `how-to-tailor-your-resume-to-a-job-description` | `cover-tailor-resume.png` |
+| `how-to-customize-your-cv-for-every-job-in-minutes` | `cover-customize-cv.png` |
+| `job-specific-resume-why-one-generic-cv-is-not-enough` | `cover-job-specific-resume.png` |
+| `what-is-an-ats-resume` | `cover-what-is-ats.png` |
+| `ats-friendly-resume-format` | `cover-ats-friendly-format.png` |
+| `resume-keywords-for-ats` | `cover-resume-keywords.png` |
+| `resume-checklist-25-things-to-fix-before-you-apply` | `cover-resume-checklist.png` |
+| `ats-resume-template-simple-structure` | `cover-ats-template.png` |
+| `before-and-after-resume-examples-generic-cv-vs-tailored-cv` | `cover-before-after.png` |

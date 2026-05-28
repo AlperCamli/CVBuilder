@@ -154,7 +154,11 @@ export function CareerArticle() {
                 "linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-slate-50) 100%)",
             }}
           >
-            <img src="/images/og-image.png" alt="" className="w-full h-full object-cover" />
+            <img
+              src={article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png"}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           </div>
 
           <div>
