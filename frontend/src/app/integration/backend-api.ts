@@ -270,6 +270,8 @@ export interface BillingCheckoutInput {
   plan_code: "free" | "pro" | "lifetime";
   success_url?: string;
   cancel_url?: string;
+  // When false, the Pro checkout skips the free trial and bills immediately.
+  with_trial?: boolean;
 }
 
 export interface BillingPortalInput {

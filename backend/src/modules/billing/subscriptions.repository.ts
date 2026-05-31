@@ -17,6 +17,7 @@ export interface SyncSubscriptionInput {
 export interface BillingSubscriptionsRepository {
   getCurrentForUser(userId: string): Promise<SubscriptionRecord | null>;
   getLatestForUser(userId: string): Promise<SubscriptionRecord | null>;
+  hasUsedTrial(userId: string): Promise<boolean>;
   getCustomerIdForUser(userId: string, provider: string): Promise<string | null>;
   findByProviderSubscriptionId(
     provider: string,
@@ -98,6 +99,31 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
     }
 
     return toSubscriptionRecord(data as Record<string, unknown>);
+  }
+
+  async hasUsedTrial(userId: string): Promise<boolean> {
+    // A real Stripe `pro` subscription row (trial, active, or later canceled) is
+    // only ever persisted after the user went through a Pro checkout, which is
+    // where the free trial is granted. Its `provider_subscription_id` stays set
+    // even after the trial is canceled and the subscription is deleted, so its
+    // presence is the durable signal that this user has already consumed a trial.
+    // Placeholder customer-link rows have a null `provider_subscription_id` and a
+    // `free` plan_code, so they are correctly excluded.
+    const { data, error } = await this.supabaseClient
+      .from("subscriptions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("plan_code", "pro")
+      .not("provider_subscription_id", "is", null)
+      .limit(1);
+
+    if (error) {
+      throw new InternalServerError("Failed to determine trial eligibility", {
+        reason: error.message
+      });
+    }
+
+    return Boolean(data && data.length > 0);
   }
 
   async getCustomerIdForUser(userId: string, provider: string): Promise<string | null> {

@@ -236,8 +236,20 @@ export class BillingService {
     const customerId = await this.ensureStripeCustomerId(user);
 
     const isLifetime = plan.code === "lifetime";
-    const trialPeriodDays =
-      !isLifetime && this.options.trialPeriodDays > 0 ? this.options.trialPeriodDays : null;
+
+    // Only grant a free trial when: the plan supports one, trials are enabled,
+    // the caller did not explicitly opt out (`with_trial: false`), and the user
+    // has never consumed a trial before. The last check closes the abuse vector
+    // where a user starts a trial, cancels before the first charge, and then
+    // starts a brand-new trial once the previous one lapses.
+    let trialPeriodDays: number | null = null;
+
+    if (!isLifetime && this.options.trialPeriodDays > 0 && input.with_trial !== false) {
+      const alreadyUsedTrial = await this.subscriptionsRepository.hasUsedTrial(user.id);
+      if (!alreadyUsedTrial) {
+        trialPeriodDays = this.options.trialPeriodDays;
+      }
+    }
 
     const checkoutSession = await stripeGateway.createCheckoutSession({
       customer_id: customerId,
@@ -263,7 +275,9 @@ export class BillingService {
       checkout_url: checkoutSession.url,
       checkout_session_id: checkoutSession.id,
       plan_code: plan.code,
-      plan_name: plan.name
+      plan_name: plan.name,
+      trial_applied: trialPeriodDays !== null,
+      trial_period_days: trialPeriodDays
     };
   }
 

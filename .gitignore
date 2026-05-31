@@ -12,3 +12,6 @@
 
 # Security audit (local only)
 SECURITY_AUDIT.md
+
+# Local Claude Code skills
+.claude/skills/

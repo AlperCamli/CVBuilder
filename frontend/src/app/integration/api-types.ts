@@ -1108,6 +1108,8 @@ export interface CreateCheckoutResponseData {
   checkout_session_id: string;
   plan_code: "free" | "pro" | "lifetime";
   plan_name: string;
+  trial_applied: boolean;
+  trial_period_days: number | null;
 }
 
 export interface CreatePortalResponseData {

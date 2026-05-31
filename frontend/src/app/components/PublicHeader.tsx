@@ -68,6 +68,14 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
                   How it works
                 </Link>
                 <Link
+                  to="/pricing"
+                  onClick={closeMobileMenu}
+                  className="rounded-lg px-3 py-3 text-left"
+                  style={{ fontSize: "15px", color: "var(--color-text-primary)" }}
+                >
+                  Pricing
+                </Link>
+                <Link
                   to="/career-advice"
                   onClick={closeMobileMenu}
                   className="rounded-lg px-3 py-3 text-left"
@@ -172,6 +180,12 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
             style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
           >
             How it works
+          </Link>
+          <Link
+            to="/pricing"
+            style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
+          >
+            Pricing
           </Link>
           <Link
             to="/career-advice"

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { useAuth } from "../integration/auth-context";
+import { startStripeCheckout } from "../integration/checkout-redirect";
 import type { UpgradePromptOptions, UpgradePromptVariant } from "../contexts/UpgradePromptContext";
 
 interface UpgradePromptModalProps {
@@ -104,13 +105,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     setBusy(target);
     setError(null);
     try {
-      const base = window.location.origin;
-      const response = await api.createBillingCheckout({
-        plan_code: target,
-        success_url: `${base}/app/pricing?checkout=success`,
-        cancel_url: `${base}/app/pricing?checkout=cancel`
-      });
-      window.location.href = response.checkout_url;
+      await startStripeCheckout(api, target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open checkout.");
       setBusy(null);

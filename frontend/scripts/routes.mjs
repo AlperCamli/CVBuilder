@@ -156,6 +156,33 @@ export const ROUTES = [
     includeInSitemap: true,
   },
   {
+    path: "/pricing",
+    snapshot: "pricing",
+    title: "Pricing | jobspecificCV",
+    description:
+      "Simple pricing for a faster job search. Start free, go Monthly Pro with a 3-day free trial, or pay once for Lifetime Pro. Cancel anytime.",
+    canonical: absoluteUrl("/pricing"),
+    ogType: "website",
+    ogTitle: "jobspecificCV Pricing — Free, Monthly Pro, and Lifetime",
+    ogDescription:
+      "Start free, go Pro with a 3-day free trial, or buy Lifetime Pro once. No charge during the trial; cancel anytime.",
+    ogImage: OG_IMAGE,
+    ogImageAlt: DEFAULT_IMAGE_ALT,
+    twitterTitle: "jobspecificCV Pricing",
+    twitterDescription:
+      "Start free, go Pro with a 3-day free trial, or buy Lifetime Pro once. Cancel anytime.",
+    twitterImage: OG_IMAGE,
+    twitterImageAlt: DEFAULT_IMAGE_ALT,
+    lastmod: "2026-05-31",
+    includeInSitemap: true,
+    jsonLd: [
+      breadcrumbJsonLd([
+        { name: "Home", path: "/" },
+        { name: "Pricing", path: "/pricing" },
+      ]),
+    ],
+  },
+  {
     path: "/career-advice",
     snapshot: "career-advice",
     title: "Career Advice for CVs and Job Applications | jobspecificCV",

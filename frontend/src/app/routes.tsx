@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { UpgradePromptProvider } from "./contexts/UpgradePromptContext";
 import { Layout } from "./components/Layout";
+import { CheckoutIntentResumer } from "./components/CheckoutIntentResumer";
 import { Landing } from "./pages/Landing";
 import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
@@ -25,6 +26,7 @@ import { Resumes } from "./pages/Resumes";
 import { CoverLetters } from "./pages/CoverLetters";
 import { CoverLetterEditor } from "./pages/CoverLetterEditor";
 import { Pricing } from "./pages/Pricing";
+import { PublicPricing } from "./pages/PublicPricing";
 import { Profile } from "./pages/Profile";
 import { RedirectIfAuthenticated, RequireAuth } from "./integration/auth-route-guards";
 
@@ -32,6 +34,7 @@ function LayoutWrapper() {
   return (
     <SidebarProvider>
       <UpgradePromptProvider>
+        <CheckoutIntentResumer />
         <Layout />
       </UpgradePromptProvider>
     </SidebarProvider>
@@ -42,6 +45,10 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: Landing
+  },
+  {
+    path: "/pricing",
+    Component: PublicPricing
   },
   {
     path: "/career-advice",

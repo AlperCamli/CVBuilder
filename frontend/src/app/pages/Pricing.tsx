@@ -5,65 +5,8 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { BillingPlanResponseData, EntitlementSummary, UsageSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
-
-type CheckoutTarget = "pro" | "lifetime";
-
-interface PlanCard {
-  code: "free" | "pro" | "lifetime";
-  name: string;
-  price: string;
-  period: string;
-  description: string;
-  features: string[];
-  highlighted?: boolean;
-  badge?: string;
-}
-
-const PLAN_CARDS: PlanCard[] = [
-  {
-    code: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Try the basics, no card required.",
-    features: [
-      "3 customized CVs per month",
-      "5 exports per month",
-      "20 AI actions per month",
-      "25 MB storage"
-    ]
-  },
-  {
-    code: "pro",
-    name: "Monthly Pro",
-    price: "$10",
-    period: "per month",
-    description: "Everything you need for an active job search.",
-    highlighted: true,
-    badge: "3-day free trial",
-    features: [
-      "Unlimited customized CVs",
-      "Unlimited exports (PDF + DOCX)",
-      "Unlimited AI actions",
-      "Unlimited storage",
-      "Cancel anytime"
-    ]
-  },
-  {
-    code: "lifetime",
-    name: "Lifetime Pro",
-    price: "$99",
-    period: "one-time",
-    description: "Pay once. Use forever.",
-    badge: "Best value",
-    features: [
-      "Everything in Monthly Pro",
-      "No recurring charges",
-      "Lifetime access to future updates",
-      "Best long-term value"
-    ]
-  }
-];
+import { startStripeCheckout } from "../integration/checkout-redirect";
+import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 const formatTrialEnd = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -125,17 +68,11 @@ export function Pricing() {
     };
   }, [api]);
 
-  const startCheckout = async (target: CheckoutTarget) => {
+  const startCheckout = async (target: CheckoutTarget, withTrial = true) => {
     setBusyTarget(target);
     setError(null);
     try {
-      const base = window.location.origin;
-      const response = await api.createBillingCheckout({
-        plan_code: target,
-        success_url: `${base}/app/pricing?checkout=success`,
-        cancel_url: `${base}/app/pricing?checkout=cancel`
-      });
-      window.location.href = response.checkout_url;
+      await startStripeCheckout(api, target, { withTrial });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open checkout.");
       setBusyTarget(null);
@@ -368,6 +305,25 @@ export function Pricing() {
                     {isBusy ? <Loader2 size={14} className="animate-spin" /> : null}
                     {cta.label}
                   </button>
+                  {card.code === "pro" &&
+                    currentPlanCode !== "pro" &&
+                    currentPlanCode !== "lifetime" && (
+                      <button
+                        onClick={() => void startCheckout("pro", false)}
+                        disabled={isBusy}
+                        className="w-full mt-2 px-6 py-2 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2 bg-transparent"
+                        style={{
+                          fontSize: "12px",
+                          color: "var(--color-teal-700)",
+                          border: "none",
+                          textDecoration: "underline",
+                          cursor: isBusy ? "not-allowed" : "pointer",
+                          opacity: isBusy ? 0.6 : 1
+                        }}
+                      >
+                        Subscribe now without trial
+                      </button>
+                    )}
                 </div>
               );
             })}

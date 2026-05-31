@@ -153,6 +153,12 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
     return latest[0] ?? null;
   }
 
+  async hasUsedTrial(userId: string): Promise<boolean> {
+    return this.listByUser(userId).some(
+      (row) => row.plan_code === "pro" && row.provider_subscription_id !== null
+    );
+  }
+
   async getCustomerIdForUser(userId: string, provider: string): Promise<string | null> {
     const subscriptions = this.listByUser(userId)
       .filter((item) => item.provider === provider && item.provider_customer_id)
@@ -449,6 +455,8 @@ export const createTestConfig = (): AppConfig => {
       stripeSecretKey: null,
       stripeWebhookSecret: null,
       stripeProPriceId: "price_pro_monthly",
+      stripeLifetimePriceId: "price_lifetime_once",
+      trialPeriodDays: 3,
       checkoutSuccessUrl: "http://localhost:5173/app/pricing?checkout=success",
       checkoutCancelUrl: "http://localhost:5173/app/pricing?checkout=cancel",
       portalReturnUrl: "http://localhost:5173/app/pricing"
