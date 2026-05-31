@@ -27,6 +27,21 @@ function breadcrumbJsonLd(items) {
   };
 }
 
+function faqPageJsonLd(items) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+}
+
 function categoryPath(category) {
   return `/career-advice/${category.slug}`;
 }
@@ -154,6 +169,45 @@ export const ROUTES = [
     twitterImage: OG_IMAGE,
     lastmod: "2026-05-26",
     includeInSitemap: true,
+    jsonLd: [
+      faqPageJsonLd([
+        {
+          question: "What makes this different from other AI CV builders?",
+          answer:
+            "Our biggest difference is that we keep the human in the loop. Instead of letting AI guess what should be emphasized, we analyze the job description, identify relevant topics and keywords, and then let you choose which ones you want to reflect in your CV. We also ask a few short follow-up questions when needed, so the final result is based on your real experience, not AI assumptions.",
+        },
+        {
+          question: "How does the AI tailor my CV for a specific job?",
+          answer:
+            "You enter the role, company, and job description. Then the system analyzes the job description, identifies important topics and keywords, gives you multiple relevant options to choose from, asks short follow-up questions when needed, and then suggests updates to your CV based on your selections. This creates a much more relevant CV while still keeping you in control.",
+        },
+        {
+          question: "How do you reduce AI hallucinations?",
+          answer:
+            "We reduce hallucinations by not relying on blind one-click rewriting. Our process is designed to keep the AI grounded by starting from your real CV, learning from the actual job description, showing you topic and keyword options extracted from that job, letting you select what should be emphasized, asking short follow-up questions instead of guessing, and showing changes for review before they are applied. That human-in-the-loop workflow is one of the main things that makes the product more trustworthy.",
+        },
+        {
+          question: "Why do I have to choose keywords and topics myself?",
+          answer:
+            "Because that is one of the core strengths of the product. Many AI tools rewrite too much without enough user control. We do it differently: we extract likely keywords and themes from the job description, then let you decide which ones match your real experience and should be reflected in your CV. This gives you more control, more trust, better relevance, and a final CV that still feels like yours.",
+        },
+        {
+          question: "Is this just ChatGPT for resumes?",
+          answer:
+            "No. General AI tools are open-ended, which means users have to decide the whole process themselves and results can be inconsistent. This product gives you a structured tailoring workflow: job description analysis, topic and keyword selection, short follow-up questions, suggested CV revisions, and human approval before changes are used. It is built specifically for job applications, not generic prompting.",
+        },
+        {
+          question: "Why is human-in-the-loop important for CV writing?",
+          answer:
+            "Because your CV is personal, high-stakes, and should reflect your real background accurately. Fully automatic AI rewriting may sound convenient, but it can lead to weak, generic, or misleading results. Human-in-the-loop means the AI helps with speed and structure, while you guide relevance, truthfulness, and emphasis. That balance is a major reason users can trust the output more.",
+        },
+        {
+          question: "What is ATS, and does this help with it?",
+          answer:
+            "ATS stands for Applicant Tracking System — the software many employers use to collect, scan, and sort job applications before a recruiter ever reviews them. A well-structured, relevant CV is more likely to perform better in these systems. And yes, the product helps with exactly this. It surfaces relevant language, topics, and keywords from the job description so your CV is more aligned with the role — but it does so in a controlled way, keeping the CV readable, credible, and useful for both ATS screening and human recruiters.",
+        },
+      ]),
+    ],
   },
   {
     path: "/pricing",
