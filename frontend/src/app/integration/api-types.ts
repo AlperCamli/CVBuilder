@@ -1099,6 +1099,7 @@ export interface BillingPlanResponseData {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  trial_eligible: boolean;
   provider: BillingProviderSummary;
   entitlement_summary: EntitlementSummary;
 }

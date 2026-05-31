@@ -48,6 +48,8 @@ A free trial is granted only when **all** of the following hold, otherwise check
 
 The last condition closes the trial-abuse loop: previously a user could start a 3-day trial, cancel before the first charge, let it lapse, and then start a brand-new trial. Eligibility is decided by `BillingSubscriptionsRepository.hasUsedTrial(userId)`, which returns `true` when the user has any `subscriptions` row with `plan_code = "pro"` and a non-null `provider_subscription_id`. That row is created the first time the user goes through Pro checkout and **persists with its real Stripe subscription id even after the trial is canceled and the subscription is deleted**, so it is a durable "already used a trial" signal. Placeholder customer-link rows (null `provider_subscription_id`, `plan_code = "free"`) are excluded.
 
+`BillingService.isUserTrialEligible(userId)` wraps this check (`trialPeriodDays > 0 && !hasUsedTrial`) and is shared by checkout and the billing-plan endpoint. `GET /billing/plan` returns the result as **`trial_eligible: boolean`** so the frontend can render the correct CTA — "Start 3-day free trial" while eligible, "Start your subscription" once the trial has been consumed. The in-app pricing page, the public pricing page (for signed-in visitors), and the upsell modal all read this flag, and they drop the trial badge / "Subscribe now without trial" secondary CTA when ineligible.
+
 ### Buying Pro without a trial
 
 Clients may pass `with_trial: false` in the checkout body to skip the trial and be billed immediately, even if the user is otherwise trial-eligible. This powers a "Subscribe now" CTA alongside the "Start free trial" CTA.

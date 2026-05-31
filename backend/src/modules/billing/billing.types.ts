@@ -21,6 +21,10 @@ export interface BillingPlanResponseData {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  // True only when checkout would still grant the free trial (trials enabled and
+  // the user has never used one). Lets the UI swap the trial CTA for a plain
+  // "subscribe" CTA once the trial has been consumed.
+  trial_eligible: boolean;
   provider: BillingProviderSummary;
   entitlement_summary: ResolvedEntitlements;
 }

@@ -1,5 +1,5 @@
 import { Check, Loader2, Sparkles, Zap } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { useAuth } from "../integration/auth-context";
@@ -43,15 +43,23 @@ const featureLabel = (feature: string | undefined): string => {
   }
 };
 
-const getCopy = (variant: UpgradePromptVariant, options: UpgradePromptOptions): VariantCopy => {
+const getCopy = (
+  variant: UpgradePromptVariant,
+  options: UpgradePromptOptions,
+  trialEligible: boolean
+): VariantCopy => {
+  // Once a user has used their one free trial, drop all trial language and CTAs.
+  const proCta = trialEligible ? "Start 3-day free trial" : "Start your subscription";
+
   switch (variant) {
     case "welcome":
       return {
         eyebrow: "Welcome — let's get you a customized CV",
-        title: "Try Pro free for 3 days",
-        body:
-          "Unlock unlimited customized CVs, exports, and AI rewrites for 3 days. Cancel any time before the trial ends — no charge.",
-        ctaPrimary: "Start 3-day free trial",
+        title: trialEligible ? "Try Pro free for 3 days" : "Go Pro for unlimited access",
+        body: trialEligible
+          ? "Unlock unlimited customized CVs, exports, and AI rewrites for 3 days. Cancel any time before the trial ends — no charge."
+          : "Unlock unlimited customized CVs, exports, and AI rewrites. Subscribe to Pro and cancel any time.",
+        ctaPrimary: proCta,
         ctaSecondary: "Get Lifetime — $99",
         dismiss: "Maybe later"
       };
@@ -59,9 +67,10 @@ const getCopy = (variant: UpgradePromptVariant, options: UpgradePromptOptions): 
       return {
         eyebrow: "Heads up",
         title: "Get unlimited exports with Pro",
-        body:
-          "You're on the Free plan, which is capped at 5 exports per month. Start a 3-day free trial to export as much as you want.",
-        ctaPrimary: "Start 3-day free trial",
+        body: trialEligible
+          ? "You're on the Free plan, which is capped at 5 exports per month. Start a 3-day free trial to export as much as you want."
+          : "You're on the Free plan, which is capped at 5 exports per month. Subscribe to Pro to export as much as you want.",
+        ctaPrimary: proCta,
         ctaSecondary: "Get Lifetime — $99",
         dismiss: "Continue with Free"
       };
@@ -71,8 +80,10 @@ const getCopy = (variant: UpgradePromptVariant, options: UpgradePromptOptions): 
         title: `Upgrade for unlimited ${featureLabel(options.feature)}`,
         body:
           options.reason ??
-          "You've reached the Free plan limit. Upgrade to Pro for unlimited usage — start with a 3-day free trial.",
-        ctaPrimary: "Start 3-day free trial",
+          (trialEligible
+            ? "You've reached the Free plan limit. Upgrade to Pro for unlimited usage — start with a 3-day free trial."
+            : "You've reached the Free plan limit. Subscribe to Pro for unlimited usage."),
+        ctaPrimary: proCta,
         ctaSecondary: "Get Lifetime — $99",
         dismiss: "Not now"
       };
@@ -84,8 +95,33 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
   const navigate = useNavigate();
   const [busy, setBusy] = useState<"pro" | "lifetime" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Assume eligible until we hear otherwise, so the trial CTA never flashes for
+  // someone who is actually eligible. Refreshed each time the modal opens.
+  const [trialEligible, setTrialEligible] = useState(true);
 
-  const copy = getCopy(variant, options);
+  useEffect(() => {
+    if (!open || !isAuthenticated) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const plan = await api.getBillingPlan();
+        if (!cancelled) {
+          setTrialEligible(plan.trial_eligible);
+        }
+      } catch {
+        // Non-fatal: keep the default trial copy if eligibility can't be loaded.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isAuthenticated, api]);
+
+  const copy = getCopy(variant, options, trialEligible);
 
   const handleClose = (next: boolean) => {
     if (!next) {

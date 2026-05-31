@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { PublicHeader } from "../components/PublicHeader";
 import { useAuth } from "../integration/auth-context";
@@ -7,7 +8,33 @@ import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pr
 
 export function PublicPricing() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, api } = useAuth();
+  // Anonymous visitors are assumed eligible (most are, post-signup). For a
+  // signed-in visitor who already used their trial, reflect that here too so the
+  // marketing CTA matches what they'd see inside the app.
+  const [trialEligible, setTrialEligible] = useState(true);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const plan = await api.getBillingPlan();
+        if (!cancelled) {
+          setTrialEligible(plan.trial_eligible);
+        }
+      } catch {
+        // Non-fatal: keep the default trial copy if eligibility can't be loaded.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, api]);
 
   // From the public marketing page we never call Stripe directly. Authenticated
   // visitors are sent to the full in-app billing page; anonymous visitors have
@@ -35,7 +62,10 @@ export function PublicPricing() {
       return { label: "Get started free", onClick: goFree };
     }
     if (card.code === "pro") {
-      return { label: "Start 3-day free trial", onClick: () => choosePlan("pro") };
+      return {
+        label: trialEligible ? "Start 3-day free trial" : "Start your subscription",
+        onClick: () => choosePlan("pro")
+      };
     }
     return { label: "Get Lifetime — $99", onClick: () => choosePlan("lifetime") };
   };
@@ -53,13 +83,16 @@ export function PublicPricing() {
             Simple pricing for a faster job search
           </h1>
           <p style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-            Start free, or go Pro with a 3-day free trial. Cancel anytime — no charge during the trial.
+            {trialEligible
+              ? "Start free, or go Pro with a 3-day free trial. Cancel anytime — no charge during the trial."
+              : "Start free, or subscribe to Pro for unlimited access. Cancel anytime."}
           </p>
         </div>
 
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
           {PLAN_CARDS.map((card) => {
             const cta = resolveCta(card);
+            const badge = card.code === "pro" && !trialEligible ? "Most popular" : card.badge;
             return (
               <div
                 key={card.code}
@@ -73,7 +106,7 @@ export function PublicPricing() {
                     : "var(--color-border-tertiary)"
                 }}
               >
-                {card.badge && (
+                {badge && (
                   <div className="mb-4">
                     <span
                       className="px-3 py-1 rounded-full font-medium inline-block"
@@ -83,7 +116,7 @@ export function PublicPricing() {
                         color: card.highlighted ? "var(--color-teal-50)" : "white"
                       }}
                     >
-                      {card.badge}
+                      {badge}
                     </span>
                   </div>
                 )}
@@ -136,7 +169,7 @@ export function PublicPricing() {
                 >
                   {cta.label}
                 </button>
-                {card.code === "pro" && (
+                {card.code === "pro" && trialEligible && (
                   <button
                     onClick={() => choosePlan("pro", false)}
                     className="w-full mt-2 px-6 py-2 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2 bg-transparent"

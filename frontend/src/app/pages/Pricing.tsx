@@ -105,6 +105,9 @@ export function Pricing() {
   const currentPlanCode = plan?.plan_code ?? "free";
   const subscriptionStatus = plan?.subscription_status ?? "inactive";
   const isTrialing = subscriptionStatus === "trialing";
+  // Default to eligible only until the plan loads, to avoid flashing the wrong
+  // CTA; once loaded this reflects the backend's authoritative decision.
+  const trialEligible = plan?.trial_eligible ?? true;
   const trialEnd = useMemo(() => formatTrialEnd(plan?.current_period_end ?? null), [plan]);
   const checkoutState = new URLSearchParams(location.search).get("checkout");
 
@@ -128,7 +131,7 @@ export function Pricing() {
         };
       }
       return {
-        label: "Start 3-day free trial",
+        label: trialEligible ? "Start 3-day free trial" : "Start your subscription",
         disabled: false,
         onClick: () => void startCheckout("pro")
       };
@@ -152,7 +155,9 @@ export function Pricing() {
           Choose your plan
         </h1>
         <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-          Try Pro free for 3 days. Cancel anytime — no charge during the trial.
+          {trialEligible
+            ? "Try Pro free for 3 days. Cancel anytime — no charge during the trial."
+            : "You've already used your free trial. Subscribe to Pro for unlimited access — cancel anytime."}
         </p>
       </div>
 
@@ -226,6 +231,9 @@ export function Pricing() {
                 (card.code === "pro" && busyTarget === "pro") ||
                 (card.code === "lifetime" && busyTarget === "lifetime") ||
                 (card.code === "pro" && currentPlanCode === "pro" && busyTarget === "portal");
+              // The "3-day free trial" badge is misleading once the trial is used.
+              const badge =
+                card.code === "pro" && !trialEligible ? "Most popular" : card.badge;
               return (
                 <div
                   key={card.code}
@@ -239,7 +247,7 @@ export function Pricing() {
                       : "var(--color-border-tertiary)"
                   }}
                 >
-                  {card.badge && (
+                  {badge && (
                     <div className="mb-4">
                       <span
                         className="px-3 py-1 rounded-full font-medium inline-block"
@@ -249,7 +257,7 @@ export function Pricing() {
                           color: card.highlighted ? "var(--color-teal-50)" : "white"
                         }}
                       >
-                        {card.badge}
+                        {badge}
                       </span>
                     </div>
                   )}
@@ -306,6 +314,7 @@ export function Pricing() {
                     {cta.label}
                   </button>
                   {card.code === "pro" &&
+                    trialEligible &&
                     currentPlanCode !== "pro" &&
                     currentPlanCode !== "lifetime" && (
                       <button

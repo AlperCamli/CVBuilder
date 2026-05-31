@@ -184,6 +184,7 @@ describe("billing endpoints", () => {
     expect(planResponse.body.success).toBe(true);
     expect(planResponse.body.data.plan_code).toBe("free");
     expect(planResponse.body.data.subscription_status).toBe("inactive");
+    expect(planResponse.body.data.trial_eligible).toBe(true);
 
     expect(usageResponse.status).toBe(200);
     expect(usageResponse.body.data.plan_code).toBe("free");
@@ -320,6 +321,14 @@ describe("billing endpoints", () => {
       .set("stripe-signature", "sig_test")
       .set("Content-Type", "application/json")
       .send(JSON.stringify(canceledWebhook));
+
+    // The billing plan endpoint should now report the user as trial-ineligible,
+    // so the UI can swap the trial CTA for a plain subscribe CTA.
+    const planAfterCancel = await request(app)
+      .get("/api/v1/billing/plan")
+      .set("Authorization", "Bearer valid-token");
+    expect(planAfterCancel.status).toBe(200);
+    expect(planAfterCancel.body.data.trial_eligible).toBe(false);
 
     // Attempting to start over must not hand out another free trial.
     const secondCheckout = await request(app)

@@ -152,6 +152,7 @@ export class BillingService {
 
   async getBillingPlan(userId: string): Promise<BillingPlanResponseData> {
     const snapshot = await this.getSnapshot(userId);
+    const trialEligible = await this.isUserTrialEligible(userId);
 
     return {
       plan_code: snapshot.current_plan.plan_code as PlanCode,
@@ -159,6 +160,7 @@ export class BillingService {
       current_period_start: snapshot.current_plan.current_period_start,
       current_period_end: snapshot.current_plan.current_period_end,
       cancel_at_period_end: snapshot.current_plan.cancel_at_period_end,
+      trial_eligible: trialEligible,
       provider: {
         provider: snapshot.subscription?.provider ?? this.options.provider,
         provider_customer_id: snapshot.subscription?.provider_customer_id ?? null,
@@ -166,6 +168,19 @@ export class BillingService {
       },
       entitlement_summary: snapshot.entitlements
     };
+  }
+
+  // Whether starting checkout right now would grant the free trial: trials must
+  // be enabled and the user must not have already consumed their one trial.
+  // Shared by the checkout flow and the billing-plan endpoint so the UI's CTA
+  // label ("Start 3-day free trial" vs "Start your subscription") always matches
+  // what checkout will actually do.
+  private async isUserTrialEligible(userId: string): Promise<boolean> {
+    if (this.options.trialPeriodDays <= 0) {
+      return false;
+    }
+
+    return !(await this.subscriptionsRepository.hasUsedTrial(userId));
   }
 
   async getBillingUsage(userId: string): Promise<BillingUsageResponseData> {
@@ -244,11 +259,8 @@ export class BillingService {
     // starts a brand-new trial once the previous one lapses.
     let trialPeriodDays: number | null = null;
 
-    if (!isLifetime && this.options.trialPeriodDays > 0 && input.with_trial !== false) {
-      const alreadyUsedTrial = await this.subscriptionsRepository.hasUsedTrial(user.id);
-      if (!alreadyUsedTrial) {
-        trialPeriodDays = this.options.trialPeriodDays;
-      }
+    if (!isLifetime && input.with_trial !== false && (await this.isUserTrialEligible(user.id))) {
+      trialPeriodDays = this.options.trialPeriodDays;
     }
 
     const checkoutSession = await stripeGateway.createCheckoutSession({
