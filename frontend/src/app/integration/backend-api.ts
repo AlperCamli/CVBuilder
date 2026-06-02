@@ -1,9 +1,7 @@
 import type { ApiClient } from "./api-client";
 import type {
-  AiBlockCompareResult,
   CvAiBlockVersionsResponse,
   CvAiHistoryResponse,
-  AiBlockOptionsResult,
   AiSuggestResponse,
   AiSuggestionDetail,
   BlockRevisionListResponse,
@@ -219,19 +217,8 @@ export interface AiBlockTargetInput {
 
 export interface BlockSuggestInput extends AiBlockTargetInput {
   block_id: string;
-  action_type: "improve" | "summarize" | "rewrite" | "ats_optimize" | "shorten" | "expand" | "options";
+  action_type: "improve" | "summarize" | "ats_optimize" | "expand";
   user_instruction?: string | null;
-}
-
-export interface BlockCompareInput {
-  tailored_cv_id: string;
-  block_id: string;
-}
-
-export interface BlockOptionsInput extends AiBlockTargetInput {
-  block_id: string;
-  user_instruction?: string | null;
-  option_count?: number;
 }
 
 export interface ImportImproveInput {
@@ -526,14 +513,6 @@ export class BackendApi {
 
   postBlockSuggest(payload: BlockSuggestInput): Promise<AiSuggestResponse> {
     return this.client.post<AiSuggestResponse, BlockSuggestInput>("/ai/blocks/suggest", payload);
-  }
-
-  postBlockCompare(payload: BlockCompareInput): Promise<AiBlockCompareResult> {
-    return this.client.post<AiBlockCompareResult, BlockCompareInput>("/ai/blocks/compare", payload);
-  }
-
-  postBlockOptions(payload: BlockOptionsInput): Promise<AiBlockOptionsResult> {
-    return this.client.post<AiBlockOptionsResult, BlockOptionsInput>("/ai/blocks/options", payload);
   }
 
   getSuggestion(suggestionId: string): Promise<AiSuggestionDetail> {

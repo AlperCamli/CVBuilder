@@ -27,15 +27,7 @@ const followUpAnswerSchema = z
   })
   .strict();
 
-const actionTypeSchema = z.enum([
-  "improve",
-  "summarize",
-  "rewrite",
-  "ats_optimize",
-  "shorten",
-  "expand",
-  "options"
-]);
+const actionTypeSchema = z.enum(["improve", "summarize", "ats_optimize", "expand"]);
 
 const aiBlockTargetBaseSchema = z
   .object({
@@ -91,26 +83,6 @@ export const aiBlockSuggestSchema = z
     block_id: z.string().trim().min(1).max(128),
     action_type: actionTypeSchema,
     user_instruction: z.string().trim().max(3000).nullable().optional()
-  })
-  .merge(aiBlockTargetBaseSchema)
-  .strict()
-  .refine(hasExactlyOneTarget, {
-    message: "Exactly one of tailored_cv_id or master_cv_id is required",
-    path: ["tailored_cv_id"]
-  });
-
-export const aiBlockCompareSchema = z
-  .object({
-    tailored_cv_id: uuidSchema,
-    block_id: z.string().trim().min(1).max(128)
-  })
-  .strict();
-
-export const aiBlockOptionsSchema = z
-  .object({
-    block_id: z.string().trim().min(1).max(128),
-    user_instruction: z.string().trim().max(3000).nullable().optional(),
-    option_count: z.number().int().min(2).max(6).optional()
   })
   .merge(aiBlockTargetBaseSchema)
   .strict()

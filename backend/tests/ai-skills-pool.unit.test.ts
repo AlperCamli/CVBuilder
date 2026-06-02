@@ -143,8 +143,8 @@ const makeService = (masterCv: MasterCvRecord, planCode: "free" | "pro") => {
       before_content: payload.before_content as Record<string, unknown>,
       suggested_content: payload.suggested_content as Record<string, unknown>,
       option_group_key: null,
-      status: "pending",
-      applied_at: null,
+      status: payload.status ?? "pending",
+      applied_at: payload.applied_at ?? null,
       created_at: NOW
     }));
   });
@@ -154,8 +154,17 @@ const makeService = (masterCv: MasterCvRecord, planCode: "free" | "pro") => {
   } as unknown as AiRepository;
 
   const masterCvRepository = {
-    findById: vi.fn().mockResolvedValue(masterCv)
+    findById: vi.fn().mockResolvedValue(masterCv),
+    updateById: vi.fn().mockImplementation(async (_userId, _masterCvId, patch) => ({
+      ...masterCv,
+      ...patch,
+      updated_at: NOW
+    }))
   } as unknown as MasterCvRepository;
+
+  const cvRevisionsService = {
+    createMasterBlockRevision: vi.fn().mockResolvedValue({})
+  } as unknown as CvRevisionsService;
 
   const billingService = {
     assertActionAllowed: vi.fn().mockResolvedValue(undefined),
@@ -175,7 +184,7 @@ const makeService = (masterCv: MasterCvRecord, planCode: "free" | "pro") => {
     masterCvRepository,
     {} as TailoredCvRepository,
     {} as JobsRepository,
-    {} as CvRevisionsService,
+    cvRevisionsService,
     {} as TemplatesService,
     {
       resolve: vi.fn()
@@ -186,6 +195,7 @@ const makeService = (masterCv: MasterCvRecord, planCode: "free" | "pro") => {
   return {
     service,
     createSuggestions,
+    cvRevisionsService,
     billingService
   };
 };
@@ -275,17 +285,11 @@ describe("AiService skills pool refresh rules", () => {
     vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
       ai_run: { id: "run-1" },
       output: {
-        suggestions: [
-          {
-            label: "Skills Pool",
-            rationale: "Derived from CV context",
-            suggested_block: {
-              fields: {
-                skills: ["TypeScript", "Node.js", "TypeScript", "AWS"]
-              }
-            }
+        suggested_block: {
+          fields: {
+            skills: ["TypeScript", "Node.js", "TypeScript", "AWS"]
           }
-        ]
+        }
       }
     });
 
@@ -295,9 +299,12 @@ describe("AiService skills pool refresh rules", () => {
       action_type: "improve"
     });
 
-    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestion_id).toBe("s-1");
+    expect(result.updated_block.id).toBe("skills-block");
     expect(createSuggestions).toHaveBeenCalledTimes(1);
     const payload = createSuggestions.mock.calls[0]?.[0]?.[0] as Record<string, unknown>;
+    expect(payload.status).toBe("applied");
+    expect(typeof payload.applied_at).toBe("string");
     const suggestedContent = payload.suggested_content as Record<string, unknown>;
     const suggestedFields = (suggestedContent.fields as Record<string, unknown>).skills as string[];
     const suggestedMeta = suggestedContent.meta as Record<string, unknown>;
@@ -321,17 +328,11 @@ describe("AiService skills pool refresh rules", () => {
     vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
       ai_run: { id: "run-2" },
       output: {
-        suggestions: [
-          {
-            label: "Skills Pool",
-            rationale: "Refresh",
-            suggested_block: {
-              fields: {
-                skills: ["Node.js", "Redis", "Kafka"]
-              }
-            }
+        suggested_block: {
+          fields: {
+            skills: ["Node.js", "Redis", "Kafka"]
           }
-        ]
+        }
       }
     });
 

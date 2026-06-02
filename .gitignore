@@ -15,3 +15,6 @@ SECURITY_AUDIT.md
 
 # Local Claude Code skills
 .claude/skills/
+
+# Supabase CLI local state (linked project, refs, versions)
+supabase/.temp/

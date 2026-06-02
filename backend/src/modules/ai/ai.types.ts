@@ -72,17 +72,6 @@ export interface BlockSuggestInput extends AiBlockTargetInput {
   user_instruction?: string | null;
 }
 
-export interface BlockCompareInput {
-  tailored_cv_id: string;
-  block_id: string;
-}
-
-export interface BlockOptionsInput extends AiBlockTargetInput {
-  block_id: string;
-  user_instruction?: string | null;
-  option_count?: number;
-}
-
 export interface ImportImproveInput {
   parsed_content: Record<string, unknown>;
   language?: string;
@@ -118,22 +107,8 @@ export interface CoverLetterGenerationResult {
   content: string;
 }
 
-export interface BlockSuggestionVariant {
-  label: string;
-  rationale: string;
-  suggested_block: Record<string, unknown>;
-}
-
 export interface BlockSuggestResult {
-  suggestions: BlockSuggestionVariant[];
-}
-
-export interface BlockCompareResult {
-  comparison_summary: string;
-  gap_highlights: string[];
-  improvement_guidance: string[];
-  matched_keywords: string[];
-  missing_keywords: string[];
+  suggested_block: Record<string, unknown>;
 }
 
 export interface AiRunSummary {
@@ -225,6 +200,16 @@ export interface TailoredCvDraftSummary {
 
 export interface SuggestionApplyResponse {
   suggestion: AiSuggestionSummary;
+  cv_kind: CvKind;
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
+  updated_block: CvBlock;
+  section_id: string;
+}
+
+export interface BlockSuggestApplyResponse {
+  ai_run_id: string;
+  suggestion_id: string;
   cv_kind: CvKind;
   master_cv_id: string | null;
   tailored_cv_id: string | null;

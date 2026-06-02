@@ -179,27 +179,9 @@ export const importImproveOutputSchema = z
   })
   .strict();
 
-export const blockSuggestionVariantSchema = z
-  .object({
-    label: z.string().trim().min(1).max(160),
-    rationale: z.string().trim().min(1).max(1000),
-    suggested_block: z.record(z.unknown())
-  })
-  .strict();
-
 export const blockSuggestOutputSchema = z
   .object({
-    suggestions: z.array(blockSuggestionVariantSchema).min(1).max(8)
-  })
-  .strict();
-
-export const blockCompareOutputSchema = z
-  .object({
-    comparison_summary: z.string().trim().min(1).max(1500),
-    gap_highlights: z.array(z.string().trim().min(1).max(300)).max(20),
-    improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20),
-    matched_keywords: z.array(z.string().trim().min(1).max(80)).max(30),
-    missing_keywords: z.array(z.string().trim().min(1).max(80)).max(30)
+    suggested_block: z.record(z.unknown())
   })
   .strict();
 

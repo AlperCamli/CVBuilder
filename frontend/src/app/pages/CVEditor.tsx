@@ -54,9 +54,9 @@ import { toast } from "sonner";
 import { useAuth } from "../integration/auth-context";
 import type {
   AiBlockVersionChain,
+  CvBlock,
   CvContent,
   CvAiHistoryResponse,
-  AiBlockCompareResult,
   AiSuggestionSummary,
   CvAiBlockVersionsResponse,
   CvBlockRevisionSummary,
@@ -81,7 +81,6 @@ import {
 } from "./cv-editor-ai-guard";
 import {
   buildSkillsPoolDataPatch,
-  parseSkillsPoolItemsFromSuggestedContent,
   parseSkillsPoolMetadata,
   parseSkillsPoolMetadataFromBlockMeta,
   shuffleSkillsPoolItems
@@ -332,7 +331,7 @@ const clearDraft = (cvKind: "master" | "tailored", cvId: string): void => {
   window.localStorage.removeItem(getDraftStorageKey(cvKind, cvId));
 };
 
-const DraggableSection = ({ section, index, moveSection, children }: any) => {
+const DraggableSection = ({ section, index, moveSection, highlighted, children }: any) => {
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -386,22 +385,20 @@ const DraggableSection = ({ section, index, moveSection, children }: any) => {
       style={{
         opacity: isDragging ? 0.4 : 1,
         transform: isDragging ? "scale(0.98)" : "scale(1)",
-        boxShadow: isOver ? "0 0 0 2px var(--color-teal-200)" : "none",
+        boxShadow: highlighted
+          ? "0 0 0 2px var(--color-teal-400), 0 0 24px rgba(20, 184, 166, 0.32)"
+          : isOver
+            ? "0 0 0 2px var(--color-teal-200)"
+            : "none",
         borderRadius: "12px",
-        cursor: isDragging ? "grabbing" : "grab"
+        cursor: isDragging ? "grabbing" : "grab",
+        transition: "box-shadow 240ms ease, opacity 200ms ease, transform 200ms ease"
       }}
     >
       {children}
     </div>
   );
 };
-
-interface SuggestionCard {
-  id: string;
-  rationale: string;
-  status: string;
-  suggested_content: Record<string, unknown>;
-}
 
 interface SkillPoolState {
   items: string[];
@@ -455,10 +452,9 @@ export function CVEditor() {
   const [aiTargetSectionId, setAiTargetSectionId] = useState<string | null>(null);
   const [aiTargetBlockId, setAiTargetBlockId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiCompareResult, setAiCompareResult] = useState<AiBlockCompareResult | null>(null);
-  const [aiSuggestions, setAiSuggestions] = useState<SuggestionCard[]>([]);
   const [aiHistory, setAiHistory] = useState<CvAiHistoryResponse | null>(null);
   const [aiBlockVersions, setAiBlockVersions] = useState<Record<string, AiBlockVersionChain>>({});
+  const [highlightedAiBlockIds, setHighlightedAiBlockIds] = useState<string[]>([]);
   const [showSkillsPoolDialog, setShowSkillsPoolDialog] = useState(false);
   const [skillsPoolSectionId, setSkillsPoolSectionId] = useState<string | null>(null);
   const [skillsPoolLoading, setSkillsPoolLoading] = useState(false);
@@ -586,28 +582,52 @@ export function CVEditor() {
     markDirty();
   };
 
-  const syncSkillPoolFromSuggestedBlock = (
-    sectionId: string,
-    suggestedContent: Record<string, unknown>
-  ): boolean => {
-    const poolItems = parseSkillsPoolItemsFromSuggestedContent(suggestedContent);
-    if (poolItems.length === 0) {
-      return false;
-    }
-
-    const suggestedMeta = parseSkillsPoolMetadataFromBlockMeta(
-      (suggestedContent as Record<string, unknown>).meta ?? {}
+  const applyPersistedBlockUpdate = (blockId: string, updatedBlock: CvBlock): boolean => {
+    const currentContent = withDisplayMetadata(
+      editorSectionsToCvContent(sections, language),
+      fontScale,
+      spacingScale,
+      layoutScale
     );
 
-    updateSkillSectionData(sectionId, (currentData) => ({
-      ...currentData,
-      ...buildSkillsPoolDataPatch({
-        ...suggestedMeta,
-        items: poolItems
+    let didReplace = false;
+    const nextSections = currentContent.sections.map((section) => ({
+      ...section,
+      blocks: section.blocks.map((block) => {
+        if (block.id !== blockId) {
+          return block;
+        }
+
+        didReplace = true;
+        return {
+          ...block,
+          ...updatedBlock,
+          id: block.id
+        };
       })
     }));
 
+    if (!didReplace) {
+      return false;
+    }
+
+    setSections(
+      cvContentToEditorSections({
+        ...currentContent,
+        sections: nextSections
+      })
+    );
+    setDirty(false);
+    setRestoredDraftAt(null);
+    setLastSavedAt(new Date().toISOString());
     return true;
+  };
+
+  const highlightAiUpdatedBlock = (blockId: string) => {
+    setHighlightedAiBlockIds((prev) => [...new Set([...prev, blockId])]);
+    window.setTimeout(() => {
+      setHighlightedAiBlockIds((prev) => prev.filter((item) => item !== blockId));
+    }, 3500);
   };
 
   const markDirty = () => {
@@ -1376,12 +1396,15 @@ export function CVEditor() {
         user_instruction: "Generate a reusable skills suggestion pool from this CV context."
       });
 
-      const firstSuggestion = suggested.suggestions[0]?.suggested_content;
-      if (!firstSuggestion || !syncSkillPoolFromSuggestedBlock(sectionId, firstSuggestion)) {
+      if (!applyPersistedBlockUpdate(resolvedBlockId, suggested.updated_block)) {
         setSkillsPoolError("AI returned an invalid skills pool.");
         return;
       }
 
+      highlightAiUpdatedBlock(resolvedBlockId);
+      if (cvId) {
+        await loadAiData(cvKind, cvId);
+      }
       setShowSkillsPoolDialog(true);
     } catch (err) {
       if (err instanceof Error) {
@@ -1459,9 +1482,13 @@ export function CVEditor() {
         user_instruction: "Refresh the existing skills suggestion pool using CV context."
       });
 
-      const firstSuggestion = suggested.suggestions[0]?.suggested_content;
-      if (!firstSuggestion || !syncSkillPoolFromSuggestedBlock(skillsPoolSectionId, firstSuggestion)) {
+      if (!applyPersistedBlockUpdate(resolvedBlockId, suggested.updated_block)) {
         setSkillsPoolError("AI returned an invalid refreshed pool.");
+        return;
+      }
+      highlightAiUpdatedBlock(resolvedBlockId);
+      if (cvId) {
+        await loadAiData(cvKind, cvId);
       }
     } catch (err) {
       if (err instanceof Error) {
@@ -1533,8 +1560,6 @@ export function CVEditor() {
 
     setAiTargetSectionId(sectionId);
     setAiTargetBlockId(resolvedBlockId ?? null);
-    setAiCompareResult(null);
-    setAiSuggestions([]);
     setShowAIPopup(true);
 
     if (cvId) {
@@ -1582,15 +1607,7 @@ export function CVEditor() {
   };
 
   const runAiAction = async (
-    action:
-      | "improve"
-      | "summarize"
-      | "rewrite"
-      | "ats_optimize"
-      | "shorten"
-      | "expand"
-      | "options"
-      | "compare"
+    action: "improve" | "summarize" | "ats_optimize" | "expand"
   ) => {
     if (!cvId) {
       setError("CV id is missing.");
@@ -1610,8 +1627,6 @@ export function CVEditor() {
     }
 
     setAiLoading(true);
-    setAiCompareResult(null);
-    setAiSuggestions([]);
 
     try {
       if (dirty) {
@@ -1625,48 +1640,21 @@ export function CVEditor() {
       const targetPayload =
         cvKind === "tailored" ? { tailored_cv_id: cvId } : { master_cv_id: cvId };
 
-      if (action === "compare") {
-        if (cvKind !== "tailored") {
-          setError("Compare to job is available only for customized CVs.");
-          return;
-        }
+      const suggested = await api.postBlockSuggest({
+        ...targetPayload,
+        block_id: blockId,
+        action_type: action
+      });
 
-        const compared = await api.postBlockCompare({
-          tailored_cv_id: cvId,
-          block_id: blockId
-        });
-        setAiCompareResult(compared);
-      } else if (action === "options") {
-        const options = await api.postBlockOptions({
-          ...targetPayload,
-          block_id: blockId,
-          option_count: 3
-        });
-
-        setAiSuggestions(
-          options.suggestions.map((suggestion) => ({
-            id: suggestion.id,
-            rationale: suggestion.rationale,
-            status: suggestion.status,
-            suggested_content: suggestion.suggested_content
-          }))
-        );
-      } else {
-        const suggested = await api.postBlockSuggest({
-          ...targetPayload,
-          block_id: blockId,
-          action_type: action
-        });
-
-        setAiSuggestions(
-          suggested.suggestions.map((suggestion) => ({
-            id: suggestion.id,
-            rationale: suggestion.rationale,
-            status: suggestion.status,
-            suggested_content: suggestion.suggested_content
-          }))
-        );
+      if (!applyPersistedBlockUpdate(blockId, suggested.updated_block)) {
+        setError("AI updated the block, but the editor could not locate it locally.");
+        return;
       }
+
+      highlightAiUpdatedBlock(blockId);
+      await loadAiData(cvKind, cvId);
+      setShowAIPopup(false);
+      toast.success("Block updated with AI.");
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -1675,36 +1663,6 @@ export function CVEditor() {
       }
     } finally {
       setAiLoading(false);
-    }
-  };
-
-  const applySuggestion = async (suggestionId: string) => {
-    try {
-      await api.getSuggestion(suggestionId);
-      await api.applySuggestion(suggestionId);
-      await loadCv();
-      if (cvId) {
-        await loadAiData(cvKind, cvId);
-      }
-      setShowAIPopup(false);
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      }
-    }
-  };
-
-  const rejectSuggestion = async (suggestionId: string) => {
-    try {
-      await api.rejectSuggestion(suggestionId);
-      setAiSuggestions((prev) => prev.filter((suggestion) => suggestion.id !== suggestionId));
-      if (cvId) {
-        await loadAiData(cvKind, cvId);
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      }
     }
   };
 
@@ -1791,6 +1749,20 @@ export function CVEditor() {
       onPrev: () => changeAiBlockVersion(blockId, -1),
       onNext: () => changeAiBlockVersion(blockId, 1)
     };
+  };
+
+  const sectionContainsBlock = (section: EditorSection, blockId: string): boolean => {
+    if (getSectionFirstBlockId(section) === blockId) {
+      return true;
+    }
+
+    const data = (section.data ?? {}) as Record<string, unknown>;
+    if (String(data.blockId ?? "") === blockId) {
+      return true;
+    }
+
+    const items = Array.isArray(data.items) ? data.items : [];
+    return items.some((item) => matchesBlockReference(item as Record<string, unknown>, blockId));
   };
 
   const handlePostExportNavigation = () => {
@@ -1892,8 +1864,16 @@ export function CVEditor() {
       }
     })();
 
+    const highlighted = highlightedAiBlockIds.some((blockId) => sectionContainsBlock(section, blockId));
+
     return (
-      <DraggableSection key={section.id} section={section} index={index} moveSection={moveSection}>
+      <DraggableSection
+        key={section.id}
+        section={section}
+        index={index}
+        moveSection={moveSection}
+        highlighted={highlighted}
+      >
         {content}
       </DraggableSection>
     );
@@ -2454,8 +2434,6 @@ export function CVEditor() {
           onOpenChange={(open) => {
             setShowAIPopup(open);
             if (!open) {
-              setAiCompareResult(null);
-              setAiSuggestions([]);
               setAiTargetBlockId(null);
             }
           }}
@@ -2466,36 +2444,21 @@ export function CVEditor() {
                 AI Block Assistant
               </DialogTitle>
               <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                Select an action. Suggestions remain pending until you apply them.
+                Select an action. The updated block is applied automatically.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3 mt-2">
               <div className="grid grid-cols-2 gap-2">
-                {(
-                  cvKind === "tailored"
-                    ? [
-                      { label: "Improve writing", action: "improve" },
-                      { label: "Summarize", action: "summarize" },
-                      { label: "Rewrite", action: "rewrite" },
-                      { label: "Shorten", action: "shorten" },
-                      { label: "Expand", action: "expand" },
-                      { label: "ATS optimize", action: "ats_optimize" },
-                      { label: "Generate options", action: "options" },
-                      { label: "Compare to job", action: "compare" }
-                    ]
-                    : [
-                      { label: "Improve writing", action: "improve" },
-                      { label: "Summarize", action: "summarize" },
-                      { label: "Rewrite", action: "rewrite" },
-                      { label: "Shorten", action: "shorten" },
-                      { label: "Expand", action: "expand" },
-                      { label: "Generate options", action: "options" }
-                    ]
-                ).map((item) => (
+                {[
+                  { label: "Improve writing", action: "improve" },
+                  { label: "Summarize", action: "summarize" },
+                  { label: "Expand", action: "expand" },
+                  { label: "ATS optimize", action: "ats_optimize" }
+                ].map((item) => (
                   <button
                     key={item.label}
-                    onClick={() => void runAiAction(item.action as any)}
+                    onClick={() => void runAiAction(item.action as "improve" | "summarize" | "expand" | "ats_optimize")}
                     disabled={aiLoading}
                     className="w-full p-2.5 rounded-lg border text-left"
                     style={{
@@ -2515,45 +2478,6 @@ export function CVEditor() {
                 <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                   <Loader2 size={14} className="animate-spin" />
                   Running AI action...
-                </div>
-              )}
-
-              {aiCompareResult && (
-                <div className="p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
-                  <p style={{ fontSize: "12px", color: "var(--color-text-primary)", marginBottom: "6px" }}>
-                    {aiCompareResult.comparison_summary}
-                  </p>
-                  <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                    Missing keywords: {aiCompareResult.missing_keywords.join(", ") || "none"}
-                  </p>
-                </div>
-              )}
-
-              {aiSuggestions.length > 0 && (
-                <div className="space-y-2 max-h-[280px] overflow-auto pr-1">
-                  {aiSuggestions.map((suggestion) => (
-                    <div key={suggestion.id} className="p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
-                      <p style={{ fontSize: "12px", color: "var(--color-text-primary)", marginBottom: "6px" }}>
-                        {suggestion.rationale || "AI suggestion"}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => void applySuggestion(suggestion.id)}
-                          className="px-3 py-1 rounded-lg"
-                          style={{ fontSize: "11px", background: "var(--color-teal-600)", color: "white" }}
-                        >
-                          Apply
-                        </button>
-                        <button
-                          onClick={() => void rejectSuggestion(suggestion.id)}
-                          className="px-3 py-1 rounded-lg border"
-                          style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
 

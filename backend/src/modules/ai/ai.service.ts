@@ -53,9 +53,7 @@ import type {
   AiRunSummary,
   AiSuggestionDetail,
   AiSuggestionSummary,
-  BlockCompareInput,
-  BlockCompareResult,
-  BlockOptionsInput,
+  BlockSuggestApplyResponse,
   BlockSuggestInput,
   FollowUpAnswer,
   FollowUpQuestionsInput,
@@ -121,6 +119,9 @@ const asStringArray = (value: unknown): string[] => {
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean);
 };
+
+const normalizeSectionType = (value: string): string =>
+  value.trim().toLowerCase().replace(/[\s-]+/g, "_");
 
 const stableStringify = (value: unknown): string => {
   if (value === null || typeof value !== "object") {
@@ -258,6 +259,11 @@ interface AiBlockTargetContext {
   cv_id: string;
   current_content: TailoredCvRecord["current_content"] | MasterCvRecord["current_content"];
   linked_job: JobRecord | null;
+}
+
+interface SkillsSectionEnsureResult {
+  content: TailoredCvRecord["current_content"];
+  changed_block_ids: string[];
 }
 
 interface ResolvedPromptSnapshot {
@@ -535,11 +541,13 @@ export class AiService {
 
     try {
       const aliasContext = buildTailoredDraftModelContent(masterCv.current_content);
+      const selectedTopics = this.extractSelectedAnswerOptions(input.answers, "priority_topics");
+      const selectedKeywords = this.extractSelectedAnswerOptions(input.answers, "priority_keywords");
       const flowInput = {
         master_cv: aliasContext.model_content,
         role: input.job.job_title,
-        selected_topics: this.extractSelectedAnswerOptions(input.answers, "priority_topics"),
-        selected_keywords: this.extractSelectedAnswerOptions(input.answers, "priority_keywords"),
+        selected_topics: selectedTopics,
+        selected_keywords: selectedKeywords,
         answered_questions: this.extractAnsweredQuestions(input.answers)
       };
 
@@ -572,6 +580,13 @@ export class AiService {
       );
       normalizedContent = stabilized.content;
 
+      const skillsEnsured = this.ensureTailoredSkillsSection(
+        normalizedContent,
+        selectedKeywords,
+        selectedTopics
+      );
+      normalizedContent = skillsEnsured.content;
+
       this.assertTailoredDraftSemanticContent(normalizedContent);
       this.assertTailoredDraftDivergesFromMaster(normalizedContent, masterCv.current_content);
 
@@ -599,10 +614,15 @@ export class AiService {
           flow_type: "tailored_draft",
           prompt_key: executed.prompt_key,
           prompt_version: executed.prompt_version,
-          changed_block_ids: this.resolveChangedBlockAliases(
-            asStringArray(output.changed_block_ids),
-            aliasContext.alias_map.block_alias_to_id
-          )
+          changed_block_ids: [
+            ...new Set([
+              ...this.resolveChangedBlockAliases(
+                asStringArray(output.changed_block_ids),
+                aliasContext.alias_map.block_alias_to_id
+              ),
+              ...skillsEnsured.changed_block_ids
+            ])
+          ]
         }
       };
     } catch (error) {
@@ -771,7 +791,7 @@ export class AiService {
     };
   }
 
-  async suggestBlock(session: SessionContext, input: BlockSuggestInput) {
+  async suggestBlock(session: SessionContext, input: BlockSuggestInput): Promise<BlockSuggestApplyResponse> {
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
 
     const target = await this.resolveAiBlockTarget(session.appUser.id, input);
@@ -804,7 +824,6 @@ export class AiService {
         }
       }
 
-      const optionCount = 1;
       const skillsPoolContext = collectSkillsPoolContext(target.current_content, currentBlock.block);
       const userInstruction = input.user_instruction ?? "";
 
@@ -820,7 +839,6 @@ export class AiService {
           block: currentBlock.block,
           user_instruction: userInstruction,
           job_description: target.linked_job?.job_description ?? "",
-          option_count: optionCount,
           skills_pool_mode: hasExistingPool ? "refresh" : "generate",
           skills_pool_context: skillsPoolContext
         },
@@ -829,85 +847,52 @@ export class AiService {
       });
 
       const output = asRecord(executed.output);
-      const outputSuggestions = Array.isArray(output.suggestions)
-        ? output.suggestions.map((item) => asRecord(item))
-        : [];
-
-      if (outputSuggestions.length === 0) {
-        throw new AiFlowFailedError("Skills pool generation produced no suggestions", {
-          flow_type: "block_suggest",
-          reason: "skills_pool_empty"
-        });
-      }
+      const suggestedBlockInput = asRecord(output.suggested_block);
 
       const nowIso = new Date().toISOString();
       const utcDay = toUtcDateKey(new Date());
 
-      const normalizedSuggestions = outputSuggestions.map((variant) => {
-        const suggestedBlockInput = asRecord(variant.suggested_block);
-        const parsedSkills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
-        if (parsedSkills.length === 0) {
-          throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
-            flow_type: "block_suggest",
-            reason: "skills_pool_parse_failed"
-          });
-        }
+      const parsedSkills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
+      if (parsedSkills.length === 0) {
+        throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
+          flow_type: "block_suggest",
+          reason: "skills_pool_parse_failed"
+        });
+      }
 
-        const nextPoolMeta = hasExistingPool
-          ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, parsedSkills, nowIso, utcDay)
-          : buildSkillsPoolMetaForGeneration(parsedSkills, nowIso);
+      const nextPoolMeta = hasExistingPool
+        ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, parsedSkills, nowIso, utcDay)
+        : buildSkillsPoolMetaForGeneration(parsedSkills, nowIso);
 
-        const suggestedBlock = normalizeCvBlock(
-          {
-            ...currentBlock.block,
-            fields: {
-              ...asRecord(currentBlock.block.fields),
-              skills: parsedSkills
-            },
-            meta: {
-              ...asRecord(currentBlock.block.meta),
-              ...nextPoolMeta
-            }
+      const suggestedBlock = normalizeCvBlock(
+        {
+          ...currentBlock.block,
+          fields: {
+            ...asRecord(currentBlock.block.fields),
+            skills: parsedSkills
           },
-          currentBlock.block
-        );
-
-        return {
-          ...variant,
-          suggested_block: asRecord(suggestedBlock),
-          rationale: asString(variant.rationale)
-        };
-      });
-
-      const persistedSuggestions = await this.aiRepository.createSuggestions(
-        normalizedSuggestions.map((variant) => ({
-          ai_run_id: executed.ai_run.id,
-          user_id: session.appUser.id,
-          master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
-          tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
-          block_id: input.block_id,
-          action_type: input.action_type,
-          before_content: asRecord(currentBlock.block),
-          suggested_content: asRecord(variant.suggested_block),
-          option_group_key: null
-        }))
+          meta: {
+            ...asRecord(currentBlock.block.meta),
+            ...nextPoolMeta
+          }
+        },
+        currentBlock.block
       );
 
-      await this.billingService.recordAiActionUsage(session.appUser.id);
-
-      return {
+      const applied = await this.applyGeneratedBlockSuggestion({
+        user_id: session.appUser.id,
+        target,
         ai_run_id: executed.ai_run.id,
-        suggestion_ids: persistedSuggestions.map((item) => item.id),
-        suggestions: persistedSuggestions.map((item, index) => ({
-          ...this.toSuggestionSummary(item),
-          before_content: item.before_content,
-          suggested_content: item.suggested_content,
-          rationale: String(normalizedSuggestions[index]?.rationale ?? "")
-        }))
-      };
+        block_id: input.block_id,
+        action_type: input.action_type,
+        before_block: asRecord(currentBlock.block),
+        suggested_block: asRecord(suggestedBlock)
+      });
+
+      await this.billingService.recordAiActionUsage(session.appUser.id);
+      return applied;
     }
 
-    const optionCount = input.action_type === "options" ? 3 : 1;
     const executed = await this.executeFlow({
       flow_type: "block_suggest",
       action_type: input.action_type,
@@ -919,146 +904,25 @@ export class AiService {
         action_type: input.action_type,
         block: currentBlock.block,
         user_instruction: input.user_instruction ?? "",
-        job_description: target.linked_job?.job_description ?? "",
-        option_count: optionCount
+        job_description: target.linked_job?.job_description ?? ""
       },
       user_prompt: `Suggest a ${input.action_type} update for block ${input.block_id}.`
     });
 
     const output = asRecord(executed.output);
-    const outputSuggestions = Array.isArray(output.suggestions)
-      ? output.suggestions.map((item) => asRecord(item))
-      : [];
-
-    const optionGroupKey = input.action_type === "options" ? randomUUID() : null;
-
-    const persistedSuggestions = await this.aiRepository.createSuggestions(
-      outputSuggestions.map((variant) => ({
-        ai_run_id: executed.ai_run.id,
-        user_id: session.appUser.id,
-        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
-        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
-        block_id: input.block_id,
-        action_type: input.action_type,
-        before_content: asRecord(currentBlock.block),
-        suggested_content: asRecord(variant.suggested_block),
-        option_group_key: optionGroupKey
-      }))
-    );
-
-    await this.billingService.recordAiActionUsage(session.appUser.id);
-
-    return {
-      ai_run_id: executed.ai_run.id,
-      suggestion_ids: persistedSuggestions.map((item) => item.id),
-      suggestions: persistedSuggestions.map((item, index) => ({
-        ...this.toSuggestionSummary(item),
-        before_content: item.before_content,
-        suggested_content: item.suggested_content,
-        rationale: String(outputSuggestions[index]?.rationale ?? "")
-      }))
-    };
-  }
-
-  async compareBlock(session: SessionContext, input: BlockCompareInput) {
-    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
-
-    const tailoredCv = await this.requireTailoredCv(session.appUser.id, input.tailored_cv_id);
-    const currentBlock = findBlockInCvContent(tailoredCv.current_content, input.block_id);
-    const linkedJob = await this.loadLinkedJob(session.appUser.id, tailoredCv);
-
-    if (!linkedJob) {
-      throw new NotFoundError("Linked job context was not found for this tailored CV");
-    }
-
-    const blockFields = asRecord(currentBlock.block.fields);
-    const blockText = Object.values(blockFields)
-      .map((value) => (typeof value === "string" ? value : ""))
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
-    const executed = await this.executeFlow<BlockCompareResult>({
-      flow_type: "block_compare",
+    const suggestedBlock = normalizeCvBlock(asRecord(output.suggested_block), currentBlock.block);
+    const applied = await this.applyGeneratedBlockSuggestion({
       user_id: session.appUser.id,
-      tailored_cv_id: tailoredCv.id,
-      job_id: linkedJob.id,
-      input_payload: {
-        block_id: currentBlock.block.id,
-        block_text: blockText,
-        block: currentBlock.block,
-        job_title: linkedJob.job_title,
-        company_name: linkedJob.company_name,
-        job_description: linkedJob.job_description
-      },
-      user_prompt: `Compare block ${input.block_id} to job requirements.`
+      target,
+      ai_run_id: executed.ai_run.id,
+      block_id: input.block_id,
+      action_type: input.action_type,
+      before_block: asRecord(currentBlock.block),
+      suggested_block: asRecord(suggestedBlock)
     });
 
     await this.billingService.recordAiActionUsage(session.appUser.id);
-
-    return {
-      ai_run_id: executed.ai_run.id,
-      ...executed.output
-    };
-  }
-
-  async generateBlockOptions(session: SessionContext, input: BlockOptionsInput) {
-    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
-
-    const target = await this.resolveAiBlockTarget(session.appUser.id, input);
-    const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
-    const optionCount = input.option_count ?? 3;
-
-    const executed = await this.executeFlow({
-      flow_type: "multi_option",
-      action_type: "options",
-      user_id: session.appUser.id,
-      master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
-      tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
-      job_id: target.linked_job?.id ?? null,
-      input_payload: {
-        action_type: "options",
-        option_count: optionCount,
-        block: currentBlock.block,
-        user_instruction: input.user_instruction ?? "",
-        job_description: target.linked_job?.job_description ?? ""
-      },
-      user_prompt: `Generate ${optionCount} options for block ${input.block_id}.`
-    });
-
-    const output = asRecord(executed.output);
-    const outputSuggestions = Array.isArray(output.suggestions)
-      ? output.suggestions.map((item) => asRecord(item))
-      : [];
-
-    const optionGroupKey = randomUUID();
-
-    const persisted = await this.aiRepository.createSuggestions(
-      outputSuggestions.map((variant) => ({
-        ai_run_id: executed.ai_run.id,
-        user_id: session.appUser.id,
-        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
-        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
-        block_id: input.block_id,
-        action_type: "options",
-        before_content: asRecord(currentBlock.block),
-        suggested_content: asRecord(variant.suggested_block),
-        option_group_key: optionGroupKey
-      }))
-    );
-
-    await this.billingService.recordAiActionUsage(session.appUser.id);
-
-    return {
-      ai_run_id: executed.ai_run.id,
-      option_group_key: optionGroupKey,
-      suggestions: persisted.map((item, index) => ({
-        ...this.toSuggestionSummary(item),
-        before_content: item.before_content,
-        suggested_content: item.suggested_content,
-        rationale: String(outputSuggestions[index]?.rationale ?? "")
-      }))
-    };
+    return applied;
   }
 
   async getSuggestion(session: SessionContext, suggestionId: string): Promise<AiSuggestionDetail> {
@@ -1157,11 +1021,118 @@ export class AiService {
       });
     }
 
+    if (target.cv_kind === "master") {
+      await this.cvRevisionsService.createMasterBlockRevision({
+        user_id: session.appUser.id,
+        master_cv_id: target.cv_id,
+        block: replacement.updated_block,
+        change_source: "ai",
+        ai_suggestion_id: applied.id,
+        created_by_user_id: session.appUser.id
+      });
+    }
+
     return {
       suggestion: this.toSuggestionSummary(applied),
       cv_kind: target.cv_kind,
       master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
       tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+      updated_block: replacement.updated_block,
+      section_id: replacement.section_id
+    };
+  }
+
+  private async applyGeneratedBlockSuggestion(options: {
+    user_id: string;
+    target: AiBlockTargetContext;
+    ai_run_id: string;
+    block_id: string;
+    action_type: AiSuggestionActionType;
+    before_block: Record<string, unknown>;
+    suggested_block: Record<string, unknown>;
+  }): Promise<BlockSuggestApplyResponse> {
+    const current = findBlockInCvContent(options.target.current_content, options.block_id);
+    const suggestedBlock = normalizeCvBlock(options.suggested_block, current.block);
+    const replacement = replaceBlockInCvContent(
+      options.target.current_content,
+      options.block_id,
+      suggestedBlock
+    );
+
+    if (options.target.cv_kind === "tailored") {
+      const updatedTailoredCv = await this.tailoredCvRepository.updateById(
+        options.user_id,
+        options.target.cv_id,
+        {
+          current_content: replacement.content
+        }
+      );
+
+      if (!updatedTailoredCv) {
+        throw new NotFoundError("Tailored CV was not found");
+      }
+    } else {
+      const updatedMasterCv = await this.masterCvRepository.updateById(
+        options.user_id,
+        options.target.cv_id,
+        {
+          current_content: replacement.content,
+          summary_text: buildCvSummaryText(replacement.content)
+        }
+      );
+
+      if (!updatedMasterCv) {
+        throw new NotFoundError("Master CV was not found");
+      }
+    }
+
+    const appliedAt = new Date().toISOString();
+    const [suggestion] = await this.aiRepository.createSuggestions([
+      {
+        ai_run_id: options.ai_run_id,
+        user_id: options.user_id,
+        master_cv_id: options.target.cv_kind === "master" ? options.target.cv_id : null,
+        tailored_cv_id: options.target.cv_kind === "tailored" ? options.target.cv_id : null,
+        block_id: options.block_id,
+        action_type: options.action_type,
+        before_content: options.before_block,
+        suggested_content: asRecord(replacement.updated_block),
+        option_group_key: null,
+        status: "applied",
+        applied_at: appliedAt
+      }
+    ]);
+
+    if (!suggestion) {
+      throw new InternalServerError("AI suggestion could not be persisted after applying block update");
+    }
+
+    if (options.target.cv_kind === "tailored") {
+      await this.cvRevisionsService.createTailoredBlockRevision({
+        user_id: options.user_id,
+        tailored_cv_id: options.target.cv_id,
+        block: replacement.updated_block,
+        change_source: "ai",
+        ai_suggestion_id: suggestion.id,
+        created_by_user_id: options.user_id
+      });
+    } else {
+      await this.cvRevisionsService.createMasterBlockRevision({
+        user_id: options.user_id,
+        master_cv_id: options.target.cv_id,
+        block: replacement.updated_block,
+        change_source: "ai",
+        ai_suggestion_id: suggestion.id,
+        created_by_user_id: options.user_id
+      });
+    }
+
+    return {
+      ai_run_id: options.ai_run_id,
+      suggestion_id: suggestion.id,
+      cv_kind: options.target.cv_kind,
+      master_cv_id: options.target.cv_kind === "master" ? options.target.cv_id : null,
+      tailored_cv_id: options.target.cv_kind === "tailored" ? options.target.cv_id : null,
       updated_block: replacement.updated_block,
       section_id: replacement.section_id
     };
@@ -1483,11 +1454,13 @@ export class AiService {
 
     try {
       const aliasContext = buildTailoredDraftModelContent(masterCv.current_content);
+      const selectedTopics = this.extractSelectedAnswerOptions(input.answers, "priority_topics");
+      const selectedKeywords = this.extractSelectedAnswerOptions(input.answers, "priority_keywords");
       const flowInput = {
         master_cv: aliasContext.model_content,
         role: input.job.job_title,
-        selected_topics: this.extractSelectedAnswerOptions(input.answers, "priority_topics"),
-        selected_keywords: this.extractSelectedAnswerOptions(input.answers, "priority_keywords"),
+        selected_topics: selectedTopics,
+        selected_keywords: selectedKeywords,
         answered_questions: this.extractAnsweredQuestions(input.answers)
       };
 
@@ -1519,6 +1492,13 @@ export class AiService {
       );
       normalizedContent = stabilized.content;
 
+      const skillsEnsured = this.ensureTailoredSkillsSection(
+        normalizedContent,
+        selectedKeywords,
+        selectedTopics
+      );
+      normalizedContent = skillsEnsured.content;
+
       this.assertTailoredDraftSemanticContent(normalizedContent);
       this.assertTailoredDraftDivergesFromMaster(normalizedContent, masterCv.current_content);
 
@@ -1544,10 +1524,15 @@ export class AiService {
           flow_type: "tailored_draft" as const,
           prompt_key: prompt.prompt_key,
           prompt_version: prompt.prompt_version,
-          changed_block_ids: this.resolveChangedBlockAliases(
-            asStringArray(output.changed_block_ids),
-            aliasContext.alias_map.block_alias_to_id
-          )
+          changed_block_ids: [
+            ...new Set([
+              ...this.resolveChangedBlockAliases(
+                asStringArray(output.changed_block_ids),
+                aliasContext.alias_map.block_alias_to_id
+              ),
+              ...skillsEnsured.changed_block_ids
+            ])
+          ]
         }
       };
 
@@ -1755,6 +1740,112 @@ export class AiService {
     } catch {
       // Keep the original error path; watchdog will still sweep stale pending runs.
     }
+  }
+
+  private ensureTailoredSkillsSection(
+    content: TailoredCvRecord["current_content"],
+    selectedKeywords: string[],
+    selectedTopics: string[]
+  ): SkillsSectionEnsureResult {
+    const generatedSkills = this.buildGeneratedSkills(selectedKeywords, selectedTopics);
+    if (generatedSkills.length === 0) {
+      return {
+        content,
+        changed_block_ids: []
+      };
+    }
+
+    const nextContent = cloneCvContent(content);
+    const sections = [...nextContent.sections].sort((a, b) => a.order - b.order);
+    const existingSkillsSection = sections.find(
+      (section) => normalizeSectionType(asString(section.type)) === "skills"
+    );
+
+    if (existingSkillsSection) {
+      const firstBlock = [...existingSkillsSection.blocks].sort((a, b) => a.order - b.order)[0];
+      if (!firstBlock) {
+        return {
+          content,
+          changed_block_ids: []
+        };
+      }
+
+      const fields = asRecord(firstBlock.fields);
+      const existingSkills = dedupeSkills([
+        ...asStringArray(fields.skills),
+        ...asStringArray(fields.items),
+        ...asString(fields.text)
+          .split(/[,;|]/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      ]);
+      const mergedSkills = dedupeSkills([...existingSkills, ...generatedSkills]).slice(0, 24);
+      if (stableStringify(existingSkills) === stableStringify(mergedSkills)) {
+        return {
+          content,
+          changed_block_ids: []
+        };
+      }
+
+      firstBlock.fields = {
+        ...fields,
+        skills: mergedSkills,
+        items: mergedSkills,
+        text: mergedSkills.join(", ")
+      };
+
+      return {
+        content: nextContent,
+        changed_block_ids: [firstBlock.id]
+      };
+    }
+
+    const maxOrder = nextContent.sections.reduce((max, section) => Math.max(max, section.order), -1);
+    const blockId = `skills-block-${randomUUID()}`;
+    nextContent.sections.push({
+      id: `skills-section-${randomUUID()}`,
+      type: "skills",
+      title: "Skills",
+      order: maxOrder + 1,
+      blocks: [
+        {
+          id: blockId,
+          type: "skills",
+          order: 0,
+          visibility: "visible",
+          fields: {
+            skills: generatedSkills,
+            items: generatedSkills,
+            text: generatedSkills.join(", ")
+          },
+          meta: {}
+        }
+      ],
+      meta: {}
+    });
+
+    return {
+      content: nextContent,
+      changed_block_ids: [blockId]
+    };
+  }
+
+  private buildGeneratedSkills(selectedKeywords: string[], selectedTopics: string[]): string[] {
+    const topicSkills = selectedTopics.filter((topic) => {
+      const trimmed = topic.trim();
+      if (!trimmed || trimmed.length > 80) {
+        return false;
+      }
+
+      const words = trimmed.split(/\s+/).filter(Boolean);
+      if (words.length > 5) {
+        return false;
+      }
+
+      return !/[.!?]/.test(trimmed);
+    });
+
+    return dedupeSkills([...selectedKeywords, ...topicSkills]).slice(0, 24);
   }
 
   private assertTailoredDraftSemanticContent(content: TailoredCvRecord["current_content"]): void {

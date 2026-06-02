@@ -4,9 +4,7 @@ import { validate } from "../../shared/validation/validate";
 import type { AiController } from "./ai.controller";
 import {
   aiRunIdParamsSchema,
-  aiBlockCompareSchema,
   aiImportImproveSchema,
-  aiBlockOptionsSchema,
   aiBlockSuggestSchema,
   aiFollowUpQuestionsSchema,
   aiJobAnalysisSchema,
@@ -101,20 +99,6 @@ export const createAiRouter = (
     ...inferenceGuard,
     validate({ body: aiBlockSuggestSchema }),
     aiController.postBlockSuggest
-  );
-
-  router.post(
-    "/ai/blocks/compare",
-    ...inferenceGuard,
-    validate({ body: aiBlockCompareSchema }),
-    aiController.postBlockCompare
-  );
-
-  router.post(
-    "/ai/blocks/options",
-    ...inferenceGuard,
-    validate({ body: aiBlockOptionsSchema }),
-    aiController.postBlockOptions
   );
 
   router.get(

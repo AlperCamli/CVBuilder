@@ -560,13 +560,10 @@ export interface CreateMasterCvFromImportResponse {
 }
 
 export type AiSuggestionActionType =
-  | "rewrite"
   | "summarize"
   | "improve"
   | "ats_optimize"
-  | "options"
-  | "expand"
-  | "shorten";
+  | "expand";
 
 export type AiSuggestionStatus = "pending" | "applied" | "rejected" | "expired";
 
@@ -595,8 +592,6 @@ export interface AiRunSummary {
     | "follow_up_questions"
     | "tailored_draft"
     | "block_suggest"
-    | "block_compare"
-    | "multi_option"
     | "import_improve"
     | "summary"
     | "improve";
@@ -751,35 +746,12 @@ export interface ImportImproveResponse {
 
 export interface AiSuggestResponse {
   ai_run_id: string;
-  suggestion_ids: string[];
-  suggestions: Array<
-    AiSuggestionSummary & {
-      before_content: Record<string, unknown> | null;
-      suggested_content: Record<string, unknown>;
-      rationale: string;
-    }
-  >;
-}
-
-export interface AiBlockCompareResult {
-  ai_run_id: string;
-  comparison_summary: string;
-  gap_highlights: string[];
-  improvement_guidance: string[];
-  matched_keywords: string[];
-  missing_keywords: string[];
-}
-
-export interface AiBlockOptionsResult {
-  ai_run_id: string;
-  option_group_key: string;
-  suggestions: Array<
-    AiSuggestionSummary & {
-      before_content: Record<string, unknown> | null;
-      suggested_content: Record<string, unknown>;
-      rationale: string;
-    }
-  >;
+  suggestion_id: string;
+  cv_kind: "master" | "tailored";
+  master_cv_id: string | null;
+  tailored_cv_id: string | null;
+  updated_block: CvBlock;
+  section_id: string;
 }
 
 export interface SuggestionApplyResponse {

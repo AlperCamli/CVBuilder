@@ -42,6 +42,15 @@ export interface CreateTailoredBlockRevisionInput {
   created_by_user_id?: string | null;
 }
 
+export interface CreateMasterBlockRevisionInput {
+  user_id: string;
+  master_cv_id: string;
+  block: CvBlock;
+  change_source: CvRevisionChangeSource;
+  ai_suggestion_id?: string | null;
+  created_by_user_id?: string | null;
+}
+
 export interface RestoreRevisionResponse {
   tailored_cv_id: string;
   restored_from_revision_id: string;

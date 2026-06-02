@@ -74,16 +74,6 @@ export class AiController {
     sendSuccess(response, data);
   });
 
-  postBlockCompare = asyncHandler(async (request: Request, response: Response) => {
-    const data = await this.aiService.compareBlock(requireSession(request), request.body);
-    sendSuccess(response, data);
-  });
-
-  postBlockOptions = asyncHandler(async (request: Request, response: Response) => {
-    const data = await this.aiService.generateBlockOptions(requireSession(request), request.body);
-    sendSuccess(response, data);
-  });
-
   getSuggestion = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.aiService.getSuggestion(requireSession(request), request.params.suggestionId);
     sendSuccess(response, data);

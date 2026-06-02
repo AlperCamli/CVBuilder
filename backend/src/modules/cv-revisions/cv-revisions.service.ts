@@ -10,6 +10,7 @@ import type { CvRevisionsRepository } from "./cv-revisions.repository";
 import type {
   BlockRevisionListResponse,
   CreateTailoredBlockRevisionInput,
+  CreateMasterBlockRevisionInput,
   CvBlockRevisionDetail,
   CvBlockRevisionSummary,
   RestoreRevisionResponse,
@@ -70,6 +71,33 @@ export class CvRevisionsService {
       cv_kind: "tailored",
       tailored_cv_id: input.tailored_cv_id,
       master_cv_id: null,
+      block_id: input.block.id,
+      block_type: input.block.type,
+      revision_number: latest + 1,
+      content_snapshot: input.block as unknown as Record<string, unknown>,
+      change_source: input.change_source,
+      ai_suggestion_id: input.ai_suggestion_id ?? null,
+      created_by_user_id: input.created_by_user_id ?? null
+    });
+
+    return this.toSummary(created);
+  }
+
+  async createMasterBlockRevision(
+    input: CreateMasterBlockRevisionInput
+  ): Promise<CvBlockRevisionSummary> {
+    const latest = await this.cvRevisionsRepository.findLatestRevisionNumber({
+      user_id: input.user_id,
+      cv_kind: "master",
+      master_cv_id: input.master_cv_id,
+      block_id: input.block.id
+    });
+
+    const created = await this.cvRevisionsRepository.create({
+      user_id: input.user_id,
+      cv_kind: "master",
+      master_cv_id: input.master_cv_id,
+      tailored_cv_id: null,
       block_id: input.block.id,
       block_type: input.block.type,
       revision_number: latest + 1,

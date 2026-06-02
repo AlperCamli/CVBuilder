@@ -15,14 +15,10 @@ const REQUIRED_PROMPT_TARGETS: PromptCoverageTarget[] = [
   { flow_type: "import_improve", action_type: null },
   { flow_type: "cv_parse", action_type: null },
   { flow_type: "cover_letter_generation", action_type: null },
-  { flow_type: "block_compare", action_type: null },
-  { flow_type: "multi_option", action_type: "options" },
   { flow_type: "block_suggest", action_type: "improve" },
-  { flow_type: "block_suggest", action_type: "rewrite" },
   { flow_type: "block_suggest", action_type: "summarize" },
-  { flow_type: "block_suggest", action_type: "shorten" },
   { flow_type: "block_suggest", action_type: "expand" },
-  { flow_type: "block_suggest", action_type: "options" }
+  { flow_type: "block_suggest", action_type: "ats_optimize" }
 ];
 
 const toCoverageKey = (target: PromptCoverageTarget): string =>

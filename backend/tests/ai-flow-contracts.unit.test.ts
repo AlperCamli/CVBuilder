@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockSuggestOutputSchema,
   importImproveOutputSchema,
   tailoredDraftOutputSchema
 } from "../src/modules/ai/flows/flow-contracts";
@@ -180,5 +181,40 @@ describe("AI flow output contracts", () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it("accepts one auto-applied block suggestion output", () => {
+    const parsed = blockSuggestOutputSchema.safeParse({
+      suggested_block: {
+        id: "summary-1",
+        type: "summary",
+        order: 0,
+        visibility: "visible",
+        fields: {
+          text: "Improved summary."
+        },
+        meta: {}
+      }
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects old block suggestion arrays and rationale summaries", () => {
+    const parsed = blockSuggestOutputSchema.safeParse({
+      suggestions: [
+        {
+          label: "Option",
+          rationale: "Why",
+          suggested_block: {
+            fields: {
+              text: "Old shape"
+            }
+          }
+        }
+      ]
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });

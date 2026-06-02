@@ -37,7 +37,12 @@
       "Bash(sips -Z 1200 og-image.png --out og-image-social.jpg -s format jpeg -s formatOptions 85)",
       "Bash(sips -g pixelWidth -g pixelHeight og-image-social.jpg)",
       "Bash(sips -g pixelWidth -g pixelHeight logo.png)",
-      "Bash(curl -sI \"https://jobspecificcv.com/images/logo.png\")"
+      "Bash(curl -sI \"https://jobspecificcv.com/images/logo.png\")",
+      "Bash(ls /Users/alpercamli/Desktop/CV_Builder/.claude/SKİLLS/ 2>/dev/null; echo \"---\"; mkdir -p /Users/alpercamli/Desktop/CV_Builder/.claude/skills/kb-to-sql-query /Users/alpercamli/Desktop/CV_Builder/.claude/skills/db-kb-writer && echo \"created\")",
+      "Bash(awk 'NR>=16 && NR<=18 {printf \"%d: [%s]\\\\n\", NR, $0}' src/app/pages/Landing.tsx)"
+    ],
+    "additionalDirectories": [
+      "/Users/alpercamli/Desktop/CV_Builder/.claude/skills"
     ]
   }
 }

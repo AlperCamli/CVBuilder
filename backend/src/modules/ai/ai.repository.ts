@@ -38,6 +38,8 @@ export interface CreateAiSuggestionPayload {
   before_content?: Record<string, unknown> | null;
   suggested_content: Record<string, unknown>;
   option_group_key?: string | null;
+  status?: AiSuggestionStatus;
+  applied_at?: string | null;
 }
 
 export interface UpdateAiSuggestionPayload {
@@ -399,8 +401,8 @@ export class SupabaseAiRepository implements AiRepository {
           before_content: payload.before_content ?? null,
           suggested_content: payload.suggested_content,
           option_group_key: payload.option_group_key ?? null,
-          status: "pending",
-          applied_at: null,
+          status: payload.status ?? "pending",
+          applied_at: payload.applied_at ?? null,
           created_at: new Date().toISOString()
         }))
       )

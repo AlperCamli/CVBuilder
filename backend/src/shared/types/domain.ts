@@ -91,8 +91,6 @@ export type AiFlowType =
   | "follow_up_questions"
   | "tailored_draft"
   | "block_suggest"
-  | "block_compare"
-  | "multi_option"
   | "import_improve"
   | "summary"
   | "improve"
@@ -134,13 +132,10 @@ export interface AiRunRecord {
 }
 
 export type AiSuggestionActionType =
-  | "rewrite"
   | "summarize"
   | "improve"
   | "ats_optimize"
-  | "options"
-  | "expand"
-  | "shorten";
+  | "expand";
 
 export type AiSuggestionStatus = "pending" | "applied" | "rejected" | "expired";
 

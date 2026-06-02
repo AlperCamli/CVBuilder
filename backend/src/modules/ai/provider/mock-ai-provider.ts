@@ -180,10 +180,10 @@ const buildSuggestionText = (
     return clip(starter, 900);
   }
 
-  if (actionType === "summarize" || actionType === "shorten") {
+  if (actionType === "summarize") {
     const sentences = splitSentences(cleanSource, 2);
     const merged = sentences.join(" ") || cleanSource;
-    return clip(merged, actionType === "shorten" ? 180 : 260);
+    return clip(merged, 260);
   }
 
   if (actionType === "expand") {
@@ -199,18 +199,6 @@ const buildSuggestionText = (
     }
 
     return clip(`${cleanSource} Core keywords: ${keywordText}.`, 900);
-  }
-
-  if (actionType === "rewrite") {
-    const suffix = cleanInstruction ? ` Focus: ${cleanInstruction}.` : "";
-    return clip(`Rewritten: ${cleanSource}${suffix}`, 900);
-  }
-
-  if (actionType === "options") {
-    const optionStyle = ["direct", "achievement-driven", "concise"];
-    const style = optionStyle[variantIndex % optionStyle.length];
-    const suffix = keywordText ? ` Keywords: ${keywordText}.` : "";
-    return clip(`Option ${variantIndex + 1} (${style}): ${cleanSource}${suffix}`, 900);
   }
 
   const defaultSuffix = cleanInstruction ? ` ${cleanInstruction}` : "";
@@ -492,13 +480,9 @@ const generateCoverLetter = (input: Record<string, unknown>): Record<string, unk
 
 const generateBlockSuggestions = (
   input: Record<string, unknown>,
-  fallbackCount = 1
+  _fallbackCount = 1
 ): Record<string, unknown> => {
   const actionType = asString(input.action_type) || "improve";
-  const optionCount =
-    Number.isInteger(input.option_count) && Number(input.option_count) > 0
-      ? Number(input.option_count)
-      : fallbackCount;
   const block = asRecord(input.block);
   const userInstruction = asString(input.user_instruction);
   const jobDescription = asString(input.job_description);
@@ -532,64 +516,21 @@ const generateBlockSuggestions = (
     };
 
     return {
-      suggestions: [
-        {
-          label: "Skills Pool",
-          rationale: "Derived from existing skills, experience descriptions, and education context.",
-          suggested_block: suggestedBlock
-        }
-      ]
+      suggested_block: suggestedBlock
     };
   }
 
-  const suggestions = Array.from({ length: optionCount }).map((_, index) => {
-    const nextText = buildSuggestionText(primary.text, actionType, keywords, userInstruction, index);
-    const suggestedBlock = setPrimaryTextField(block, primary.key, nextText);
+  const nextText = buildSuggestionText(primary.text, actionType, keywords, userInstruction, 0);
+  const suggestedBlock = setPrimaryTextField(block, primary.key, nextText);
 
-    return {
-      label: actionType === "options" ? `Option ${index + 1}` : capitalize(actionType.replace("_", " ")),
-      rationale:
-        actionType === "ats_optimize"
-          ? "Added role-relevant keywords while preserving source context."
-          : actionType === "shorten" || actionType === "summarize"
-            ? "Condensed text while keeping core signal and impact language."
-            : actionType === "expand"
-              ? "Expanded context to make scope and impact clearer."
-              : "Adjusted wording for stronger relevance and clarity.",
-      suggested_block: {
-        ...suggestedBlock,
-        meta: {
-          ...asRecord(suggestedBlock.meta),
-          ai_action_type: actionType,
-          ai_option_index: index
-        }
+  return {
+    suggested_block: {
+      ...suggestedBlock,
+      meta: {
+        ...asRecord(suggestedBlock.meta),
+        ai_action_type: actionType
       }
-    };
-  });
-
-  return {
-    suggestions
-  };
-};
-
-const generateBlockCompare = (input: Record<string, unknown>): Record<string, unknown> => {
-  const jobDescription = asString(input.job_description);
-  const blockText = asString(input.block_text);
-  const keywords = tokenizeKeywords(jobDescription, 10);
-  const blockTextLower = blockText.toLowerCase();
-  const matched = keywords.filter((keyword) => blockTextLower.includes(keyword));
-  const missing = keywords.filter((keyword) => !blockTextLower.includes(keyword));
-
-  const gapHighlights = missing.slice(0, 5).map((keyword) => `${capitalize(keyword)} is not clearly evidenced.`);
-  const guidance = missing.slice(0, 5).map((keyword) => `Add one quantified example for ${capitalize(keyword)}.`);
-  const summary = `This block aligns with ${matched.length}/${keywords.length || 1} priority keywords from the job description.`;
-
-  return {
-    comparison_summary: summary,
-    gap_highlights: gapHighlights,
-    improvement_guidance: guidance,
-    matched_keywords: matched,
-    missing_keywords: missing
+    }
   };
 };
 
@@ -618,9 +559,6 @@ export class MockAiProvider implements AiProvider {
       case "block_suggest":
         outputPayload = generateBlockSuggestions(request.input_payload, 1);
         break;
-      case "multi_option":
-        outputPayload = generateBlockSuggestions(request.input_payload, 3);
-        break;
       case "import_improve":
         outputPayload = generateImportImprove(request.input_payload);
         break;
@@ -629,9 +567,6 @@ export class MockAiProvider implements AiProvider {
         break;
       case "cover_letter_generation":
         outputPayload = generateCoverLetter(request.input_payload);
-        break;
-      case "block_compare":
-        outputPayload = generateBlockCompare(request.input_payload);
         break;
       case "summary":
       case "improve":

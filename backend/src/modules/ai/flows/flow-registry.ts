@@ -1,7 +1,6 @@
 import type { ZodTypeAny } from "zod";
 import type { AiFlowType } from "../../../shared/types/domain";
 import {
-  blockCompareOutputSchema,
   blockSuggestOutputSchema,
   followUpQuestionsOutputSchema,
   importImproveOutputSchema,
@@ -41,30 +40,15 @@ const definitions: AiFlowDefinition[] = [
     prompt_key: "tailored-draft",
     prompt_version: "phase6-v1",
     system_prompt:
-      "You are a CV tailoring assistant. Tailor the sanitized master_cv body for the target role using selected_topics, selected_keywords, and answered_questions. Use the same language as the source CV content. Preserve facts; never invent employers, dates, institutions, certifications, awards, or achievements. The CV header/contact data is intentionally omitted and will be restored by the backend, so do not create a header/contact section. Keep existing alias ids for unchanged or rewritten sections/blocks. Add new simple alias ids only for new blocks/sections. If an answer is negative or says the user lacks something, do not mention the weakness; find the best truthful fit using the existing CV content and selected signals. Output exactly one JSON object with root keys current_content and changed_block_ids. Do not output generation_summary, markdown, or prose outside JSON.",
+      "You are a CV tailoring assistant. Tailor the sanitized master_cv body for the target role using selected_topics, selected_keywords, and answered_questions. Use the same language as the source CV content. Preserve facts; never invent employers, dates, institutions, certifications, awards, or achievements. The CV header/contact data is intentionally omitted and will be restored by the backend, so do not create a header/contact section. Keep existing alias ids for unchanged or rewritten sections/blocks. Add new simple alias ids only for new blocks/sections. If the source CV has no skills section, you may add a concise Skills section using selected keywords/topics that are truthful skill signals. If an answer is negative or says the user lacks something, do not mention the weakness; find the best truthful fit using the existing CV content and selected signals. Output exactly one JSON object with root keys current_content and changed_block_ids. Do not output generation_summary, markdown, or prose outside JSON.",
     output_schema: tailoredDraftOutputSchema
   },
   {
     flow_type: "block_suggest",
     prompt_key: "block-suggest",
-    prompt_version: "phase3-v1",
+    prompt_version: "phase8-v1",
     system_prompt:
-      "Generate contextual block-level edit suggestions without directly mutating stored CV content.",
-    output_schema: blockSuggestOutputSchema
-  },
-  {
-    flow_type: "block_compare",
-    prompt_key: "block-compare",
-    prompt_version: "phase3-v1",
-    system_prompt:
-      "Compare a CV block against job requirements and produce actionable gap feedback.",
-    output_schema: blockCompareOutputSchema
-  },
-  {
-    flow_type: "multi_option",
-    prompt_key: "block-options",
-    prompt_version: "phase3-v1",
-    system_prompt: "Generate multiple alternative rewrite options for one CV block.",
+      "Update one CV block for the requested action while preserving truthful facts, IDs, type, order, and visibility. Return strict JSON with one root key suggested_block only. Do not include rationale, labels, summaries, options, markdown, or prose.",
     output_schema: blockSuggestOutputSchema
   },
   {
