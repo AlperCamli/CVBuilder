@@ -172,7 +172,7 @@ export interface UpdateJobInput {
 export interface JobAnalysisInput {
   master_cv_id: string;
   job: {
-    company_name: string;
+    company_name?: string;
     job_title: string;
     job_description: string;
   };
@@ -180,16 +180,13 @@ export interface JobAnalysisInput {
 
 export interface FollowUpQuestionsInput {
   master_cv_id: string;
-  job: {
-    company_name: string;
-    job_title: string;
-    job_description: string;
-  };
-  prior_analysis?: Record<string, unknown>;
+  selected_topics: string[];
+  selected_keywords: string[];
 }
 
 export interface FollowUpAnswer {
   question_id: string;
+  question_text?: string | null;
   answer_text?: string | null;
   selected_options?: string[];
 }
@@ -200,7 +197,7 @@ export interface TailoredDraftInput {
   language?: string;
   template_id?: string | null;
   job: {
-    company_name: string;
+    company_name?: string;
     job_title: string;
     job_description: string;
     job_posting_url?: string | null;

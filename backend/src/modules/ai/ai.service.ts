@@ -40,6 +40,10 @@ import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-
 import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
 import { stabilizeTailoredDraftFromMaster } from "./tailored-draft-empty-field-recovery";
 import { evaluateTailoredDraftMasterDivergence } from "./tailored-draft-master-divergence";
+import {
+  buildTailoredDraftModelContent,
+  resolveTailoredDraftModelContent
+} from "./tailored-draft-model-content";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -53,6 +57,7 @@ import type {
   BlockCompareResult,
   BlockOptionsInput,
   BlockSuggestInput,
+  FollowUpAnswer,
   FollowUpQuestionsInput,
   FollowUpQuestionsResult,
   ImportImproveInput,
@@ -453,11 +458,8 @@ export class AiService {
     const masterCv = await this.requireMasterCv(session.appUser.id, input.master_cv_id);
 
     const flowInput = {
-      company_name: input.job.company_name,
-      job_title: input.job.job_title,
-      job_description: input.job.job_description,
-      master_cv_text: buildCvSummaryText(masterCv.current_content, 5000) ?? "",
-      master_cv_summary: masterCv.summary_text
+      role: input.job.job_title,
+      job_description: input.job.job_description
     };
 
     const executed = await this.executeFlow({
@@ -465,7 +467,7 @@ export class AiService {
       user_id: session.appUser.id,
       master_cv_id: masterCv.id,
       input_payload: flowInput,
-      user_prompt: `Analyze role fit for ${input.job.job_title} at ${input.job.company_name}.`
+      user_prompt: `Analyze CV keywords and topics for the ${input.job.job_title} role.`
     });
 
     await this.billingService.recordAiActionUsage(session.appUser.id);
@@ -481,13 +483,9 @@ export class AiService {
 
     await this.requireMasterCv(session.appUser.id, input.master_cv_id);
 
-    const priorAnalysis = asRecord(input.prior_analysis);
     const flowInput = {
-      company_name: input.job.company_name,
-      job_title: input.job.job_title,
-      job_description: input.job.job_description,
-      gap_keywords: asStringArray(priorAnalysis.gaps),
-      prior_analysis: input.prior_analysis ?? null
+      selected_topics: input.selected_topics,
+      selected_keywords: input.selected_keywords
     };
 
     const executed = await this.executeFlow({
@@ -495,7 +493,7 @@ export class AiService {
       user_id: session.appUser.id,
       master_cv_id: input.master_cv_id,
       input_payload: flowInput,
-      user_prompt: `Generate follow-up questions for ${input.job.job_title} at ${input.job.company_name}.`
+      user_prompt: "Generate short follow-up questions for the selected CV tailoring topics and keywords."
     });
 
     await this.billingService.recordAiActionUsage(session.appUser.id);
@@ -532,18 +530,17 @@ export class AiService {
         prompt_key: string;
         prompt_version: string;
         changed_block_ids: string[];
-        generation_summary: string;
       };
     };
 
     try {
+      const aliasContext = buildTailoredDraftModelContent(masterCv.current_content);
       const flowInput = {
-        master_content: masterCv.current_content,
-        master_cv_title: masterCv.title,
-        master_cv_summary: masterCv.summary_text,
-        job: input.job,
-        answers: input.answers,
-        language: input.language ?? tailoredCv.language
+        master_cv: aliasContext.model_content,
+        role: input.job.job_title,
+        selected_topics: this.extractSelectedAnswerOptions(input.answers, "priority_topics"),
+        selected_keywords: this.extractSelectedAnswerOptions(input.answers, "priority_keywords"),
+        answered_questions: this.extractAnsweredQuestions(input.answers)
       };
 
       const executed = await this.executeFlow({
@@ -553,15 +550,30 @@ export class AiService {
         tailored_cv_id: tailoredCv.id,
         job_id: job.id,
         input_payload: flowInput,
-        user_prompt: `Generate a tailored draft for ${input.job.job_title} at ${input.job.company_name}.`
+        user_prompt: `Generate a tailored draft for the ${input.job.job_title} role.`
       });
 
-      const normalizedContent = normalizeCvContent(
-        asRecord(executed.output).current_content,
-        input.language ?? tailoredCv.language
+      const output = asRecord(executed.output);
+      const normalizedModelContent = normalizeCvContent(
+        asRecord(output.current_content),
+        tailoredCv.language
       );
+      let normalizedContent = normalizeCvContent(
+        resolveTailoredDraftModelContent(
+          normalizedModelContent,
+          masterCv.current_content,
+          aliasContext.alias_map
+        ),
+        tailoredCv.language
+      );
+      const stabilized = stabilizeTailoredDraftFromMaster(
+        normalizedContent,
+        masterCv.current_content
+      );
+      normalizedContent = stabilized.content;
 
       this.assertTailoredDraftSemanticContent(normalizedContent);
+      this.assertTailoredDraftDivergesFromMaster(normalizedContent, masterCv.current_content);
 
       const updatedTailoredCv = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCv.id, {
         current_content: normalizedContent,
@@ -587,8 +599,10 @@ export class AiService {
           flow_type: "tailored_draft",
           prompt_key: executed.prompt_key,
           prompt_version: executed.prompt_version,
-          changed_block_ids: asStringArray(asRecord(executed.output).changed_block_ids),
-          generation_summary: String(asRecord(executed.output).generation_summary ?? "")
+          changed_block_ids: this.resolveChangedBlockAliases(
+            asStringArray(output.changed_block_ids),
+            aliasContext.alias_map.block_alias_to_id
+          )
         }
       };
     } catch (error) {
@@ -1319,19 +1333,58 @@ export class AiService {
     }
   }
 
+  private extractSelectedAnswerOptions(
+    answers: FollowUpAnswer[],
+    questionId: string
+  ): string[] {
+    const selected = answers.find((answer) => answer.question_id === questionId)?.selected_options ?? [];
+    return [...new Set(selected.map((value) => value.trim()).filter(Boolean))].slice(0, 20);
+  }
+
+  private extractAnsweredQuestions(
+    answers: FollowUpAnswer[]
+  ): Array<{ question: string; answer: string }> {
+    return answers
+      .filter((answer) => answer.question_id !== "priority_topics" && answer.question_id !== "priority_keywords")
+      .map((answer) => {
+        const question = (answer.question_text ?? answer.question_id).trim();
+        const answerText = (answer.answer_text ?? "").trim();
+        if (!question || !answerText) {
+          return null;
+        }
+        return {
+          question,
+          answer: answerText
+        };
+      })
+      .filter((item): item is { question: string; answer: string } => Boolean(item))
+      .slice(0, 20);
+  }
+
+  private resolveChangedBlockAliases(
+    changedBlockIds: string[],
+    blockAliasToId: Record<string, string>
+  ): string[] {
+    return [
+      ...new Set(
+        changedBlockIds
+          .map((blockId) => blockAliasToId[blockId] ?? blockId)
+          .map((blockId) => blockId.trim())
+          .filter(Boolean)
+      )
+    ];
+  }
+
   private async executeTailoringJobAnalysisRun(
     userId: string,
     run: AiRunRecord,
     input: JobAnalysisInput,
     prompt: ResolvedPromptSnapshot
   ): Promise<AiRunRecord> {
-    const masterCv = await this.requireMasterCv(userId, input.master_cv_id);
+    await this.requireMasterCv(userId, input.master_cv_id);
     const flowInput = {
-      company_name: input.job.company_name,
-      job_title: input.job.job_title,
-      job_description: input.job.job_description,
-      master_cv_text: buildCvSummaryText(masterCv.current_content, 5000) ?? "",
-      master_cv_summary: masterCv.summary_text
+      role: input.job.job_title,
+      job_description: input.job.job_description
     };
 
     const executed = await this.executeRunFlow({
@@ -1343,15 +1396,8 @@ export class AiService {
     });
 
     const resultPayload: JobAnalysisResult = {
-      keywords: asStringArray(asRecord(executed.output_payload).keywords),
-      requirements: asStringArray(asRecord(executed.output_payload).requirements),
-      strengths: asStringArray(asRecord(executed.output_payload).strengths),
-      gaps: asStringArray(asRecord(executed.output_payload).gaps),
-      summary: String(asRecord(executed.output_payload).summary ?? ""),
-      fit_score:
-        typeof asRecord(executed.output_payload).fit_score === "number"
-          ? Number(asRecord(executed.output_payload).fit_score)
-          : null
+      topics: asStringArray(asRecord(executed.output_payload).topics),
+      keywords: asStringArray(asRecord(executed.output_payload).keywords)
     };
 
     const completed = await this.completeRunWithPayload(
@@ -1373,13 +1419,9 @@ export class AiService {
     prompt: ResolvedPromptSnapshot
   ): Promise<AiRunRecord> {
     await this.requireMasterCv(userId, input.master_cv_id);
-    const priorAnalysis = asRecord(input.prior_analysis);
     const flowInput = {
-      company_name: input.job.company_name,
-      job_title: input.job.job_title,
-      job_description: input.job.job_description,
-      gap_keywords: asStringArray(priorAnalysis.gaps),
-      prior_analysis: input.prior_analysis ?? null
+      selected_topics: input.selected_topics,
+      selected_keywords: input.selected_keywords
     };
 
     const executed = await this.executeRunFlow({
@@ -1440,13 +1482,13 @@ export class AiService {
     });
 
     try {
+      const aliasContext = buildTailoredDraftModelContent(masterCv.current_content);
       const flowInput = {
-        master_content: masterCv.current_content,
-        master_cv_title: masterCv.title,
-        master_cv_summary: masterCv.summary_text,
-        job: input.job,
-        answers: input.answers,
-        language: input.language ?? tailoredCv.language
+        master_cv: aliasContext.model_content,
+        role: input.job.job_title,
+        selected_topics: this.extractSelectedAnswerOptions(input.answers, "priority_topics"),
+        selected_keywords: this.extractSelectedAnswerOptions(input.answers, "priority_keywords"),
+        answered_questions: this.extractAnsweredQuestions(input.answers)
       };
 
       const executed = await this.executeRunFlow({
@@ -1458,9 +1500,17 @@ export class AiService {
       });
 
       const output = asRecord(executed.output_payload);
-      let normalizedContent = normalizeCvContent(
+      const normalizedModelContent = normalizeCvContent(
         asRecord(output.current_content),
-        input.language ?? tailoredCv.language
+        tailoredCv.language
+      );
+      let normalizedContent = normalizeCvContent(
+        resolveTailoredDraftModelContent(
+          normalizedModelContent,
+          masterCv.current_content,
+          aliasContext.alias_map
+        ),
+        tailoredCv.language
       );
 
       const stabilized = stabilizeTailoredDraftFromMaster(
@@ -1494,8 +1544,10 @@ export class AiService {
           flow_type: "tailored_draft" as const,
           prompt_key: prompt.prompt_key,
           prompt_version: prompt.prompt_version,
-          changed_block_ids: asStringArray(output.changed_block_ids),
-          generation_summary: String(output.generation_summary ?? "")
+          changed_block_ids: this.resolveChangedBlockAliases(
+            asStringArray(output.changed_block_ids),
+            aliasContext.alias_map.block_alias_to_id
+          )
         }
       };
 
@@ -1858,16 +1910,15 @@ export class AiService {
   ): string {
     if (flowType === "job_analysis") {
       const input = payload as JobAnalysisInput;
-      return `Analyze role fit for ${input.job.job_title} at ${input.job.company_name}.`;
+      return `Analyze CV keywords and topics for the ${input.job.job_title} role.`;
     }
 
     if (flowType === "follow_up_questions") {
-      const input = payload as FollowUpQuestionsInput;
-      return `Generate follow-up questions for ${input.job.job_title} at ${input.job.company_name}.`;
+      return "Generate short follow-up questions for the selected CV tailoring topics and keywords.";
     }
 
     const input = payload as TailoredCvDraftInput;
-    return `Generate a tailored draft for ${input.job.job_title} at ${input.job.company_name}.`;
+    return `Generate a tailored draft for the ${input.job.job_title} role.`;
   }
 
   private async requireTailoringRun(userId: string, aiRunId: string): Promise<AiRunRecord> {
@@ -2077,10 +2128,11 @@ export class AiService {
       };
     }
 
+    const companyName = input.job.company_name?.trim() ?? "";
     const createdJob = await this.jobsRepository.create({
       user_id: userId,
       tailored_cv_id: null,
-      company_name: input.job.company_name,
+      company_name: companyName,
       job_title: input.job.job_title,
       job_description: input.job.job_description,
       job_posting_url: input.job.job_posting_url ?? null,
@@ -2097,7 +2149,7 @@ export class AiService {
       user_id: userId,
       master_cv_id: masterCv.id,
       job_id: createdJob.id,
-      title: `${masterCv.title} - ${input.job.company_name}`,
+      title: companyName ? `${masterCv.title} - ${companyName}` : `${masterCv.title} - ${input.job.job_title}`,
       language: clonedContent.language,
       template_id: validatedTemplateId !== undefined ? validatedTemplateId : masterCv.template_id,
       current_content: clonedContent,
@@ -2120,10 +2172,11 @@ export class AiService {
     jobInput: AiTailoredDraftJobPayload
   ) {
     if (!tailoredCv.job_id) {
+      const companyName = jobInput.company_name?.trim() ?? "";
       const createdJob = await this.jobsRepository.create({
         user_id: userId,
         tailored_cv_id: tailoredCv.id,
-        company_name: jobInput.company_name,
+        company_name: companyName,
         job_title: jobInput.job_title,
         job_description: jobInput.job_description,
         job_posting_url: jobInput.job_posting_url ?? null,
@@ -2144,8 +2197,9 @@ export class AiService {
       return createdJob;
     }
 
+    const companyName = jobInput.company_name?.trim() ?? "";
     const updatedJob = await this.jobsRepository.updateById(userId, tailoredCv.job_id, {
-      company_name: jobInput.company_name,
+      company_name: companyName,
       job_title: jobInput.job_title,
       job_description: jobInput.job_description,
       job_posting_url: jobInput.job_posting_url ?? null,

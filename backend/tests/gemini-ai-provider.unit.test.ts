@@ -69,18 +69,7 @@ describe("GeminiAiProvider", () => {
               },
               question_type: {
                 type: "string",
-                enum: ["single_choice", "multi_select", "text"]
-              },
-              target_hint: {
-                anyOf: [
-                  {
-                    type: "string",
-                    maxLength: 160
-                  },
-                  {
-                    type: "null"
-                  }
-                ]
+                enum: ["short_text", "yes_no"]
               }
             },
             required: ["id", "question_type"],
@@ -107,12 +96,8 @@ describe("GeminiAiProvider", () => {
     const questionType = (
       (questionItem.properties as Record<string, unknown>).question_type as Record<string, unknown>
     ).enum;
-    const targetHintAnyOf = (
-      (questionItem.properties as Record<string, unknown>).target_hint as Record<string, unknown>
-    ).anyOf;
 
-    expect(questionType).toEqual(["single_choice", "multi_select", "text"]);
-    expect(Array.isArray(targetHintAnyOf)).toBe(true);
+    expect(questionType).toEqual(["short_text", "yes_no"]);
     expect(questionItem.additionalProperties).toBe(false);
   });
 

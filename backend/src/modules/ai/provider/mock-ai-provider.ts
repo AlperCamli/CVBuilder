@@ -64,6 +64,12 @@ const capitalize = (value: string): string => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "item";
+
 const tokenizeKeywords = (text: string, count: number): string[] => {
   const words = (text.toLowerCase().match(/[\p{L}\p{N}+#/.:-]{3,}/gu) ?? []).filter(
     (word) => !STOP_WORDS.has(word)
@@ -213,89 +219,44 @@ const buildSuggestionText = (
 
 const generateJobAnalysis = (input: Record<string, unknown>): Record<string, unknown> => {
   const jobDescription = asString(input.job_description);
-  const masterText = asString(input.master_cv_text);
   const keywords = tokenizeKeywords(jobDescription, 12);
-  const requirements = splitSentences(jobDescription, 6);
-  const strengths = keywords
-    .filter((keyword) => masterText.toLowerCase().includes(keyword))
-    .slice(0, 6)
-    .map((keyword) => `Evidence found for ${keyword}`);
-  const gaps = keywords
-    .filter((keyword) => !masterText.toLowerCase().includes(keyword))
-    .slice(0, 6)
-    .map((keyword) => `Add concrete evidence for ${keyword}`);
-  const matchedCount = keywords.length === 0 ? 0 : keywords.length - gaps.length;
-  const fitScore = keywords.length === 0 ? 50 : Math.max(25, Math.min(95, Math.round((matchedCount / keywords.length) * 100)));
-
-  const summary = `Role fit is estimated at ${fitScore}%. Prioritize ${
-    gaps.length > 0 ? gaps.slice(0, 3).join("; ") : "strong alignment and quantifiable achievements"
-  }.`;
+  const topics = splitSentences(jobDescription, 8).map((sentence) => clip(sentence, 160));
 
   return {
-    keywords,
-    requirements,
-    strengths,
-    gaps,
-    summary,
-    fit_score: fitScore
+    topics: topics.length > 0 ? topics : keywords.slice(0, 6).map((keyword) => capitalize(keyword)),
+    keywords
   };
 };
 
 const generateFollowUpQuestions = (input: Record<string, unknown>): Record<string, unknown> => {
-  const jobDescription = asString(input.job_description);
-  const keywords = tokenizeKeywords(jobDescription, 8);
-  const gapKeywords = asArray(input.gap_keywords)
+  const topics = asArray(input.selected_topics)
     .map((value) => asString(value))
     .filter(Boolean)
-    .slice(0, 4);
-
-  const focusKeywords = gapKeywords.length > 0 ? gapKeywords : keywords.slice(0, 4);
+    .slice(0, 3);
+  const keywords = asArray(input.selected_keywords)
+    .map((value) => asString(value))
+    .filter(Boolean)
+    .slice(0, 3);
+  const focusItems = [...topics, ...keywords].slice(0, 4);
 
   const questions: Record<string, unknown>[] = [
     {
       id: `q-impact-${randomUUID()}`,
-      question: "Which achievement best demonstrates your impact for this role?",
-      question_type: "text",
-      target_hint: "experience"
+      question: "Which achievement should be emphasized most?",
+      question_type: "short_text"
     },
     {
-      id: `q-priority-${randomUUID()}`,
-      question: "Which focus areas should be emphasized most in this tailored CV?",
-      question_type: "multi_select",
-      choices: focusKeywords.map((keyword) => ({
-        id: keyword,
-        label: capitalize(keyword)
-      })),
-      target_hint: "summary"
-    },
-    {
-      id: `q-tone-${randomUUID()}`,
-      question: "Which writing style should the tailored CV prioritize?",
-      question_type: "single_choice",
-      choices: [
-        {
-          id: "results_first",
-          label: "Results-first"
-        },
-        {
-          id: "technical_depth",
-          label: "Technical depth"
-        },
-        {
-          id: "leadership_focus",
-          label: "Leadership focus"
-        }
-      ],
-      target_hint: "summary"
+      id: `q-confirm-${randomUUID()}`,
+      question: "Should the CV emphasize measurable outcomes where possible?",
+      question_type: "yes_no"
     }
   ];
 
-  for (const gapKeyword of focusKeywords.slice(0, 2)) {
+  for (const item of focusItems.slice(0, 2)) {
     questions.push({
-      id: `q-gap-${gapKeyword}-${randomUUID()}`,
-      question: `Share one concrete example for ${capitalize(gapKeyword)} that should appear in the CV.`,
-      question_type: "text",
-      target_hint: "experience"
+      id: `q-${slugify(item)}-${randomUUID()}`,
+      question: `How should ${item} be reflected in your CV?`,
+      question_type: "short_text"
     });
   }
 
@@ -327,27 +288,19 @@ const ensureTailoredContent = (
 };
 
 const generateTailoredDraft = (input: Record<string, unknown>): Record<string, unknown> => {
-  const masterContent = asRecord(input.master_content);
-  const job = asRecord(input.job);
-  const answers = asArray(input.answers).map((answer) => asRecord(answer));
-  const jobTitle = asString(job.job_title);
-  const companyName = asString(job.company_name);
+  const masterContent = asRecord(input.master_cv);
+  const answers = asArray(input.answered_questions).map((answer) => asRecord(answer));
+  const selectedKeywords = asArray(input.selected_keywords).map((item) => asString(item)).filter(Boolean);
+  const jobTitle = asString(input.role);
   const language = asString(input.language) || asString(masterContent.language) || "en";
-  const jobDescription = asString(job.job_description);
   const answerSummary = answers
-    .map((answer) => asString(answer.answer_text).trim())
+    .map((answer) => asString(answer.answer).trim())
     .filter(Boolean)
     .slice(0, 3)
     .join(" ");
-  const keywords = tokenizeKeywords(jobDescription, 6);
+  const keywords = selectedKeywords.length > 0 ? selectedKeywords.slice(0, 8) : tokenizeKeywords(JSON.stringify(masterContent), 6);
 
   const content = ensureTailoredContent(masterContent, language);
-  const metadata = asRecord(content.metadata);
-  content.metadata = {
-    ...metadata,
-    target_job_title: jobTitle,
-    target_company_name: companyName
-  };
 
   const sections = asArray(content.sections).map((section) => asRecord(section));
   const changedBlockIds: string[] = [];
@@ -365,7 +318,7 @@ const generateTailoredDraft = (input: Record<string, unknown>): Record<string, u
       if (!summaryUpdated && (blockType === "summary" || asString(section.type) === "summary")) {
         const primary = extractPrimaryTextField(block);
         const sourceText = primary.text || "";
-        const intro = `Targeting ${jobTitle || "the role"} at ${companyName || "the company"}.`;
+        const intro = `Targeting ${jobTitle || "the role"}.`;
         const keywordLine = keywords.length > 0 ? ` Key strengths: ${toKeywordsText(keywords)}.` : "";
         const answerLine = answerSummary ? ` Tailoring notes: ${clip(answerSummary, 260)}.` : "";
         const nextText = clip(`${intro} ${sourceText}${keywordLine}${answerLine}`.trim(), 1000);
@@ -407,7 +360,6 @@ const generateTailoredDraft = (input: Record<string, unknown>): Record<string, u
 
   return {
     current_content: content,
-    generation_summary: `Generated tailored draft for ${jobTitle || "target role"} at ${companyName || "target company"}.`,
     changed_block_ids: [...new Set(changedBlockIds)]
   };
 };

@@ -180,7 +180,7 @@ describe("AiService follow_up_questions flow", () => {
           {
             id: "q1",
             question: "Which achievements are most relevant to this role?",
-            question_type: "text"
+            question_type: "short_text"
           }
         ]
       }
@@ -188,14 +188,8 @@ describe("AiService follow_up_questions flow", () => {
 
     const result = await service.generateFollowUpQuestions(session, {
       master_cv_id: masterCv.id,
-      job: {
-        company_name: "Acme",
-        job_title: "Backend Engineer",
-        job_description: "Build APIs and services."
-      },
-      prior_analysis: {
-        gaps: ["leadership examples"]
-      }
+      selected_topics: ["API delivery"],
+      selected_keywords: ["services"]
     });
 
     const questions = result.questions as Array<{ id: string }>;
@@ -221,11 +215,8 @@ describe("AiService follow_up_questions flow", () => {
 
     await service.generateFollowUpQuestions(session, {
       master_cv_id: masterCv.id,
-      job: {
-        company_name: "Acme",
-        job_title: "Backend Engineer",
-        job_description: "Build APIs and services."
-      }
+      selected_topics: ["API delivery"],
+      selected_keywords: ["services"]
     });
 
     expect(providerGenerate).toHaveBeenCalledTimes(1);
@@ -242,7 +233,7 @@ describe("AiService follow_up_questions flow", () => {
           {
             id: "q1",
             question: "Question with unsupported fields",
-            question_type: "text",
+            question_type: "short_text",
             extra: "not allowed"
           }
         ]
@@ -252,11 +243,8 @@ describe("AiService follow_up_questions flow", () => {
     await expect(
       service.generateFollowUpQuestions(session, {
         master_cv_id: masterCv.id,
-        job: {
-          company_name: "Acme",
-          job_title: "Backend Engineer",
-          job_description: "Build APIs and services."
-        }
+        selected_topics: ["API delivery"],
+        selected_keywords: ["services"]
       })
     ).rejects.toBeInstanceOf(AiFlowFailedError);
 
@@ -265,9 +253,8 @@ describe("AiService follow_up_questions flow", () => {
     expect(completeRun).not.toHaveBeenCalled();
   });
 
-  it("normalizes overly long target_hint values instead of failing the flow", async () => {
+  it("accepts yes-no questions", async () => {
     const service = makeService();
-    const longTargetHint = "A".repeat(220);
     providerGenerate.mockResolvedValue({
       provider: "gemini",
       model_name: "gemini-3-flash-preview",
@@ -275,9 +262,8 @@ describe("AiService follow_up_questions flow", () => {
         questions: [
           {
             id: "q1",
-            question: "Which outcomes should we emphasize first?",
-            question_type: "text",
-            target_hint: longTargetHint
+            question: "Should measurable outcomes be emphasized?",
+            question_type: "yes_no"
           }
         ]
       }
@@ -285,17 +271,13 @@ describe("AiService follow_up_questions flow", () => {
 
     const result = await service.generateFollowUpQuestions(session, {
       master_cv_id: masterCv.id,
-      job: {
-        company_name: "Acme",
-        job_title: "Backend Engineer",
-        job_description: "Build APIs and services."
-      }
+      selected_topics: ["API delivery"],
+      selected_keywords: ["services"]
     });
 
-    const questions = result.questions as Array<{ target_hint?: string | null }>;
+    const questions = result.questions as Array<{ question_type: string }>;
     expect(questions).toHaveLength(1);
-    expect(questions[0]?.target_hint).toHaveLength(160);
-    expect(questions[0]?.target_hint).toBe("A".repeat(160));
+    expect(questions[0]?.question_type).toBe("yes_no");
     expect(completeRun).toHaveBeenCalledTimes(1);
     expect(failRun).not.toHaveBeenCalled();
   });
@@ -313,11 +295,8 @@ describe("AiService follow_up_questions flow", () => {
     await expect(
       service.generateFollowUpQuestions(session, {
         master_cv_id: masterCv.id,
-        job: {
-          company_name: "Acme",
-          job_title: "Backend Engineer",
-          job_description: "Build APIs and services."
-        }
+        selected_topics: ["API delivery"],
+        selected_keywords: ["services"]
       })
     ).rejects.toBeInstanceOf(AiProviderError);
 
@@ -339,7 +318,7 @@ describe("AiService follow_up_questions flow", () => {
           {
             id: "q1",
             question: "Which outcomes are most important to highlight?",
-            question_type: "text"
+            question_type: "short_text"
           }
         ]
       }
@@ -354,11 +333,8 @@ describe("AiService follow_up_questions flow", () => {
     await expect(
       service.generateFollowUpQuestions(session, {
         master_cv_id: masterCv.id,
-        job: {
-          company_name: "Acme",
-          job_title: "Backend Engineer",
-          job_description: "Build APIs and services."
-        }
+        selected_topics: ["API delivery"],
+        selected_keywords: ["services"]
       })
     ).rejects.toThrow("Failed to update AI run progress stage");
 

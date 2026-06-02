@@ -56,7 +56,6 @@ describe("AI flow output contracts", () => {
   it("requires structured CV content for tailored_draft outputs", () => {
     const parsed = tailoredDraftOutputSchema.safeParse({
       current_content: "invalid",
-      generation_summary: "Generated draft.",
       changed_block_ids: ["summary-1"]
     });
 
@@ -66,7 +65,6 @@ describe("AI flow output contracts", () => {
   it("accepts valid tailored_draft outputs", () => {
     const parsed = tailoredDraftOutputSchema.safeParse({
       current_content: validCvContent,
-      generation_summary: "Generated draft.",
       changed_block_ids: ["summary-1"]
     });
 
@@ -80,7 +78,6 @@ describe("AI flow output contracts", () => {
         language: "en",
         metadata: {}
       },
-      generation_summary: "Generated draft.",
       changed_block_ids: ["summary-1"]
     });
 
@@ -104,7 +101,6 @@ describe("AI flow output contracts", () => {
           }
         ]
       },
-      generation_summary: "Generated draft.",
       changed_block_ids: ["summary-1"]
     });
 
@@ -142,7 +138,6 @@ describe("AI flow output contracts", () => {
           }
         ]
       },
-      generation_summary: "Generated draft.",
       changed_block_ids: ["edu-1"]
     });
 

@@ -17,7 +17,6 @@ interface TailoringFlowState {
     notes?: string;
   };
   analysis?: JobAnalysisResult;
-  followUpQuestions?: FollowUpQuestion[];
 }
 
 const toOptionalUrl = (value?: string): string | null => {
@@ -56,22 +55,18 @@ export function TailoringFlow() {
   const masterCvId = state.masterCvId ?? id;
   const jobData = state.jobData;
   const analysis = state.analysis;
-  const followUpQuestions = state.followUpQuestions ?? [];
 
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
+  const [followUpQuestions, setFollowUpQuestions] = useState<FollowUpQuestion[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
+  const [loadingFollowUps, setLoadingFollowUps] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
-  const topics = useMemo(
-    () =>
-      (analysis?.requirements?.length ? analysis.requirements : analysis?.strengths?.length ? analysis.strengths : [])
-        .slice(0, 8),
-    [analysis]
-  );
+  const topics = useMemo(() => (analysis?.topics ?? []).slice(0, 10), [analysis]);
 
   const keywords = useMemo(() => (analysis?.keywords ?? []).slice(0, 14), [analysis]);
 
@@ -124,6 +119,7 @@ export function TailoringFlow() {
             }
             return {
               question_id: question.id,
+              question_text: question.question,
               answer_text: answer.slice(0, 4000)
             };
           })
@@ -177,11 +173,47 @@ export function TailoringFlow() {
 
   const handleNext = () => {
     if (currentStep === 0) {
-      setCurrentStep(1);
+      void handleGenerateFollowUps();
       return;
     }
 
     void handleGenerate();
+  };
+
+  const handleGenerateFollowUps = async () => {
+    if (selectedTopics.length + selectedKeywords.length === 0) {
+      setError("Select at least one topic or keyword before continuing.");
+      return;
+    }
+
+    setLoadingFollowUps(true);
+    setError(null);
+    setProgressMessage(null);
+
+    try {
+      const followUpRun = await runTailoringFlow<{ questions: FollowUpQuestion[] }>({
+        api,
+        flowType: "follow_up_questions",
+        input: {
+          master_cv_id: masterCvId,
+          selected_topics: selectedTopics.slice(0, 20),
+          selected_keywords: selectedKeywords.slice(0, 20)
+        },
+        onStage: setProgressMessage
+      });
+
+      setFollowUpQuestions(followUpRun.result.questions ?? []);
+      setCurrentStep(1);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to generate follow-up questions.");
+      }
+    } finally {
+      setLoadingFollowUps(false);
+      setProgressMessage(null);
+    }
   };
 
   const toggleTopic = (topic: string) => {
@@ -236,13 +268,13 @@ export function TailoringFlow() {
             <div className="p-8 rounded-xl border" style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}>
               <div className="mb-6">
                 <div className="inline-block px-3 py-1 rounded-full mb-4" style={{ background: "var(--color-teal-50)", color: "var(--color-teal-800)", fontSize: "11px", fontWeight: 500 }}>
-                  {jobData.role} at {jobData.company}
+                  {jobData.company ? `${jobData.role} at ${jobData.company}` : jobData.role}
                 </div>
                 <h2 className="font-medium mb-3" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-                  Priority topics from job analysis
+                  Choose topics and keywords
                 </h2>
                 <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Select the topics that should be emphasized in your customized CV.
+                  Select at least one topic or keyword that should be emphasized in your customized CV.
                 </p>
               </div>
 
@@ -268,37 +300,6 @@ export function TailoringFlow() {
                 })}
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => navigate(-1)}
-                  className="px-6 py-2.5 rounded-lg font-medium border"
-                  style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
-                >
-                  Back
-                </button>
-                <button
-                  onClick={handleNext}
-                  className="flex-1 px-6 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
-                  style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
-                >
-                  Continue
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 1 && (
-            <div className="p-8 rounded-xl border" style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}>
-              <div className="mb-6">
-                <h2 className="font-medium mb-3" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-                  ATS keywords and follow-up context
-                </h2>
-                <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Select keywords (you can choose more than one) and optionally answer follow-up questions before generating the draft.
-                </p>
-              </div>
-
               <div className="flex flex-wrap gap-2 mb-6">
                 {(keywords.length > 0 ? keywords : ["results-driven", "collaboration", "ownership"]).map((keyword) => {
                   const isSelected = selectedKeywords.includes(keyword);
@@ -321,6 +322,44 @@ export function TailoringFlow() {
                 })}
               </div>
 
+              <div className="flex gap-3">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="px-6 py-2.5 rounded-lg font-medium border"
+                  style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={loadingFollowUps}
+                  className="flex-1 px-6 py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
+                  style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
+                >
+                  {loadingFollowUps ? <Loader2 size={14} className="animate-spin" /> : null}
+                  {loadingFollowUps ? "Generating questions..." : "Continue"}
+                  {!loadingFollowUps ? <ChevronRight size={16} /> : null}
+                </button>
+              </div>
+              {loadingFollowUps && progressMessage ? (
+                <p className="mt-3" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                  {progressMessage}
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {currentStep === 1 && (
+            <div className="p-8 rounded-xl border" style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}>
+              <div className="mb-6">
+                <h2 className="font-medium mb-3" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
+                  Follow-up context
+                </h2>
+                <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
+                  Answer only the questions that help explain how your selected topics should appear in the CV.
+                </p>
+              </div>
+
               {followUpQuestions.length > 0 && (
                 <div className="space-y-3 mb-6">
                   {followUpQuestions.slice(0, 3).map((question) => (
@@ -328,18 +367,46 @@ export function TailoringFlow() {
                       <label className="block mb-1" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
                         {question.question}
                       </label>
-                      <textarea
-                        rows={2}
-                        value={questionAnswers[question.id] ?? ""}
-                        onChange={(event) =>
-                          setQuestionAnswers((prev) => ({
-                            ...prev,
-                            [question.id]: event.target.value
-                          }))
-                        }
-                        className="w-full px-3 py-2 rounded-lg border"
-                        style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)", background: "var(--color-background-primary)" }}
-                      />
+                      {question.question_type === "yes_no" ? (
+                        <div className="flex gap-2">
+                          {["yes", "no"].map((value) => {
+                            const isSelected = questionAnswers[question.id] === value;
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() =>
+                                  setQuestionAnswers((prev) => ({
+                                    ...prev,
+                                    [question.id]: value
+                                  }))
+                                }
+                                className="px-4 py-2 rounded-lg border font-medium"
+                                style={{
+                                  fontSize: "13px",
+                                  borderColor: isSelected ? "var(--color-teal-400)" : "var(--color-border-secondary)",
+                                  background: isSelected ? "var(--color-teal-50)" : "var(--color-background-primary)",
+                                  color: isSelected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
+                                }}
+                              >
+                                {value === "yes" ? "Yes" : "No"}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <input
+                          value={questionAnswers[question.id] ?? ""}
+                          onChange={(event) =>
+                            setQuestionAnswers((prev) => ({
+                              ...prev,
+                              [question.id]: event.target.value
+                            }))
+                          }
+                          className="w-full px-3 py-2 rounded-lg border"
+                          style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)", background: "var(--color-background-primary)" }}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>

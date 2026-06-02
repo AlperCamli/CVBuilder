@@ -13,7 +13,7 @@ import type {
 export type SessionContext = AuthenticatedRequestContext;
 
 export interface AiJobPayload {
-  company_name: string;
+  company_name?: string;
   job_title: string;
   job_description: string;
 }
@@ -24,23 +24,17 @@ export interface AiTailoredDraftJobPayload extends AiJobPayload {
   notes?: string | null;
 }
 
-export interface FollowUpQuestionChoice {
-  id: string;
-  label: string;
-}
-
-export type FollowUpQuestionType = "single_choice" | "multi_select" | "text";
+export type FollowUpQuestionType = "short_text" | "yes_no";
 
 export interface FollowUpQuestion {
   id: string;
   question: string;
   question_type: FollowUpQuestionType;
-  choices?: FollowUpQuestionChoice[];
-  target_hint?: string | null;
 }
 
 export interface FollowUpAnswer {
   question_id: string;
+  question_text?: string | null;
   answer_text?: string | null;
   selected_options?: string[];
 }
@@ -50,8 +44,10 @@ export interface JobAnalysisInput {
   job: AiJobPayload;
 }
 
-export interface FollowUpQuestionsInput extends JobAnalysisInput {
-  prior_analysis?: Record<string, unknown>;
+export interface FollowUpQuestionsInput {
+  master_cv_id: string;
+  selected_topics: string[];
+  selected_keywords: string[];
 }
 
 export interface TailoredDraftInput {
@@ -104,12 +100,8 @@ export interface CoverLetterGenerationInput {
 }
 
 export interface JobAnalysisResult {
+  topics: string[];
   keywords: string[];
-  requirements: string[];
-  strengths: string[];
-  gaps: string[];
-  summary: string;
-  fit_score: number | null;
 }
 
 export interface FollowUpQuestionsResult {
@@ -118,7 +110,6 @@ export interface FollowUpQuestionsResult {
 
 export interface TailoredDraftResult {
   current_content: Record<string, unknown>;
-  generation_summary: string;
   changed_block_ids: string[];
 }
 

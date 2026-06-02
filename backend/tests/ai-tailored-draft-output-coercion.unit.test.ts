@@ -18,7 +18,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           }
         ]
       },
-      generation_summary: "Tailored draft generated.",
       changed_block_ids: []
     });
 
@@ -59,7 +58,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           }
         ]
       },
-      generation_summary: "Tailored draft generated.",
       changed_block_ids: []
     });
 
@@ -101,7 +99,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           }
         ]
       },
-      generation_summary: "Tailored draft generated.",
       changed_block_ids: ["summary-1"]
     };
 
@@ -143,7 +140,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           social_links: ["github.com/alpercamli"]
         })
       );
-      expect(parsed.data.generation_summary.length).toBeGreaterThan(0);
       expect(parsed.data.changed_block_ids).toEqual([]);
     }
   });
@@ -161,7 +157,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           ]
         }
       ],
-      generation_summary: "Tailored draft generated.",
       changed_block_ids: ["summary-1"]
     });
 
@@ -169,7 +164,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.current_content.sections?.[0]?.type).toBe("summary");
-      expect(parsed.data.generation_summary).toBe("Tailored draft generated.");
       expect(parsed.data.changed_block_ids).toEqual(["summary-1"]);
     }
   });
@@ -191,7 +185,6 @@ describe("coerceTailoredDraftOutputPayload", () => {
           }
         ]
       },
-      generation_summary: "Tailored draft generated.",
       changed_block_ids: []
     });
 

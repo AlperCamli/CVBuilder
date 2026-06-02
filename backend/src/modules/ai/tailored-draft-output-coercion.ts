@@ -71,9 +71,6 @@ const ROOT_RESERVED_KEYS = new Set([
   "metadata"
 ]);
 
-const RECOVERY_GENERATION_SUMMARY =
-  "Tailored draft recovered from incomplete model output; master CV preserved as baseline.";
-
 const SECTION_STRUCTURAL_KEYS = new Set([
   "id",
   "type",
@@ -414,11 +411,6 @@ const collectHeaderRootFields = (payload: Record<string, unknown>): Record<strin
   return fields;
 };
 
-const resolveRecoveredGenerationSummary = (payload: Record<string, unknown>): string => {
-  const provided = asTrimmedString(payload.generation_summary);
-  return provided || RECOVERY_GENERATION_SUMMARY;
-};
-
 const resolveRecoveredChangedBlockIds = (payload: Record<string, unknown>): string[] => {
   if (!Array.isArray(payload.changed_block_ids)) {
     return [];
@@ -476,7 +468,6 @@ export const coerceTailoredDraftOutputPayload = (
     if (Array.isArray(outputPayload.sections)) {
       return {
         current_content: buildContentFromRootSections(outputPayload),
-        generation_summary: resolveRecoveredGenerationSummary(outputPayload),
         changed_block_ids: resolveRecoveredChangedBlockIds(outputPayload)
       };
     }
@@ -484,7 +475,6 @@ export const coerceTailoredDraftOutputPayload = (
     if (countHeaderLikeRootSignals(outputPayload) >= 2) {
       return {
         current_content: buildContentFromHeaderRoot(outputPayload),
-        generation_summary: resolveRecoveredGenerationSummary(outputPayload),
         changed_block_ids: resolveRecoveredChangedBlockIds(outputPayload)
       };
     }
@@ -498,10 +488,10 @@ export const coerceTailoredDraftOutputPayload = (
   );
 
   return {
-    ...outputPayload,
     current_content: {
       ...currentContent,
       sections: normalizedSections
-    }
+    },
+    changed_block_ids: resolveRecoveredChangedBlockIds(outputPayload)
   };
 };

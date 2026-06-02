@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
-import type { JobAnalysisResult, FollowUpQuestion } from "../integration/api-types";
+import type { JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
 
 interface TailorCvLocationState {
@@ -116,7 +116,7 @@ export function TailorCV() {
 
     try {
       const job = {
-        company_name: formData.company,
+        ...(formData.company.trim() ? { company_name: formData.company.trim() } : {}),
         job_title: formData.role,
         job_description: formData.jobDescription
       };
@@ -132,17 +132,6 @@ export function TailorCV() {
         ...(analysisRun.result as Omit<JobAnalysisResult, "ai_run_id">)
       };
 
-      const followUpRun = await runTailoringFlow<{ questions: FollowUpQuestion[] }>({
-        api,
-        flowType: "follow_up_questions",
-        input: { master_cv_id: masterCvId, job, prior_analysis: analysis },
-        onStage: setProgressMessage
-      });
-      const followUp = {
-        ai_run_id: followUpRun.ai_run_id,
-        questions: followUpRun.result.questions
-      };
-
       navigate(`/app/tailoring-flow/${masterCvId}`, {
         state: {
           masterCvId,
@@ -155,8 +144,7 @@ export function TailorCV() {
             locationText: formData.locationText,
             notes: formData.notes
           },
-          analysis,
-          followUpQuestions: followUp.questions
+          analysis
         }
       });
     } catch (err) {
@@ -260,7 +248,7 @@ export function TailorCV() {
 
                 <div>
                   <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                    Company name
+                    Company name (optional)
                   </label>
                   <input
                     type="text"
@@ -322,7 +310,6 @@ export function TailorCV() {
                   submitting ||
                   !masterCvId ||
                   !formData.role ||
-                  !formData.company ||
                   !formData.jobDescription
                 }
                 className="w-full mt-6 px-6 py-3 rounded-lg font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2"

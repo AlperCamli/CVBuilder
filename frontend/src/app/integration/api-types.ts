@@ -653,27 +653,16 @@ export interface CvAiBlockVersionsResponse {
 
 export interface JobAnalysisResult {
   ai_run_id: string;
+  topics: string[];
   keywords: string[];
-  requirements: string[];
-  strengths: string[];
-  gaps: string[];
-  summary: string;
-  fit_score: number | null;
 }
 
-export interface FollowUpQuestionChoice {
-  id: string;
-  label: string;
-}
-
-export type FollowUpQuestionType = "single_choice" | "multi_select" | "text";
+export type FollowUpQuestionType = "short_text" | "yes_no";
 
 export interface FollowUpQuestion {
   id: string;
   question: string;
   question_type: FollowUpQuestionType;
-  choices?: FollowUpQuestionChoice[];
-  target_hint?: string | null;
 }
 
 export interface FollowUpQuestionsResult {
@@ -743,7 +732,6 @@ export interface TailoredCvDraftResult {
     prompt_key: string;
     prompt_version: string;
     changed_block_ids: string[];
-    generation_summary: string;
   };
 }
 

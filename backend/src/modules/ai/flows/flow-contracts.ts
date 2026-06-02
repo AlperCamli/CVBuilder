@@ -34,43 +34,18 @@ const hasNonEmptyField = (fields: Record<string, unknown>, key: string): boolean
   return flattenTextValues(fields[key]).some((value) => value.trim().length > 0);
 };
 
-const normalizedHintSchema = z.preprocess((value) => {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 160 ? trimmed.slice(0, 160) : trimmed;
-}, z.string().max(160).nullable().optional());
-
 export const followUpQuestionSchema = z
   .object({
     id: z.string().trim().min(1).max(128),
     question: z.string().trim().min(1).max(500),
-    question_type: z.enum(["single_choice", "multi_select", "text"]),
-    choices: z
-      .array(
-        z
-          .object({
-            id: z.string().trim().min(1).max(128),
-            label: z.string().trim().min(1).max(240)
-          })
-          .strict()
-      )
-      .max(10)
-      .optional(),
-    target_hint: normalizedHintSchema
+    question_type: z.enum(["short_text", "yes_no"])
   })
   .strict();
 
 export const jobAnalysisOutputSchema = z
   .object({
-    keywords: z.array(z.string().trim().min(1).max(80)).max(30),
-    requirements: z.array(z.string().trim().min(1).max(300)).max(20),
-    strengths: z.array(z.string().trim().min(1).max(300)).max(20),
-    gaps: z.array(z.string().trim().min(1).max(300)).max(20),
-    summary: z.string().trim().min(1).max(2000),
-    fit_score: z.number().int().min(0).max(100).nullable()
+    topics: z.array(z.string().trim().min(1).max(160)).max(20),
+    keywords: z.array(z.string().trim().min(1).max(80)).max(30)
   })
   .strict();
 
@@ -192,7 +167,6 @@ const importImproveContentSchema = cvContentInputSchema.superRefine((content, co
 export const tailoredDraftOutputSchema = z
   .object({
     current_content: tailoredDraftContentSchema,
-    generation_summary: z.string().trim().min(1).max(2000),
     changed_block_ids: z.array(z.string().trim().min(1).max(128)).max(200)
   })
   .strict();

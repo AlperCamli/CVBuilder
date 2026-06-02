@@ -4,7 +4,7 @@ const uuidSchema = z.string().uuid();
 
 const aiJobSchema = z
   .object({
-    company_name: z.string().trim().min(1).max(160),
+    company_name: z.string().trim().max(160).optional(),
     job_title: z.string().trim().min(1).max(160),
     job_description: z.string().trim().min(1).max(40000)
   })
@@ -21,6 +21,7 @@ const aiTailoredJobSchema = aiJobSchema
 const followUpAnswerSchema = z
   .object({
     question_id: z.string().trim().min(1).max(128),
+    question_text: z.string().trim().max(500).nullable().optional(),
     answer_text: z.string().trim().max(4000).nullable().optional(),
     selected_options: z.array(z.string().trim().min(1).max(200)).max(20).optional()
   })
@@ -65,10 +66,14 @@ export const aiJobAnalysisSchema = z
 export const aiFollowUpQuestionsSchema = z
   .object({
     master_cv_id: uuidSchema,
-    job: aiJobSchema,
-    prior_analysis: z.record(z.unknown()).optional()
+    selected_topics: z.array(z.string().trim().min(1).max(200)).max(20),
+    selected_keywords: z.array(z.string().trim().min(1).max(200)).max(20)
   })
-  .strict();
+  .strict()
+  .refine((input) => input.selected_topics.length + input.selected_keywords.length > 0, {
+    message: "At least one selected topic or keyword is required",
+    path: ["selected_topics"]
+  });
 
 export const aiTailoredDraftSchema = z
   .object({
