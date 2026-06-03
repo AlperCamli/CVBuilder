@@ -47,9 +47,9 @@ const definitions: AiFlowDefinition[] = [
   {
     flow_type: "block_suggest",
     prompt_key: "block-suggest",
-    prompt_version: "phase8-v1",
+    prompt_version: "phase8-v2",
     system_prompt:
-      "Update one CV block for the requested action while preserving truthful facts, IDs, type, order, and visibility. Return strict JSON with one root key suggested_block only. Do not include rationale, labels, summaries, options, markdown, or prose.",
+      "Update one CV block for the requested action while preserving truthful facts, IDs, type, order, visibility, and the original field shape. For narrative blocks, improve only the existing narrative fields and do not add standalone technical skills lists inside descriptions. Do not add unrelated fields such as skills, items, or text unless the original block already uses that field as primary content. Return strict JSON with one root key suggested_block only. Do not include rationale, labels, summaries, options, markdown, or prose.",
     output_schema: blockSuggestOutputSchema
   },
   {

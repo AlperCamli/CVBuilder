@@ -83,6 +83,58 @@ const asStringArray = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const splitSkillCandidate = (value: string): string[] => {
+  const withoutLabel = value.replace(
+    /^\s*(?:technical\s+skills|skills|tools|technologies)\s*[:\-]\s*/i,
+    ""
+  );
+
+  return withoutLabel
+    .split(/[\n;,|]+/)
+    .map((item) => item.replace(/^[-•*]\s*/, "").trim())
+    .filter((item) => item.length > 0);
+};
+
+const isAtomicSkill = (value: string): boolean => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (/^(?:technical\s+skills|skills|tools|technologies|work\s+experience|experience|education|summary|professional\s+summary)$/i.test(normalized)) {
+    return false;
+  }
+
+  if (normalized.length > 80) {
+    return false;
+  }
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 6) {
+    return false;
+  }
+
+  if (/[.!?]$/.test(normalized)) {
+    return false;
+  }
+
+  return true;
+};
+
+const asSkillArray = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    return splitSkillCandidate(value).filter(isAtomicSkill);
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .flatMap((item) => splitSkillCandidate(asTrimmedString(item)))
+    .filter(isAtomicSkill);
+};
+
 export const dedupeSkills = (values: string[]): string[] => {
   const seen = new Set<string>();
   const output: string[] = [];
@@ -118,7 +170,7 @@ export const extractSkillsPoolMetadata = (metaInput: unknown): SkillsPoolMetadat
 
 export const extractPoolSkillsFromSuggestedBlock = (suggestedBlock: Record<string, unknown>): string[] => {
   const fields = asRecord(asRecord(suggestedBlock).fields);
-  const values = [...asStringArray(fields.skills), ...asStringArray(fields.items)];
+  const values = [...asSkillArray(fields.skills), ...asSkillArray(fields.items)];
   return dedupeSkills(values);
 };
 

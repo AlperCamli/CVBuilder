@@ -132,6 +132,53 @@ describe("cv-mappers experience compatibility", () => {
     expect(String(items[0]?.description ?? "")).toContain("Maintained analytics workflows");
   });
 
+  it("does not append duplicate legacy description text", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "experience-3",
+          type: "experience",
+          title: "Experience",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-main",
+              type: "experience",
+              order: 0,
+              visibility: visible,
+              fields: {
+                role: "Data Analyst",
+                company: "Gamma",
+                description: "Built reporting dashboards"
+              },
+              meta: {}
+            },
+            {
+              id: "exp-items",
+              type: "experience_items",
+              order: 1,
+              visibility: visible,
+              fields: {
+                items: ["Built reporting dashboards"]
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const experienceSection = sections.find((section) => section.type === "experience");
+    const items = ((experienceSection?.data as any)?.items ?? []) as Array<Record<string, unknown>>;
+
+    expect(String(items[0]?.description ?? "")).toBe("Built reporting dashboards");
+  });
+
   it("round-trips skills pool metadata through editor mapping", () => {
     const content = {
       version: "v1",
@@ -175,5 +222,83 @@ describe("cv-mappers experience compatibility", () => {
     const restoredMeta = restored.sections[0]?.blocks[0]?.meta as Record<string, unknown>;
     expect(restoredMeta.skill_pool_items).toEqual(["Node.js", "AWS"]);
     expect(restoredMeta.skill_pool_shuffle_used).toBe(true);
+  });
+
+  it("splits a single delimited skills value for editor rendering", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "skills-section",
+          type: "skills",
+          title: "Skills",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "skills-block",
+              type: "skills",
+              order: 0,
+              visibility: visible,
+              fields: {
+                skills: ["TypeScript, React; Node.js\nPostgreSQL"]
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const skillsSection = sections.find((section) => section.type === "skills");
+
+    expect((skillsSection?.data as any)?.skills).toEqual([
+      "TypeScript",
+      "React",
+      "Node.js",
+      "PostgreSQL"
+    ]);
+  });
+
+  it("does not duplicate volunteer descriptions when organization is blank", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "volunteer-section",
+          type: "volunteer",
+          title: "Volunteer Work",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "volunteer-block",
+              type: "volunteer_item",
+              order: 0,
+              visibility: visible,
+              fields: {
+                organization: "",
+                role: "Volunteer",
+                description: "Organized community events",
+                text: "Organized community events"
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const volunteerSection = sections.find((section) => section.type === "volunteer");
+    const items = ((volunteerSection?.data as any)?.items ?? []) as Array<Record<string, unknown>>;
+
+    expect(items[0]?.organization).toBe("");
+    expect(items[0]?.description).toBe("Organized community events");
   });
 });

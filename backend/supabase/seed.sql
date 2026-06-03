@@ -183,9 +183,9 @@ values
     'gemini',
     'gemini-2.5-flash',
     'block-suggest-improve',
-    'phase8-v1',
-    'Improve one CV block for clarity and measurable impact. Preserve truthful facts, IDs, type, order, and visibility. Output strict JSON with one root key suggested_block only.',
-    'Return one improved suggested_block only.',
+    'phase8-v2',
+    'Improve one CV block for clarity and measurable impact. Preserve truthful facts, IDs, type, order, visibility, and original field shape. For narrative blocks, improve only existing narrative fields and do not add standalone technical skills lists inside descriptions. Do not add unrelated fields such as skills, items, or text unless the original block already uses that field as primary content. Output strict JSON with one root key suggested_block only.',
+    'Return one improved suggested_block only. Keep skills only in skills blocks.',
     true
   ),
   (
@@ -195,9 +195,9 @@ values
     'gemini',
     'gemini-2.5-flash',
     'block-suggest-summarize',
-    'phase8-v1',
-    'Summarize one CV block while retaining critical achievements. Preserve truthful facts, IDs, type, order, and visibility. Output strict JSON with one root key suggested_block only.',
-    'Return one summarized suggested_block only.',
+    'phase8-v2',
+    'Summarize one CV block while retaining critical achievements. Preserve truthful facts, IDs, type, order, visibility, and original field shape. For narrative blocks, summarize only existing narrative fields and do not add standalone technical skills lists inside descriptions. Do not add unrelated fields such as skills, items, or text unless the original block already uses that field as primary content. Output strict JSON with one root key suggested_block only.',
+    'Return one summarized suggested_block only. Keep skills only in skills blocks.',
     true
   ),
   (
@@ -207,9 +207,9 @@ values
     'gemini',
     'gemini-2.5-flash',
     'block-suggest-expand',
-    'phase8-v1',
-    'Expand one CV block with stronger context and impact language without adding false claims. Preserve truthful facts, IDs, type, order, and visibility. Output strict JSON with one root key suggested_block only.',
-    'Return one expanded suggested_block only.',
+    'phase8-v2',
+    'Expand one CV block with stronger context and impact language without adding false claims. Preserve truthful facts, IDs, type, order, visibility, and original field shape. For narrative blocks, expand only existing narrative fields and do not add standalone technical skills lists inside descriptions. Do not add unrelated fields such as skills, items, or text unless the original block already uses that field as primary content. Output strict JSON with one root key suggested_block only.',
+    'Return one expanded suggested_block only. Keep skills only in skills blocks.',
     true
   ),
   (
@@ -219,8 +219,8 @@ values
     'gemini',
     'gemini-2.5-flash',
     'block-suggest-ats-optimize',
-    'phase8-v1',
-    'Optimize one CV block for ATS relevance using available job context. Preserve truthful facts, IDs, type, order, and visibility. Output strict JSON with one root key suggested_block only.',
-    'Return one ATS-optimized suggested_block only.',
+    'phase8-v2',
+    'Optimize one CV block for ATS relevance using available job context. Preserve truthful facts, IDs, type, order, visibility, and original field shape. For narrative blocks, optimize only existing narrative fields and do not add standalone technical skills lists inside descriptions. Do not add unrelated fields such as skills, items, or text unless the original block already uses that field as primary content. Output strict JSON with one root key suggested_block only.',
+    'Return one ATS-optimized suggested_block only. Keep skills only in skills blocks.',
     true
   );

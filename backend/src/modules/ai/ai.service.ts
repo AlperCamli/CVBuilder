@@ -143,6 +143,21 @@ const IMPORT_IMPROVE_NARRATIVE_FIELD_KEYS = [
   "details",
   "highlights"
 ];
+const IMPORT_IMPROVE_STRUCTURED_NARRATIVE_SECTIONS = new Set([
+  "experience",
+  "work_experience",
+  "volunteer",
+  "volunteering",
+  "volunteer_work",
+  "projects",
+  "project"
+]);
+const IMPORT_IMPROVE_SKILLS_LEAK_FIELD_KEYS = new Set([
+  "skills",
+  "skill",
+  "items",
+  "skill_pool_items"
+]);
 
 const stableStringify = (value: unknown): string => {
   if (value === null || typeof value !== "object") {
@@ -194,6 +209,89 @@ const getNarrativeText = (fields: Record<string, unknown>): string => {
     }
   }
   return "";
+};
+
+const getPreferredNarrativeFieldKey = (
+  originalFields: Record<string, unknown>,
+  suggestedFields: Record<string, unknown>
+): string | null => {
+  for (const key of IMPORT_IMPROVE_NARRATIVE_FIELD_KEYS) {
+    if (key in originalFields && asString(suggestedFields[key])) {
+      return key;
+    }
+  }
+
+  for (const key of IMPORT_IMPROVE_NARRATIVE_FIELD_KEYS) {
+    if (key in suggestedFields && asString(suggestedFields[key])) {
+      return key;
+    }
+  }
+
+  return null;
+};
+
+const stripStandaloneSkillsListFromNarrative = (value: string): string => {
+  const withoutSkillTail = value.replace(
+    /(?:^|\n)\s*(?:technical\s+skills|skills|tools|technologies)\s*[:\-].*$/is,
+    ""
+  );
+
+  return withoutSkillTail
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => !/^\s*(?:technical\s+skills|skills|tools|technologies)\s*[:\-]/i.test(line))
+    .join("\n")
+    .trim();
+};
+
+const sanitizeImportImproveSuggestedBlock = (
+  suggestedBlock: Record<string, unknown>,
+  originalBlock: MasterCvRecord["current_content"]["sections"][number]["blocks"][number],
+  sectionType: string
+): Record<string, unknown> => {
+  const originalFields = asRecord(originalBlock.fields);
+  const suggestedFields = asRecord(suggestedBlock.fields);
+  const normalizedSectionType = normalizeSectionType(sectionType);
+
+  if (IMPORT_IMPROVE_STRUCTURED_NARRATIVE_SECTIONS.has(normalizedSectionType)) {
+    const nextFields = { ...originalFields };
+    const narrativeKey = getPreferredNarrativeFieldKey(originalFields, suggestedFields);
+    if (narrativeKey) {
+      const cleanedNarrative = stripStandaloneSkillsListFromNarrative(asString(suggestedFields[narrativeKey]));
+      if (cleanedNarrative) {
+        nextFields[narrativeKey] = cleanedNarrative;
+      }
+    }
+
+    return {
+      ...originalBlock,
+      fields: nextFields,
+      meta: {
+        ...asRecord(originalBlock.meta),
+        ...asRecord(suggestedBlock.meta)
+      }
+    };
+  }
+
+  const nextFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(suggestedFields)) {
+    if (IMPORT_IMPROVE_SKILLS_LEAK_FIELD_KEYS.has(key) && !(key in originalFields)) {
+      continue;
+    }
+    nextFields[key] = value;
+  }
+
+  return {
+    ...originalBlock,
+    fields: {
+      ...originalFields,
+      ...nextFields
+    },
+    meta: {
+      ...asRecord(originalBlock.meta),
+      ...asRecord(suggestedBlock.meta)
+    }
+  };
 };
 
 const hasMeaningfulImportImproveFields = (fields: Record<string, unknown>): boolean =>
@@ -1164,7 +1262,12 @@ export class AiService {
     }
 
     const currentBlock = findBlockInCvContent(content, success.task.block_id);
-    const suggestedBlock = normalizeCvBlock(asRecord(success.suggested_block), currentBlock.block);
+    const sanitizedSuggestedBlock = sanitizeImportImproveSuggestedBlock(
+      asRecord(success.suggested_block),
+      currentBlock.block,
+      success.task.section_type
+    );
+    const suggestedBlock = normalizeCvBlock(sanitizedSuggestedBlock, currentBlock.block);
     const replacement = replaceBlockInCvContent(content, success.task.block_id, suggestedBlock);
 
     return {

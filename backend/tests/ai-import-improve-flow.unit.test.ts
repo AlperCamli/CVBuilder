@@ -352,6 +352,14 @@ describe("AiService parallel import_improve flow", () => {
         .filter(([request]) => request.flow_type === "block_suggest")
         .map(([request]) => request.input_payload.action_type)
     ).toEqual(expect.arrayContaining(["expand", "improve"]));
+    expect(
+      (aiProvider.generate as unknown as { mock: { calls: Array<[AiProviderRequest]> } }).mock.calls
+        .filter(
+          ([request]) =>
+            request.flow_type === "block_suggest" && !request.input_payload.skills_pool_context
+        )
+        .every(([request]) => !("skills_pool_context" in request.input_payload))
+    ).toBe(true);
     expect(result.generation_metadata.attempted_runs).toBe(5);
     expect(result.generation_metadata.successful_runs).toBe(5);
     expect(result.generation_metadata.failed_runs).toBe(0);
@@ -362,6 +370,69 @@ describe("AiService parallel import_improve flow", () => {
       expect.arrayContaining(["experience-short", "experience-long", "education-block"])
     );
     expect(billingService.recordAiActionUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips accidental skills fields and standalone skills lists from non-skills blocks", async () => {
+    const { service } = makeService(async (request) => {
+      if (request.flow_type === "professional_summary") {
+        return {
+          provider: "gemini",
+          model_name: request.model_name,
+          output_payload: {
+            summary_text: "Backend engineer with experience building reliable APIs."
+          }
+        };
+      }
+
+      const block = request.input_payload.block as Record<string, unknown>;
+      const fields = block.fields as Record<string, unknown>;
+      if (request.input_payload.skills_pool_context) {
+        return {
+          provider: "gemini",
+          model_name: request.model_name,
+          output_payload: {
+            suggested_block: {
+              ...block,
+              fields: {
+                ...fields,
+                skills: ["TypeScript", "APIs"]
+              }
+            }
+          }
+        };
+      }
+
+      return {
+        provider: "gemini",
+        model_name: request.model_name,
+        output_payload: {
+          suggested_block: {
+            ...block,
+            fields: {
+              ...fields,
+              description: `${String(fields.description ?? "")} Improved.\nTechnical Skills: TypeScript, Node.js, PostgreSQL`,
+              skills: ["TypeScript", "Node.js"],
+              items: ["TypeScript", "Node.js"]
+            }
+          }
+        }
+      };
+    });
+
+    const result = await service.improveImportedContent(session, {
+      parsed_content: baseContent()
+    });
+
+    const experienceBlocks = result.improved_content.sections
+      .find((section) => section.type === "experience")
+      ?.blocks ?? [];
+    const improvedBlock = experienceBlocks.find((block) => block.id === "experience-long");
+    const fields = improvedBlock?.fields as Record<string, unknown>;
+
+    expect(String(fields.description ?? "")).toContain("Improved.");
+    expect(String(fields.description ?? "")).not.toContain("Technical Skills");
+    expect(fields.skills).toBeUndefined();
+    expect(fields.items).toBeUndefined();
   });
 
   it("returns partial success when some sub-runs fail", async () => {

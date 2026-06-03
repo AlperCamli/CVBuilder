@@ -953,6 +953,13 @@ const blockTextCandidates = (block: CvBlock): string[] => {
   return dedupe([...fromItems, ...fromText]);
 };
 
+const splitSkillCandidates = (value: string): string[] =>
+  value
+    .replace(/^\s*(?:technical\s+skills|skills|tools|technologies)\s*[:\-]\s*/i, "")
+    .split(/[\n;,|]+/)
+    .map((item) => normalizeWhitespace(item.replace(/^[-•*]\s*/, "")))
+    .filter((item) => item.length > 0);
+
 const isLegacyItemsBlock = (sectionType: string, block: CvBlock): boolean => {
   const blockType = block.type.trim().toLowerCase();
   if (blockType === `${sectionType}_items`) {
@@ -967,15 +974,23 @@ const isLegacyItemsBlock = (sectionType: string, block: CvBlock): boolean => {
 };
 
 const mergeDescriptionText = (currentValue: string, addition: string): string => {
-  const left = normalizeWhitespace(currentValue);
-  const right = normalizeWhitespace(addition);
-  if (!left) {
-    return right;
+  const lines = [currentValue, addition]
+    .flatMap((value) => value.split(/\n+/))
+    .map((line) => normalizeWhitespace(line))
+    .filter((line) => line.length > 0);
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    deduped.push(line);
   }
-  if (!right) {
-    return left;
-  }
-  return `${left}\n${right}`;
+
+  return deduped.join("\n");
 };
 
 const defaultSectionTitle = (sectionType: string): string => {
@@ -1451,7 +1466,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
           const arrays = [...asStringArray(block.fields.skills), ...asStringArray(block.fields.items)];
           return [...direct, ...arrays];
         })
-        .map((skill) => skill.trim())
+        .flatMap((skill) => splitSkillCandidates(skill))
         .filter((skill) => skill.length > 0);
 
       sections.push({
@@ -1674,32 +1689,42 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 
     if (sectionType === "volunteer") {
       const items: EditorItem[] = sortedBlocks.map((block, index) => {
-        const parsedFromText = parseVolunteerText(getField(block, "text"));
+        const structuredOrganization = getField(block, "organization", "company");
         const structuredRole = getField(block, "role", "position", "title");
         const normalizedStructuredRole = isYearOnly(structuredRole) ? "" : structuredRole;
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
-        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText.startDate);
-        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText.endDate);
+        const structuredDescription = getField(block, "description", "summary", "details");
+        const fallbackText = getField(block, "text");
+        const shouldUseTextFallback =
+          fallbackText.length > 0 &&
+          normalizeWhitespace(fallbackText).toLowerCase() !== normalizeWhitespace(structuredDescription).toLowerCase() &&
+          (!structuredOrganization ||
+            !normalizedStructuredRole ||
+            (!startDate && !endDate && !asBoolean(block.fields.current_role)) ||
+            !structuredDescription);
+        const parsedFromText = shouldUseTextFallback ? parseVolunteerText(fallbackText) : null;
+        const normalizedStartDate = firstNonEmpty(startDate, parsedFromText?.startDate ?? "");
+        const normalizedEndDate = firstNonEmpty(endDate, parsedFromText?.endDate ?? "");
         const currentRole =
           asBoolean(block.fields.current_role) ||
           normalizedEndDate.toLowerCase() === "present" ||
-          parsedFromText.currentRole;
+          Boolean(parsedFromText?.currentRole);
 
         return {
           ...withBlockState(block, index),
           organization: firstNonEmpty(
-            parsedFromText.organization,
-            getField(block, "organization", "company")
+            structuredOrganization,
+            parsedFromText?.organization ?? ""
           ),
-          role: firstNonEmpty(normalizedStructuredRole, parsedFromText.role),
+          role: firstNonEmpty(normalizedStructuredRole, parsedFromText?.role ?? ""),
           country: getField(block, "location", "country", "city"),
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
           currentRole,
           description: firstNonEmpty(
-            getField(block, "description", "summary", "details"),
-            parsedFromText.description
+            structuredDescription,
+            parsedFromText?.description ?? ""
           )
         };
       });

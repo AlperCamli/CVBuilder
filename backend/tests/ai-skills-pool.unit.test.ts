@@ -222,6 +222,32 @@ describe("skills-pool helpers", () => {
 
     expect(dedupeSkills(skills)).toEqual(["AWS", "Docker", "Kubernetes"]);
   });
+
+  it("splits delimited skill strings into atomic skills", () => {
+    const skills = extractPoolSkillsFromSuggestedBlock({
+      fields: {
+        skills: ["Technical Skills: TypeScript, Node.js; PostgreSQL\nAWS"],
+        items: ["Docker | Kubernetes"]
+      }
+    });
+
+    expect(skills).toEqual(["TypeScript", "Node.js", "PostgreSQL", "AWS", "Docker", "Kubernetes"]);
+  });
+
+  it("rejects paragraph-like suggested skills", () => {
+    const skills = extractPoolSkillsFromSuggestedBlock({
+      fields: {
+        skills: [
+          "Built reliable APIs with observability for multiple product teams.",
+          "Professional Summary",
+          "TypeScript"
+        ],
+        items: ["Cross-functional technical leadership across many complex platform initiatives"]
+      }
+    });
+
+    expect(skills).toEqual(["TypeScript"]);
+  });
 });
 
 describe("AiService skills pool refresh rules", () => {
