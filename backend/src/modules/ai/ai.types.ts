@@ -263,5 +263,11 @@ export interface ImportImproveResponse {
     flow_type: "import_improve";
     prompt_key: string;
     prompt_version: string;
+    attempted_runs?: number;
+    successful_runs?: number;
+    failed_runs?: number;
+    skipped_blocks?: number;
+    sub_run_ids?: string[];
+    partial_success?: boolean;
   };
 }

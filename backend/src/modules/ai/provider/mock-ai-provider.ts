@@ -385,6 +385,20 @@ const generateImportImprove = (input: Record<string, unknown>): Record<string, u
   };
 };
 
+const generateProfessionalSummary = (input: Record<string, unknown>): Record<string, unknown> => {
+  const cvBody = asRecord(input.cv_body);
+  const sections = asArray(cvBody.sections).map((section) => asRecord(section));
+  const sourceText = sections
+    .flatMap((section) => asArray(section.blocks).map((block) => extractPrimaryTextField(asRecord(block)).text))
+    .filter(Boolean)
+    .join(" ");
+  const summary = clip(sourceText, 260) || "Experienced professional with a practical background and clear strengths.";
+
+  return {
+    summary_text: `${summary}${summary.endsWith(".") ? "" : "."}`
+  };
+};
+
 const generateCvParse = (input: Record<string, unknown>): Record<string, unknown> => {
   const rawText = asString(input.raw_text).trim();
   const language = asString(input.language_hint) || "en";
@@ -559,6 +573,9 @@ export class MockAiProvider implements AiProvider {
         break;
       case "import_improve":
         outputPayload = generateImportImprove(request.input_payload);
+        break;
+      case "professional_summary":
+        outputPayload = generateProfessionalSummary(request.input_payload);
         break;
       case "cv_parse":
         outputPayload = generateCvParse(request.input_payload);

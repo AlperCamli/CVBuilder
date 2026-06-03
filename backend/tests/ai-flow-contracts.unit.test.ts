@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   blockSuggestOutputSchema,
   importImproveOutputSchema,
+  professionalSummaryOutputSchema,
   tailoredDraftOutputSchema
 } from "../src/modules/ai/flows/flow-contracts";
 
@@ -205,6 +206,23 @@ describe("AI flow output contracts", () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it("accepts professional_summary output with summary_text only", () => {
+    const parsed = professionalSummaryOutputSchema.safeParse({
+      summary_text: "Backend engineer with experience building APIs and data systems."
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects professional_summary output with extra fields", () => {
+    const parsed = professionalSummaryOutputSchema.safeParse({
+      summary_text: "Backend engineer.",
+      rationale: "extra"
+    });
+
+    expect(parsed.success).toBe(false);
   });
 
   it("rejects old block suggestion arrays and rationale summaries", () => {

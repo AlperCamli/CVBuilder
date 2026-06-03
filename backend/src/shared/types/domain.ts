@@ -92,6 +92,7 @@ export type AiFlowType =
   | "tailored_draft"
   | "block_suggest"
   | "import_improve"
+  | "professional_summary"
   | "summary"
   | "improve"
   | "cv_parse"

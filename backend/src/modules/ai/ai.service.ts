@@ -127,6 +127,23 @@ const asStringArray = (value: unknown): string[] => {
 const normalizeSectionType = (value: string): string =>
   value.trim().toLowerCase().replace(/[\s-]+/g, "_");
 
+const IMPORT_IMPROVE_CONCURRENCY_LIMIT = 6;
+const IMPORT_IMPROVE_EXPAND_WORD_THRESHOLD = 12;
+const IMPORT_IMPROVE_HEADER_SECTION_TYPES = new Set([
+  "header",
+  "contact",
+  "contact_info",
+  "personal_info"
+]);
+const IMPORT_IMPROVE_NARRATIVE_FIELD_KEYS = [
+  "description",
+  "summary",
+  "text",
+  "content",
+  "details",
+  "highlights"
+];
+
 const stableStringify = (value: unknown): string => {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -141,6 +158,216 @@ const stableStringify = (value: unknown): string => {
     .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`);
 
   return `{${entries.join(",")}}`;
+};
+
+const flattenImportImproveText = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => flattenImportImproveText(item));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value as Record<string, unknown>).flatMap((item) =>
+      flattenImportImproveText(item)
+    );
+  }
+  return [];
+};
+
+const countWords = (text: string): number => {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+};
+
+const getNarrativeText = (fields: Record<string, unknown>): string => {
+  for (const key of IMPORT_IMPROVE_NARRATIVE_FIELD_KEYS) {
+    const text = asString(fields[key]);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+};
+
+const hasMeaningfulImportImproveFields = (fields: Record<string, unknown>): boolean =>
+  flattenImportImproveText(fields).some((text) => text.length > 0);
+
+const isImportImproveHeaderSection = (sectionType: string): boolean =>
+  IMPORT_IMPROVE_HEADER_SECTION_TYPES.has(normalizeSectionType(sectionType));
+
+const hasUsableSummary = (content: MasterCvRecord["current_content"]): boolean =>
+  content.sections
+    .filter((section) => normalizeSectionType(section.type) === "summary")
+    .flatMap((section) => section.blocks)
+    .some((block) => block.visibility !== "hidden" && hasMeaningfulImportImproveFields(asRecord(block.fields)));
+
+const findFirstSummaryTarget = (
+  content: MasterCvRecord["current_content"]
+): { section_id: string | null; block_id: string | null } => {
+  const section = [...content.sections]
+    .sort((left, right) => left.order - right.order)
+    .find((item) => normalizeSectionType(item.type) === "summary");
+  if (!section) {
+    return {
+      section_id: null,
+      block_id: null
+    };
+  }
+
+  const block = [...section.blocks].sort((left, right) => left.order - right.order)[0];
+  return {
+    section_id: section.id,
+    block_id: block?.id ?? null
+  };
+};
+
+const hasUsableSkills = (content: MasterCvRecord["current_content"]): boolean =>
+  content.sections
+    .filter((section) => normalizeSectionType(section.type) === "skills")
+    .flatMap((section) => section.blocks)
+    .some((block) => block.visibility !== "hidden" && hasMeaningfulImportImproveFields(asRecord(block.fields)));
+
+const findFirstSkillsTarget = (
+  content: MasterCvRecord["current_content"]
+): { section_id: string | null; block_id: string | null } => {
+  const section = [...content.sections]
+    .sort((left, right) => left.order - right.order)
+    .find((item) => normalizeSectionType(item.type) === "skills");
+  if (!section) {
+    return {
+      section_id: null,
+      block_id: null
+    };
+  }
+
+  const block = [...section.blocks].sort((left, right) => left.order - right.order)[0];
+  return {
+    section_id: section.id,
+    block_id: block?.id ?? null
+  };
+};
+
+const hasImportImproveGenerationSource = (content: MasterCvRecord["current_content"]): boolean =>
+  content.sections
+    .filter((section) => {
+      const sectionType = normalizeSectionType(section.type);
+      return !isImportImproveHeaderSection(sectionType) && sectionType !== "summary" && sectionType !== "skills";
+    })
+    .flatMap((section) => section.blocks)
+    .some((block) => block.visibility !== "hidden" && hasMeaningfulImportImproveFields(asRecord(block.fields)));
+
+const planImportImproveTasks = (content: MasterCvRecord["current_content"]): ImportImproveTaskPlan => {
+  const tasks: ImportImproveTask[] = [];
+  let skippedBlocks = 0;
+  const hasGenerationSource = hasImportImproveGenerationSource(content);
+
+  if (hasGenerationSource && !hasUsableSummary(content)) {
+    const target = findFirstSummaryTarget(content);
+    tasks.push({
+      kind: "professional_summary",
+      target_section_id: target.section_id,
+      target_block_id: target.block_id
+    });
+  }
+
+  if (hasGenerationSource && !hasUsableSkills(content)) {
+    const target = findFirstSkillsTarget(content);
+    tasks.push({
+      kind: "skills",
+      target_section_id: target.section_id,
+      target_block_id: target.block_id
+    });
+  }
+
+  const sortedSections = [...content.sections].sort((left, right) => left.order - right.order);
+  for (const section of sortedSections) {
+    const sectionType = normalizeSectionType(section.type);
+    if (isImportImproveHeaderSection(sectionType) || sectionType === "skills") {
+      skippedBlocks += section.blocks.length;
+      continue;
+    }
+
+    const sortedBlocks = [...section.blocks].sort((left, right) => left.order - right.order);
+    for (const block of sortedBlocks) {
+      if (block.visibility === "hidden") {
+        skippedBlocks += 1;
+        continue;
+      }
+
+      const fields = asRecord(block.fields);
+      if (!hasMeaningfulImportImproveFields(fields)) {
+        skippedBlocks += 1;
+        continue;
+      }
+
+      if (sectionType === "summary" && !hasUsableSummary(content)) {
+        skippedBlocks += 1;
+        continue;
+      }
+
+      if (sectionType === "experience" && !asString(fields.description)) {
+        skippedBlocks += 1;
+        continue;
+      }
+
+      const narrativeText = getNarrativeText(fields);
+      const actionType =
+        narrativeText && countWords(narrativeText) < IMPORT_IMPROVE_EXPAND_WORD_THRESHOLD
+          ? "expand"
+          : "improve";
+
+      tasks.push({
+        kind: "block",
+        block_id: block.id,
+        section_type: sectionType,
+        action_type: actionType
+      });
+    }
+  }
+
+  return {
+    tasks,
+    skipped_blocks: skippedBlocks
+  };
+};
+
+const runWithConcurrency = async <TInput, TOutput>(
+  items: TInput[],
+  limit: number,
+  worker: (item: TInput) => Promise<TOutput>
+): Promise<Array<PromiseSettledResult<TOutput>>> => {
+  const results: Array<PromiseSettledResult<TOutput>> = new Array(items.length);
+  let nextIndex = 0;
+
+  const runWorker = async (): Promise<void> => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      try {
+        results[currentIndex] = {
+          status: "fulfilled",
+          value: await worker(items[currentIndex])
+        };
+      } catch (error) {
+        results[currentIndex] = {
+          status: "rejected",
+          reason: error
+        };
+      }
+    }
+  };
+
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
 };
 
 const snapshotsEqual = (left: unknown, right: unknown): boolean => {
@@ -298,6 +525,40 @@ interface RunFlowExecutionResult {
 }
 
 type TailoringRunInputPayload = JobAnalysisInput | FollowUpQuestionsInput | TailoredCvDraftInput;
+
+interface ImportImproveBlockTask {
+  kind: "block";
+  block_id: string;
+  section_type: string;
+  action_type: "improve" | "expand";
+}
+
+interface ImportImproveSummaryTask {
+  kind: "professional_summary";
+  target_section_id: string | null;
+  target_block_id: string | null;
+}
+
+interface ImportImproveSkillsTask {
+  kind: "skills";
+  target_section_id: string | null;
+  target_block_id: string | null;
+}
+
+type ImportImproveTask = ImportImproveBlockTask | ImportImproveSummaryTask | ImportImproveSkillsTask;
+
+interface ImportImproveTaskPlan {
+  tasks: ImportImproveTask[];
+  skipped_blocks: number;
+}
+
+interface ImportImproveTaskSuccess {
+  task: ImportImproveTask;
+  ai_run_id: string;
+  suggested_block?: Record<string, unknown>;
+  summary_text?: string;
+  skills: string[];
+}
 
 const TAILORING_FLOW_TYPES: TailoringRunFlowType[] = [
   "job_analysis",
@@ -651,53 +912,446 @@ export class AiService {
       asRecord(input.parsed_content),
       input.language ?? "en"
     );
-    const aliasContext = buildImportImproveModelContent(normalizedContent);
     const improvementGuidance = asStringArray(input.improvement_guidance);
-
-    const flowInput: Record<string, unknown> = {
-      cv_body: aliasContext.model_content
-    };
-    if (improvementGuidance.length > 0) {
-      flowInput.improvement_guidance = improvementGuidance;
-    }
-
-    const executed = await this.executeFlow({
+    const taskPlan = planImportImproveTasks(normalizedContent);
+    const parentPrompt = await this.resolvePromptForFlow({
       flow_type: "import_improve",
-      user_id: session.appUser.id,
-      input_payload: flowInput,
-      user_prompt: "Improve imported CV content while preserving factual accuracy."
+      action_type: null,
+      user_prompt: "Orchestrate imported CV improvements using block-level AI runs."
     });
 
-    await this.billingService.recordAiActionUsage(session.appUser.id);
+    const parentRun = await this.aiRepository.createRun({
+      user_id: session.appUser.id,
+      flow_type: "import_improve",
+      provider: this.aiProvider.providerName,
+      model_name: parentPrompt.model_name,
+      progress_stage: "queued",
+      input_payload: {
+        flow_input: {
+          task_count: taskPlan.tasks.length,
+          skipped_blocks: taskPlan.skipped_blocks,
+          improvement_guidance: improvementGuidance
+        },
+        prompt: {
+          prompt_key: parentPrompt.prompt_key,
+          prompt_version: parentPrompt.prompt_version,
+          provider: this.aiProvider.providerName,
+          model_name: parentPrompt.model_name,
+          user_prompt: parentPrompt.user_prompt,
+          system_prompt: parentPrompt.system_prompt
+        }
+      }
+    });
 
-    const normalizedModelContent = normalizeCvContent(
-      asRecord(asRecord(executed.output).improved_content),
-      normalizedContent.language
-    );
-    const improvedContent = normalizeCvContent(
-      resolveImportImproveModelContent(
-        normalizedModelContent,
-        normalizedContent,
-        aliasContext.alias_map
-      ),
-      normalizedContent.language
-    );
+    try {
+      await this.updateRunStage(session.appUser.id, parentRun.id, "building_prompt");
+
+      if (taskPlan.tasks.length === 0) {
+        const completedOutput = {
+          improved_content: normalizedContent,
+          changed_block_ids: [],
+          orchestration: {
+            attempted_runs: 0,
+            successful_runs: 0,
+            failed_runs: 0,
+            skipped_blocks: taskPlan.skipped_blocks,
+            sub_run_ids: [],
+            partial_success: false
+          }
+        };
+        const completed = await this.completeRunWithPayload(
+          session.appUser.id,
+          parentRun.id,
+          completedOutput
+        );
+
+        return {
+          ai_run_id: completed.id,
+          improved_content: normalizedContent,
+          changed_block_ids: [],
+          generation_metadata: {
+            provider: this.aiProvider.providerName,
+            model_name: parentPrompt.model_name,
+            flow_type: "import_improve",
+            prompt_key: parentPrompt.prompt_key,
+            prompt_version: parentPrompt.prompt_version,
+            attempted_runs: 0,
+            successful_runs: 0,
+            failed_runs: 0,
+            skipped_blocks: taskPlan.skipped_blocks,
+            sub_run_ids: [],
+            partial_success: false
+          }
+        };
+      }
+
+      await this.updateRunStage(session.appUser.id, parentRun.id, "calling_model");
+      const settled = await runWithConcurrency(
+        taskPlan.tasks,
+        IMPORT_IMPROVE_CONCURRENCY_LIMIT,
+        (task) =>
+          this.executeImportImproveTask({
+            user_id: session.appUser.id,
+            content: normalizedContent,
+            task,
+            improvement_guidance: improvementGuidance
+          })
+      );
+
+      await this.billingService.recordAiActionUsage(session.appUser.id);
+
+      const successes = settled
+        .filter((result): result is PromiseFulfilledResult<ImportImproveTaskSuccess> => result.status === "fulfilled")
+        .map((result) => result.value);
+      const failures = settled.filter((result) => result.status === "rejected");
+      const subRunIds = successes.map((success) => success.ai_run_id);
+
+      if (successes.length === 0) {
+        throw new AiFlowFailedError("Import improve sub-runs failed", {
+          flow_type: "import_improve",
+          reason: "all_sub_runs_failed",
+          attempted_runs: taskPlan.tasks.length,
+          failed_runs: failures.length
+        });
+      }
+
+      let improvedContent = cloneCvContent(normalizedContent);
+      const changedBlockIds: string[] = [];
+      for (const success of successes) {
+        const applied = this.applyImportImproveTaskSuccess(improvedContent, success);
+        improvedContent = applied.content;
+        if (applied.changed_block_id) {
+          changedBlockIds.push(applied.changed_block_id);
+        }
+      }
+
+      improvedContent = normalizeCvContent(improvedContent, normalizedContent.language);
+      const outputPayload = {
+        improved_content: improvedContent,
+        changed_block_ids: [...new Set(changedBlockIds)],
+        orchestration: {
+          attempted_runs: taskPlan.tasks.length,
+          successful_runs: successes.length,
+          failed_runs: failures.length,
+          skipped_blocks: taskPlan.skipped_blocks,
+          sub_run_ids: subRunIds,
+          partial_success: failures.length > 0
+        }
+      };
+      const completed = await this.completeRunWithPayload(
+        session.appUser.id,
+        parentRun.id,
+        outputPayload
+      );
+
+      return {
+        ai_run_id: completed.id,
+        improved_content: improvedContent,
+        changed_block_ids: [...new Set(changedBlockIds)],
+        generation_metadata: {
+          provider: this.aiProvider.providerName,
+          model_name: parentPrompt.model_name,
+          flow_type: "import_improve",
+          prompt_key: parentPrompt.prompt_key,
+          prompt_version: parentPrompt.prompt_version,
+          attempted_runs: taskPlan.tasks.length,
+          successful_runs: successes.length,
+          failed_runs: failures.length,
+          skipped_blocks: taskPlan.skipped_blocks,
+          sub_run_ids: subRunIds,
+          partial_success: failures.length > 0
+        }
+      };
+    } catch (error) {
+      await this.failRunBestEffort(session.appUser.id, parentRun.id, error);
+      throw error;
+    }
+  }
+
+  private async executeImportImproveTask(options: {
+    user_id: string;
+    content: MasterCvRecord["current_content"];
+    task: ImportImproveTask;
+    improvement_guidance: string[];
+  }): Promise<ImportImproveTaskSuccess> {
+    if (options.task.kind === "professional_summary") {
+      const aliasContext = buildImportImproveModelContent(options.content);
+      const executed = await this.executeFlow<{ summary_text: string }>({
+        flow_type: "professional_summary",
+        user_id: options.user_id,
+        input_payload: {
+          cv_body: aliasContext.model_content
+        },
+        user_prompt: "Write a professional summary from the sanitized CV body."
+      });
+
+      return {
+        task: options.task,
+        ai_run_id: executed.ai_run.id,
+        summary_text: asString(asRecord(executed.output).summary_text),
+        skills: []
+      };
+    }
+
+    if (options.task.kind === "skills") {
+      const fallbackBlock = this.buildImportImproveSkillsFallbackBlock(options.task.target_block_id);
+      const skillsPoolContext = collectSkillsPoolContext(options.content, fallbackBlock);
+      const executed = await this.executeFlow<{ suggested_block: Record<string, unknown> }>({
+        flow_type: "block_suggest",
+        action_type: "improve",
+        user_id: options.user_id,
+        input_payload: {
+          action_type: "improve",
+          block: fallbackBlock,
+          user_instruction: options.improvement_guidance.join("\n"),
+          job_description: "",
+          skills_pool_mode: "generate",
+          skills_pool_context: skillsPoolContext
+        },
+        user_prompt:
+          "Generate a final non-duplicate skills pool from existing work experience descriptions and education context. Return only valid structured suggested_block with fields.skills as string array (max 20)."
+      });
+
+      const suggestedBlockInput = asRecord(asRecord(executed.output).suggested_block);
+      const skills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
+      if (skills.length === 0) {
+        throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
+          flow_type: "block_suggest",
+          reason: "skills_pool_parse_failed"
+        });
+      }
+
+      return {
+        task: options.task,
+        ai_run_id: executed.ai_run.id,
+        suggested_block: suggestedBlockInput,
+        skills,
+      };
+    }
+
+    const currentBlock = findBlockInCvContent(options.content, options.task.block_id);
+    const executed = await this.executeFlow<{ suggested_block: Record<string, unknown> }>({
+      flow_type: "block_suggest",
+      action_type: options.task.action_type,
+      user_id: options.user_id,
+      input_payload: {
+        action_type: options.task.action_type,
+        block: currentBlock.block,
+        user_instruction: options.improvement_guidance.join("\n"),
+        job_description: ""
+      },
+      user_prompt: `Suggest a ${options.task.action_type} update for imported block ${options.task.block_id}.`
+    });
 
     return {
+      task: options.task,
       ai_run_id: executed.ai_run.id,
-      improved_content: improvedContent,
-      changed_block_ids: this.resolveChangedBlockAliases(
-        asStringArray(asRecord(executed.output).changed_block_ids),
-        aliasContext.alias_map.block_alias_to_id
-      ),
-      generation_metadata: {
-        provider: executed.provider,
-        model_name: executed.model_name,
-        flow_type: "import_improve",
-        prompt_key: executed.prompt_key,
-        prompt_version: executed.prompt_version
-      }
+      suggested_block: asRecord(asRecord(executed.output).suggested_block),
+      skills: []
     };
+  }
+
+  private applyImportImproveTaskSuccess(
+    content: MasterCvRecord["current_content"],
+    success: ImportImproveTaskSuccess
+  ): { content: MasterCvRecord["current_content"]; changed_block_id: string | null } {
+    if (success.task.kind === "professional_summary") {
+      return this.applyImportImproveSummary(content, success.task, asString(success.summary_text));
+    }
+
+    if (success.task.kind === "skills") {
+      return this.applyImportImproveSkills(content, success.task, success.skills, success.suggested_block);
+    }
+
+    const currentBlock = findBlockInCvContent(content, success.task.block_id);
+    const suggestedBlock = normalizeCvBlock(asRecord(success.suggested_block), currentBlock.block);
+    const replacement = replaceBlockInCvContent(content, success.task.block_id, suggestedBlock);
+
+    return {
+      content: replacement.content,
+      changed_block_id: replacement.updated_block.id
+    };
+  }
+
+  private applyImportImproveSummary(
+    content: MasterCvRecord["current_content"],
+    task: ImportImproveSummaryTask,
+    summaryText: string
+  ): { content: MasterCvRecord["current_content"]; changed_block_id: string | null } {
+    if (!summaryText) {
+      return {
+        content,
+        changed_block_id: null
+      };
+    }
+
+    if (task.target_block_id) {
+      const currentBlock = findBlockInCvContent(content, task.target_block_id);
+      const suggestedBlock = normalizeCvBlock(
+        {
+          ...currentBlock.block,
+          fields: {
+            ...asRecord(currentBlock.block.fields),
+            text: summaryText
+          }
+        },
+        currentBlock.block
+      );
+      const replacement = replaceBlockInCvContent(content, task.target_block_id, suggestedBlock);
+      return {
+        content: replacement.content,
+        changed_block_id: replacement.updated_block.id
+      };
+    }
+
+    const nextContent = cloneCvContent(content);
+    const blockId = `summary-block-${randomUUID()}`;
+    const summaryBlock = {
+      id: blockId,
+      type: "summary",
+      order: 0,
+      visibility: "visible" as const,
+      fields: {
+        text: summaryText
+      },
+      meta: {}
+    };
+
+    if (task.target_section_id) {
+      const section = nextContent.sections.find((item) => item.id === task.target_section_id);
+      if (section) {
+        section.blocks = [summaryBlock];
+        return {
+          content: nextContent,
+          changed_block_id: blockId
+        };
+      }
+    }
+
+    const insertIndex = this.findImportImproveBodyInsertIndex(nextContent);
+    nextContent.sections.splice(insertIndex, 0, {
+      id: `summary-section-${randomUUID()}`,
+      type: "summary",
+      title: "Professional Summary",
+      order: insertIndex,
+      blocks: [summaryBlock],
+      meta: {}
+    });
+    nextContent.sections = nextContent.sections.map((section, index) => ({
+      ...section,
+      order: index
+    }));
+
+    return {
+      content: nextContent,
+      changed_block_id: blockId
+    };
+  }
+
+  private applyImportImproveSkills(
+    content: MasterCvRecord["current_content"],
+    task: ImportImproveSkillsTask,
+    skills: string[],
+    suggestedBlockInput: Record<string, unknown> | undefined
+  ): { content: MasterCvRecord["current_content"]; changed_block_id: string | null } {
+    const parsedSkills = dedupeSkills(skills);
+    if (parsedSkills.length === 0) {
+      return {
+        content,
+        changed_block_id: null
+      };
+    }
+
+    const fallbackBlock = this.buildImportImproveSkillsFallbackBlock(task.target_block_id);
+    const normalizedSuggested = normalizeCvBlock(
+      {
+        ...fallbackBlock,
+        ...asRecord(suggestedBlockInput),
+        fields: {
+          ...asRecord(fallbackBlock.fields),
+          ...asRecord(asRecord(suggestedBlockInput).fields),
+          skills: parsedSkills,
+          items: parsedSkills,
+          text: parsedSkills.join(", ")
+        },
+        meta: {
+          ...asRecord(fallbackBlock.meta),
+          ...buildSkillsPoolMetaForGeneration(parsedSkills, new Date().toISOString())
+        }
+      },
+      fallbackBlock
+    );
+
+    if (task.target_block_id) {
+      const currentBlock = findBlockInCvContent(content, task.target_block_id);
+      const suggestedBlock = normalizeCvBlock(normalizedSuggested, currentBlock.block);
+      const replacement = replaceBlockInCvContent(content, task.target_block_id, suggestedBlock);
+      return {
+        content: replacement.content,
+        changed_block_id: replacement.updated_block.id
+      };
+    }
+
+    const nextContent = cloneCvContent(content);
+    const blockId = normalizedSuggested.id;
+    const skillsBlock = {
+      ...normalizedSuggested,
+      id: blockId,
+      order: 0
+    };
+
+    if (task.target_section_id) {
+      const section = nextContent.sections.find((item) => item.id === task.target_section_id);
+      if (section) {
+        section.blocks = [skillsBlock];
+        return {
+          content: nextContent,
+          changed_block_id: blockId
+        };
+      }
+    }
+
+    const maxOrder = nextContent.sections.reduce((max, section) => Math.max(max, section.order), -1);
+    nextContent.sections.push({
+      id: `skills-section-${randomUUID()}`,
+      type: "skills",
+      title: "Skills",
+      order: maxOrder + 1,
+      blocks: [skillsBlock],
+      meta: {}
+    });
+
+    return {
+      content: nextContent,
+      changed_block_id: blockId
+    };
+  }
+
+  private buildImportImproveSkillsFallbackBlock(blockId?: string | null) {
+    return {
+      id: blockId || `skills-block-${randomUUID()}`,
+      type: "skills",
+      order: 0,
+      visibility: "visible" as const,
+      fields: {
+        skills: [],
+        items: [],
+        text: ""
+      },
+      meta: {}
+    };
+  }
+
+  private findImportImproveBodyInsertIndex(content: MasterCvRecord["current_content"]): number {
+    let insertIndex = 0;
+    const sortedSections = [...content.sections].sort((left, right) => left.order - right.order);
+    for (const section of sortedSections) {
+      if (!isImportImproveHeaderSection(section.type)) {
+        break;
+      }
+      insertIndex += 1;
+    }
+    return insertIndex;
   }
 
   async parseCvContent(
@@ -825,10 +1479,6 @@ export class AiService {
       if (hasExistingPool) {
         if (planCode === "free") {
           throw new ConflictError("Skills pool refresh is available only for Pro users.");
-        }
-
-        if (!currentPoolMeta.skill_pool_shuffle_used) {
-          throw new ConflictError("First refresh requires in-editor shuffle before real refresh.");
         }
 
         const dayKey = toUtcDateKey(new Date());

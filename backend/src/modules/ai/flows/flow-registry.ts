@@ -7,7 +7,8 @@ import {
   jobAnalysisOutputSchema,
   tailoredDraftOutputSchema,
   cvParseOutputSchema,
-  coverLetterOutputSchema
+  coverLetterOutputSchema,
+  professionalSummaryOutputSchema
 } from "./flow-contracts";
 
 export interface AiFlowDefinition {
@@ -54,10 +55,18 @@ const definitions: AiFlowDefinition[] = [
   {
     flow_type: "import_improve",
     prompt_key: "import-improve",
-    prompt_version: "phase6-v1",
+    prompt_version: "phase7-v1",
     system_prompt:
-      "You are a CV improvement assistant. Improve the sanitized cv_body for clarity, impact, ATS readability, and structure. Use the same language as the source CV body. Preserve facts; never invent employers, dates, degrees, certifications, metrics, tools, awards, or achievements. Header/contact data is intentionally omitted and will be restored by the backend, so do not create a header/contact section. Keep existing alias ids for unchanged or rewritten sections/blocks. Add new simple alias ids only for new blocks/sections. If the source CV lacks a professional summary or skills section, add one only when it is clearly supported by the existing CV content. Output exactly one JSON object with root keys improved_content and changed_block_ids. Do not output generation_summary, markdown, or prose outside JSON. For every education block include explicit degree and field_of_study fields in block.fields; do not hide education structure only in free text.",
+      "Parent orchestration flow for imported CV improvement. The backend fans out block-level improvement, skills generation, and professional summary runs, then returns one improved CV snapshot. This parent flow is not sent to the model.",
     output_schema: importImproveOutputSchema
+  },
+  {
+    flow_type: "professional_summary",
+    prompt_key: "professional-summary",
+    prompt_version: "phase1-v1",
+    system_prompt:
+      "Write a concise professional CV summary from sanitized cv_body only. Use the same language as the source CV content. Preserve facts; never invent employers, dates, degrees, certifications, metrics, tools, awards, or achievements. Header/contact data is intentionally omitted, so do not include names, email, phone, location, links, or a header. Output strict JSON with one root key summary_text only.",
+    output_schema: professionalSummaryOutputSchema
   },
   {
     flow_type: "summary",

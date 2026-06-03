@@ -241,21 +241,32 @@ describe("AiService skills pool refresh rules", () => {
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it("blocks real refresh when first shuffle has not been used", async () => {
+  it("allows real refresh without requiring prior shuffle", async () => {
     const cv = createMasterCvRecord({
       skill_pool_items: ["Node.js"],
       skill_pool_last_generated_at: NOW,
       skill_pool_shuffle_used: false
     });
-    const { service } = makeService(cv, "pro");
+    const { service, createSuggestions } = makeService(cv, "pro");
 
-    await expect(
-      service.suggestBlock(session, {
-        master_cv_id: "master-1",
-        block_id: "skills-block",
-        action_type: "improve"
-      })
-    ).rejects.toBeInstanceOf(ConflictError);
+    vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
+      ai_run: { id: "run-refresh" },
+      output: {
+        suggested_block: {
+          fields: {
+            skills: ["Node.js", "Redis", "Kafka"]
+          }
+        }
+      }
+    });
+
+    await service.suggestBlock(session, {
+      master_cv_id: "master-1",
+      block_id: "skills-block",
+      action_type: "improve"
+    });
+
+    expect(createSuggestions).toHaveBeenCalledTimes(1);
   });
 
   it("blocks real refresh when daily limit is reached", async () => {

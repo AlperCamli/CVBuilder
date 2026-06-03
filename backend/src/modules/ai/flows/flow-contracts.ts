@@ -184,6 +184,12 @@ export const blockSuggestOutputSchema = z
   })
   .strict();
 
+export const professionalSummaryOutputSchema = z
+  .object({
+    summary_text: z.string().trim().min(1).max(2000)
+  })
+  .strict();
+
 export const cvParseOutputSchema = z
   .object({
     parsed_content: cvContentInputSchema,

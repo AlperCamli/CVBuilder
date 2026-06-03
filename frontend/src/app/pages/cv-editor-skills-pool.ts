@@ -143,13 +143,4 @@ export const parseSkillsPoolItemsFromSuggestedContent = (content: Record<string,
   return clampSkillsPoolItems(candidates);
 };
 
-export const shuffleSkillsPoolItems = (items: string[]): string[] => {
-  const next = [...items];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const rand = Math.floor(Math.random() * (index + 1));
-    [next[index], next[rand]] = [next[rand], next[index]];
-  }
-  return next;
-};
-
 export const SKILLS_POOL_MAX_SIZE = SKILL_POOL_MAX_ITEMS;

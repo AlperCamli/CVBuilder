@@ -11,7 +11,8 @@ import {
   FileText,
   Loader2,
   History,
-  RefreshCw
+  RefreshCw,
+  ChevronUp
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -82,8 +83,7 @@ import {
 import {
   buildSkillsPoolDataPatch,
   parseSkillsPoolMetadata,
-  parseSkillsPoolMetadataFromBlockMeta,
-  shuffleSkillsPoolItems
+  parseSkillsPoolMetadataFromBlockMeta
 } from "./cv-editor-skills-pool";
 
 const formatDateTime = (value: string | null | undefined): string => {
@@ -1446,19 +1446,6 @@ export function CVEditor() {
     }
 
     setSkillsPoolError(null);
-    if (!poolState.shuffleUsed) {
-      const shuffled = shuffleSkillsPoolItems(poolState.items);
-      updateSkillSectionData(skillsPoolSectionId, (currentData) => ({
-        ...currentData,
-        ...buildSkillsPoolDataPatch({
-          ...poolState,
-          items: shuffled,
-          shuffleUsed: true
-        })
-      }));
-      return;
-    }
-
     setSkillsPoolRefreshing(true);
     try {
       if (dirty) {
@@ -1971,7 +1958,9 @@ export function CVEditor() {
                 setShowSkillsPoolDialog(false);
                 setSkillsPoolError(null);
               }}
-              className="h-7 px-2.5"
+              aria-label="Collapse skills pool"
+              title="Collapse skills pool"
+              className="h-7 w-7 p-0"
               style={{
                 fontSize: "11px",
                 borderColor: "var(--color-border-secondary)",
@@ -1979,7 +1968,7 @@ export function CVEditor() {
                 background: "var(--color-background-primary)"
               }}
             >
-              Hide
+              <ChevronUp size={14} />
             </Button>
           </div>
         </div>

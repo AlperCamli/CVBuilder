@@ -3,14 +3,14 @@ import { AiService } from "../src/modules/ai/ai.service";
 import type { SessionContext } from "../src/modules/ai/ai.types";
 import type { AiRepository } from "../src/modules/ai/ai.repository";
 import type { AiPromptResolver, ResolvedAiPrompt } from "../src/modules/ai/prompts/prompt-resolver";
-import type { AiProvider } from "../src/modules/ai/provider/ai-provider";
+import type { AiProvider, AiProviderRequest, AiProviderResult } from "../src/modules/ai/provider/ai-provider";
 import type { BillingService } from "../src/modules/billing/billing.service";
 import type { CvRevisionsService } from "../src/modules/cv-revisions/cv-revisions.service";
 import type { JobsRepository } from "../src/modules/jobs/jobs.repository";
 import type { MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
 import type { TailoredCvRepository } from "../src/modules/tailored-cv/tailored-cv.repository";
 import type { TemplatesService } from "../src/modules/templates/templates.service";
-import type { AiRunRecord, UserRecord } from "../src/shared/types/domain";
+import type { AiFlowType, AiRunRecord, UserRecord } from "../src/shared/types/domain";
 import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 
 const NOW = "2026-06-03T12:00:00.000Z";
@@ -37,7 +37,7 @@ const session: SessionContext = {
   appUser: sessionUser
 };
 
-const parsedContent: CvContent = {
+const baseContent = (): CvContent => ({
   version: "v1",
   language: "en",
   metadata: {
@@ -46,14 +46,14 @@ const parsedContent: CvContent = {
   },
   sections: [
     {
-      id: "header-real-id",
+      id: "header-section",
       type: "header",
       title: "Header",
       order: 0,
       meta: {},
       blocks: [
         {
-          id: "header-block-real-id",
+          id: "header-block",
           type: "contact",
           order: 0,
           visibility: "visible",
@@ -66,41 +66,123 @@ const parsedContent: CvContent = {
       ]
     },
     {
-      id: "experience-real-id",
+      id: "experience-section",
       type: "experience",
       title: "Experience",
       order: 1,
       meta: {},
       blocks: [
         {
-          id: "experience-block-real-id",
+          id: "experience-short",
           type: "experience_item",
           order: 0,
           visibility: "visible",
           fields: {
             role: "Backend Engineer",
-            description: "Built APIs.",
-            owner_id: "99d5751f-b90f-4df8-8ff9-50651d7725cc",
-            empty: ""
+            description: "Built APIs."
           },
-          meta: {
-            parser: "import"
-          }
+          meta: {}
+        },
+        {
+          id: "experience-long",
+          type: "experience_item",
+          order: 1,
+          visibility: "visible",
+          fields: {
+            role: "Platform Engineer",
+            description:
+              "Designed and maintained backend services for multiple product teams with monitoring and release automation."
+          },
+          meta: {}
+        },
+        {
+          id: "experience-empty",
+          type: "experience_item",
+          order: 2,
+          visibility: "visible",
+          fields: {
+            role: "Empty",
+            description: ""
+          },
+          meta: {}
+        }
+      ]
+    },
+    {
+      id: "education-section",
+      type: "education",
+      title: "Education",
+      order: 2,
+      meta: {},
+      blocks: [
+        {
+          id: "education-block",
+          type: "education_item",
+          order: 0,
+          visibility: "visible",
+          fields: {
+            institution: "Example University",
+            degree: "Bachelor",
+            field_of_study: "Computer Science"
+          },
+          meta: {}
         }
       ]
     }
   ]
-};
+});
 
-const pendingRun: AiRunRecord = {
-  id: "run-1",
+const headerOnlyContent = (): CvContent => ({
+  version: "v1",
+  language: "en",
+  metadata: {
+    full_name: "User One"
+  },
+  sections: [
+    {
+      id: "header-section",
+      type: "header",
+      title: "Header",
+      order: 0,
+      meta: {},
+      blocks: [
+        {
+          id: "header-block",
+          type: "contact",
+          order: 0,
+          visibility: "visible",
+          fields: {
+            full_name: "User One"
+          },
+          meta: {}
+        }
+      ]
+    }
+  ]
+});
+
+const resolvedPromptFor = (flowType: AiFlowType, actionType?: string | null): ResolvedAiPrompt => ({
+  prompt_key:
+    flowType === "block_suggest"
+      ? `block-suggest-${actionType ?? "improve"}`
+      : flowType === "professional_summary"
+        ? "professional-summary"
+        : "import-improve",
+  prompt_version: flowType === "professional_summary" ? "phase1-v1" : "phase7-v1",
+  system_prompt: `${flowType} prompt`,
+  model_name: flowType === "professional_summary" ? "heavy-model" : "light-model",
+  user_prompt_template: null
+});
+
+const makeRun = (id: string, flowType: AiFlowType): AiRunRecord => ({
+  id,
   user_id: sessionUser.id,
   master_cv_id: null,
   tailored_cv_id: null,
   job_id: null,
-  flow_type: "import_improve",
+  flow_type: flowType,
   provider: "gemini",
-  model_name: "gemini-2.5-flash",
+  model_name: flowType === "professional_summary" ? "heavy-model" : "light-model",
   status: "pending",
   progress_stage: "queued",
   input_payload: {},
@@ -112,59 +194,77 @@ const pendingRun: AiRunRecord = {
   total_tokens: null,
   started_at: NOW,
   completed_at: null
-};
+});
 
-const resolvedPrompt: ResolvedAiPrompt = {
-  prompt_key: "import-improve",
-  prompt_version: "phase6-v1",
-  system_prompt: "Improve import body.",
-  model_name: "gemini-2.5-flash",
-  user_prompt_template: null
-};
+const makeService = (providerGenerate: (request: AiProviderRequest) => Promise<AiProviderResult>) => {
+  let runCounter = 0;
+  const createdRuns: AiRunRecord[] = [];
+  const completedRuns: Array<{ runId: string; output: Record<string, unknown> }> = [];
+  const failedRuns: Array<{ runId: string; message: string; debug: Record<string, unknown> | null | undefined }> = [];
 
-const makeService = (overrides?: {
-  aiRepository?: Partial<AiRepository>;
-  aiProvider?: Partial<AiProvider>;
-  billingService?: Partial<BillingService>;
-  promptResolver?: Partial<AiPromptResolver>;
-}): AiService => {
   const aiRepository = {
-    createRun: vi.fn().mockResolvedValue(pendingRun),
-    completeRun: vi.fn().mockResolvedValue({
-      ...pendingRun,
-      status: "completed",
-      progress_stage: "completed",
-      completed_at: NOW
+    createRun: vi.fn().mockImplementation(async (payload: { flow_type: AiFlowType }) => {
+      runCounter += 1;
+      const run = makeRun(`run-${runCounter}`, payload.flow_type);
+      createdRuns.push(run);
+      return run;
     }),
-    failRun: vi.fn().mockResolvedValue({
-      ...pendingRun,
-      status: "failed",
-      completed_at: NOW
+    completeRun: vi.fn().mockImplementation(async (_userId: string, runId: string, output: Record<string, unknown>) => {
+      const run = createdRuns.find((item) => item.id === runId) ?? makeRun(runId, "import_improve");
+      completedRuns.push({ runId, output });
+      return {
+        ...run,
+        status: "completed",
+        progress_stage: "completed",
+        output_payload: output,
+        completed_at: NOW
+      };
     }),
-    updateRunProgressStage: vi.fn().mockResolvedValue(pendingRun),
-    updateRunContext: vi.fn().mockResolvedValue(pendingRun),
-    ...(overrides?.aiRepository ?? {})
+    failRun: vi.fn().mockImplementation(
+      async (_userId: string, runId: string, message: string, debug?: Record<string, unknown> | null) => {
+        const run = createdRuns.find((item) => item.id === runId) ?? makeRun(runId, "import_improve");
+        failedRuns.push({ runId, message, debug });
+        return {
+          ...run,
+          status: "failed",
+          progress_stage: "failed",
+          error_message: message,
+          debug_payload: debug ?? null,
+          completed_at: NOW
+        };
+      }
+    ),
+    updateRunProgressStage: vi.fn().mockImplementation(async (_userId: string, runId: string, stage: string) => {
+      const run = createdRuns.find((item) => item.id === runId) ?? makeRun(runId, "import_improve");
+      return {
+        ...run,
+        progress_stage: stage
+      };
+    }),
+    updateRunContext: vi.fn(),
+    findRunById: vi.fn()
   } as unknown as AiRepository;
 
   const aiProvider = {
     providerName: "gemini",
-    resolveModelName: vi.fn().mockReturnValue("gemini-2.5-flash"),
-    generate: vi.fn(),
-    ...(overrides?.aiProvider ?? {})
+    resolveModelName: vi.fn().mockImplementation((flowType: AiFlowType) =>
+      flowType === "professional_summary" ? "heavy-model" : "light-model"
+    ),
+    generate: vi.fn(providerGenerate)
   } as unknown as AiProvider;
 
   const billingService = {
     assertActionAllowed: vi.fn().mockResolvedValue(undefined),
-    recordAiActionUsage: vi.fn().mockResolvedValue(undefined),
-    ...(overrides?.billingService ?? {})
+    recordAiActionUsage: vi.fn().mockResolvedValue(undefined)
   } as unknown as BillingService;
 
   const promptResolver = {
-    resolve: vi.fn().mockResolvedValue(resolvedPrompt),
-    ...(overrides?.promptResolver ?? {})
+    resolve: vi.fn().mockImplementation(async (input: { flow_type: AiFlowType; action_type?: string | null }) =>
+      resolvedPromptFor(input.flow_type, input.action_type)
+    )
   } as unknown as AiPromptResolver;
 
-  return new AiService(
+  const service = new AiService(
     aiRepository,
     aiProvider,
     {} as MasterCvRepository,
@@ -175,123 +275,174 @@ const makeService = (overrides?: {
     promptResolver,
     billingService
   );
+
+  return {
+    service,
+    aiRepository,
+    aiProvider,
+    billingService,
+    createdRuns,
+    completedRuns,
+    failedRuns
+  };
 };
 
-describe("AiService import_improve flow", () => {
+describe("AiService parallel import_improve flow", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("sends sanitized alias body to the model and restores header/contact output", async () => {
-    const service = makeService();
-    const executeFlow = vi
-      .spyOn(
-        service as unknown as {
-          executeFlow: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        },
-        "executeFlow"
-      )
-      .mockResolvedValue({
-        ai_run: {
-          id: "run-1"
-        },
-        output: {
-          improved_content: {
-            sections: [
-              {
-                id: "experience_1_section",
-                type: "experience",
-                title: "Experience",
-                order: 0,
-                blocks: [
-                  {
-                    id: "experience_1",
-                    type: "experience_item",
-                    order: 0,
-                    visibility: "visible",
-                    fields: {
-                      role: "Backend Engineer",
-                      description: "Built reliable APIs."
-                    }
-                  }
-                ]
+  it("creates a parent run and parallel sub-runs for summary, skills, expand, and improve tasks", async () => {
+    const { service, aiProvider, billingService, createdRuns } = makeService(async (request) => {
+      if (request.flow_type === "professional_summary") {
+        expect(JSON.stringify(request.input_payload)).not.toContain("user@example.com");
+        return {
+          provider: "gemini",
+          model_name: request.model_name,
+          output_payload: {
+            summary_text: "Backend engineer with experience building reliable APIs."
+          }
+        };
+      }
+
+      const block = request.input_payload.block as Record<string, unknown>;
+      const fields = block.fields as Record<string, unknown>;
+      if (request.input_payload.skills_pool_context) {
+        return {
+          provider: "gemini",
+          model_name: request.model_name,
+          output_payload: {
+            suggested_block: {
+              ...block,
+              fields: {
+                ...fields,
+                skills: ["TypeScript", "APIs"]
               }
-            ]
-          },
-          changed_block_ids: ["experience_1"]
-        },
+            }
+          }
+        };
+      }
+
+      return {
         provider: "gemini",
-        model_name: "gemini-2.5-flash",
-        prompt_key: "import-improve",
-        prompt_version: "phase6-v1"
-      });
+        model_name: request.model_name,
+        output_payload: {
+          suggested_block: {
+            ...block,
+            fields: {
+              ...fields,
+              description: `${String(fields.description ?? "")} Improved.`
+            }
+          }
+        }
+      };
+    });
 
     const result = await service.improveImportedContent(session, {
-      parsed_content: parsedContent,
-      improvement_guidance: []
+      parsed_content: baseContent(),
+      improvement_guidance: ["Use stronger action verbs"]
     });
 
-    expect(executeFlow).toHaveBeenCalledTimes(1);
-    const inputPayload = executeFlow.mock.calls[0]?.[0]?.input_payload as Record<string, unknown>;
-    expect(inputPayload).toHaveProperty("cv_body");
-    expect(inputPayload).not.toHaveProperty("language");
-    expect(inputPayload).not.toHaveProperty("parsed_content");
-    expect(inputPayload).not.toHaveProperty("improvement_guidance");
-
-    const serializedInput = JSON.stringify(inputPayload);
-    expect(serializedInput).not.toContain("header-real-id");
-    expect(serializedInput).not.toContain("header-block-real-id");
-    expect(serializedInput).not.toContain("experience-real-id");
-    expect(serializedInput).not.toContain("experience-block-real-id");
-    expect(serializedInput).not.toContain("99d5751f-b90f-4df8-8ff9-50651d7725cc");
-    expect(serializedInput).not.toContain("user@example.com");
-    expect(serializedInput).toContain("experience_1");
-
-    expect(result.generation_metadata.flow_type).toBe("import_improve");
-    expect(result.changed_block_ids).toEqual(["experience-block-real-id"]);
-    expect(result.improved_content.metadata).toEqual(parsedContent.metadata);
-    expect(result.improved_content.sections[0]?.id).toBe("header-real-id");
-    expect(result.improved_content.sections[1]?.id).toBe("experience-real-id");
-    expect(result.improved_content.sections[1]?.blocks[0]?.id).toBe("experience-block-real-id");
-    expect(result.improved_content.sections[1]?.blocks[0]?.fields.description).toBe("Built reliable APIs.");
+    expect(createdRuns[0]?.flow_type).toBe("import_improve");
+    expect(createdRuns.filter((run) => run.flow_type === "professional_summary")).toHaveLength(1);
+    expect(createdRuns.filter((run) => run.flow_type === "block_suggest")).toHaveLength(4);
+    expect(aiProvider.generate).toHaveBeenCalledTimes(5);
+    expect(
+      (aiProvider.generate as unknown as { mock: { calls: Array<[AiProviderRequest]> } }).mock.calls
+        .filter(([request]) => request.flow_type === "block_suggest")
+        .map(([request]) => request.input_payload.action_type)
+    ).toEqual(expect.arrayContaining(["expand", "improve"]));
+    expect(result.generation_metadata.attempted_runs).toBe(5);
+    expect(result.generation_metadata.successful_runs).toBe(5);
+    expect(result.generation_metadata.failed_runs).toBe(0);
+    expect(result.generation_metadata.partial_success).toBe(false);
+    expect(result.improved_content.sections.some((section) => section.type === "summary")).toBe(true);
+    expect(result.improved_content.sections.some((section) => section.type === "skills")).toBe(true);
+    expect(result.changed_block_ids).toEqual(
+      expect.arrayContaining(["experience-short", "experience-long", "education-block"])
+    );
+    expect(billingService.recordAiActionUsage).toHaveBeenCalledTimes(1);
   });
 
-  it("fails the AI run when import_improve provider output is invalid", async () => {
-    const failRun = vi.fn().mockResolvedValue({
-      ...pendingRun,
-      status: "failed",
-      completed_at: NOW
+  it("returns partial success when some sub-runs fail", async () => {
+    const { service, failedRuns } = makeService(async (request) => {
+      if (request.flow_type === "professional_summary") {
+        throw new Error("summary failed");
+      }
+
+      const block = request.input_payload.block as Record<string, unknown>;
+      const fields = block.fields as Record<string, unknown>;
+      if (request.input_payload.skills_pool_context) {
+        return {
+          provider: "gemini",
+          model_name: request.model_name,
+          output_payload: {
+            suggested_block: {
+              ...block,
+              fields: {
+                ...fields,
+                skills: ["TypeScript", "APIs"]
+              }
+            }
+          }
+        };
+      }
+
+      return {
+        provider: "gemini",
+        model_name: request.model_name,
+        output_payload: {
+          suggested_block: {
+            ...block,
+            fields: {
+              ...fields,
+              description: `${String(fields.description ?? "")} Improved.`
+            }
+          }
+        }
+      };
     });
-    const providerGenerate = vi.fn().mockResolvedValue({
-      provider: "gemini",
-      model_name: "gemini-2.5-flash",
-      output_payload: {
-        improved_content: 123,
-        changed_block_ids: []
+
+    const result = await service.improveImportedContent(session, {
+      parsed_content: {
+        ...baseContent(),
+        sections: baseContent().sections.filter((section) => section.type !== "education")
       }
     });
-    const service = makeService({
-      aiRepository: {
-        failRun
-      },
-      aiProvider: {
-        generate: providerGenerate
-      }
+
+    expect(result.generation_metadata.partial_success).toBe(true);
+    expect(result.generation_metadata.failed_runs).toBe(1);
+    expect(result.generation_metadata.successful_runs).toBeGreaterThan(0);
+    expect(failedRuns.some((run) => run.runId !== "run-1")).toBe(true);
+  });
+
+  it("fails the parent run when all attempted sub-runs fail", async () => {
+    const { service, failedRuns, billingService } = makeService(async () => {
+      throw new Error("provider down");
     });
 
     await expect(
       service.improveImportedContent(session, {
-        parsed_content: parsedContent
+        parsed_content: baseContent()
       })
-    ).rejects.toThrow("AI output did not match required contract");
+    ).rejects.toThrow("Import improve sub-runs failed");
 
-    expect(providerGenerate).toHaveBeenCalledTimes(1);
-    expect(failRun).toHaveBeenCalled();
-    expect(
-      failRun.mock.calls.some((call) => {
-        const debugPayload = call[3] as Record<string, unknown> | undefined;
-        return debugPayload?.reason === "output_contract_invalid";
-      })
-    ).toBe(true);
+    expect(failedRuns.some((run) => run.runId === "run-1")).toBe(true);
+    expect(billingService.recordAiActionUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes without billing when no eligible tasks exist", async () => {
+    const { service, aiProvider, billingService } = makeService(async () => {
+      throw new Error("provider should not be called");
+    });
+
+    const result = await service.improveImportedContent(session, {
+      parsed_content: headerOnlyContent()
+    });
+
+    expect(aiProvider.generate).not.toHaveBeenCalled();
+    expect(billingService.recordAiActionUsage).not.toHaveBeenCalled();
+    expect(result.generation_metadata.attempted_runs).toBe(0);
+    expect(result.improved_content.sections).toHaveLength(1);
   });
 });
