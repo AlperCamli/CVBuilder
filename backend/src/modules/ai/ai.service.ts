@@ -44,6 +44,10 @@ import {
   buildTailoredDraftModelContent,
   resolveTailoredDraftModelContent
 } from "./tailored-draft-model-content";
+import {
+  buildImportImproveModelContent,
+  resolveImportImproveModelContent
+} from "./import-improve-model-content";
 import type {
   AiBlockVersionChain,
   AiBlockVersionEntry,
@@ -647,12 +651,15 @@ export class AiService {
       asRecord(input.parsed_content),
       input.language ?? "en"
     );
+    const aliasContext = buildImportImproveModelContent(normalizedContent);
+    const improvementGuidance = asStringArray(input.improvement_guidance);
 
-    const flowInput = {
-      parsed_content: normalizedContent,
-      language: normalizedContent.language,
-      improvement_guidance: input.improvement_guidance ?? []
+    const flowInput: Record<string, unknown> = {
+      cv_body: aliasContext.model_content
     };
+    if (improvementGuidance.length > 0) {
+      flowInput.improvement_guidance = improvementGuidance;
+    }
 
     const executed = await this.executeFlow({
       flow_type: "import_improve",
@@ -663,16 +670,26 @@ export class AiService {
 
     await this.billingService.recordAiActionUsage(session.appUser.id);
 
-    const improvedContent = normalizeCvContent(
+    const normalizedModelContent = normalizeCvContent(
       asRecord(asRecord(executed.output).improved_content),
+      normalizedContent.language
+    );
+    const improvedContent = normalizeCvContent(
+      resolveImportImproveModelContent(
+        normalizedModelContent,
+        normalizedContent,
+        aliasContext.alias_map
+      ),
       normalizedContent.language
     );
 
     return {
       ai_run_id: executed.ai_run.id,
       improved_content: improvedContent,
-      generation_summary: String(asRecord(executed.output).generation_summary ?? ""),
-      changed_block_ids: asStringArray(asRecord(executed.output).changed_block_ids),
+      changed_block_ids: this.resolveChangedBlockAliases(
+        asStringArray(asRecord(executed.output).changed_block_ids),
+        aliasContext.alias_map.block_alias_to_id
+      ),
       generation_metadata: {
         provider: executed.provider,
         model_name: executed.model_name,

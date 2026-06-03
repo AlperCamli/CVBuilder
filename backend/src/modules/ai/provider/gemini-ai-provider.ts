@@ -354,7 +354,7 @@ const toPromptText = (request: AiProviderRequest): string => {
     request.prompt.user_prompt,
     "</USER_PROMPT>",
     "Return only valid JSON that strictly matches the requested schema.",
-    "Always produce English output.",
+    "Follow the language policy stated in system_prompt and user_prompt.",
     `flow_type: ${request.flow_type}`,
     "<INPUT_PAYLOAD_JSON>",
     JSON.stringify(request.input_payload),

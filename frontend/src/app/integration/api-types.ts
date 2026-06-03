@@ -733,7 +733,6 @@ export interface TailoredCvDraftResult {
 export interface ImportImproveResponse {
   ai_run_id: string;
   improved_content: CvContent;
-  generation_summary: string;
   changed_block_ids: string[];
   generation_metadata: {
     provider: string;

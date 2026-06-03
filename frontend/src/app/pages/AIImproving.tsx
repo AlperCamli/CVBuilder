@@ -66,7 +66,6 @@ export function AIImproving() {
             try {
               const improved = await api.postImportImprove({
                 parsed_content: parsedContent as unknown as Record<string, unknown>,
-                language: parsedContent.language,
                 improvement_guidance: improvementGuidance
               });
 

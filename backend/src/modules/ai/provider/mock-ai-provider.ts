@@ -353,9 +353,8 @@ const generateTailoredDraft = (input: Record<string, unknown>): Record<string, u
 };
 
 const generateImportImprove = (input: Record<string, unknown>): Record<string, unknown> => {
-  const parsedContent = asRecord(input.parsed_content);
-  const language = asString(input.language) || asString(parsedContent.language) || "en";
-  const content = ensureTailoredContent(parsedContent, language);
+  const cvBody = asRecord(input.cv_body);
+  const content = ensureTailoredContent(cvBody, "en");
   const sections = asArray(content.sections).map((section) => asRecord(section));
   const changedBlockIds: string[] = [];
 
@@ -382,7 +381,6 @@ const generateImportImprove = (input: Record<string, unknown>): Record<string, u
 
   return {
     improved_content: content,
-    generation_summary: "Improved imported CV content for clarity and impact.",
     changed_block_ids: [...new Set(changedBlockIds)]
   };
 };

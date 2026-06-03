@@ -111,6 +111,15 @@ describe("AI flow output contracts", () => {
   it("requires structured CV content for import_improve outputs", () => {
     const parsed = importImproveOutputSchema.safeParse({
       improved_content: 123,
+      changed_block_ids: ["summary-1"]
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects import_improve generation_summary output", () => {
+    const parsed = importImproveOutputSchema.safeParse({
+      improved_content: validCvContent,
       generation_summary: "Improved imported CV.",
       changed_block_ids: ["summary-1"]
     });
@@ -166,7 +175,6 @@ describe("AI flow output contracts", () => {
           }
         ]
       },
-      generation_summary: "Improved imported CV.",
       changed_block_ids: ["edu-1"]
     });
 
@@ -176,7 +184,6 @@ describe("AI flow output contracts", () => {
   it("accepts import_improve output with structured education fields", () => {
     const parsed = importImproveOutputSchema.safeParse({
       improved_content: validEducationContent,
-      generation_summary: "Improved imported CV.",
       changed_block_ids: ["edu-1"]
     });
 
