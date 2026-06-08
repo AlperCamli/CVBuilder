@@ -1,3 +1,4 @@
+import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { TemplateSummary } from "../templates/templates.types";
 import type { RenderingBlock, RenderingPayload, RenderingSection } from "./rendering.types";
@@ -83,10 +84,15 @@ export interface RenderingPresentation {
   sections: PresentationSection[];
 }
 
+type SkillsDisplay = "inline" | "bulleted";
+
 interface TemplateProfile {
   layout: PresentationTemplateLayout;
   mode: PresentationLayoutMode;
   tokens: PresentationStyleTokens;
+  // How the skills section renders: a comma-separated line ("inline", default) or one
+  // bullet per skill ("bulleted"). Used by templates that present skills as a list.
+  skills_display?: SkillsDisplay;
 }
 
 const DEFAULT_PROFILE: TemplateProfile = {
@@ -127,6 +133,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
   "executive-timeline": {
     layout: "executive-timeline",
     mode: "timeline-split",
+    skills_display: "bulleted",
     tokens: {
       font_family: "Cambria, Georgia, serif",
       heading_color_hex: "#0f172a",
@@ -159,6 +166,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
   "academic-classic": {
     layout: "academic-classic",
     mode: "classic-single-column",
+    skills_display: "bulleted",
     tokens: {
       font_family: "Times New Roman, Georgia, serif",
       heading_color_hex: "#111827",
@@ -191,6 +199,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
   "two-column-modern": {
     layout: "two-column-modern",
     mode: "portfolio-two-column",
+    skills_display: "bulleted",
     tokens: {
       font_family: "Helvetica, Arial, sans-serif",
       heading_color_hex: "#0f172a",
@@ -331,6 +340,16 @@ const pickBodyText = (sectionType: string, block: RenderingBlock): string | null
   for (const key of preferredKeys) {
     const value = normalizeLine(block.normalized_fields[key]?.text ?? null);
     if (value) {
+      // If this narrative field holds a "• "-marked bullet list, those lines render as
+      // bullets (via derived.bullets); keep only the lead paragraph here so the body does
+      // not duplicate the bullet text.
+      const raw = block.fields[key];
+      if (typeof raw === "string") {
+        const split = splitBulletLines(raw);
+        if (split.bullets.length > 0) {
+          return normalizeLine(split.leadParagraph);
+        }
+      }
       return value;
     }
   }
@@ -553,7 +572,7 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
   return item;
 };
 
-const collectSkillsInlineText = (section: RenderingSection): string | null => {
+const collectSkillsList = (section: RenderingSection): string[] => {
   const skills: string[] = [];
 
   for (const block of section.blocks) {
@@ -581,7 +600,11 @@ const collectSkillsInlineText = (section: RenderingSection): string | null => {
     }
   }
 
-  const deduped = dedupeText(skills);
+  return dedupeText(skills);
+};
+
+const collectSkillsInlineText = (section: RenderingSection): string | null => {
+  const deduped = collectSkillsList(section);
   return deduped.length > 0 ? deduped.join(", ") : null;
 };
 
@@ -646,7 +669,10 @@ const collectLanguagesInlineText = (section: RenderingSection): string | null =>
   return deduped.length > 0 ? deduped.join(", ") : null;
 };
 
-const mapSection = (section: RenderingSection): PresentationSection | null => {
+const mapSection = (
+  section: RenderingSection,
+  skillsDisplay: SkillsDisplay = "inline"
+): PresentationSection | null => {
   const type = section.type;
   const title = getSectionTitle(type);
   const normalizedType = type.toLowerCase();
@@ -678,16 +704,37 @@ const mapSection = (section: RenderingSection): PresentationSection | null => {
   }
 
   if (type === "skills") {
-    const inlineText = collectSkillsInlineText(section);
-    if (!inlineText) {
+    const skills = collectSkillsList(section);
+    if (skills.length === 0) {
       return null;
+    }
+
+    if (skillsDisplay === "bulleted") {
+      return {
+        id: section.id,
+        type,
+        title,
+        inline_text: null,
+        items: [
+          {
+            id: `${section.id}-skills`,
+            title: null,
+            subtitle: null,
+            date_range: null,
+            location: null,
+            metadata_line: null,
+            body: null,
+            bullets: skills
+          }
+        ]
+      };
     }
 
     return {
       id: section.id,
       type,
       title,
-      inline_text: inlineText,
+      inline_text: skills.join(", "),
       items: []
     };
   }
@@ -1035,6 +1082,8 @@ export const mapRenderingPayloadToPresentation = (
   template: TemplateSummary | null
 ): RenderingPresentation => {
   const theme = resolveTemplateProfile(template);
+  const skillsDisplay =
+    (TEMPLATE_PROFILES[template?.slug ?? "modern-clean"] ?? DEFAULT_PROFILE).skills_display ?? "inline";
   const headerSections = findHeaderSections(rendering);
 
   const metadataUrls = metadata.urls ? extractTextItems(metadata.urls) : [];
@@ -1061,7 +1110,7 @@ export const mapRenderingPayloadToPresentation = (
 
   const sections = rendering.sections
     .sort((a, b) => a.order - b.order)
-    .map((section) => mapSection(section))
+    .map((section) => mapSection(section, skillsDisplay))
     .filter((section): section is PresentationSection => section !== null);
 
   return {

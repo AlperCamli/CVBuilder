@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import JSZip from "jszip";
 import { normalizeCvContent } from "../../../shared/cv-content/cv-content.utils";
+import { addBulletPrefix, isBulletLine } from "../../../shared/cv-content/bullet-text";
 import type { CvContent } from "../../../shared/cv-content/cv-content.types";
 import type {
   CvParser,
@@ -2127,13 +2128,15 @@ const inferEntryFields = (
   const normalizedBody = normalizeWhitespaceText(bodyLines.join(" "));
   const combinedText = normalizeWhitespaceText([normalizedHeader, normalizedBody].filter(Boolean).join(" "));
 
+  let fields: Record<string, unknown>;
+
   if (sectionType === "experience") {
     const headerDateParts = extractDateRangeFromText(normalizedHeader);
     const descriptor = normalizeWhitespaceText(headerDateParts.before || normalizedHeader);
     const split = splitRoleCompanyText(descriptor);
     const description = normalizeWhitespaceText([headerDateParts.after, normalizedBody].filter(Boolean).join(" "));
 
-    return {
+    fields = {
       role: split.role,
       company: split.company,
       start_date: headerDateParts.startDate,
@@ -2141,15 +2144,13 @@ const inferEntryFields = (
       current_role: headerDateParts.currentRole,
       description
     };
-  }
-
-  if (sectionType === "volunteer") {
+  } else if (sectionType === "volunteer") {
     const experienceFields = inferEntryFields("experience", headerLine, bodyLines);
     const role = typeof experienceFields.role === "string" ? experienceFields.role : "";
     const company = typeof experienceFields.company === "string" ? experienceFields.company : "";
     const description = typeof experienceFields.description === "string" ? experienceFields.description : "";
 
-    return {
+    fields = {
       organization: company,
       role,
       location: "",
@@ -2158,13 +2159,25 @@ const inferEntryFields = (
       current_role: experienceFields.current_role ?? false,
       description
     };
+  } else if (sectionType === "education") {
+    fields = parseEducationFields(combinedText);
+  } else {
+    fields = parseProjectFields(combinedText);
   }
 
-  if (sectionType === "education") {
-    return parseEducationFields(combinedText);
+  // Preserve imported bullet points: when the body contains bullet lines, rebuild the
+  // description keeping the "• " markers on separate lines (with any header-trailing text
+  // as a lead paragraph) instead of the flattened single-line description above.
+  if (bodyLines.some((line) => isBulletLine(line.trim()))) {
+    const headerLead = normalizeWhitespaceText(extractDateRangeFromText(normalizedHeader).after);
+    const bulletBody = bodyLines.map((line) => normalizeWhitespaceText(line)).filter(Boolean);
+    fields = {
+      ...fields,
+      description: [headerLead, ...bulletBody].filter(Boolean).join("\n")
+    };
   }
 
-  return parseProjectFields(combinedText);
+  return fields;
 };
 
 const buildExperienceStyleBlocks = (sectionType: ExperienceStyleSection, lines: string[]): Array<Record<string, unknown>> => {
@@ -2215,11 +2228,14 @@ const buildExperienceStyleBlocks = (sectionType: ExperienceStyleSection, lines: 
     }
 
     if (bullet) {
+      // Keep the bullet as a "• "-prefixed line so the imported list survives into the
+      // editor / render pipeline instead of being flattened into a paragraph.
+      const bulletLine = addBulletPrefix(normalizedLine);
       if (current) {
         const activeEntry = current as EntryDraft;
-        activeEntry.bodyLines.push(normalizedLine);
+        activeEntry.bodyLines.push(bulletLine);
       } else {
-        bufferedBullets.push(normalizedLine);
+        bufferedBullets.push(bulletLine);
       }
       continue;
     }

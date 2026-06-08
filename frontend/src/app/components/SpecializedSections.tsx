@@ -1,6 +1,7 @@
 import { GripVertical, Eye, EyeOff, Trash2, Plus, ChevronUp, ChevronDown } from "lucide-react";
 import { CollapsibleItem } from "./CollapsibleItem";
 import { DateInputHelper } from "./DateInputHelper";
+import { BulletTextarea } from "./BulletTextarea";
 import { useRef } from "react";
 import { useDrag, useDrop } from "react-dnd";
 
@@ -351,11 +352,11 @@ function CourseItem({ item, index, updateItem, removeItem, toggleItemVisibility,
               borderColor: "var(--color-border-secondary)",
             }}
           />
-          <textarea
+          <BulletTextarea
             rows={2}
             placeholder="Description (optional)"
             value={item.description || ""}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -585,11 +586,11 @@ function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility
               onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
-          <textarea
+          <BulletTextarea
             rows={3}
             placeholder="Description"
             value={item.description || ""}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -814,11 +815,11 @@ function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, 
             placeholder="Date (e.g. 2023)"
             onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
-          <textarea
+          <BulletTextarea
             rows={2}
             placeholder="Description (optional)"
             value={item.description || ""}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -1043,11 +1044,11 @@ function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibi
             placeholder="Date (e.g. 2023)"
             onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
-          <textarea
+          <BulletTextarea
             rows={2}
             placeholder="Description (optional)"
             value={item.description || ""}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -1564,11 +1565,11 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
               I currently volunteer here
             </span>
           </label>
-          <textarea
+          <BulletTextarea
             rows={3}
             placeholder="Responsibilities, Impact, Activities…"
-            value={item.description}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            value={item.description || ""}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",

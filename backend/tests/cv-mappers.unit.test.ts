@@ -301,4 +301,47 @@ describe("cv-mappers experience compatibility", () => {
     expect(items[0]?.organization).toBe("");
     expect(items[0]?.description).toBe("Organized community events");
   });
+
+  it("preserves bullet-list newlines in experience descriptions through a full round trip", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "experience-section",
+          type: "experience",
+          title: "Experience",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-block",
+              type: "experience_item",
+              order: 0,
+              visibility: visible,
+              fields: {
+                role: "Data Engineer",
+                company: "Acme",
+                description: "• Led migration\n• Cut latency by 40%"
+              },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const experienceSection = sections.find((section) => section.type === "experience");
+    const items = ((experienceSection?.data as any)?.items ?? []) as Array<Record<string, unknown>>;
+
+    // Load path must not collapse "\n" into " ".
+    expect(items[0]?.description).toBe("• Led migration\n• Cut latency by 40%");
+
+    // ...and the write path keeps it verbatim.
+    const roundTripped = editorSectionsToCvContent(sections, "en");
+    const block = roundTripped.sections.find((section) => section.type === "experience")?.blocks[0];
+    expect(block?.fields.description).toBe("• Led migration\n• Cut latency by 40%");
+  });
 });

@@ -19,6 +19,7 @@ import {
 import { useState, useRef, type ReactNode } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { DateInputHelper } from "./DateInputHelper";
+import { BulletTextarea } from "./BulletTextarea";
 
 interface HeaderSectionProps {
   data: any;
@@ -641,11 +642,11 @@ function ExperienceItem({
               I currently work here
             </span>
           </label>
-          <textarea
+          <BulletTextarea
             rows={3}
             placeholder="Responsibilities, Achievements, Technologies/Tools…"
-            value={item.description}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            value={item.description || ""}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -985,11 +986,11 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
               </span>
             </label>
           </div>
-          <textarea
+          <BulletTextarea
             rows={2}
             placeholder="Additional details (optional)"
-            value={item.description}
-            onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+            value={item.description || ""}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{
               fontSize: "13px",
@@ -1588,11 +1589,11 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                         placeholder="Dates (optional)"
                         onChange={(nextValue) => updateItem(index, { ...item, dates: nextValue })}
                       />
-                      <textarea
+                      <BulletTextarea
                         rows={2}
                         placeholder="Description (optional)"
-                        value={item.description}
-                        onChange={(e) => updateItem(index, { ...item, description: e.target.value })}
+                        value={item.description || ""}
+                        onValueChange={(next) => updateItem(index, { ...item, description: next })}
                         className="w-full px-2 py-1.5 rounded border resize-none"
                         style={{
                           fontSize: "13px",

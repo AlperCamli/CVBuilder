@@ -9,6 +9,8 @@ import {
   normalizeCvContent,
   replaceBlockInCvContent
 } from "../../shared/cv-content/cv-content.utils";
+import { looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
+import type { CvBlock } from "../../shared/cv-content/cv-content.types";
 import {
   AiFlowFailedError,
   AiProviderError,
@@ -122,6 +124,41 @@ const asStringArray = (value: unknown): string[] => {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean);
+};
+
+// Block types whose narrative fields are edited as bullet lists in the CV editor.
+const NARRATIVE_BULLET_BLOCK_TYPES = new Set([
+  "experience_item",
+  "education_item",
+  "project_item",
+  "volunteer_item",
+  "award_item",
+  "publication_item"
+]);
+const NARRATIVE_BULLET_FIELDS = ["description", "responsibilities", "highlights"];
+
+// Normalize AI bullet answers (dashes / numbers / "•" / multi-line) into the "• " convention
+// for experience-style blocks so they round-trip and render as bullets. Summary and skills
+// blocks are left untouched. Idempotent on already-normalized text.
+const bulletizeNarrativeFields = (block: CvBlock): CvBlock => {
+  if (!NARRATIVE_BULLET_BLOCK_TYPES.has(block.type)) {
+    return block;
+  }
+
+  let changed = false;
+  const fields = { ...block.fields };
+  for (const key of NARRATIVE_BULLET_FIELDS) {
+    const value = fields[key];
+    if (typeof value === "string" && looksLikeBulletAnswer(value)) {
+      const normalized = normalizeToBullets(value);
+      if (normalized !== value) {
+        fields[key] = normalized;
+        changed = true;
+      }
+    }
+  }
+
+  return changed ? { ...block, fields } : block;
 };
 
 const normalizeSectionType = (value: string): string =>
@@ -1267,7 +1304,9 @@ export class AiService {
       currentBlock.block,
       success.task.section_type
     );
-    const suggestedBlock = normalizeCvBlock(sanitizedSuggestedBlock, currentBlock.block);
+    const suggestedBlock = bulletizeNarrativeFields(
+      normalizeCvBlock(sanitizedSuggestedBlock, currentBlock.block)
+    );
     const replacement = replaceBlockInCvContent(content, success.task.block_id, suggestedBlock);
 
     return {
@@ -1735,7 +1774,9 @@ export class AiService {
       }
     }
 
-    const suggestedBlock = normalizeCvBlock(suggestion.suggested_content, current.block);
+    const suggestedBlock = bulletizeNarrativeFields(
+      normalizeCvBlock(suggestion.suggested_content, current.block)
+    );
     const replacement = replaceBlockInCvContent(
       target.current_content,
       suggestion.block_id,
@@ -1822,7 +1863,9 @@ export class AiService {
     suggested_block: Record<string, unknown>;
   }): Promise<BlockSuggestApplyResponse> {
     const current = findBlockInCvContent(options.target.current_content, options.block_id);
-    const suggestedBlock = normalizeCvBlock(options.suggested_block, current.block);
+    const suggestedBlock = bulletizeNarrativeFields(
+      normalizeCvBlock(options.suggested_block, current.block)
+    );
     const replacement = replaceBlockInCvContent(
       options.target.current_content,
       options.block_id,

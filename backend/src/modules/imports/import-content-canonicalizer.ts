@@ -323,6 +323,56 @@ const getFieldValue = (fields: Record<string, CvJsonValue>, keys: string[]): str
   return null;
 };
 
+// Newline-preserving variant of flattenText: collapses whitespace per line but keeps line
+// breaks, so bullet-list descriptions ("• a\n• b") are not flattened during canonicalization.
+const flattenMultiline = (value: CvJsonValue): string | null => {
+  if (typeof value === "string") {
+    const lines = value
+      .split(/\r?\n/)
+      .map((line) => collapseWhitespace(line))
+      .filter((line) => line.length > 0);
+    return lines.length > 0 ? lines.join("\n") : null;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    const lines = value
+      .map((item) => flattenMultiline(item))
+      .filter((line): line is string => Boolean(line));
+    return lines.length > 0 ? lines.join("\n") : null;
+  }
+
+  return null;
+};
+
+const getMultilineFieldValue = (fields: Record<string, CvJsonValue>, keys: string[]): string | null => {
+  for (const key of keys) {
+    if (!(key in fields)) {
+      continue;
+    }
+
+    const value = flattenMultiline(fields[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const firstNonEmptyMultiline = (...values: Array<string | null>): string | null => {
+  for (const value of values) {
+    if (value && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const parseLanguageEntries = (text: string): ParsedLanguageEntry[] => {
   const normalizedText = collapseWhitespace(text);
   if (!normalizedText) {
@@ -446,10 +496,10 @@ const canonicalizeEducationFields = (
     getFieldValue(fields, ["to_date"]) ?? "",
     getFieldValue(fields, ["graduation_date"]) ?? ""
   );
-  const description = firstNonEmpty(
-    getFieldValue(fields, ["description"]) ?? "",
-    getFieldValue(fields, ["details"]) ?? "",
-    getFieldValue(fields, ["notes"]) ?? ""
+  const description = firstNonEmptyMultiline(
+    getMultilineFieldValue(fields, ["description"]),
+    getMultilineFieldValue(fields, ["details"]),
+    getMultilineFieldValue(fields, ["notes"])
   );
 
   if (institution) {
@@ -543,13 +593,13 @@ const canonicalizeExperienceFields = (
     getFieldValue(fields, ["to_date"]) ?? "",
     getFieldValue(fields, ["until"]) ?? ""
   );
-  const description = firstNonEmpty(
-    getFieldValue(fields, ["description"]) ?? "",
-    getFieldValue(fields, ["summary"]) ?? "",
-    getFieldValue(fields, ["details"]) ?? "",
-    getFieldValue(fields, ["responsibilities"]) ?? "",
-    getFieldValue(fields, ["highlights"]) ?? "",
-    getFieldValue(fields, ["notes"]) ?? ""
+  const description = firstNonEmptyMultiline(
+    getMultilineFieldValue(fields, ["description"]),
+    getMultilineFieldValue(fields, ["summary"]),
+    getMultilineFieldValue(fields, ["details"]),
+    getMultilineFieldValue(fields, ["responsibilities"]),
+    getMultilineFieldValue(fields, ["highlights"]),
+    getMultilineFieldValue(fields, ["notes"])
   );
 
   const headerText = firstNonEmpty(

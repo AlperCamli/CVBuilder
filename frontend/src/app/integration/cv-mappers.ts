@@ -196,6 +196,19 @@ const firstNonEmpty = (...values: string[]): string => {
   return "";
 };
 
+// Like firstNonEmpty but preserves internal newlines so bullet-list descriptions
+// ("• a\n• b") survive the round trip back into the editor instead of collapsing to
+// "• a • b". Only intra-line whitespace is trimmed.
+const firstNonEmptyMultiline = (...values: string[]): string => {
+  for (const value of values) {
+    if (value && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return "";
+};
+
 const isYearOnly = (value: string): boolean => /^(?:19|20)\d{2}$/.test(normalizeWhitespace(value));
 
 const monthPattern = [
@@ -1384,7 +1397,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
           }
         }
 
-        let description = firstNonEmpty(structuredDescription, parsedFromText?.description ?? "");
+        let description = firstNonEmptyMultiline(structuredDescription, parsedFromText?.description ?? "");
         if (pendingLegacyDescriptions.length > 0) {
           description = mergeDescriptionText(pendingLegacyDescriptions.join("\n"), description);
           pendingLegacyDescriptions = [];
@@ -1443,7 +1456,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
             asBoolean(block.fields.expected_graduation) || asBoolean(block.fields.expectedGraduation),
           exchangeProgram:
             asBoolean(block.fields.exchange_program) || asBoolean(block.fields.exchangeProgram),
-          description: firstNonEmpty(getField(block, "description", "notes"), parsedFromText.description)
+          description: firstNonEmptyMultiline(getField(block, "description", "notes"), parsedFromText.description)
         };
       });
 
@@ -1722,7 +1735,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
           startDate: normalizedStartDate,
           endDate: normalizedEndDate,
           currentRole,
-          description: firstNonEmpty(
+          description: firstNonEmptyMultiline(
             structuredDescription,
             parsedFromText?.description ?? ""
           )

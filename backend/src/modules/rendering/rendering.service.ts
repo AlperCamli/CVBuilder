@@ -1,4 +1,5 @@
 import { normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
+import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { TemplatesService } from "../templates/templates.service";
 import { mapRenderingPayloadToPresentation } from "./rendering-presentation";
@@ -53,6 +54,9 @@ const keyMatches = (key: string, accepted: string[]): boolean => {
   const normalized = key.toLowerCase();
   return accepted.some((item) => normalized === item || normalized.includes(item));
 };
+
+// Narrative string fields whose "• "-marked lines should render as a bullet list.
+const NARRATIVE_BULLET_KEYS = ["description", "responsibilities", "highlights", "details", "notes"];
 
 export class RenderingService {
   constructor(private readonly templatesService: TemplatesService) {}
@@ -199,6 +203,17 @@ export class RenderingService {
       nonEmpty.find(([, value]) => value.text !== headline)?.[1].text ??
       null;
 
+    // Pull explicit "• "-marked bullets out of narrative string fields (e.g. description)
+    // so an imported/edited bullet list renders as bullets. Driven purely by the marker, so
+    // plain paragraphs are left untouched.
+    const narrativeBullets = nonEmpty.flatMap(([key]) => {
+      if (!keyMatches(key, NARRATIVE_BULLET_KEYS)) {
+        return [];
+      }
+      const raw = context.block.fields[key];
+      return typeof raw === "string" ? splitBulletLines(raw).bullets : [];
+    });
+
     const bulletCandidates = nonEmpty.filter(([key, value]) => {
       if (value.text_items.length > 1) {
         return true;
@@ -214,8 +229,10 @@ export class RenderingService {
         "points"
       ]);
     });
-    const bullets = bulletCandidates
-      .flatMap(([, value]) => value.text_items)
+    const bullets = [
+      ...narrativeBullets,
+      ...bulletCandidates.flatMap(([, value]) => value.text_items)
+    ]
       .filter((item) => item.length > 0)
       .slice(0, 8);
 

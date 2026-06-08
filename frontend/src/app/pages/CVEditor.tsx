@@ -75,6 +75,7 @@ import {
   getSectionFirstBlockId,
   type EditorSection
 } from "../integration/cv-mappers";
+import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
 import {
   canUseAiForSectionBlock,
   matchesBlockReference,
@@ -408,6 +409,40 @@ interface SkillPoolState {
   shuffleUsed: boolean;
 }
 
+// Block types whose narrative fields are edited as bullet lists.
+const NARRATIVE_BULLET_BLOCK_TYPES = new Set([
+  "experience_item",
+  "education_item",
+  "project_item",
+  "volunteer_item",
+  "award_item",
+  "publication_item"
+]);
+const NARRATIVE_BULLET_FIELDS = ["description", "responsibilities", "highlights"];
+
+// Frontend safety net mirroring the backend: normalize AI bullet answers into the "• "
+// convention so applied suggestions show clean bullets immediately. Summary/skills untouched.
+const bulletizeNarrativeBlock = (block: CvBlock): CvBlock => {
+  if (!NARRATIVE_BULLET_BLOCK_TYPES.has(block.type)) {
+    return block;
+  }
+
+  let changed = false;
+  const fields = { ...block.fields };
+  for (const key of NARRATIVE_BULLET_FIELDS) {
+    const value = fields[key];
+    if (typeof value === "string" && looksLikeBulletAnswer(value)) {
+      const normalized = normalizeToBullets(value);
+      if (normalized !== value) {
+        fields[key] = normalized;
+        changed = true;
+      }
+    }
+  }
+
+  return changed ? { ...block, fields } : block;
+};
+
 export function CVEditor() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -599,11 +634,11 @@ export function CVEditor() {
         }
 
         didReplace = true;
-        return {
+        return bulletizeNarrativeBlock({
           ...block,
           ...updatedBlock,
           id: block.id
-        };
+        });
       })
     }));
 
