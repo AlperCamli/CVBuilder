@@ -101,12 +101,14 @@ const formatDateTime = (value: string | null | undefined): string => {
   });
 };
 
-const FONT_SCALE_MIN = 0.85;
+const FONT_SCALE_MIN = 0.7;
 const FONT_SCALE_MAX = 1.15;
-const SPACING_SCALE_MIN = 0.7;
+const SPACING_SCALE_MIN = 0.5;
 const SPACING_SCALE_MAX = 1.4;
-const LAYOUT_SCALE_MIN = 0.7;
+const LAYOUT_SCALE_MIN = 0.5;
 const LAYOUT_SCALE_MAX = 1.3;
+// Fine slider increment so users can dial in a compact layout precisely.
+const SCALE_STEP = 0.01;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
 const EXPORT_UPSELL_SESSION_KEY = "cv-editor:export-upsell-shown";
 const EMPTY_AI_BLOCK_MESSAGE = "This block is empty, please provide some information.";
@@ -2167,7 +2169,7 @@ export function CVEditor() {
                         type="range"
                         min={FONT_SCALE_MIN}
                         max={FONT_SCALE_MAX}
-                        step={0.05}
+                        step={SCALE_STEP}
                         value={fontScale}
                         onChange={(event) => {
                           const next = clampFontScale(Number(event.target.value));
@@ -2191,7 +2193,7 @@ export function CVEditor() {
                         type="range"
                         min={SPACING_SCALE_MIN}
                         max={SPACING_SCALE_MAX}
-                        step={0.05}
+                        step={SCALE_STEP}
                         value={spacingScale}
                         onChange={(event) => {
                           const next = clampSpacingScale(Number(event.target.value));
@@ -2218,7 +2220,7 @@ export function CVEditor() {
                         type="range"
                         min={LAYOUT_SCALE_MIN}
                         max={LAYOUT_SCALE_MAX}
-                        step={0.05}
+                        step={SCALE_STEP}
                         value={layoutScale}
                         onChange={(event) => {
                           const next = clampLayoutScale(Number(event.target.value));
