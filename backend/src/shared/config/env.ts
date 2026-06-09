@@ -31,6 +31,9 @@ const envSchema = z
     AI_RUN_SWEEP_INTERVAL_MS: z.coerce.number().int().min(15_000).max(600_000).default(60_000),
     EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
     EXPORT_DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(600),
+    CV_ASSETS_STORAGE_BUCKET: z.string().min(1).default("cv-assets"),
+    CV_PHOTO_MAX_BYTES: z.coerce.number().int().min(1024).max(20_971_520).default(5_242_880),
+    CV_PHOTO_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
     STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
@@ -90,6 +93,11 @@ export interface AppConfig {
   exports: {
     storageBucket: string;
     downloadUrlTtlSeconds: number;
+  };
+  cvAssets: {
+    storageBucket: string;
+    photoMaxBytes: number;
+    photoUrlTtlSeconds: number;
   };
   billing: {
     provider: "stripe";
@@ -190,6 +198,11 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
     exports: {
       storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,
       downloadUrlTtlSeconds: parsed.data.EXPORT_DOWNLOAD_URL_TTL_SECONDS
+    },
+    cvAssets: {
+      storageBucket: parsed.data.CV_ASSETS_STORAGE_BUCKET,
+      photoMaxBytes: parsed.data.CV_PHOTO_MAX_BYTES,
+      photoUrlTtlSeconds: parsed.data.CV_PHOTO_URL_TTL_SECONDS
     },
     billing: {
       provider: "stripe",

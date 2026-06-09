@@ -36,7 +36,10 @@ const buildTestApp = () => {
   });
 
   const entitlementsService = new EntitlementsService(
-    createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId })
+    createPlanCatalog({
+      proStripePriceId: config.billing.stripeProPriceId,
+      lifetimeStripePriceId: config.billing.stripeLifetimePriceId
+    })
   );
   const usageService = new UsageService(usageRepository);
   const billingService = new BillingService(
@@ -50,7 +53,8 @@ const buildTestApp = () => {
       checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
       checkoutCancelUrl: config.billing.checkoutCancelUrl,
       portalReturnUrl: config.billing.portalReturnUrl,
-      stripeWebhookSecret: config.billing.stripeWebhookSecret
+      stripeWebhookSecret: config.billing.stripeWebhookSecret,
+      trialPeriodDays: config.billing.trialPeriodDays
     }
   );
   const usersService = new UsersService(usersRepository, billingService);

@@ -1,9 +1,28 @@
 # Profile Photo Feature — Implementation Plan
 
-> Status: **Plan only — not implemented.** This document describes how to turn the
-> current placeholder "add profile photo" behaviour into a properly engineered feature
-> that fits the project's existing storage, rendering, export, and content-model
-> decisions. No code changes are made by this document.
+> Status: **Implemented.** Profile photos are now managed files (bucket `cv-assets`,
+> `file_type=avatar`) referenced by `metadata.photo` (a `files.id`), replacing the inline
+> base64 approach. Preview resolves the reference to a signed URL server-side; exports
+> resolve it to a base64 data URI before embedding. Legacy inline `data:` photos still work.
+>
+> **Decisions taken during implementation (vs. the original options in §15):**
+> - **Upload mechanism:** signed direct-to-storage upload + a `complete` validation step
+>   (not a base64 proxy). The global `express.json()` body limit (100 kb) makes proxying
+>   multi-MB images impractical, and this mirrors the existing import upload flow.
+> - **Reference shape:** `metadata.photo` stores the `files.id` (Option A).
+> - **Image processing:** **no** server-side resize/normalize dependency was added. Only
+>   **PNG/JPEG** are accepted (validated by magic bytes); other formats are rejected up front
+>   so they can never silently drop at export. Resizing / webp→png normalization remains a
+>   documented follow-up (would require an image library such as `sharp`).
+> - **Entitlements:** ungated.
+> - **Cleanup:** best-effort storage delete + `files` soft-delete on remove/replace; an
+>   orphan sweep for files still referenced by old revisions is deferred.
+>
+> **Requires provisioning:** the `cv-assets` Supabase Storage bucket (private) must exist,
+> with user-scoped RLS consistent with the other buckets. Configurable env:
+> `CV_ASSETS_STORAGE_BUCKET`, `CV_PHOTO_MAX_BYTES`, `CV_PHOTO_URL_TTL_SECONDS`.
+>
+> The remainder of this document is the original design write-up, kept for context.
 
 ---
 

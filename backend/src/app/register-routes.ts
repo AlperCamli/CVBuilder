@@ -26,6 +26,8 @@ import { UsersController } from "../modules/users/users.controller";
 import { createUsersRouter } from "../modules/users/users.routes";
 import { RenderingController } from "../modules/rendering/rendering.controller";
 import { createRenderingRouter } from "../modules/rendering/rendering.routes";
+import { CvPhotosController } from "../modules/cv-photos/cv-photos.controller";
+import { createCvPhotosRouter } from "../modules/cv-photos/cv-photos.routes";
 import { ExportsController } from "../modules/exports/exports.controller";
 import { createExportsRouter } from "../modules/exports/exports.routes";
 import { BillingController } from "../modules/billing/billing.controller";
@@ -51,7 +53,8 @@ export const registerV1Routes = (
   const cvRevisionsController = new CvRevisionsController(services.cvRevisionsService);
   const aiController = new AiController(services.aiService);
   const templatesController = new TemplatesController(services.templatesService);
-  const renderingController = new RenderingController(services.renderingService);
+  const renderingController = new RenderingController(services.renderingService, services.cvPhotosService);
+  const cvPhotosController = new CvPhotosController(services.cvPhotosService);
   const exportsController = new ExportsController(services.exportsService);
   const billingController = new BillingController(services.billingService);
 
@@ -67,6 +70,7 @@ export const registerV1Routes = (
   router.use(createAiRouter(aiController, authMiddleware, aiRateLimiter));
   router.use(createTemplatesRouter(templatesController, authMiddleware));
   router.use(createRenderingRouter(renderingController, authMiddleware));
+  router.use(createCvPhotosRouter(cvPhotosController, authMiddleware));
   router.use(createExportsRouter(exportsController, authMiddleware));
   router.use(createBillingRouter(billingController, authMiddleware));
 };

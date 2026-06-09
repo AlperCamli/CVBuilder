@@ -17,7 +17,8 @@ This is a block-oriented, editor-friendly JSON model used directly by Phase 3 re
     "headline": "",
     "email": "",
     "phone": "",
-    "location": ""
+    "location": "",
+    "photo": null
   },
   "sections": [
     {
@@ -53,6 +54,11 @@ This is a block-oriented, editor-friendly JSON model used directly by Phase 3 re
 - block IDs are stable identifiers for update and future revision history
 - `fields` and `meta` are structured JSON records for extensibility
 - `visibility` supports editor/show-hide behavior
+- `metadata.photo` is the profile photo reference. New CVs store a managed `files.id`
+  (an `avatar` file in the `cv-assets` bucket, resolved to a signed URL for preview and a
+  base64 data URI for export). Legacy CVs may carry an inline `data:` URI; both shapes are
+  accepted. A value starting with `data:` or `http(s)://` is treated as already-displayable;
+  any other non-empty value is a managed file id. See `storage-strategy.md`.
 
 ## Stable ID Expectations
 

@@ -16,10 +16,23 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-import { useState, useRef, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
+import { useAuth } from "../integration/auth-context";
+import { supabase } from "../integration/supabase-client";
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PHOTO_TYPES = ["image/png", "image/jpeg"];
+
+// A stored photo value is a managed files.id when it is neither a legacy inline data URI nor
+// an absolute URL; those need to be resolved to a signed URL before display.
+const isDisplayablePhoto = (value: unknown): value is string =>
+  typeof value === "string" && (value.startsWith("data:") || /^https?:\/\//i.test(value));
+
+const isManagedPhotoReference = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && !isDisplayablePhoto(value);
 
 interface HeaderSectionProps {
   data: any;
@@ -29,11 +42,47 @@ interface HeaderSectionProps {
 }
 
 export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: HeaderSectionProps) {
+  const { api } = useAuth();
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [newSocialType, setNewSocialType] = useState("");
   const [newSocialUrl, setNewSocialUrl] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const socialLinks = data.socialLinks || [];
+
+  // Resolve the stored photo (a managed files.id) to a signed URL for the thumbnail.
+  // Legacy inline data URIs (and absolute URLs) are already displayable.
+  useEffect(() => {
+    const photo = data.photo as string | null | undefined;
+    if (!photo) {
+      setPhotoUrl(null);
+      return;
+    }
+    if (isDisplayablePhoto(photo)) {
+      setPhotoUrl(photo);
+      return;
+    }
+
+    let cancelled = false;
+    api
+      .getCvPhotoUrl(photo)
+      .then((res) => {
+        if (!cancelled) {
+          setPhotoUrl(res.signed_url);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPhotoUrl(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.photo]);
 
   const socialPlatforms = [
     { type: "linkedin", label: "LinkedIn", icon: Linkedin },
@@ -72,14 +121,65 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
     });
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onChange({ ...data, photo: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+    // Reset the input so selecting the same file again re-triggers onChange.
+    e.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    if (!ALLOWED_PHOTO_TYPES.includes(file.type)) {
+      setPhotoError("Please choose a PNG or JPEG image.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError("Image must be 5 MB or smaller.");
+      return;
+    }
+
+    setPhotoError(null);
+    setPhotoUploading(true);
+    const previousPhoto = typeof data.photo === "string" ? data.photo : null;
+    try {
+      // 1) Ask the backend for a signed direct-to-storage upload target.
+      const target = await api.createCvPhotoUploadUrl({
+        content_type: file.type,
+        size_bytes: file.size
+      });
+      // 2) Upload the bytes straight to storage (avoids large bodies through the API).
+      const { error: uploadError } = await supabase.storage
+        .from(target.storage_bucket)
+        .uploadToSignedUrl(target.storage_path, target.token, file);
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+      // 3) Finalize: backend validates the object and persists its files row.
+      const finalized = await api.completeCvPhotoUpload(target.file_id, {
+        storage_path: target.storage_path
+      });
+
+      onChange({ ...data, photo: finalized.file_id });
+      setPhotoUrl(finalized.signed_url);
+
+      // Clean up a previously managed photo that this upload replaces.
+      if (previousPhoto && isManagedPhotoReference(previousPhoto)) {
+        api.deleteCvPhoto(previousPhoto).catch(() => {});
+      }
+    } catch {
+      setPhotoError("Photo upload failed. Please try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    const previousPhoto = typeof data.photo === "string" ? data.photo : null;
+    onChange({ ...data, photo: null });
+    setPhotoUrl(null);
+    setPhotoError(null);
+    if (previousPhoto && isManagedPhotoReference(previousPhoto)) {
+      api.deleteCvPhoto(previousPhoto).catch(() => {});
     }
   };
 
@@ -108,15 +208,15 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
         <div className="space-y-3">
           {/* Photo Upload */}
           <div className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
-            {data.photo ? (
+            {photoUrl ? (
               <div className="relative">
                 <img
-                  src={data.photo}
+                  src={photoUrl}
                   alt="Profile"
                   className="w-16 h-16 rounded-full object-cover"
                 />
                 <button
-                  onClick={() => onChange({ ...data, photo: null })}
+                  onClick={handleRemovePhoto}
                   className="absolute -top-1 -right-1 p-0.5 rounded-full"
                   style={{ fontSize: "10px", background: "var(--color-danger)", color: "var(--color-danger-bg)" }}
                 >
@@ -124,12 +224,17 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                 </button>
               </div>
             ) : (
-              <label className="w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer transition-colors hover:bg-[var(--color-background-secondary)]"
-                style={{ borderColor: "var(--color-border-tertiary)" }}>
+              <label
+                className={`w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center transition-colors ${
+                  photoUploading ? "opacity-60 cursor-wait" : "cursor-pointer hover:bg-[var(--color-background-secondary)]"
+                }`}
+                style={{ borderColor: "var(--color-border-tertiary)" }}
+              >
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg"
                   onChange={handlePhotoUpload}
+                  disabled={photoUploading}
                   className="hidden"
                 />
                 <Camera size={20} style={{ color: "var(--color-text-secondary)" }} />
@@ -139,8 +244,14 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
               <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-primary)" }}>
                 Profile Photo
               </p>
-              <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                {data.photo ? "Click X to remove" : "Click to upload"}
+              <p style={{ fontSize: "12px", color: photoError ? "var(--color-danger)" : "var(--color-text-secondary)" }}>
+                {photoError
+                  ? photoError
+                  : photoUploading
+                    ? "Uploading…"
+                    : photoUrl
+                      ? "Click X to remove"
+                      : "PNG or JPEG, up to 5 MB"}
               </p>
             </div>
           </div>

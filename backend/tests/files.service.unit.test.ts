@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { FilesService } from "../src/modules/files/files.service";
-import type { CreateFilePayload, FilesRepository, UploadStorageObjectPayload } from "../src/modules/files/files.repository";
+import type {
+  CreateFilePayload,
+  FilesRepository,
+  SignedUploadTarget,
+  UploadStorageObjectPayload
+} from "../src/modules/files/files.repository";
 import type { FileRecord } from "../src/shared/types/domain";
 
 const nowIso = (): string => new Date().toISOString();
@@ -35,6 +40,17 @@ class FakeFilesRepository implements FilesRepository {
 
   async uploadStorageObject(payload: UploadStorageObjectPayload): Promise<void> {
     this.uploadedPayload = payload;
+  }
+
+  async createSignedUploadUrl(storageBucket: string, storagePath: string): Promise<SignedUploadTarget> {
+    return {
+      storage_path: storagePath,
+      token: `${storageBucket}:upload-token`
+    };
+  }
+
+  async downloadStorageObject(_storageBucket: string, _storagePath: string): Promise<Uint8Array> {
+    return new Uint8Array();
   }
 
   async deleteStorageObject(_storageBucket: string, _storagePath: string): Promise<void> {

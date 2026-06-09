@@ -20,12 +20,19 @@ export interface UploadStorageObjectPayload {
   mime_type: string;
 }
 
+export interface SignedUploadTarget {
+  storage_path: string;
+  token: string;
+}
+
 export interface FilesRepository {
   createFile(payload: CreateFilePayload): Promise<FileRecord>;
   findById(userId: string, fileId: string): Promise<FileRecord | null>;
   softDeleteById(userId: string, fileId: string): Promise<boolean>;
   uploadStorageObject(payload: UploadStorageObjectPayload): Promise<void>;
   deleteStorageObject(storageBucket: string, storagePath: string): Promise<void>;
+  createSignedUploadUrl(storageBucket: string, storagePath: string): Promise<SignedUploadTarget>;
+  downloadStorageObject(storageBucket: string, storagePath: string): Promise<Uint8Array>;
   createSignedDownloadUrl(
     storageBucket: string,
     storagePath: string,
@@ -127,6 +134,43 @@ export class SupabaseFilesRepository implements FilesRepository {
         storage_path: payload.storage_path
       });
     }
+  }
+
+  async createSignedUploadUrl(
+    storageBucket: string,
+    storagePath: string
+  ): Promise<SignedUploadTarget> {
+    const { data, error } = await this.supabaseClient.storage
+      .from(storageBucket)
+      .createSignedUploadUrl(storagePath);
+
+    if (error || !data?.token) {
+      throw new InternalServerError("Failed to create signed upload URL", {
+        reason: error?.message ?? "missing_upload_token",
+        storage_bucket: storageBucket,
+        storage_path: storagePath
+      });
+    }
+
+    return {
+      storage_path: storagePath,
+      token: data.token
+    };
+  }
+
+  async downloadStorageObject(storageBucket: string, storagePath: string): Promise<Uint8Array> {
+    const { data, error } = await this.supabaseClient.storage.from(storageBucket).download(storagePath);
+
+    if (error || !data) {
+      throw new InternalServerError("Failed to download file from storage", {
+        reason: error?.message ?? "missing_storage_object",
+        storage_bucket: storageBucket,
+        storage_path: storagePath
+      });
+    }
+
+    const arrayBuffer = await data.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
   }
 
   async deleteStorageObject(storageBucket: string, storagePath: string): Promise<void> {

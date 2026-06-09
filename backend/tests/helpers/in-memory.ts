@@ -450,6 +450,11 @@ export const createTestConfig = (): AppConfig => {
       storageBucket: "exports",
       downloadUrlTtlSeconds: 600
     },
+    cvAssets: {
+      storageBucket: "cv-assets",
+      photoMaxBytes: 5_242_880,
+      photoUrlTtlSeconds: 3600
+    },
     billing: {
       provider: "stripe",
       stripeSecretKey: null,

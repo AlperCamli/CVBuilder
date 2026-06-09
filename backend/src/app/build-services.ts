@@ -62,6 +62,7 @@ import {
 import { RenderingService } from "../modules/rendering/rendering.service";
 import { FilesService } from "../modules/files/files.service";
 import { SupabaseFilesRepository, type FilesRepository } from "../modules/files/files.repository";
+import { CvPhotosService } from "../modules/cv-photos/cv-photos.service";
 import { ExportsService } from "../modules/exports/exports.service";
 import {
   SupabaseExportsRepository,
@@ -101,6 +102,7 @@ export interface AppServices {
   templatesService: TemplatesService;
   renderingService: RenderingService;
   filesService: FilesService;
+  cvPhotosService: CvPhotosService;
   exportsService: ExportsService;
   billingService: BillingService;
 }
@@ -232,6 +234,11 @@ export const buildDefaultServices = (
     storageBucket: config.exports.storageBucket,
     downloadUrlTtlSeconds: config.exports.downloadUrlTtlSeconds
   });
+  const cvPhotosService = new CvPhotosService(filesRepository, {
+    storageBucket: config.cvAssets.storageBucket,
+    photoMaxBytes: config.cvAssets.photoMaxBytes,
+    photoUrlTtlSeconds: config.cvAssets.photoUrlTtlSeconds
+  });
   const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
   const jobsService = new JobsService(jobsRepository);
   const coverLettersService = new CoverLettersService(
@@ -277,7 +284,8 @@ export const buildDefaultServices = (
     renderingService,
     filesService,
     renderingExportGenerator,
-    billingService
+    billingService,
+    cvPhotosService
   );
 
   return {
@@ -296,6 +304,7 @@ export const buildDefaultServices = (
     templatesService,
     renderingService,
     filesService,
+    cvPhotosService,
     exportsService,
     billingService
   };

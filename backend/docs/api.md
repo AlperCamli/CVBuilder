@@ -435,3 +435,68 @@ Response `200` now includes target scope:
   "section_id": "section-id"
 }
 ```
+
+## CV Profile Photo Endpoints
+
+Profile photos are stored as managed files (bucket `cv-assets`, `file_type=avatar`); the CV's
+`metadata.photo` holds the returned `file_id`. See `storage-strategy.md`. All endpoints
+require auth and are user-scoped.
+
+### `POST /cv-photos/upload-url`
+
+Validate type/size and issue a signed direct-to-storage upload target.
+
+Request:
+
+```json
+{ "content_type": "image/png", "size_bytes": 204800 }
+```
+
+Response `200`:
+
+```json
+{
+  "file_id": "uuid",
+  "storage_bucket": "cv-assets",
+  "storage_path": "users/<userId>/avatars/<fileId>.png",
+  "token": "<signed-upload-token>",
+  "mime_type": "image/png"
+}
+```
+
+The client then uploads the file to the signed target (`uploadToSignedUrl`). Only `image/png`
+and `image/jpeg` are accepted; max size is `CV_PHOTO_MAX_BYTES` (default 5 MB).
+
+### `POST /cv-photos/:fileId/complete`
+
+Re-validate the uploaded object (ownership, size, PNG/JPEG magic bytes) and persist its
+`files` row.
+
+Request:
+
+```json
+{ "storage_path": "users/<userId>/avatars/<fileId>.png" }
+```
+
+Response `200`:
+
+```json
+{
+  "file_id": "uuid",
+  "signed_url": "https://...",
+  "expires_at": "ISO-8601",
+  "expires_in_seconds": 3600
+}
+```
+
+### `GET /cv-photos/:fileId/url`
+
+Return a fresh signed URL for display. Response shape matches the `complete` response.
+
+### `DELETE /cv-photos/:fileId`
+
+Soft-delete the `files` row and best-effort delete the storage object. Response `200`:
+
+```json
+{ "deleted": true }
+```

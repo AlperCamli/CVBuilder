@@ -628,11 +628,18 @@ describe("GeminiAiProvider", () => {
         storageBucket: "exports",
         downloadUrlTtlSeconds: 600
       },
+      cvAssets: {
+        storageBucket: "cv-assets",
+        photoMaxBytes: 5_242_880,
+        photoUrlTtlSeconds: 3600
+      },
       billing: {
         provider: "stripe",
         stripeSecretKey: null,
         stripeWebhookSecret: null,
         stripeProPriceId: null,
+        stripeLifetimePriceId: null,
+        trialPeriodDays: 3,
         checkoutSuccessUrl: "http://localhost:5173/app/pricing?checkout=success",
         checkoutCancelUrl: "http://localhost:5173/app/pricing?checkout=cancel",
         portalReturnUrl: "http://localhost:5173/app/pricing"

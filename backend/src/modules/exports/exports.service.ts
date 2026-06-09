@@ -34,6 +34,7 @@ import type {
   SessionContext
 } from "./exports.types";
 import type { RenderingExportGenerator } from "./generators/rendering-export-generator";
+import type { CvPhotosService } from "../cv-photos/cv-photos.service";
 
 const truncateErrorMessage = (value: string, maxLength = 500): string => {
   const normalized = value.trim();
@@ -153,7 +154,8 @@ export class ExportsService {
     private readonly renderingService: RenderingService,
     private readonly filesService: FilesService,
     private readonly renderingExportGenerator: RenderingExportGenerator,
-    private readonly billingService: BillingService
+    private readonly billingService: BillingService,
+    private readonly cvPhotosService: CvPhotosService
   ) {}
 
   async createPdfExport(
@@ -402,6 +404,15 @@ export class ExportsService {
       });
 
       resolvedTemplate = renderingResult.resolved_template.template;
+
+      // The header photo is stored as a managed files.id (or a legacy inline data URI).
+      // The PDF/DOCX embedders only accept a base64 data URI, so resolve it here before
+      // generation. Unresolvable references become null (photo is simply omitted).
+      renderingResult.presentation.header.photo = await this.cvPhotosService.resolveDataUri(
+        userId,
+        renderingResult.presentation.header.photo
+      );
+
       if (resolvedTemplate && !isTemplateFormatEnabled(resolvedTemplate, format)) {
         throw new ValidationError("Template does not support requested export format", {
           format,

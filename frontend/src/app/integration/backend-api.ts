@@ -114,6 +114,30 @@ export interface ImportUploadUrlTarget {
   token: string;
 }
 
+export interface CreateCvPhotoUploadUrlInput {
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface CvPhotoUploadTarget {
+  file_id: string;
+  storage_bucket: string;
+  storage_path: string;
+  token: string;
+  mime_type: string;
+}
+
+export interface CompleteCvPhotoUploadInput {
+  storage_path: string;
+}
+
+export interface CvPhotoAccess {
+  file_id: string;
+  signed_url: string;
+  expires_at: string;
+  expires_in_seconds: number;
+}
+
 export interface CreateMasterCvFromImportInput {
   title?: string;
   language?: string;
@@ -366,6 +390,28 @@ export class BackendApi {
 
   markImportUploadComplete(importId: string): Promise<ImportDetail> {
     return this.client.post<ImportDetail>(`/imports/${importId}/upload-complete`);
+  }
+
+  createCvPhotoUploadUrl(payload: CreateCvPhotoUploadUrlInput): Promise<CvPhotoUploadTarget> {
+    return this.client.post<CvPhotoUploadTarget, CreateCvPhotoUploadUrlInput>(
+      "/cv-photos/upload-url",
+      payload
+    );
+  }
+
+  completeCvPhotoUpload(fileId: string, payload: CompleteCvPhotoUploadInput): Promise<CvPhotoAccess> {
+    return this.client.post<CvPhotoAccess, CompleteCvPhotoUploadInput>(
+      `/cv-photos/${fileId}/complete`,
+      payload
+    );
+  }
+
+  getCvPhotoUrl(fileId: string): Promise<CvPhotoAccess> {
+    return this.client.get<CvPhotoAccess>(`/cv-photos/${fileId}/url`);
+  }
+
+  deleteCvPhoto(fileId: string): Promise<{ deleted: boolean }> {
+    return this.client.delete<{ deleted: boolean }>(`/cv-photos/${fileId}`);
   }
 
   parseImport(importId: string): Promise<ParseImportResponse> {

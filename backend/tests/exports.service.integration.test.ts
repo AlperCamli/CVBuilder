@@ -25,6 +25,7 @@ import type { TemplateSummary } from "../src/modules/templates/templates.types";
 import type { FilesService } from "../src/modules/files/files.service";
 import type { RenderingExportGenerator } from "../src/modules/exports/generators/rendering-export-generator";
 import type { BillingService } from "../src/modules/billing/billing.service";
+import type { CvPhotosService } from "../src/modules/cv-photos/cv-photos.service";
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -32,6 +33,11 @@ const noopBillingService = {
   assertActionAllowed: async () => {},
   recordExportUsage: async () => {}
 } as unknown as BillingService;
+
+// Passthrough: leaves the (typically absent) header photo unchanged in these export tests.
+const noopCvPhotosService = {
+  resolveDataUri: async (_userId: string, reference: string | null) => reference
+} as unknown as CvPhotosService;
 
 class InMemoryExportsRepository implements ExportsRepository {
   rows = new Map<string, ExportRecord>();
@@ -587,7 +593,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       generator,
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     const pdfResult = await service.createPdfExport(session, "tailored-1", {
@@ -648,7 +655,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       generator,
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     await service.createPdfExport(session, "tailored-1", {
@@ -700,7 +708,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       generator,
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     await service.createPdfExport(session, "tailored-1", {
@@ -753,7 +762,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       generator,
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     const result = await service.createMasterCvPdfExport(session, "master-1", {
@@ -812,7 +822,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       generator,
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     await expect(service.createPdfExport(session, "tailored-1", {})).rejects.toBeInstanceOf(
@@ -863,7 +874,8 @@ describe("exports service integration checks", () => {
       renderingService as unknown as RenderingService,
       filesService as unknown as FilesService,
       new FakeRenderingExportGenerator(),
-      noopBillingService
+      noopBillingService,
+      noopCvPhotosService
     );
 
     await expect(service.createDocxExport(session, "tailored-1", {})).rejects.toBeInstanceOf(
