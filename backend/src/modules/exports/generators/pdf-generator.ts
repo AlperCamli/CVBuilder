@@ -1,6 +1,19 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  PDFDocument,
+  appendBezierCurve,
+  clip,
+  closePath,
+  endPath,
+  moveTo,
+  popGraphicsState,
+  pushGraphicsState,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage
+} from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import type {
   ExportDocumentBlock,
@@ -78,6 +91,7 @@ interface PlacedImage {
   width: number;
   height: number;
   imageRef: PDFImage;
+  shape: "circle" | "square";
 }
 
 interface BlockShape {
@@ -292,7 +306,8 @@ const buildHeaderBlock = (
       yFromTop: 0,
       width: style.photoSize,
       height: style.photoSize,
-      imageRef: photo
+      imageRef: photo,
+      shape: model.photo_shape === "square" ? "square" : "circle"
     });
   }
 
@@ -801,6 +816,42 @@ const resolveColor = (palette: PdfPalette, key: ColorKey): RgbColor => {
   }
 };
 
+// Bezier control-point ratio for approximating a circle with four curves.
+const CIRCLE_KAPPA = 0.5522847498307936;
+
+// Draw an image clipped to a circle (matches the rounded preview thumbnail). pdf-lib has no
+// high-level circle clip, so we set a circular clipping path via graphics-state operators,
+// draw the image inside it, then restore the previous state.
+const drawCircleClippedImage = (
+  page: PDFPage,
+  image: PDFImage,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): void => {
+  const rx = width / 2;
+  const ry = height / 2;
+  const cx = x + rx;
+  const cy = y + ry;
+  const ox = rx * CIRCLE_KAPPA;
+  const oy = ry * CIRCLE_KAPPA;
+
+  page.pushOperators(
+    pushGraphicsState(),
+    moveTo(cx + rx, cy),
+    appendBezierCurve(cx + rx, cy + oy, cx + ox, cy + ry, cx, cy + ry),
+    appendBezierCurve(cx - ox, cy + ry, cx - rx, cy + oy, cx - rx, cy),
+    appendBezierCurve(cx - rx, cy - oy, cx - ox, cy - ry, cx, cy - ry),
+    appendBezierCurve(cx + ox, cy - ry, cx + rx, cy - oy, cx + rx, cy),
+    closePath(),
+    clip(),
+    endPath()
+  );
+  page.drawImage(image, { x, y, width, height });
+  page.pushOperators(popGraphicsState());
+};
+
 const drawBlock = (
   page: PDFPage,
   block: PdfBlock,
@@ -811,12 +862,18 @@ const drawBlock = (
   const palette = block.column === "sidebar" ? style.sidebarPalette : style.palette;
 
   for (const image of block.shape.images) {
-    page.drawImage(image.imageRef, {
-      x: leftX + image.xOffset,
-      y: topY - image.yFromTop - image.height,
-      width: image.width,
-      height: image.height
-    });
+    const imageX = leftX + image.xOffset;
+    const imageY = topY - image.yFromTop - image.height;
+    if (image.shape === "circle") {
+      drawCircleClippedImage(page, image.imageRef, imageX, imageY, image.width, image.height);
+    } else {
+      page.drawImage(image.imageRef, {
+        x: imageX,
+        y: imageY,
+        width: image.width,
+        height: image.height
+      });
+    }
   }
 
   for (const line of block.shape.lines) {

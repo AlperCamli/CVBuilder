@@ -314,7 +314,7 @@ function buildHeaderBlocks(
             style={{
               width: scaledPx(58),
               height: scaledPx(58),
-              borderRadius: "999px",
+              borderRadius: header.photo_shape === "square" ? "0px" : "999px",
               objectFit: "cover",
               flexShrink: 0
             }}

@@ -362,6 +362,7 @@ export interface PresentationHeader {
   phone: string | null;
   location: string | null;
   photo: string | null;
+  photo_shape: "circle" | "square";
   contact_items: string[];
   social_links: PresentationSocialLink[];
 }

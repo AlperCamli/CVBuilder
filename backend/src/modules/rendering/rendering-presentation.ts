@@ -53,9 +53,12 @@ export interface PresentationHeader {
   phone: string | null;
   location: string | null;
   photo: string | null;
+  photo_shape: PhotoShape;
   contact_items: string[];
   social_links: PresentationSocialLink[];
 }
+
+export type PhotoShape = "circle" | "square";
 
 export interface PresentationItem {
   id: string;
@@ -1100,6 +1103,7 @@ export const mapRenderingPayloadToPresentation = (
     phone: toMetadataString(metadata.phone) ?? getHeaderFallbackField(headerSections, ["phone"]),
     location: toMetadataString(metadata.location) ?? getHeaderFallbackField(headerSections, ["location", "city", "country"]),
     photo: toMetadataString(metadata.photo) ?? null,
+    photo_shape: toMetadataString(metadata.photo_shape) === "square" ? "square" : "circle",
     contact_items: [
       toMetadataString(metadata.email) ?? getHeaderFallbackField(headerSections, ["email"]),
       toMetadataString(metadata.phone) ?? getHeaderFallbackField(headerSections, ["phone"]),

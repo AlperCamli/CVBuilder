@@ -17,6 +17,7 @@ describe("pdf generator", () => {
         }
       ],
       photo_data_uri: null,
+      photo_shape: "circle",
       theme: {
         layout: "modern-clean",
         mode: "classic-single-column",
@@ -54,5 +55,41 @@ describe("pdf generator", () => {
 
     const unicodeLine = "Alper Çamlı İstanbul Kıdemli Geliştirici Şükrü Işık";
     expect(normalizePdfText(unicodeLine)).toBe(unicodeLine);
+  });
+
+  it("embeds a circle-clipped and a square photo without throwing", async () => {
+    // 1x1 transparent PNG.
+    const pngDataUri =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    const baseModel: ExportDocumentModel = {
+      title: "Jane Doe",
+      subtitle: "Engineer",
+      contact_line: "jane@example.com",
+      contact_items: ["jane@example.com"],
+      social_links: [],
+      photo_data_uri: pngDataUri,
+      photo_shape: "circle",
+      theme: {
+        layout: "modern-clean",
+        mode: "classic-single-column",
+        heading_color_hex: "#111827",
+        accent_color_hex: "#0f5ea6",
+        body_color_hex: "#1f2937",
+        muted_color_hex: "#4b5563",
+        page_background_hex: "#ffffff",
+        body_text_size: 11,
+        section_spacing: 12,
+        block_spacing: 8,
+        font_family: "Georgia, serif"
+      },
+      sections: []
+    };
+
+    const circleBytes = await generatePdfDocument(baseModel);
+    const squareBytes = await generatePdfDocument({ ...baseModel, photo_shape: "square" });
+
+    expect(circleBytes.byteLength).toBeGreaterThan(1000);
+    expect(squareBytes.byteLength).toBeGreaterThan(1000);
   });
 });

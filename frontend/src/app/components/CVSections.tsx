@@ -11,6 +11,8 @@ import {
   X as XIcon,
   Upload,
   Camera,
+  Circle,
+  Square,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -253,6 +255,33 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                       ? "Click X to remove"
                       : "PNG or JPEG, up to 5 MB"}
               </p>
+            </div>
+            {/* Photo shape selector */}
+            <div className="flex items-center gap-1 ml-auto">
+              {([
+                { shape: "circle", Icon: Circle, label: "Circle" },
+                { shape: "square", Icon: Square, label: "Square" }
+              ] as const).map(({ shape, Icon, label }) => {
+                const selected = (data.photoShape === "square" ? "square" : "circle") === shape;
+                return (
+                  <button
+                    key={shape}
+                    type="button"
+                    title={label}
+                    aria-label={`${label} photo`}
+                    aria-pressed={selected}
+                    onClick={() => onChange({ ...data, photoShape: shape })}
+                    className="p-1.5 rounded-lg border transition-colors"
+                    style={{
+                      borderColor: selected ? "var(--color-teal-600)" : "var(--color-border-secondary)",
+                      background: selected ? "var(--color-teal-50)" : "transparent",
+                      color: selected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
+                    }}
+                  >
+                    <Icon size={16} />
+                  </button>
+                );
+              })}
             </div>
           </div>
 

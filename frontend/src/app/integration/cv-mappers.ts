@@ -1231,6 +1231,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
     phone: toJsonValue(firstNonEmpty(asString(metadata.phone), getHeaderField("phone"), inferPhoneFromText(headerText))),
     location: toJsonValue(firstNonEmpty(asString(metadata.location), getHeaderField("location"))),
     photo: toJsonValue(asString(metadata.photo)),
+    photo_shape: toJsonValue(asString(metadata.photo_shape) || "circle"),
     urls: toJsonValue(
       dedupe([
         ...asStringArray(content.metadata.urls),
@@ -1254,6 +1255,7 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
         phone: asString(normalizedMetadata.phone),
         location: asString(normalizedMetadata.location),
         photo: asString(normalizedMetadata.photo),
+        photoShape: asString(normalizedMetadata.photo_shape) || "circle",
         socialLinks: extractSocialLinks(metadataWithHeaderFallback)
       }
     }
@@ -2004,6 +2006,7 @@ export const editorSectionsToCvContent = (
     phone: toJsonValue(asString(headerData.phone)),
     location: toJsonValue(asString(headerData.location)),
     photo: toJsonValue(asString(headerData.photo)),
+    photo_shape: toJsonValue(asString(headerData.photoShape) || "circle"),
     social_links: socialLinks,
     urls: urlList
   };

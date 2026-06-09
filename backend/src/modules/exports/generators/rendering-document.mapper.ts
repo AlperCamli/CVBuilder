@@ -53,6 +53,7 @@ export interface ExportDocumentModel {
   contact_items: string[];
   social_links: ExportDocumentSocialLink[];
   photo_data_uri: string | null;
+  photo_shape: "circle" | "square";
   sections: ExportDocumentSection[];
   theme: ExportDocumentTheme;
 }
@@ -144,6 +145,7 @@ export const mapPresentationToExportDocument = (
     contact_items: contactItems,
     social_links: mapSocialLinks(header.social_links),
     photo_data_uri: isDataUriImage(header.photo) ? header.photo : null,
+    photo_shape: header.photo_shape === "square" ? "square" : "circle",
     sections,
     theme: toTheme(presentation)
   };

@@ -59,6 +59,11 @@ Profile photos are managed files, not inline base64 in the CV content JSON.
 - Only PNG and JPEG are accepted (the export embedders' supported formats). Server-side
   resizing / format normalization (e.g. webp) is intentionally deferred — it would require an
   image-processing dependency.
+- Photo shape is user-selectable via `metadata.photo_shape` (`"circle"` default, or
+  `"square"`). It is applied consistently in the live preview (CSS border-radius) and the PDF
+  export (a circular clipping path in `pdf-generator.ts`). DOCX always renders the image
+  square — the `docx` library cannot clip an image to a circle without pre-masking it, which
+  would need an image library.
 
 ## Deferred
 
