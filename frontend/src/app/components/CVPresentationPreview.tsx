@@ -27,11 +27,11 @@ interface CVPresentationPreviewProps {
   onPageCountChange?: (pageCount: number) => void;
 }
 
-const MIN_FONT_SCALE = 0.85;
+const MIN_FONT_SCALE = 0.7;
 const MAX_FONT_SCALE = 1.15;
-const MIN_SPACING_SCALE = 0.7;
+const MIN_SPACING_SCALE = 0.5;
 const MAX_SPACING_SCALE = 1.4;
-const MIN_LAYOUT_SCALE = 0.7;
+const MIN_LAYOUT_SCALE = 0.5;
 const MAX_LAYOUT_SCALE = 1.3;
 
 // A4 at 72dpi (PDF points) — matches the backend PDF page size exactly.
