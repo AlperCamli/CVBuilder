@@ -2115,6 +2115,16 @@ export function CVEditor() {
               )}
 
               <button
+                onClick={() => void saveCv()}
+                disabled={saving || autoSaving}
+                className="px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+                style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
+              >
+                {saving || autoSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {saving ? "Saving..." : autoSaving ? "Autosaving..." : "Save"}
+              </button>
+
+              <button
                 onClick={() => setShowTemplateGallery(true)}
                 className="px-3 py-1.5 rounded-lg border"
                 style={{
@@ -2268,18 +2278,6 @@ export function CVEditor() {
                   {selectedTemplateDetail.template.status}
                 </span>
               )}
-
-              <button
-                onClick={() => void saveCv()}
-                disabled={saving || autoSaving}
-                className="px-3 py-1.5 rounded-lg font-medium flex items-center justify-center gap-2"
-                // Fixed min width sized for the longest label ("Autosaving...") so the button
-                // does not grow/shrink between states and shift neighboring controls.
-                style={{ fontSize: "13px", color: "var(--color-text-secondary)", minWidth: "8.5rem" }}
-              >
-                {saving || autoSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Saving..." : autoSaving ? "Autosaving..." : "Save"}
-              </button>
 
               {cvKind === "master" && cvId && (
                 <button
