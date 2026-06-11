@@ -7,21 +7,22 @@ export interface ContentType {
   icon?: LucideIcon;
   essential: boolean;
   description: string;
+  order?: number;
 }
 
 const contentTypes: ContentType[] = [
-  { id: "summary", name: "Professional Summary", icon: FileText, essential: true, description: "Brief overview of your experience" },
-  { id: "experience", name: "Work Experience", icon: Briefcase, essential: true, description: "Your employment history" },
-  { id: "education", name: "Education", icon: GraduationCap, essential: true, description: "Academic qualifications" },
-  { id: "skills", name: "Skills", icon: Lightbulb, essential: true, description: "Technical and soft skills" },
-  { id: "languages", name: "Languages", icon: Languages, essential: false, description: "Languages you speak" },
-  { id: "certifications", name: "Certifications", icon: Award, essential: false, description: "Professional certificates" },
-  { id: "courses", name: "Courses", icon: BookOpen, essential: false, description: "Relevant courses and training" },
-  { id: "projects", name: "Projects", icon: FileText, essential: false, description: "Personal or professional projects" },
-  { id: "volunteer", name: "Volunteer Work", icon: Heart, essential: false, description: "Volunteer experience" },
-  { id: "awards", name: "Awards", icon: Award, essential: false, description: "Recognition and achievements" },
-  { id: "publications", name: "Publications", icon: BookOpen, essential: false, description: "Articles, papers, or books" },
-  { id: "references", name: "References", icon: Users, essential: false, description: "Professional references" },
+  { id: "summary", name: "Professional Summary", icon: FileText, essential: true, description: "Brief overview of your experience", order: 1 },
+  { id: "experience", name: "Work Experience", icon: Briefcase, essential: true, description: "Your employment history", order: 2 },
+  { id: "education", name: "Education", icon: GraduationCap, essential: true, description: "Academic qualifications", order: 3 },
+  { id: "skills", name: "Skills", icon: Lightbulb, essential: true, description: "Technical and soft skills", order: 4 },
+  { id: "languages", name: "Languages", icon: Languages, essential: false, description: "Languages you speak", order: 5 },
+  { id: "certifications", name: "Certifications", icon: Award, essential: false, description: "Professional certificates", order: 6 },
+  { id: "courses", name: "Courses", icon: BookOpen, essential: false, description: "Relevant courses and training", order: 7 },
+  { id: "projects", name: "Projects", icon: FileText, essential: false, description: "Personal or professional projects", order: 8 },
+  { id: "volunteer", name: "Volunteer Work", icon: Heart, essential: false, description: "Volunteer experience", order: 9 },
+  { id: "awards", name: "Awards", icon: Award, essential: false, description: "Recognition and achievements", order: 10 },
+  { id: "publications", name: "Publications", icon: BookOpen, essential: false, description: "Articles, papers, or books", order: 11 },
+  { id: "references", name: "References", icon: Users, essential: false, description: "Professional references", order: 12 },
 ];
 
 interface AddContentModalProps {
@@ -42,9 +43,9 @@ export function AddContentModal({
   if (!isOpen) return null;
 
   const resolvedContentTypes = contentTypesOverride ?? contentTypes;
-  const availableContent = resolvedContentTypes.filter(
-    (content) => !existingSections.includes(content.id)
-  );
+  const availableContent = resolvedContentTypes
+    .filter((content) => !existingSections.includes(content.id))
+    .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
 
   return (
     <div
@@ -52,11 +53,11 @@ export function AddContentModal({
       onClick={onClose}
     >
       <div
-        className="rounded-xl p-6 max-w-2xl w-full shadow-2xl"
-        style={{ background: "var(--color-background-primary)" }}
+        className="rounded-xl p-6 max-w-2xl w-full shadow-2xl flex flex-col"
+        style={{ background: "var(--color-background-primary)", maxHeight: "calc(100vh - 32px)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-shrink-0">
           <h3 className="font-medium" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
             Add Content Section
           </h3>
@@ -65,7 +66,7 @@ export function AddContentModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto pr-1 min-h-0 flex-1">
           {availableContent.map((content) => {
             const Icon = content.icon ?? FileText;
             return (

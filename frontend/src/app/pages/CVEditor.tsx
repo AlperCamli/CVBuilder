@@ -577,13 +577,16 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       volunteer: Users
     };
 
-    return activeCvModule.sectionCatalog.map((definition) => ({
-      id: definition.type,
-      name: definition.title,
-      icon: iconByType[definition.type] ?? FileText,
-      essential: definition.essential,
-      description: definition.description
-    }));
+    return [...activeCvModule.sectionCatalog]
+      .sort((a, b) => a.defaultOrder - b.defaultOrder)
+      .map((definition) => ({
+        id: definition.type,
+        name: definition.title,
+        icon: iconByType[definition.type] ?? FileText,
+        essential: definition.essential,
+        description: definition.description,
+        order: definition.defaultOrder
+      }));
   }, [moduleType]);
 
   const loadTemplates = async (targetModuleType = DEFAULT_MODULE_ID) => {

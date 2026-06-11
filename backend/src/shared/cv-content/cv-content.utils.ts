@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ValidationError, NotFoundError } from "../errors/app-error";
+import { medicalUkModule } from "../cv-modules/medical-uk.module";
 import { formatZodError } from "../validation/format-zod-error";
 import { cvContentInputSchema } from "./cv-content.schemas";
 import type {
@@ -15,6 +16,33 @@ import type {
 
 const toSectionId = (type: string): string => `${type}-${randomUUID()}`;
 const toBlockId = (type: string): string => `${type}-${randomUUID()}`;
+
+const DEFAULT_METADATA: Record<string, CvJsonValue> = {
+  full_name: "",
+  headline: "",
+  email: "",
+  phone: "",
+  location: ""
+};
+
+const MEDICAL_UK_DEFAULT_SECTION_TYPES = [
+  "medical_registration",
+  "medical_qualifications",
+  "summary",
+  "clinical_experience",
+  "clinical_skills",
+  "additional_skills",
+  "audit_qi",
+  "teaching",
+  "publications",
+  "courses_training",
+  "references"
+];
+
+const EMPTY_BLOCK_META: Record<string, CvJsonValue> = {
+  revision_anchor: null,
+  ai_suggestion_state: "none"
+};
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -96,7 +124,49 @@ export const cloneCvContent = (content: CvContent): CvContent => {
   return JSON.parse(JSON.stringify(content)) as CvContent;
 };
 
-export const createEmptyCvContent = (language: string): CvContent => {
+const createEmptyMedicalUkCvContent = (language: string): CvContent => {
+  const normalizedLanguage = language.trim() || "en";
+  const definitionsByType = new Map(
+    medicalUkModule.sectionCatalog.map((definition) => [definition.type, definition])
+  );
+
+  return {
+    version: "v1",
+    language: normalizedLanguage,
+    metadata: { ...DEFAULT_METADATA },
+    sections: MEDICAL_UK_DEFAULT_SECTION_TYPES.map((type, order) => {
+      const definition = definitionsByType.get(type);
+      const title = definition?.title ?? type;
+      const shouldCreateInitialBlock = type !== "publications" && type !== "references";
+
+      return {
+        id: toSectionId(type),
+        type,
+        title,
+        order,
+        meta: {},
+        blocks: shouldCreateInitialBlock
+          ? [
+              {
+                id: toBlockId(definition?.blockType ?? type),
+                type: definition?.blockType ?? type,
+                order: 0,
+                visibility: "visible" as const,
+                fields: { ...(definition?.defaultBlockFields ?? {}) },
+                meta: { ...EMPTY_BLOCK_META }
+              }
+            ]
+          : []
+      };
+    })
+  };
+};
+
+export const createEmptyCvContent = (language: string, moduleType?: string | null): CvContent => {
+  if (moduleType === medicalUkModule.id) {
+    return createEmptyMedicalUkCvContent(language);
+  }
+
   const normalizedLanguage = language.trim() || "en";
 
   const summarySectionId = toSectionId("summary");
@@ -107,13 +177,7 @@ export const createEmptyCvContent = (language: string): CvContent => {
   return {
     version: "v1",
     language: normalizedLanguage,
-    metadata: {
-      full_name: "",
-      headline: "",
-      email: "",
-      phone: "",
-      location: ""
-    },
+    metadata: { ...DEFAULT_METADATA },
     sections: [
       {
         id: summarySectionId,
@@ -130,10 +194,7 @@ export const createEmptyCvContent = (language: string): CvContent => {
             fields: {
               text: ""
             },
-            meta: {
-              revision_anchor: null,
-              ai_suggestion_state: "none"
-            }
+            meta: { ...EMPTY_BLOCK_META }
           }
         ]
       },

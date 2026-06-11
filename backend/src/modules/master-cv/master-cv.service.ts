@@ -37,6 +37,7 @@ export class MasterCvService {
   }
 
   async createMasterCv(session: SessionContext, input: CreateMasterCvInput): Promise<MasterCvDetail> {
+    const cvModule = getCvModule(input.module_type);
     const templateId =
       input.template_id !== undefined
         ? await this.templatesService.validateAssignableTemplateId(input.template_id)
@@ -44,14 +45,14 @@ export class MasterCvService {
 
     const content = input.current_content
       ? normalizeCvContent(input.current_content, input.language)
-      : createEmptyCvContent(input.language);
+      : createEmptyCvContent(input.language, cvModule.id);
 
     const created = await this.masterCvRepository.create({
       user_id: session.appUser.id,
       title: input.title,
       language: content.language,
       template_id: templateId,
-      module_type: getCvModule(input.module_type).id,
+      module_type: cvModule.id,
       current_content: content,
       summary_text: buildCvSummaryText(content),
       source_type: "scratch"
