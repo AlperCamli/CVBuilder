@@ -1,4 +1,5 @@
 import { NotFoundError, ValidationError } from "../../shared/errors/app-error";
+import { getCvModule } from "../../shared/cv-modules/module-registry";
 import type { CvTemplateRecord } from "../../shared/types/domain";
 import type { TemplatesRepository } from "./templates.repository";
 import type {
@@ -17,8 +18,8 @@ interface ResolveTemplateForRenderingOptions {
 export class TemplatesService {
   constructor(private readonly templatesRepository: TemplatesRepository) {}
 
-  async listTemplates(_session: SessionContext): Promise<ListTemplatesResponse> {
-    const rows = await this.templatesRepository.listActive();
+  async listTemplates(_session: SessionContext, moduleType?: string): Promise<ListTemplatesResponse> {
+    const rows = await this.templatesRepository.listActive(getCvModule(moduleType).id);
     return {
       templates: rows.map((row) => this.toSummary(row))
     };
@@ -106,6 +107,7 @@ export class TemplatesService {
       name: row.name,
       slug: row.slug,
       status: row.status,
+      module_type: row.module_type,
       preview_config: row.preview_config,
       export_config: row.export_config,
       created_at: row.created_at,

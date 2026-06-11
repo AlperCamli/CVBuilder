@@ -17,6 +17,7 @@ export interface CreateImportSessionInput {
   storage_bucket: string;
   storage_path: string;
   checksum?: string | null;
+  module_type?: string;
 }
 
 export interface CreateImportUploadUrlInput {

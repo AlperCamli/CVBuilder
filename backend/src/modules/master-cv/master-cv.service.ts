@@ -8,6 +8,7 @@ import {
   updateBlockInCvContent
 } from "../../shared/cv-content/cv-content.utils";
 import type { MasterCvRecord } from "../../shared/types/domain";
+import { getCvModule } from "../../shared/cv-modules/module-registry";
 import type { RenderingService } from "../rendering/rendering.service";
 import type { TemplatesService } from "../templates/templates.service";
 import type { MasterCvRepository } from "./master-cv.repository";
@@ -50,6 +51,7 @@ export class MasterCvService {
       title: input.title,
       language: content.language,
       template_id: templateId,
+      module_type: getCvModule(input.module_type).id,
       current_content: content,
       summary_text: buildCvSummaryText(content),
       source_type: "scratch"
@@ -177,6 +179,7 @@ export class MasterCvService {
       title: `${existing.title} (Copy)`,
       language: existing.language,
       template_id: existing.template_id,
+      module_type: existing.module_type,
       current_content: copiedContent,
       summary_text: existing.summary_text,
       source_type: existing.source_type
@@ -250,6 +253,7 @@ export class MasterCvService {
       language: row.language,
       source_type: row.source_type,
       template_id: row.template_id,
+      module_type: row.module_type,
       created_at: row.created_at,
       updated_at: row.updated_at
     };

@@ -95,6 +95,7 @@ export class TailoredCvService {
       title: input.title?.trim() || `${sourceMasterCv.title} - ${createdJob.company_name}`,
       language,
       template_id: validatedTemplateId,
+      module_type: sourceMasterCv.module_type,
       current_content: clonedContent,
       status: "draft",
       ai_generation_status: null,
@@ -372,6 +373,7 @@ export class TailoredCvService {
       id: row.id,
       title: row.title,
       language: row.language,
+      module_type: row.module_type,
       status: row.status,
       master_cv_id: row.master_cv_id,
       job_id: row.job_id,
@@ -412,6 +414,7 @@ export class TailoredCvService {
       title: masterCv.title,
       language: masterCv.language,
       template_id: masterCv.template_id,
+      module_type: masterCv.module_type,
       updated_at: masterCv.updated_at
     };
   }

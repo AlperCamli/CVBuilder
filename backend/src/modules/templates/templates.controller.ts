@@ -16,7 +16,9 @@ export class TemplatesController {
   constructor(private readonly templatesService: TemplatesService) {}
 
   listTemplates = asyncHandler(async (request: Request, response: Response) => {
-    const data = await this.templatesService.listTemplates(requireSession(request));
+    const moduleType =
+      typeof request.query.module_type === "string" ? request.query.module_type : undefined;
+    const data = await this.templatesService.listTemplates(requireSession(request), moduleType);
     sendSuccess(response, data);
   });
 

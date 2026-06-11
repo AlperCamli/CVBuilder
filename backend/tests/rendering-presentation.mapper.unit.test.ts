@@ -45,6 +45,7 @@ const renderingPayload = (): RenderingPayload => ({
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: null,
       created_at: "2026-04-30T00:00:00.000Z",
@@ -212,6 +213,7 @@ describe("rendering presentation mapper", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: null,
       created_at: "2026-04-30T00:00:00.000Z",
@@ -430,5 +432,125 @@ describe("rendering presentation mapper", () => {
     expect(reference?.subtitle).toBe("Lead Engineer • Acme Corp");
     expect(reference?.metadata_line).toBeNull();
     expect(reference?.body).toBe("jane@acme.com\n+1 202 555 0101");
+  });
+
+  it("maps medical clinical skills into competency-aware presentation items", () => {
+    const payload = renderingPayload();
+    payload.template.template = {
+      id: "template-medical",
+      name: "Medical Classic",
+      slug: "medical-classic",
+      status: "active",
+      module_type: "medical_uk",
+      preview_config: null,
+      export_config: null,
+      created_at: "2026-04-30T00:00:00.000Z",
+      updated_at: "2026-04-30T00:00:00.000Z"
+    };
+    payload.sections.push({
+      id: "clinical-skills",
+      type: "clinical_skills",
+      title: "Clinical Skills & Procedures",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "skill-1",
+          type: "clinical_skill",
+          fields: {
+            skill: "Rapid sequence induction",
+            competency_level: "supervised",
+            frequency: "Weekly",
+            context: "Emergency theatre"
+          },
+          normalized_fields: {
+            skill: field("Rapid sequence induction", "Rapid sequence induction", ["Rapid sequence induction"]),
+            competency_level: field("supervised", "supervised", ["supervised"]),
+            frequency: field("Weekly", "Weekly", ["Weekly"]),
+            context: field("Emergency theatre", "Emergency theatre", ["Emergency theatre"])
+          }
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+    const clinicalSkills = presentation.sections.find((section) => section.type === "clinical_skills");
+    const item = clinicalSkills?.items[0];
+
+    expect(presentation.theme.template_slug).toBe("medical-classic");
+    expect(clinicalSkills?.title).toBe("Clinical Skills & Procedures");
+    expect(item?.title).toBe("Rapid sequence induction");
+    expect(item?.subtitle).toBe("Supervised • Weekly • Emergency theatre");
+    expect(item?.body).toBeNull();
+  });
+
+  it("maps medical audit/QI fields into outcomes and audit metadata", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "audit-qi",
+      type: "audit_qi",
+      title: "Clinical Audit & Quality Improvement",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "audit-1",
+          type: "audit_qi_project",
+          fields: {
+            title: "WHO checklist compliance",
+            project_type: "audit",
+            role: "Project lead",
+            setting: "Surgical theatre",
+            dates: "2025",
+            standard_audited: "WHO surgical safety checklist",
+            outcomes: ["Improved sign-out documentation", "Reduced missing checks"],
+            loop_closed: true,
+            presented_at: "Departmental governance meeting"
+          },
+          normalized_fields: {
+            title: field("WHO checklist compliance", "WHO checklist compliance", ["WHO checklist compliance"]),
+            project_type: field("audit", "audit", ["audit"]),
+            role: field("Project lead", "Project lead", ["Project lead"]),
+            setting: field("Surgical theatre", "Surgical theatre", ["Surgical theatre"]),
+            dates: field("2025", "2025", ["2025"]),
+            standard_audited: field(
+              "WHO surgical safety checklist",
+              "WHO surgical safety checklist",
+              ["WHO surgical safety checklist"]
+            ),
+            outcomes: field(
+              ["Improved sign-out documentation", "Reduced missing checks"],
+              "Improved sign-out documentation Reduced missing checks",
+              ["Improved sign-out documentation", "Reduced missing checks"]
+            ),
+            loop_closed: field(true, "true", ["true"]),
+            presented_at: field(
+              "Departmental governance meeting",
+              "Departmental governance meeting",
+              ["Departmental governance meeting"]
+            )
+          }
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const auditSection = presentation.sections.find((section) => section.type === "audit_qi");
+    const audit = auditSection?.items[0];
+
+    expect(auditSection?.title).toBe("Clinical Audit & Quality Improvement");
+    expect(audit?.title).toBe("WHO checklist compliance");
+    expect(audit?.subtitle).toBe("Audit • Project lead • Surgical theatre");
+    expect(audit?.metadata_line).toBe("2025");
+    expect(audit?.body).toBe(
+      "Standard audited: WHO surgical safety checklist\nPresented at: Departmental governance meeting"
+    );
+    expect(audit?.bullets).toEqual([
+      "Improved sign-out documentation",
+      "Reduced missing checks",
+      "Audit loop closed"
+    ]);
   });
 });

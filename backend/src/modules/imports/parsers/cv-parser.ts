@@ -25,11 +25,21 @@ export interface ParseCvFileDiagnostics {
   };
 }
 
+// Module-provided section hints (free-form section types). Merged ahead of the
+// built-in section definitions during heuristic parsing; absent for standard CVs.
+export interface ExtraSectionDefinition {
+  type: string;
+  title: string;
+  aliases: string[];
+  keywords: string[];
+}
+
 export interface ParseCvFileInput {
   originalFilename: string;
   mimeType: string;
   sizeBytes: number;
   bytes: Uint8Array;
+  extraSectionDefinitions?: ExtraSectionDefinition[];
 }
 
 export interface ParseCvFileResult {

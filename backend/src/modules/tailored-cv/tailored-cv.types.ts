@@ -19,6 +19,7 @@ export interface TailoredCvSourceMasterSummary {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   updated_at: string;
 }
 
@@ -26,6 +27,7 @@ export interface TailoredCvSummary {
   id: string;
   title: string;
   language: string;
+  module_type: string;
   status: TailoredCvStatus;
   master_cv_id: string;
   job_id: string | null;

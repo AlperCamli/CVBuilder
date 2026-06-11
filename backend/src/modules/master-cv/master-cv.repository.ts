@@ -17,6 +17,7 @@ export interface CreateMasterCvPayload {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   current_content: CvContent;
   summary_text: string | null;
   source_type: MasterCvSourceType;
@@ -38,6 +39,7 @@ const toMasterCvRecord = (row: Record<string, unknown>): MasterCvRecord => {
     title: String(row.title),
     language: String(row.language),
     template_id: row.template_id ? String(row.template_id) : null,
+    module_type: row.module_type ? String(row.module_type) : "standard",
     current_content: row.current_content as CvContent,
     summary_text: (row.summary_text as string | null) ?? null,
     source_type: row.source_type as MasterCvSourceType,
@@ -153,6 +155,7 @@ export class SupabaseMasterCvRepository implements MasterCvRepository {
         title: payload.title,
         language: payload.language,
         template_id: payload.template_id,
+        module_type: payload.module_type,
         current_content: toDbContent(payload.current_content),
         summary_text: payload.summary_text,
         source_type: payload.source_type

@@ -7,6 +7,7 @@ import type { CvContent } from "../../../shared/cv-content/cv-content.types";
 import type {
   CvParser,
   ExtractCvRawTextResult,
+  ExtraSectionDefinition,
   ParseCvFileDiagnostics,
   ParseCvFileInput,
   ParseCvFileResult,
@@ -161,6 +162,28 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
 const SECTION_DEFINITION_BY_TYPE = new Map<SectionType, SectionDefinition>(
   SECTION_DEFINITIONS.map((definition) => [definition.type, definition])
 );
+
+// Module-provided section hints active for the current (synchronous) structuring pass.
+// Set only inside toStructuredContent for non-standard CV modules; empty otherwise, so
+// the standard parsing path never consults it.
+let activeExtraSectionDefinitions: ExtraSectionDefinition[] = [];
+
+const findExtraSectionByHeading = (normalizedHeading: string): ExtraSectionDefinition | null => {
+  for (const definition of activeExtraSectionDefinitions) {
+    for (const alias of definition.aliases) {
+      const aliasFolded = normalizeFolded(alias);
+      if (!aliasFolded) {
+        continue;
+      }
+
+      if (aliasFolded === normalizedHeading || headingAliasPattern(aliasFolded).test(normalizedHeading)) {
+        return definition;
+      }
+    }
+  }
+
+  return null;
+};
 
 const LOCATION_KEYWORDS = [
   "istanbul",
@@ -1066,7 +1089,7 @@ const isLikelyHeadingFalsePositive = (line: string): boolean => {
   return false;
 };
 
-const findSectionByHeading = (line: string): SectionDefinition | null => {
+const findSectionByHeading = (line: string): SectionDefinition | ExtraSectionDefinition | null => {
   if (!looksLikeHeading(line)) {
     return null;
   }
@@ -1078,6 +1101,13 @@ const findSectionByHeading = (line: string): SectionDefinition | null => {
   const normalized = normalizeFolded(line.replace(/[:\-–]+$/, ""));
   if (!normalized) {
     return null;
+  }
+
+  if (activeExtraSectionDefinitions.length > 0) {
+    const extraMatch = findExtraSectionByHeading(normalized);
+    if (extraMatch) {
+      return extraMatch;
+    }
   }
 
   const exact = headingAliasLookup.get(normalized);
@@ -1219,17 +1249,23 @@ const classifyUnheadedLine = (line: string): SectionType => {
   return "summary";
 };
 
-const createBuckets = (): Map<SectionType, string[]> => {
-  const buckets = new Map<SectionType, string[]>();
+const createBuckets = (): Map<string, string[]> => {
+  const buckets = new Map<string, string[]>();
 
   for (const definition of SECTION_DEFINITIONS) {
     buckets.set(definition.type, []);
   }
 
+  for (const definition of activeExtraSectionDefinitions) {
+    if (!buckets.has(definition.type)) {
+      buckets.set(definition.type, []);
+    }
+  }
+
   return buckets;
 };
 
-const segmentWithoutHeadings = (lines: string[]): Map<SectionType, string[]> => {
+const segmentWithoutHeadings = (lines: string[]): Map<string, string[]> => {
   const buckets = createBuckets();
 
   for (const line of lines) {
@@ -1241,11 +1277,11 @@ const segmentWithoutHeadings = (lines: string[]): Map<SectionType, string[]> => 
   return buckets;
 };
 
-const segmentByHeadings = (lines: string[]): { buckets: Map<SectionType, string[]>; headingCount: number } => {
+const segmentByHeadings = (lines: string[]): { buckets: Map<string, string[]>; headingCount: number } => {
   const buckets = createBuckets();
   const prefaceLines: string[] = [];
 
-  let activeSection: SectionType | null = null;
+  let activeSection: string | null = null;
   let headingCount = 0;
 
   for (const line of lines) {
@@ -1996,7 +2032,7 @@ const parseReferenceFields = (rawText: string): Record<string, unknown> => {
   };
 };
 
-const inferStructuredFields = (sectionType: SectionType, text: string): Record<string, unknown> => {
+const inferStructuredFields = (sectionType: string, text: string): Record<string, unknown> => {
   if (!text.trim()) {
     return {};
   }
@@ -2073,7 +2109,7 @@ interface EntryDraft {
   bodyLines: string[];
 }
 
-const isExperienceStyleSection = (sectionType: SectionType): sectionType is ExperienceStyleSection => {
+const isExperienceStyleSection = (sectionType: string): sectionType is ExperienceStyleSection => {
   return sectionType === "experience" || sectionType === "volunteer" || sectionType === "education" || sectionType === "projects";
 };
 
@@ -2290,7 +2326,7 @@ const buildExperienceStyleBlocks = (sectionType: ExperienceStyleSection, lines: 
   });
 };
 
-const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Record<string, unknown>> => {
+const buildGenericBlocks = (sectionType: string, lines: string[]): Array<Record<string, unknown>> => {
   if (isExperienceStyleSection(sectionType)) {
     return buildExperienceStyleBlocks(sectionType, lines);
   }
@@ -2397,7 +2433,21 @@ const buildGenericBlocks = (sectionType: SectionType, lines: string[]): Array<Re
   return blocks;
 };
 
-const toStructuredContent = (text: string): CvContent => {
+const toStructuredContent = (
+  text: string,
+  extraSectionDefinitions: ExtraSectionDefinition[] = []
+): CvContent => {
+  // Structuring is fully synchronous, so the module-scoped hint list cannot leak
+  // across interleaved parses; it is reset in the finally block below.
+  activeExtraSectionDefinitions = extraSectionDefinitions;
+  try {
+    return toStructuredContentInternal(text);
+  } finally {
+    activeExtraSectionDefinitions = [];
+  }
+};
+
+const toStructuredContentInternal = (text: string): CvContent => {
   const language = "en" as const;
   const normalizedText = normalizeEmailSpacing(text);
   const lines = foldWrappedLines(toLines(normalizedText));
@@ -2533,6 +2583,26 @@ const toStructuredContent = (text: string): CvContent => {
       type: definition.type,
       title: definition.title,
       blocks,
+      meta: {
+        detection: headingCount > 0 ? "heading" : "fallback"
+      }
+    });
+  }
+
+  for (const definition of activeExtraSectionDefinitions) {
+    if (SECTION_DEFINITION_BY_TYPE.has(definition.type as SectionType)) {
+      continue;
+    }
+
+    const sectionLines = dedupe(buckets.get(definition.type) ?? []);
+    if (sectionLines.length === 0) {
+      continue;
+    }
+
+    sections.push({
+      type: definition.type,
+      title: definition.title,
+      blocks: buildGenericBlocks(definition.type, sectionLines),
       meta: {
         detection: headingCount > 0 ? "heading" : "fallback"
       }
@@ -2920,7 +2990,7 @@ export class SimpleCvParser implements CvParser {
   async parse(input: ParseCvFileInput): Promise<ParseCvFileResult> {
     const extracted = await this.extractRawText(input);
     const fallbackRaw = extracted.rawExtractedText;
-    const parsedContent = toStructuredContent(fallbackRaw);
+    const parsedContent = toStructuredContent(fallbackRaw, input.extraSectionDefinitions ?? []);
     const structuredWarnings = collectStructuredMappingWarnings(parsedContent);
 
     return {

@@ -215,6 +215,43 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       body_text_size: 11,
       compact_density: true
     }
+  },
+  // medical_uk module templates: conservative single-column layouts (no photo region,
+  // no graphics) reusing existing layout modes so preview/export render paths are
+  // already supported. See backend/docs/cv-modules-implementation-guide.md.
+  "medical-classic": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Georgia, Times New Roman, serif",
+      heading_color_hex: "#111111",
+      accent_color_hex: "#1f2937",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 18,
+      block_spacing: 12,
+      body_text_size: 11.5,
+      compact_density: true
+    }
+  },
+  "medical-professional": {
+    layout: "minimal-professional",
+    mode: "classic-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Helvetica, Arial, sans-serif",
+      heading_color_hex: "#1e3a5f",
+      accent_color_hex: "#1e3a5f",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 15,
+      block_spacing: 10,
+      body_text_size: 11,
+      compact_density: true
+    }
   }
 };
 
@@ -230,7 +267,19 @@ const SECTION_TITLE_OVERRIDES: Record<string, string> = {
   volunteer: "Volunteer Work",
   awards: "Awards",
   publications: "Publications",
-  references: "References"
+  references: "References",
+  // medical_uk module section types
+  medical_registration: "Professional Registration",
+  medical_qualifications: "Professional Qualifications",
+  clinical_experience: "Clinical Experience",
+  career_gap: "Career Gaps",
+  clinical_skills: "Clinical Skills & Procedures",
+  audit_qi: "Clinical Audit & Quality Improvement",
+  teaching: "Teaching Experience",
+  management_leadership: "Management & Leadership",
+  courses_training: "Courses & Mandatory Training",
+  memberships: "Professional Memberships",
+  interests: "Interests"
 };
 
 const GENERIC_SECTION_TYPE_PATTERN = /^section[_-]?\d+$/i;
@@ -398,6 +447,42 @@ const buildMetadataLine = (dateRange: string | null, location: string | null): s
   return items.join(" • ");
 };
 
+const buildJoinedLine = (items: Array<string | null>): string | null => {
+  const normalized = items.filter((item): item is string => Boolean(normalizeLine(item)));
+  return normalized.length > 0 ? normalized.join(" • ") : null;
+};
+
+const titleizeValue = (value: string | null): string | null => {
+  const normalized = normalizeLine(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+const textItemsByKey = (block: RenderingBlock, keys: string[]): string[] => {
+  for (const key of keys) {
+    const direct = block.normalized_fields[key]?.text_items ?? [];
+    if (direct.length > 0) {
+      return dedupeText(direct);
+    }
+
+    const match = Object.entries(block.normalized_fields).find(([fieldKey]) => keyMatches(fieldKey, [key]));
+    const matched = match?.[1].text_items ?? [];
+    if (matched.length > 0) {
+      return dedupeText(matched);
+    }
+  }
+
+  return [];
+};
+
 const combineExperienceHeading = (
   headline: string | null,
   subheadline: string | null
@@ -507,9 +592,81 @@ const resolveTemplateProfile = (template: TemplateSummary | null): PresentationT
   };
 };
 
+const medicalBlockToPresentationItem = (
+  sectionType: string,
+  block: RenderingBlock
+): PresentationItem | null => {
+  if (sectionType === "clinical_skills" || block.type === "clinical_skill") {
+    const title = textByKey(block, ["skill", "procedure", "title", "name"]);
+    const subtitle = buildJoinedLine([
+      titleizeValue(textByKey(block, ["competency_level"])),
+      textByKey(block, ["frequency"]),
+      textByKey(block, ["context"])
+    ]);
+
+    return {
+      id: block.id,
+      title,
+      subtitle,
+      date_range: null,
+      location: null,
+      metadata_line: null,
+      body: null,
+      bullets: []
+    };
+  }
+
+  if (sectionType === "audit_qi" || block.type === "audit_qi_project") {
+    const title = textByKey(block, ["title", "project"]);
+    const projectType = titleizeValue(textByKey(block, ["project_type"]));
+    const role = textByKey(block, ["role"]);
+    const setting = textByKey(block, ["setting"]);
+    const dates = textByKey(block, ["dates", "date"]);
+    const standardAudited = textByKey(block, ["standard_audited"]);
+    const presentedAt = textByKey(block, ["presented_at"]);
+    const loopClosed = block.fields.loop_closed === true || textByKey(block, ["loop_closed"])?.toLowerCase() === "true";
+    const outcomes = textItemsByKey(block, ["outcomes"]);
+
+    const bodyLines = [
+      standardAudited ? `Standard audited: ${standardAudited}` : null,
+      presentedAt ? `Presented at: ${presentedAt}` : null
+    ].filter((line): line is string => Boolean(line));
+
+    return {
+      id: block.id,
+      title,
+      subtitle: buildJoinedLine([projectType, role, setting]),
+      date_range: dates,
+      location: null,
+      metadata_line: dates,
+      body: bodyLines.length > 0 ? bodyLines.join("\n") : null,
+      bullets: loopClosed ? dedupeText([...outcomes, "Audit loop closed"]) : outcomes
+    };
+  }
+
+  return null;
+};
+
 const blockToPresentationItem = (sectionType: string, block: RenderingBlock): PresentationItem | null => {
   if (block.visibility !== "visible") {
     return null;
+  }
+
+  const medicalItem = medicalBlockToPresentationItem(sectionType, block);
+  if (medicalItem) {
+    if (
+      !medicalItem.title &&
+      !medicalItem.subtitle &&
+      !medicalItem.date_range &&
+      !medicalItem.location &&
+      !medicalItem.metadata_line &&
+      !medicalItem.body &&
+      medicalItem.bullets.length === 0
+    ) {
+      return null;
+    }
+
+    return medicalItem;
   }
 
   const headline = normalizeLine(block.derived.headline);

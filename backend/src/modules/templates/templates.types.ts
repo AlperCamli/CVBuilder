@@ -9,6 +9,7 @@ export interface TemplateSummary {
   name: string;
   slug: string;
   status: string;
+  module_type: string;
   preview_config: Record<string, unknown> | null;
   export_config: Record<string, unknown> | null;
   created_at: string;

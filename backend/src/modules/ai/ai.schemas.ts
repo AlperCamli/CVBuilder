@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isKnownCvModule } from "../../shared/cv-modules/module-registry";
 
 const uuidSchema = z.string().uuid();
 
@@ -95,7 +96,16 @@ export const aiImportImproveSchema = z
   .object({
     parsed_content: z.record(z.unknown()),
     language: z.string().trim().min(2).max(16).optional(),
-    improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20).optional()
+    improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
+    module_type: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .optional()
+      .refine((value) => value === undefined || isKnownCvModule(value), {
+        message: "Unknown CV module"
+      })
   })
   .strict();
 

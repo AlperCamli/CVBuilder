@@ -45,6 +45,7 @@ export interface CvTemplateRecord {
   name: string;
   slug: string;
   status: string;
+  module_type: string;
   preview_config: Record<string, unknown> | null;
   export_config: Record<string, unknown> | null;
   created_at: string;
@@ -59,6 +60,7 @@ export interface MasterCvRecord {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   current_content: CvContent;
   summary_text: string | null;
   source_type: MasterCvSourceType;
@@ -77,6 +79,7 @@ export interface TailoredCvRecord {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   current_content: CvContent;
   status: TailoredCvStatus;
   ai_generation_status: string | null;
@@ -279,6 +282,7 @@ export interface ImportRecord {
   source_file_id: string;
   target_master_cv_id: string | null;
   status: ImportStatus;
+  module_type: string;
   parser_name: string | null;
   raw_extracted_text: string | null;
   parsed_content: CvContent | null;

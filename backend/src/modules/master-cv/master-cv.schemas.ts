@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cvBlockPatchSchema, cvContentInputSchema, cvContentReplacementSchema } from "../../shared/cv-content/cv-content.schemas";
+import { isKnownCvModule } from "../../shared/cv-modules/module-registry";
 
 const uuidSchema = z.string().uuid();
 
@@ -21,6 +22,15 @@ export const createMasterCvSchema = z
     title: z.string().trim().min(1).max(160),
     language: z.string().trim().min(2).max(16),
     template_id: uuidSchema.nullable().optional(),
+    module_type: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .optional()
+      .refine((value) => value === undefined || isKnownCvModule(value), {
+        message: "Unknown CV module"
+      }),
     current_content: cvContentInputSchema.optional()
   })
   .strict();

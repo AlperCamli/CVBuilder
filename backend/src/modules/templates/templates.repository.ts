@@ -3,7 +3,7 @@ import { InternalServerError } from "../../shared/errors/app-error";
 import type { CvTemplateRecord } from "../../shared/types/domain";
 
 export interface TemplatesRepository {
-  listActive(): Promise<CvTemplateRecord[]>;
+  listActive(moduleType?: string): Promise<CvTemplateRecord[]>;
   findById(templateId: string): Promise<CvTemplateRecord | null>;
   findDefaultActive(): Promise<CvTemplateRecord | null>;
 }
@@ -14,6 +14,7 @@ const toTemplateRecord = (row: Record<string, unknown>): CvTemplateRecord => {
     name: String(row.name),
     slug: String(row.slug),
     status: String(row.status),
+    module_type: row.module_type ? String(row.module_type) : "standard",
     preview_config: (row.preview_config as Record<string, unknown> | null) ?? null,
     export_config: (row.export_config as Record<string, unknown> | null) ?? null,
     created_at: String(row.created_at),
@@ -24,11 +25,12 @@ const toTemplateRecord = (row: Record<string, unknown>): CvTemplateRecord => {
 export class SupabaseTemplatesRepository implements TemplatesRepository {
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
-  async listActive(): Promise<CvTemplateRecord[]> {
+  async listActive(moduleType?: string): Promise<CvTemplateRecord[]> {
     const { data, error } = await this.supabaseClient
       .from("cv_templates")
       .select("*")
       .eq("status", "active")
+      .eq("module_type", moduleType ?? "standard")
       .order("name", { ascending: true });
 
     if (error) {

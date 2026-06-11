@@ -58,6 +58,7 @@ class FakeExportsService {
         name: "Modern Clean",
         slug: "modern-clean",
         status: "active",
+        module_type: "standard",
         preview_config: null,
         export_config: {
           pdf: {

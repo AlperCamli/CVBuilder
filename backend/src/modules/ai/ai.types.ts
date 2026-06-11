@@ -76,6 +76,7 @@ export interface ImportImproveInput {
   parsed_content: Record<string, unknown>;
   language?: string;
   improvement_guidance?: string[];
+  module_type?: string;
 }
 
 export interface CoverLetterGenerationInput {
@@ -187,6 +188,7 @@ export interface TailoredCvDraftSummary {
   id: string;
   title: string;
   language: string;
+  module_type: string;
   status: TailoredCvStatus;
   master_cv_id: string;
   job_id: string | null;

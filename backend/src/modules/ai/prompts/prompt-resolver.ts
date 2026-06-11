@@ -13,6 +13,10 @@ export interface ResolveAiPromptInput {
   flow_type: AiFlowType;
   provider: string;
   action_type?: AiSuggestionActionType | null;
+  // Optional per-request profile (e.g. a CV module's prompt profile). When set, rows
+  // from this profile are preferred; missing rows fall back to the default profile and
+  // then to the in-code flow registry. When absent, behavior is identical to before.
+  profile?: string;
   fallback: PromptResolutionFallback;
 }
 
@@ -32,7 +36,7 @@ interface PromptCacheState {
 const PROVIDER_ANY = "any";
 
 export class AiPromptResolver {
-  private cacheState: PromptCacheState | null = null;
+  private readonly cacheStates = new Map<string, PromptCacheState>();
 
   constructor(
     private readonly repository: AiPromptConfigRepository,
@@ -42,13 +46,24 @@ export class AiPromptResolver {
   ) {}
 
   async resolve(input: ResolveAiPromptInput): Promise<ResolvedAiPrompt> {
-    const rows = await this.loadRows();
+    const requestProfile = input.profile?.trim();
+
+    if (requestProfile && requestProfile !== this.profile) {
+      const profileRows = await this.loadRows(requestProfile);
+      const profileCandidate = this.selectCandidate(profileRows, input);
+
+      if (profileCandidate) {
+        return this.toResolvedPrompt(profileCandidate, input);
+      }
+    }
+
+    const rows = await this.loadRows(this.profile);
     const candidate = this.selectCandidate(rows, input);
 
     if (!candidate) {
       if (!this.allowFallback) {
         throw new InternalServerError("AI prompt profile is missing an active config", {
-          profile: this.profile,
+          profile: requestProfile ?? this.profile,
           flow_type: input.flow_type,
           provider: input.provider
         });
@@ -63,6 +78,17 @@ export class AiPromptResolver {
       };
     }
 
+    return this.toResolvedPrompt(candidate, input);
+  }
+
+  invalidateCache(): void {
+    this.cacheStates.clear();
+  }
+
+  private toResolvedPrompt(
+    candidate: Awaited<ReturnType<AiPromptConfigRepository["listActiveByProfile"]>>[number],
+    input: ResolveAiPromptInput
+  ): ResolvedAiPrompt {
     return {
       prompt_key: candidate.prompt_key,
       prompt_version: candidate.prompt_version,
@@ -72,21 +98,18 @@ export class AiPromptResolver {
     };
   }
 
-  invalidateCache(): void {
-    this.cacheState = null;
-  }
-
-  private async loadRows() {
+  private async loadRows(profile: string) {
     const now = Date.now();
-    if (this.cacheState && this.cacheState.expiresAt > now) {
-      return this.cacheState.rows;
+    const cached = this.cacheStates.get(profile);
+    if (cached && cached.expiresAt > now) {
+      return cached.rows;
     }
 
-    const rows = await this.repository.listActiveByProfile(this.profile);
-    this.cacheState = {
+    const rows = await this.repository.listActiveByProfile(profile);
+    this.cacheStates.set(profile, {
       rows,
       expiresAt: now + this.ttlMs
-    };
+    });
 
     return rows;
   }

@@ -18,6 +18,7 @@ export interface CreateImportPayload {
   user_id: string;
   source_file_id: string;
   status: ImportStatus;
+  module_type: string;
 }
 
 export interface ImportUpdatePayload {
@@ -72,6 +73,7 @@ const toImportRecord = (row: Record<string, unknown>): ImportRecord => {
     source_file_id: String(row.source_file_id),
     target_master_cv_id: row.target_master_cv_id ? String(row.target_master_cv_id) : null,
     status: row.status as ImportStatus,
+    module_type: row.module_type ? String(row.module_type) : "standard",
     parser_name: (row.parser_name as string | null) ?? null,
     raw_extracted_text: (row.raw_extracted_text as string | null) ?? null,
     parsed_content: (row.parsed_content as CvContent | null) ?? null,

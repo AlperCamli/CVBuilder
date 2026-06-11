@@ -100,6 +100,7 @@ export interface DashboardMasterCvItem {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   source_type: string;
   created_at: string;
   updated_at: string;
@@ -109,6 +110,7 @@ export interface DashboardTailoredCvItem {
   id: string;
   title: string;
   language: string;
+  module_type: string;
   status: string;
   master_cv_id: string;
   job_id: string | null;
@@ -228,6 +230,7 @@ export interface MasterCvSummary {
   language: string;
   source_type: MasterCvSourceType;
   template_id: string | null;
+  module_type: string;
   created_at: string;
   updated_at: string;
 }
@@ -249,6 +252,7 @@ export interface TemplateSummary {
   name: string;
   slug: string;
   status: string;
+  module_type: string;
   preview_config: Record<string, unknown> | null;
   export_config: Record<string, unknown> | null;
   created_at: string;
@@ -423,6 +427,7 @@ export interface TailoredCvSummary {
   id: string;
   title: string;
   language: string;
+  module_type: string;
   status: TailoredCvStatus;
   master_cv_id: string;
   job_id: string | null;
@@ -436,6 +441,7 @@ export interface TailoredCvSourceMasterSummary {
   title: string;
   language: string;
   template_id: string | null;
+  module_type: string;
   updated_at: string;
 }
 
@@ -700,6 +706,7 @@ export interface TailoredCvDraftSummary {
   id: string;
   title: string;
   language: string;
+  module_type: string;
   status: TailoredCvStatus;
   master_cv_id: string;
   job_id: string | null;

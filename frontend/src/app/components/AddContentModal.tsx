@@ -1,9 +1,10 @@
 import { X, Briefcase, GraduationCap, Languages, Award, FileText, Lightbulb, Heart, BookOpen, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-interface ContentType {
+export interface ContentType {
   id: string;
   name: string;
-  icon: any;
+  icon?: LucideIcon;
   essential: boolean;
   description: string;
 }
@@ -28,12 +29,20 @@ interface AddContentModalProps {
   onClose: () => void;
   onAddSection: (sectionId: string) => void;
   existingSections: string[];
+  contentTypes?: ContentType[];
 }
 
-export function AddContentModal({ isOpen, onClose, onAddSection, existingSections }: AddContentModalProps) {
+export function AddContentModal({
+  isOpen,
+  onClose,
+  onAddSection,
+  existingSections,
+  contentTypes: contentTypesOverride
+}: AddContentModalProps) {
   if (!isOpen) return null;
 
-  const availableContent = contentTypes.filter(
+  const resolvedContentTypes = contentTypesOverride ?? contentTypes;
+  const availableContent = resolvedContentTypes.filter(
     (content) => !existingSections.includes(content.id)
   );
 
@@ -58,7 +67,7 @@ export function AddContentModal({ isOpen, onClose, onAddSection, existingSection
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {availableContent.map((content) => {
-            const Icon = content.icon;
+            const Icon = content.icon ?? FileText;
             return (
               <button
                 key={content.id}

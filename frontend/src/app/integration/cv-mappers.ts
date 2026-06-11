@@ -3,6 +3,10 @@ import {
   buildSkillsPoolBlockMetaPatch,
   parseSkillsPoolMetadataFromBlockMeta
 } from "../pages/cv-editor-skills-pool";
+import {
+  getModuleManagedSectionDefinition
+} from "../modules/module-registry";
+import type { FieldDescriptor, SectionTypeDefinition } from "../modules/cv-module.types";
 
 export interface EditorHeaderData {
   name: string;
@@ -1173,7 +1177,72 @@ const sectionFromItems = (
   };
 };
 
-export const cvContentToEditorSections = (content: CvContent): EditorSection[] => {
+const normalizeModuleFieldValue = (value: unknown, field: FieldDescriptor): CvJsonValue => {
+  if (field.kind === "boolean") {
+    return toJsonValue(asBoolean(value));
+  }
+
+  if (field.kind === "bullets") {
+    if (Array.isArray(value)) {
+      return toJsonValue(asStringArray(value));
+    }
+
+    return toJsonValue(
+      asString(value)
+        .split(/\n+/)
+        .map((line) => normalizeWhitespace(line.replace(/^[-•*]\s*/, "")))
+        .filter((line) => line.length > 0)
+    );
+  }
+
+  return toJsonValue(asString(value));
+};
+
+const moduleSectionToCvSection = (
+  section: EditorSection,
+  sectionIndex: number,
+  definition: SectionTypeDefinition
+): CvSection => {
+  const items = normalizeItems(section.data.items, definition.type);
+  const usedBlockIds = new Set<string>();
+
+  const blocks: CvBlock[] = items.map((item, index) => {
+    const rawFields = toJsonRecord(item.rawFields);
+    const descriptorFields: Record<string, CvJsonValue> = {};
+
+    for (const field of definition.fieldSchema) {
+      const value = rawFields[field.key] ?? definition.defaultBlockFields[field.key] ?? "";
+      descriptorFields[field.key] = normalizeModuleFieldValue(value, field);
+    }
+
+    const preferredBlockId =
+      asString(item.blockId) || deterministicBlockId(section, definition.type, item, index);
+    const blockId = resolveUniqueId(preferredBlockId, usedBlockIds);
+
+    return {
+      id: blockId,
+      type: asString(item.blockType) || definition.blockType,
+      order: index,
+      visibility: section.hidden ? "hidden" : toVisibility(Boolean(item.hidden)),
+      fields: mergeJsonRecords(rawFields, descriptorFields),
+      meta: mergeJsonRecords(item.rawMeta)
+    };
+  });
+
+  return {
+    id: section.backendSectionId || deterministicSectionId(definition.type, sectionIndex),
+    type: definition.type,
+    title: definition.title,
+    order: sectionIndex,
+    meta: section.hidden ? { visibility: "hidden" } : {},
+    blocks
+  };
+};
+
+export const cvContentToEditorSections = (
+  content: CvContent,
+  moduleType?: string | null
+): EditorSection[] => {
   const metadata = asRecord(content.metadata);
   const sortedSections = [...content.sections].sort((a, b) => a.order - b.order);
   const headerSection = sortedSections.find((section) => normalizeSectionType(section.type) === "header");
@@ -1904,6 +1973,23 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
       continue;
     }
 
+    const moduleDefinition = getModuleManagedSectionDefinition(moduleType, sectionType);
+    if (moduleDefinition) {
+      const items: EditorItem[] = sortedBlocks.map((block, index) => ({
+        ...withBlockState(block, index)
+      }));
+
+      sections.push({
+        id: `${sectionType}-${section.id}`,
+        backendSectionId: section.id,
+        type: sectionType,
+        hidden: sectionHidden,
+        order: section.order,
+        data: { items }
+      });
+      continue;
+    }
+
     const items: EditorItem[] = sortedBlocks.map((block, index) => {
       const startDate = getField(block, "start_date", "start");
       const endDate = getField(block, "end_date", "end");
@@ -1971,7 +2057,8 @@ export const cvContentToEditorSections = (content: CvContent): EditorSection[] =
 export const editorSectionsToCvContent = (
   sections: EditorSection[],
   language: string,
-  existing?: CvContent
+  existing?: CvContent,
+  moduleType?: string | null
 ): CvContent => {
   const header = sections.find((section) => section.type === "header");
   const headerData = asRecord(header?.data);
@@ -2230,6 +2317,11 @@ export const editorSectionsToCvContent = (
             phone: toJsonValue(asString(item.phone))
           }
         }));
+      }
+
+      const moduleDefinition = getModuleManagedSectionDefinition(moduleType, sectionType);
+      if (moduleDefinition) {
+        return moduleSectionToCvSection(normalizedSection, sectionIndex, moduleDefinition);
       }
 
       return sectionFromItems(normalizedSection, sectionIndex, (item) => ({

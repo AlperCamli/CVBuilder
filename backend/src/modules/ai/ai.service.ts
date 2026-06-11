@@ -11,6 +11,7 @@ import {
 } from "../../shared/cv-content/cv-content.utils";
 import { looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
 import type { CvBlock } from "../../shared/cv-content/cv-content.types";
+import { getCvModule } from "../../shared/cv-modules/module-registry";
 import {
   AiFlowFailedError,
   AiProviderError,
@@ -609,6 +610,7 @@ interface ExecuteFlowOptions {
   master_cv_id?: string | null;
   tailored_cv_id?: string | null;
   job_id?: string | null;
+  prompt_profile?: string | null;
 }
 
 interface ExecuteFlowResult<TOutput> {
@@ -623,6 +625,7 @@ interface ExecuteFlowResult<TOutput> {
 interface AiBlockTargetContext {
   cv_kind: CvKind;
   cv_id: string;
+  module_type: string;
   current_content: TailoredCvRecord["current_content"] | MasterCvRecord["current_content"];
   linked_job: JobRecord | null;
 }
@@ -1048,11 +1051,13 @@ export class AiService {
       input.language ?? "en"
     );
     const improvementGuidance = asStringArray(input.improvement_guidance);
+    const modulePromptProfile = this.resolveModulePromptProfile(input.module_type ?? null);
     const taskPlan = planImportImproveTasks(normalizedContent);
     const parentPrompt = await this.resolvePromptForFlow({
       flow_type: "import_improve",
       action_type: null,
-      user_prompt: "Orchestrate imported CV improvements using block-level AI runs."
+      user_prompt: "Orchestrate imported CV improvements using block-level AI runs.",
+      prompt_profile: modulePromptProfile
     });
 
     const parentRun = await this.aiRepository.createRun({
@@ -1129,7 +1134,8 @@ export class AiService {
             user_id: session.appUser.id,
             content: normalizedContent,
             task,
-            improvement_guidance: improvementGuidance
+            improvement_guidance: improvementGuidance,
+            prompt_profile: modulePromptProfile
           })
       );
 
@@ -1208,12 +1214,14 @@ export class AiService {
     content: MasterCvRecord["current_content"];
     task: ImportImproveTask;
     improvement_guidance: string[];
+    prompt_profile?: string | null;
   }): Promise<ImportImproveTaskSuccess> {
     if (options.task.kind === "professional_summary") {
       const aliasContext = buildImportImproveModelContent(options.content);
       const executed = await this.executeFlow<{ summary_text: string }>({
         flow_type: "professional_summary",
         user_id: options.user_id,
+        prompt_profile: options.prompt_profile ?? null,
         input_payload: {
           cv_body: aliasContext.model_content
         },
@@ -1235,6 +1243,7 @@ export class AiService {
         flow_type: "block_suggest",
         action_type: "improve",
         user_id: options.user_id,
+        prompt_profile: options.prompt_profile ?? null,
         input_payload: {
           action_type: "improve",
           block: fallbackBlock,
@@ -1269,6 +1278,7 @@ export class AiService {
       flow_type: "block_suggest",
       action_type: options.task.action_type,
       user_id: options.user_id,
+      prompt_profile: options.prompt_profile ?? null,
       input_payload: {
         action_type: options.task.action_type,
         block: currentBlock.block,
@@ -1503,6 +1513,7 @@ export class AiService {
       source_filename: string;
       mime_type: string;
       language_hint: string;
+      prompt_profile?: string | null;
     }
   ): Promise<{
     ai_run_id: string;
@@ -1526,6 +1537,7 @@ export class AiService {
     const executed = await this.executeFlow({
       flow_type: "cv_parse",
       user_id: session.appUser.id,
+      prompt_profile: input.prompt_profile ?? null,
       input_payload: flowInput,
       user_prompt: "Parse raw CV text and return canonical cv_content JSON."
     });
@@ -1558,6 +1570,7 @@ export class AiService {
 
     let cvContent;
     let actualMasterCvId = input.master_cv_id;
+    let cvModuleType: string | null = null;
 
     if (input.tailored_cv_id) {
       const tailoredCv = await this.tailoredCvRepository.findById(session.appUser.id, input.tailored_cv_id);
@@ -1566,12 +1579,14 @@ export class AiService {
       }
       cvContent = tailoredCv.current_content;
       actualMasterCvId = tailoredCv.master_cv_id;
+      cvModuleType = tailoredCv.module_type;
     } else if (input.master_cv_id) {
       const masterCv = await this.masterCvRepository.findById(session.appUser.id, input.master_cv_id);
       if (!masterCv || masterCv.is_deleted) {
         throw new NotFoundError("Master CV not found");
       }
       cvContent = masterCv.current_content;
+      cvModuleType = masterCv.module_type;
     } else {
       throw new InternalServerError("Either master_cv_id or tailored_cv_id is required");
     }
@@ -1590,6 +1605,7 @@ export class AiService {
       user_id: session.appUser.id,
       master_cv_id: actualMasterCvId,
       tailored_cv_id: input.tailored_cv_id ?? null,
+      prompt_profile: this.resolveModulePromptProfile(cvModuleType),
       input_payload: flowInput,
       user_prompt: `Generate a cover letter for the role of ${input.job_title} at ${input.company_name}. Use real paragraph newlines and end with Sincerely, and the candidate name on separate lines.`
     });
@@ -1643,6 +1659,7 @@ export class AiService {
         master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
         tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
         job_id: target.linked_job?.id ?? null,
+        prompt_profile: this.resolveModulePromptProfile(target.module_type),
         input_payload: {
           action_type: input.action_type,
           block: currentBlock.block,
@@ -1709,6 +1726,7 @@ export class AiService {
       master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
       tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
       job_id: target.linked_job?.id ?? null,
+      prompt_profile: this.resolveModulePromptProfile(target.module_type),
       input_payload: {
         action_type: input.action_type,
         block: currentBlock.block,
@@ -2064,7 +2082,8 @@ export class AiService {
     const prompt = await this.resolvePromptForFlow({
       flow_type: options.flow_type,
       action_type: options.action_type ?? null,
-      user_prompt: options.user_prompt
+      user_prompt: options.user_prompt,
+      prompt_profile: options.prompt_profile ?? null
     });
 
     const aiRun = await this.aiRepository.createRun({
@@ -2440,10 +2459,21 @@ export class AiService {
     };
   }
 
+  // Standard CVs resolve with no per-request profile so the resolver behaves exactly
+  // as before; module CVs resolve through their module's prompt profile first.
+  private resolveModulePromptProfile(moduleType: string | null | undefined): string | null {
+    if (!moduleType || moduleType === "standard") {
+      return null;
+    }
+
+    return getCvModule(moduleType).promptProfile;
+  }
+
   private async resolvePromptForFlow(options: {
     flow_type: AiFlowType;
     action_type: AiSuggestionActionType | null;
     user_prompt: string;
+    prompt_profile?: string | null;
   }): Promise<ResolvedPromptSnapshot> {
     const definition = AI_FLOW_REGISTRY[options.flow_type];
     const modelName = this.aiProvider.resolveModelName(options.flow_type);
@@ -2451,6 +2481,7 @@ export class AiService {
       flow_type: options.flow_type,
       provider: this.aiProvider.providerName,
       action_type: options.action_type,
+      profile: options.prompt_profile ?? undefined,
       fallback: {
         prompt_key: definition.prompt_key,
         prompt_version: definition.prompt_version,
@@ -2851,6 +2882,7 @@ export class AiService {
       return {
         cv_kind: "master",
         cv_id: masterCv.id,
+        module_type: masterCv.module_type,
         current_content: masterCv.current_content,
         linked_job: null
       };
@@ -2862,6 +2894,7 @@ export class AiService {
       return {
         cv_kind: "tailored",
         cv_id: tailoredCv.id,
+        module_type: tailoredCv.module_type,
         current_content: tailoredCv.current_content,
         linked_job: linkedJob
       };
@@ -2879,6 +2912,7 @@ export class AiService {
       return {
         cv_kind: "master",
         cv_id: masterCv.id,
+        module_type: masterCv.module_type,
         current_content: masterCv.current_content,
         linked_job: null
       };
@@ -2890,6 +2924,7 @@ export class AiService {
       return {
         cv_kind: "tailored",
         cv_id: tailoredCv.id,
+        module_type: tailoredCv.module_type,
         current_content: tailoredCv.current_content,
         linked_job: linkedJob
       };
@@ -3056,6 +3091,7 @@ export class AiService {
       title: companyName ? `${masterCv.title} - ${companyName}` : `${masterCv.title} - ${input.job.job_title}`,
       language: clonedContent.language,
       template_id: validatedTemplateId !== undefined ? validatedTemplateId : masterCv.template_id,
+      module_type: masterCv.module_type,
       current_content: clonedContent,
       status: "draft",
       ai_generation_status: "pending",
@@ -3208,6 +3244,7 @@ export class AiService {
       id: row.id,
       title: row.title,
       language: row.language,
+      module_type: row.module_type,
       status: row.status,
       master_cv_id: row.master_cv_id,
       job_id: row.job_id,

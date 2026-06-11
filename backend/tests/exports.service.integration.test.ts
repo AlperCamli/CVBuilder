@@ -509,6 +509,7 @@ const buildTailoredCv = (userId: string): TailoredCvRecord => {
     title: "Tailored CV",
     language: "en",
     template_id: "template-base",
+    module_type: "standard",
     current_content: {
       version: "v1",
       language: "en",
@@ -535,6 +536,7 @@ const buildMasterCv = (userId: string): MasterCvRecord => {
     title: "Master CV",
     language: "en",
     template_id: "template-base",
+    module_type: "standard",
     current_content: {
       version: "v1",
       language: "en",
@@ -569,6 +571,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },
@@ -632,6 +635,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },
@@ -685,6 +689,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },
@@ -738,6 +743,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },
@@ -797,6 +803,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },
@@ -851,6 +858,7 @@ describe("exports service integration checks", () => {
       name: "Modern Clean",
       slug: "modern-clean",
       status: "active",
+      module_type: "standard",
       preview_config: null,
       export_config: {
         pdf: { enabled: true },

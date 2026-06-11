@@ -3,6 +3,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../../shared/erro
 import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
+import { getCvModule } from "../../shared/cv-modules/module-registry";
 import type { CreateMasterCvPayload, MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { AiProvider } from "../ai/provider/ai-provider";
 import type { AiPromptResolver } from "../ai/prompts/prompt-resolver";
@@ -61,6 +62,7 @@ interface CvParseAiFlowRunner {
       source_filename: string;
       mime_type: string;
       language_hint: string;
+      prompt_profile?: string | null;
     }
   ): Promise<{
     ai_run_id: string;
@@ -122,7 +124,8 @@ export class ImportsService {
     const importRow = await this.importsRepository.createImport({
       user_id: session.appUser.id,
       source_file_id: sourceFile.id,
-      status: "uploaded"
+      status: "uploaded",
+      module_type: getCvModule(input.module_type).id
     });
 
     return {
@@ -207,17 +210,20 @@ export class ImportsService {
         detail.sourceFile.storage_path
       );
 
+      const cvModule = getCvModule(detail.importRow.module_type);
       const parseInput: ParseCvFileInput = {
         originalFilename: detail.sourceFile.original_filename,
         mimeType: detail.sourceFile.mime_type,
         sizeBytes: detail.sourceFile.size_bytes,
-        bytes
+        bytes,
+        extraSectionDefinitions:
+          cvModule.id !== "standard" ? cvModule.parserSectionHints : undefined
       };
 
       const effectiveParseResult = await this.resolveEffectiveParseResult(parseInput, {
         original_filename: detail.sourceFile.original_filename,
         mime_type: detail.sourceFile.mime_type
-      }, session.appUser.default_cv_language || "en", session);
+      }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
       const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
@@ -351,6 +357,7 @@ export class ImportsService {
       title,
       language,
       template_id: input.template_id ?? null,
+      module_type: getCvModule(importRow.module_type).id,
       current_content: currentContent,
       summary_text: buildCvSummaryText(currentContent),
       source_type: "import"
@@ -438,7 +445,8 @@ export class ImportsService {
     parseInput: ParseCvFileInput,
     sourceFile: { original_filename: string; mime_type: string | null },
     defaultLanguage: string,
-    session: SessionContext
+    session: SessionContext,
+    promptProfile: string | null = null
   ): Promise<ParseCvFileResult> {
     if (!this.aiProvider && !this.aiFlowRunner) {
       return this.parser.parse(parseInput);
@@ -450,9 +458,10 @@ export class ImportsService {
           extraction.extracted,
           sourceFile,
           defaultLanguage,
-          session
+          session,
+          promptProfile
         )
-      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage);
+      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage, promptProfile);
     if (aiAttempt.parseResult) {
       return aiAttempt.parseResult;
     }
@@ -494,7 +503,8 @@ export class ImportsService {
   private async tryParseWithAi(
     extractedResult: ExtractCvRawTextResult,
     sourceFile: { original_filename: string; mime_type: string | null },
-    defaultLanguage: string
+    defaultLanguage: string,
+    promptProfile: string | null = null
   ): Promise<{
     parseResult: ParseCvFileResult | null;
     failureWarning: string | null;
@@ -531,6 +541,7 @@ export class ImportsService {
         flow_type: AI_PARSE_FLOW_TYPE,
         provider: this.aiProvider.providerName,
         action_type: null,
+        profile: promptProfile ?? undefined,
         fallback: {
           prompt_key: flowDefinition.prompt_key,
           prompt_version: flowDefinition.prompt_version,
@@ -595,7 +606,8 @@ export class ImportsService {
     extractedResult: ExtractCvRawTextResult,
     sourceFile: { original_filename: string; mime_type: string | null },
     defaultLanguage: string,
-    session: SessionContext
+    session: SessionContext,
+    promptProfile: string | null = null
   ): Promise<{
     parseResult: ParseCvFileResult | null;
     failureWarning: string | null;
@@ -630,7 +642,8 @@ export class ImportsService {
         raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
         source_filename: sourceFile.original_filename,
         mime_type: sourceFile.mime_type ?? "application/octet-stream",
-        language_hint: defaultLanguage || "en"
+        language_hint: defaultLanguage || "en",
+        prompt_profile: promptProfile
       });
 
       const mergedWarnings = [...extractedResult.warnings, ...aiResult.warnings];

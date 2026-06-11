@@ -13,6 +13,7 @@ export interface MasterCvSummary {
   language: string;
   source_type: MasterCvSourceType;
   template_id: string | null;
+  module_type: string;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +34,7 @@ export interface CreateMasterCvInput {
   title: string;
   language: string;
   template_id?: string | null;
+  module_type?: string;
   current_content?: unknown;
 }
 

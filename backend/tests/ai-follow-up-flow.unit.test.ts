@@ -43,6 +43,7 @@ const masterCv: MasterCvRecord = {
   title: "Master CV",
   language: "en",
   template_id: null,
+  module_type: "standard",
   current_content: {
     version: "v1",
     language: "en",

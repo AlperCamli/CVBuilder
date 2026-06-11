@@ -76,6 +76,7 @@ export interface CreateMasterCvInput {
   title: string;
   language: string;
   template_id?: string | null;
+  module_type?: string;
   current_content?: unknown;
 }
 
@@ -102,6 +103,7 @@ export interface CreateImportSessionInput {
   storage_bucket: string;
   storage_path: string;
   checksum?: string | null;
+  module_type?: string;
 }
 
 export interface CreateImportUploadUrlInput {
@@ -142,6 +144,7 @@ export interface CreateMasterCvFromImportInput {
   title?: string;
   language?: string;
   template_id?: string | null;
+  module_type?: string;
 }
 
 export interface CreateTailoredCvInput {
@@ -704,8 +707,9 @@ export class BackendApi {
     );
   }
 
-  listTemplates(): Promise<ListTemplatesResponse> {
-    return this.client.get<ListTemplatesResponse>("/templates");
+  listTemplates(moduleType?: string): Promise<ListTemplatesResponse> {
+    const query = moduleType ? `?module_type=${encodeURIComponent(moduleType)}` : "";
+    return this.client.get<ListTemplatesResponse>(`/templates${query}`);
   }
 
   getTemplate(templateId: string): Promise<TemplateDetail> {

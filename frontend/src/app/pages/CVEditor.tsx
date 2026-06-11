@@ -12,11 +12,20 @@ import {
   Loader2,
   History,
   RefreshCw,
-  ChevronUp
+  ChevronUp,
+  Briefcase,
+  GraduationCap,
+  Users,
+  BadgeCheck,
+  ClipboardList,
+  Stethoscope,
+  ShieldCheck
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AddContentModal } from "../components/AddContentModal";
+import type { ContentType } from "../components/AddContentModal";
+import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
@@ -86,6 +95,12 @@ import {
   parseSkillsPoolMetadata,
   parseSkillsPoolMetadataFromBlockMeta
 } from "./cv-editor-skills-pool";
+import {
+  DEFAULT_MODULE_ID,
+  getCvModule,
+  getModuleManagedSectionDefinition
+} from "../modules/module-registry";
+import type { SectionTypeDefinition } from "../modules/cv-module.types";
 
 const formatDateTime = (value: string | null | undefined): string => {
   if (!value) {
@@ -216,6 +231,18 @@ const sectionDefaultData = (type: string): Record<string, unknown> => {
   }
 };
 
+const moduleSectionDefaultData = (definition: SectionTypeDefinition): Record<string, unknown> => ({
+  items: [
+    {
+      id: `${definition.type}-${Date.now()}`,
+      blockType: definition.blockType,
+      hidden: false,
+      rawFields: { ...definition.defaultBlockFields },
+      rawMeta: {}
+    }
+  ]
+});
+
 const toSectionTitle = (type: string): string => {
   const normalized = type.trim();
   if (!normalized) {
@@ -250,9 +277,10 @@ const toSectionTitle = (type: string): string => {
 };
 
 interface CvEditorDraft {
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   cvKind: "master" | "tailored";
   cvId: string;
+  moduleType?: string;
   title: string;
   language: string;
   templateId: string | null;
@@ -285,7 +313,7 @@ const readDraft = (cvKind: "master" | "tailored", cvId: string): CvEditorDraft |
     };
     if (
       parsed &&
-      (parsed.version === 1 || parsed.version === 2 || parsed.version === 3) &&
+      (parsed.version === 1 || parsed.version === 2 || parsed.version === 3 || parsed.version === 4) &&
       parsed.cvKind === cvKind &&
       parsed.cvId === cvId &&
       Array.isArray(parsed.sections)
@@ -300,12 +328,13 @@ const readDraft = (cvKind: "master" | "tailored", cvId: string): CvEditorDraft |
       return {
         cvKind,
         cvId,
+        moduleType: parsed.moduleType,
         title: parsed.title ?? "",
         language: parsed.language ?? "en",
         templateId: parsed.templateId ?? null,
         sections: parsed.sections,
         updatedAt: parsed.updatedAt ?? new Date().toISOString(),
-        version: 3,
+        version: 4,
         fontScale: clampFontScale(maybeFontScale),
         spacingScale: clampSpacingScale(maybeSpacingScale),
         layoutScale: clampLayoutScale(maybeLayoutScale)
@@ -472,6 +501,7 @@ export function CVEditor() {
   const autoFitInitializedRef = useRef(false);
   const autoFitChangedRef = useRef(false);
   const [sections, setSections] = useState<EditorSection[]>([]);
+  const [moduleType, setModuleType] = useState(DEFAULT_MODULE_ID);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -522,34 +552,69 @@ export function CVEditor() {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
 
-  const loadTemplates = async () => {
-    const list = await api.listTemplates();
+  const addContentTypes = useMemo<ContentType[] | undefined>(() => {
+    if (moduleType === DEFAULT_MODULE_ID) {
+      return undefined;
+    }
+
+    const activeCvModule = getCvModule(moduleType);
+    const iconByType: Record<string, ContentType["icon"]> = {
+      medical_registration: ShieldCheck,
+      medical_qualifications: GraduationCap,
+      clinical_experience: Stethoscope,
+      clinical_skills: Stethoscope,
+      audit_qi: ClipboardList,
+      courses_training: BadgeCheck,
+      memberships: Users,
+      teaching: Users,
+      management_leadership: Briefcase
+    };
+
+    return activeCvModule.sectionCatalog.map((definition) => ({
+      id: definition.type,
+      name: definition.title,
+      icon: iconByType[definition.type] ?? FileText,
+      essential: definition.essential,
+      description: definition.description
+    }));
+  }, [moduleType]);
+
+  const loadTemplates = async (targetModuleType = DEFAULT_MODULE_ID) => {
+    const list =
+      targetModuleType === DEFAULT_MODULE_ID
+        ? await api.listTemplates()
+        : await api.listTemplates(targetModuleType);
     setTemplates(list.templates);
   };
 
   const hydrateFromMaster = (master: MasterCvDetail) => {
+    const nextModuleType = master.module_type ?? DEFAULT_MODULE_ID;
     setCvKind("master");
     setCvId(master.id);
+    setModuleType(nextModuleType);
     setTitle(master.title);
     setLanguage(master.language);
     setTemplateId(master.template_id);
     setFontScale(resolveFontScaleFromContent(master.current_content));
     setSpacingScale(resolveSpacingScaleFromContent(master.current_content));
     setLayoutScale(resolveLayoutScaleFromContent(master.current_content));
-    setSections(cvContentToEditorSections(master.current_content));
+    setSections(cvContentToEditorSections(master.current_content, nextModuleType));
     setLastSavedAt(master.updated_at);
+    void loadTemplates(nextModuleType);
   };
 
   const hydrateFromTailored = (tailored: TailoredCvDetail) => {
+    const nextModuleType = tailored.module_type ?? DEFAULT_MODULE_ID;
     setCvKind("tailored");
     setCvId(tailored.id);
+    setModuleType(nextModuleType);
     setTitle(tailored.title);
     setLanguage(tailored.language);
     setTemplateId(tailored.template_id);
     setFontScale(resolveFontScaleFromContent(tailored.current_content));
     setSpacingScale(resolveSpacingScaleFromContent(tailored.current_content));
     setLayoutScale(resolveLayoutScaleFromContent(tailored.current_content));
-    setSections(cvContentToEditorSections(tailored.current_content));
+    setSections(cvContentToEditorSections(tailored.current_content, nextModuleType));
     setLastSavedAt(tailored.updated_at);
     setTailoredJobData(
       tailored.job
@@ -559,6 +624,7 @@ export function CVEditor() {
         }
         : null
     );
+    void loadTemplates(nextModuleType);
   };
 
   const mapAiBlockVersions = (response: CvAiBlockVersionsResponse): Record<string, AiBlockVersionChain> => {
@@ -621,7 +687,7 @@ export function CVEditor() {
 
   const applyPersistedBlockUpdate = (blockId: string, updatedBlock: CvBlock): boolean => {
     const currentContent = withDisplayMetadata(
-      editorSectionsToCvContent(sections, language),
+      editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
       layoutScale
@@ -652,7 +718,7 @@ export function CVEditor() {
       cvContentToEditorSections({
         ...currentContent,
         sections: nextSections
-      })
+      }, moduleType)
     );
     setDirty(false);
     setRestoredDraftAt(null);
@@ -674,12 +740,12 @@ export function CVEditor() {
 
   const buildCurrentContent = useCallback(() => {
     return withDisplayMetadata(
-      editorSectionsToCvContent(sections, language),
+      editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
       layoutScale
     );
-  }, [fontScale, language, layoutScale, sections, spacingScale]);
+  }, [fontScale, language, layoutScale, moduleType, sections, spacingScale]);
 
   const restoreDraftIfAvailable = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
     const draft = readDraft(nextCvKind, nextCvId);
@@ -690,6 +756,9 @@ export function CVEditor() {
     }
 
     setTitle(draft.title);
+    if (draft.moduleType) {
+      setModuleType(draft.moduleType);
+    }
     setLanguage(draft.language);
     setTemplateId(draft.templateId);
     setFontScale(clampFontScale(draft.fontScale));
@@ -719,8 +788,6 @@ export function CVEditor() {
     setRestoredDraftAt(null);
 
     try {
-      await loadTemplates();
-
       if (routeCvKind === "master" || id === "master") {
         let targetMasterId = location.state?.masterCvId as string | undefined;
 
@@ -861,9 +928,10 @@ export function CVEditor() {
     }
 
     writeDraft({
-      version: 3,
+      version: 4,
       cvKind,
       cvId,
+      moduleType,
       title,
       language,
       templateId,
@@ -873,11 +941,12 @@ export function CVEditor() {
       sections,
       updatedAt: new Date().toISOString()
     });
-  }, [cvId, cvKind, dirty, fontScale, language, layoutScale, sections, spacingScale, templateId, title]);
+  }, [cvId, cvKind, dirty, fontScale, language, layoutScale, moduleType, sections, spacingScale, templateId, title]);
 
   const addSection = (sectionType: string) => {
     setSections((prev) => {
       const maxOrder = prev.filter((section) => section.type !== "header").reduce((max, section) => Math.max(max, section.order), -1);
+      const moduleDefinition = getModuleManagedSectionDefinition(moduleType, sectionType);
       return [
         ...prev,
         {
@@ -885,7 +954,7 @@ export function CVEditor() {
           type: sectionType,
           hidden: false,
           order: maxOrder + 1,
-          data: sectionDefaultData(sectionType)
+          data: moduleDefinition ? moduleSectionDefaultData(moduleDefinition) : sectionDefaultData(sectionType)
         }
       ];
     });
@@ -945,7 +1014,7 @@ export function CVEditor() {
 
     try {
       const content = withDisplayMetadata(
-        editorSectionsToCvContent(sections, language),
+        editorSectionsToCvContent(sections, language, undefined, moduleType),
         fontScale,
         spacingScale,
         layoutScale
@@ -1103,7 +1172,7 @@ export function CVEditor() {
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autoFitting, autoSaving, cvId, cvKind, dirty, fontScale, language, layoutScale, loading, saving, sections, spacingScale]);
+  }, [autoFitting, autoSaving, cvId, cvKind, dirty, fontScale, language, layoutScale, loading, moduleType, saving, sections, spacingScale]);
 
   const assignTemplate = async (nextTemplateId: string | null) => {
     if (!cvId) {
@@ -1692,7 +1761,7 @@ export function CVEditor() {
 
   const replaceBlockFromSnapshot = (blockId: string, snapshot: Record<string, unknown>): boolean => {
     const currentContent = withDisplayMetadata(
-      editorSectionsToCvContent(sections, language),
+      editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
       layoutScale
@@ -1725,7 +1794,7 @@ export function CVEditor() {
       cvContentToEditorSections({
         ...currentContent,
         sections: nextSections
-      })
+      }, moduleType)
     );
     markDirty();
     return true;
@@ -1834,7 +1903,13 @@ export function CVEditor() {
       );
     }
 
+    const moduleDefinition = getModuleManagedSectionDefinition(moduleType, section.type);
+
     const content = (() => {
+      if (moduleDefinition) {
+        return <ModuleSection {...commonProps} definition={moduleDefinition} />;
+      }
+
       switch (section.type) {
         case "summary":
           return (
@@ -2451,6 +2526,7 @@ export function CVEditor() {
           onClose={() => setShowAddContentModal(false)}
           onAddSection={addSection}
           existingSections={sections.map((section) => section.type)}
+          contentTypes={addContentTypes}
         />
 
         <TipsDrawer isOpen={showTipsDrawer} onClose={() => setShowTipsDrawer(false)} sectionType={currentTipsSection} />
