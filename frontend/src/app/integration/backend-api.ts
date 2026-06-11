@@ -252,6 +252,7 @@ export interface ImportImproveInput {
   parsed_content: Record<string, unknown>;
   language?: string;
   improvement_guidance?: string[];
+  module_type?: string;
 }
 
 export interface CoverLetterGenerationInput {

@@ -67,6 +67,9 @@ export function CVScore() {
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [parsedContent, setParsedContent] = useState<CvContent | null>(null);
+  const [moduleType, setModuleType] = useState<string | undefined>(
+    location.state?.moduleType as string | undefined
+  );
 
   useEffect(() => {
     if (!importId) {
@@ -92,6 +95,7 @@ export function CVScore() {
         }
 
         setParsedContent(result.parsed_content);
+        setModuleType(result.module_type);
       } catch (err) {
         if (cancelled) {
           return;
@@ -154,7 +158,10 @@ export function CVScore() {
     setError(null);
 
     try {
-      const existing = await api.listMasterCvs();
+      const targetModule = moduleType ?? "standard";
+      const existing = (await api.listMasterCvs()).filter(
+        (cv) => (cv.module_type ?? "standard") === targetModule
+      );
       if (existing.length > 0) {
         const confirmed = window.confirm(
           "You already have a main CV. Creating a new one will permanently delete the existing one. Continue?"
@@ -202,7 +209,8 @@ export function CVScore() {
       state: {
         importId,
         parsedContent,
-        improvements
+        improvements,
+        moduleType
       }
     });
   };

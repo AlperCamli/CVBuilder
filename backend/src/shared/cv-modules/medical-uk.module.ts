@@ -321,7 +321,7 @@ export const medicalUkModule: CvModuleDefinition = {
       essential: false,
       description: "Three senior clinicians covering the last three years",
       defaultOrder: 17,
-      blockType: "referee",
+      blockType: "references",
       fieldSchema: [
         { key: "referee_name", label: "Name", kind: "text", required: true },
         { key: "position", label: "Position / Grade", kind: "text" },

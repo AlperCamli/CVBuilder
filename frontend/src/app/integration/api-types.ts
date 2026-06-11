@@ -504,6 +504,7 @@ export interface ImportRecord {
   source_file_id: string;
   target_master_cv_id: string | null;
   status: ImportStatus;
+  module_type: string;
   parser_name: string | null;
   raw_extracted_text: string | null;
   parsed_content: CvContent | null;
@@ -550,6 +551,7 @@ export interface ParseImportResponse {
 
 export interface ImportResultView {
   status: ImportStatus;
+  module_type: string;
   parser_name: string | null;
   raw_extracted_text: string | null;
   parsed_content: CvContent | null;

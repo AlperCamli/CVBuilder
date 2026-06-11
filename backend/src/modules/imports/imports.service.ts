@@ -420,6 +420,7 @@ export class ImportsService {
   private toImportResultView(importRow: ImportRecord): ImportResultView {
     return {
       status: importRow.status,
+      module_type: importRow.module_type,
       parser_name: importRow.parser_name,
       raw_extracted_text: importRow.raw_extracted_text,
       parsed_content: importRow.parsed_content,

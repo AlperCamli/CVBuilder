@@ -12,6 +12,7 @@ export function AIImproving() {
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
   const improvementGuidance = (location.state?.improvements as string[] | undefined) ?? [];
+  const moduleType = location.state?.moduleType as string | undefined;
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -66,15 +67,19 @@ export function AIImproving() {
             try {
               const improved = await api.postImportImprove({
                 parsed_content: parsedContent as unknown as Record<string, unknown>,
-                improvement_guidance: improvementGuidance
+                improvement_guidance: improvementGuidance,
+                ...(moduleType ? { module_type: moduleType } : {})
               });
 
               await api.patchImportResult(importId, improved.improved_content);
 
               try {
                 const existing = await api.listMasterCvs();
+                const targetModule = moduleType ?? "standard";
                 for (const cv of existing) {
-                  await api.deleteMasterCv(cv.id);
+                  if ((cv.module_type ?? "standard") === targetModule) {
+                    await api.deleteMasterCv(cv.id);
+                  }
                 }
               } catch {
                 // Continue and create a new master CV even if cleanup is partial.

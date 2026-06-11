@@ -48,6 +48,7 @@ export interface ImportDetail {
 
 export interface ImportResultView {
   status: ImportStatus;
+  module_type: string;
   parser_name: string | null;
   raw_extracted_text: string | null;
   parsed_content: CvContent | null;

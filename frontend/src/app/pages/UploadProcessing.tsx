@@ -20,6 +20,7 @@ export function UploadProcessing() {
   const navigate = useNavigate();
   const location = useLocation();
   const file = location.state?.file as File | undefined;
+  const moduleType = location.state?.moduleType as string | undefined;
   const { api } = useAuth();
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
@@ -67,7 +68,8 @@ export function UploadProcessing() {
           size_bytes: file.size,
           storage_bucket: uploadTarget.storage_bucket,
           storage_path: uploadTarget.storage_path,
-          checksum: null
+          checksum: null,
+          ...(moduleType ? { module_type: moduleType } : {})
         });
 
         await api.markImportUploadComplete(importSession.import.id);
@@ -96,7 +98,8 @@ export function UploadProcessing() {
             state: {
               importId: importSession.import.id,
               fileName: file.name,
-              parseSummary: parseResponse.parse_summary
+              parseSummary: parseResponse.parse_summary,
+              moduleType: importSession.import.module_type
             }
           });
         }, 250);
