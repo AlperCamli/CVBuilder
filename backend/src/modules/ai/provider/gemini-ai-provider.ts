@@ -17,12 +17,14 @@ const MAX_DEBUG_EXCERPT_LENGTH = 2_000;
 const REQUEST_TIMEOUT_ERROR_NAME = "GeminiRequestTimeout";
 const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
+  "cv_parse",
   "professional_summary"
 ]);
 
 const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "import_improve",
+  "cv_parse",
   "cover_letter_generation"
 ]);
 

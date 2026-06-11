@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "../src/shared/errors/app-error";
-import { followUpQuestionsOutputSchema } from "../src/modules/ai/flows/flow-contracts";
+import {
+  cvParseOutputSchema,
+  followUpQuestionsOutputSchema
+} from "../src/modules/ai/flows/flow-contracts";
 import { createAiProvider } from "../src/modules/ai/provider/create-ai-provider";
 import type { AppConfig } from "../src/shared/config/env";
 
@@ -141,6 +144,48 @@ describe("GeminiAiProvider", () => {
         unknown
       >).additionalProperties
     ).toBe(false);
+  });
+
+  it("routes cv_parse to the configured heavy model and heavy output cap", async () => {
+    const provider = new GeminiAiProvider("fallback-model", "gemini-key", {
+      lightModelName: "light-model",
+      heavyModelName: "heavy-model",
+      maxOutputTokensLight: 1000,
+      maxOutputTokensHeavy: 12000
+    });
+
+    expect(provider.resolveModelName("cv_parse")).toBe("heavy-model");
+    expect(provider.resolveModelName("follow_up_questions")).toBe("light-model");
+
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        parsed_content: {
+          version: "v1",
+          language: "en",
+          metadata: {},
+          sections: []
+        },
+        warnings: []
+      })
+    });
+
+    const result = await provider.generate({
+      flow_type: "cv_parse",
+      model_name: provider.resolveModelName("cv_parse"),
+      prompt: {
+        prompt_key: "cv-parse",
+        prompt_version: "phase5-v1",
+        system_prompt: "Parse CV",
+        user_prompt: "Parse raw CV text"
+      },
+      output_schema: cvParseOutputSchema,
+      input_payload: {}
+    });
+
+    expect(result.model_name).toBe("heavy-model");
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock.mock.calls[0][0].model).toBe("heavy-model");
+    expect(generateContentMock.mock.calls[0][0].config.maxOutputTokens).toBe(12000);
   });
 
   it("recovers JSON payload from non-JSON wrapper text using one repair pass", async () => {

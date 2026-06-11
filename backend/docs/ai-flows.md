@@ -52,8 +52,8 @@ Retry tuning env vars:
 - `AI_GEMINI_MODEL_HEAVY` (default `gemini-3-flash`)
 
 Static model tier routing:
-- Heavy: `tailored_draft`, `import_improve`, `multi_option`
-- Light: `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`, `cv_parse`, `cover_letter_generation`
+- Heavy: `tailored_draft`, `import_improve`, `multi_option`, `cv_parse`
+- Light: `job_analysis`, `follow_up_questions`, `block_suggest`, `block_compare`, `summary`, `improve`, `cover_letter_generation`
 
 ## Prompt Management
 
