@@ -188,17 +188,20 @@ export function ModuleSection({
     }
 
     if (field.kind === "textarea") {
+      // Same bullet-list behavior as the standard module's description inputs: Enter
+      // starts a "• " bullet, Backspace at a marker removes it. The raw string (with
+      // markers) is stored; rendering splits it via the shared bullet convention.
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
             {field.label}
             {field.required ? " *" : ""}
           </label>
-          <textarea
+          <BulletTextarea
             rows={2}
             placeholder={field.placeholder ?? field.label}
             value={asText(value)}
-            onChange={(e) => updateItemField(index, field.key, e.target.value)}
+            onValueChange={(next) => updateItemField(index, field.key, next)}
             className="w-full px-2 py-1.5 rounded border resize-none"
             style={{ ...inputStyle, lineHeight: "1.6" }}
           />

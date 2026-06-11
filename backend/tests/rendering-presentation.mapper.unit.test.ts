@@ -628,4 +628,333 @@ describe("rendering presentation mapper", () => {
       "Audit loop closed"
     ]);
   });
+
+  it("maps medical registration fields onto labeled presentation lines", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "medical-registration",
+      type: "medical_registration",
+      title: "Professional Registration",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "registration-1",
+          type: "medical_registration",
+          fields: {
+            gmc_number: "1234567",
+            licence_status: "Full licence to practise",
+            registration_date: "08/2020",
+            ntn: "LDN/123/456",
+            visa_status: "Skilled Worker visa",
+            additional_registrations: "• IMC (Ireland) 98765"
+          },
+          normalized_fields: {
+            gmc_number: field("1234567", "1234567", ["1234567"]),
+            licence_status: field("Full licence to practise", "Full licence to practise", ["Full licence to practise"]),
+            registration_date: field("08/2020", "08/2020", ["08/2020"]),
+            ntn: field("LDN/123/456", "LDN/123/456", ["LDN/123/456"]),
+            visa_status: field("Skilled Worker visa", "Skilled Worker visa", ["Skilled Worker visa"]),
+            additional_registrations: field("• IMC (Ireland) 98765", "• IMC (Ireland) 98765", ["• IMC (Ireland) 98765"])
+          },
+          plain_text: "1234567 Full licence to practise 08/2020 LDN/123/456 Skilled Worker visa"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const item = presentation.sections.find((section) => section.type === "medical_registration")?.items[0];
+
+    expect(item?.title).toBe("GMC Number: 1234567");
+    expect(item?.subtitle).toBe("Full licence to practise • Registered 08/2020");
+    expect(item?.body).toBe("National Training Number: LDN/123/456\nRight to Work: Skilled Worker visa");
+    expect(item?.bullets).toEqual(["IMC (Ireland) 98765"]);
+  });
+
+  it("maps medical qualifications without printing the qualification type", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "medical-qualifications",
+      type: "medical_qualifications",
+      title: "Medical Qualifications",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "qualification-1",
+          type: "medical_qualification",
+          fields: {
+            qualification: "MBBS",
+            qualification_type: "primary",
+            institution: "King's College London",
+            year: "2019",
+            notes: "Distinction in clinical practice"
+          },
+          normalized_fields: {
+            qualification: field("MBBS", "MBBS", ["MBBS"]),
+            qualification_type: field("primary", "primary", ["primary"]),
+            institution: field("King's College London", "King's College London", ["King's College London"]),
+            year: field("2019", "2019", ["2019"]),
+            notes: field("Distinction in clinical practice", "Distinction in clinical practice", ["Distinction in clinical practice"])
+          },
+          plain_text: "MBBS primary King's College London 2019"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const item = presentation.sections.find((section) => section.type === "medical_qualifications")?.items[0];
+
+    expect(item?.title).toBe("MBBS");
+    expect(item?.subtitle).toBe("King's College London");
+    expect(item?.metadata_line).toBe("2019");
+    expect(item?.body).toBe("Distinction in clinical practice");
+    expect(item?.body).not.toContain("primary");
+  });
+
+  it("maps clinical experience posts with grade, place of work, duties and rota details", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "clinical-experience",
+      type: "clinical_experience",
+      title: "Clinical Experience",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "post-1",
+          type: "clinical_post",
+          fields: {
+            job_title: "Foundation Doctor",
+            grade: "FY2",
+            specialty: "General Surgery",
+            hospital: "St Mary's Hospital",
+            department: "Department of Surgery",
+            start_date: "08/2024",
+            end_date: "",
+            is_current: true,
+            duties: ["Ward rounds and patient reviews", "First responder for surgical emergencies"],
+            on_call_frequency: "1 in 8 full shift",
+            patient_demographics: "Tertiary referral centre"
+          },
+          normalized_fields: {
+            job_title: field("Foundation Doctor", "Foundation Doctor", ["Foundation Doctor"]),
+            grade: field("FY2", "FY2", ["FY2"]),
+            specialty: field("General Surgery", "General Surgery", ["General Surgery"]),
+            hospital: field("St Mary's Hospital", "St Mary's Hospital", ["St Mary's Hospital"]),
+            department: field("Department of Surgery", "Department of Surgery", ["Department of Surgery"]),
+            start_date: field("08/2024", "08/2024", ["08/2024"]),
+            end_date: field("", "", []),
+            is_current: field(true, "", []),
+            duties: field(
+              ["Ward rounds and patient reviews", "First responder for surgical emergencies"],
+              "Ward rounds and patient reviews First responder for surgical emergencies",
+              ["Ward rounds and patient reviews", "First responder for surgical emergencies"]
+            ),
+            on_call_frequency: field("1 in 8 full shift", "1 in 8 full shift", ["1 in 8 full shift"]),
+            patient_demographics: field("Tertiary referral centre", "Tertiary referral centre", ["Tertiary referral centre"])
+          },
+          plain_text: "Foundation Doctor FY2 General Surgery St Mary's Hospital"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const item = presentation.sections.find((section) => section.type === "clinical_experience")?.items[0];
+
+    expect(item?.title).toBe("Foundation Doctor (FY2)");
+    expect(item?.subtitle).toBe("General Surgery • Department of Surgery • St Mary's Hospital");
+    expect(item?.date_range).toBe("08/2024 - Present");
+    expect(item?.body).toBe("On-call: 1 in 8 full shift\nSetting: Tertiary referral centre");
+    expect(item?.bullets).toEqual([
+      "Ward rounds and patient reviews",
+      "First responder for surgical emergencies"
+    ]);
+  });
+
+  it("maps teaching activities and keeps audience size off the CV", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "teaching",
+      type: "teaching",
+      title: "Teaching Experience",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "teaching-1",
+          type: "teaching_activity",
+          fields: {
+            topic: "Acute asthma management",
+            setting: "Medical school",
+            audience: "3rd year medical students",
+            audience_size: "25",
+            format: "small_group",
+            frequency: "Monthly",
+            evaluation: "• Average feedback 4.8/5\n• Invited back as faculty"
+          },
+          normalized_fields: {
+            topic: field("Acute asthma management", "Acute asthma management", ["Acute asthma management"]),
+            setting: field("Medical school", "Medical school", ["Medical school"]),
+            audience: field("3rd year medical students", "3rd year medical students", ["3rd year medical students"]),
+            audience_size: field("25", "25", ["25"]),
+            format: field("small_group", "small_group", ["small_group"]),
+            frequency: field("Monthly", "Monthly", ["Monthly"]),
+            evaluation: field(
+              "• Average feedback 4.8/5\n• Invited back as faculty",
+              "• Average feedback 4.8/5 • Invited back as faculty",
+              ["• Average feedback 4.8/5\n• Invited back as faculty"]
+            )
+          },
+          plain_text: "Acute asthma management Medical school 3rd year medical students 25"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const item = presentation.sections.find((section) => section.type === "teaching")?.items[0];
+
+    expect(item?.title).toBe("Acute asthma management");
+    expect(item?.subtitle).toBe("Small Group • Medical school • 3rd year medical students");
+    expect(item?.metadata_line).toBe("Monthly");
+    expect(item?.bullets).toEqual(["Average feedback 4.8/5", "Invited back as faculty"]);
+    expect(item?.subtitle).not.toContain("25");
+    expect(item?.body ?? "").not.toContain("25");
+  });
+
+  it("maps courses, memberships and career gaps onto their own lines", () => {
+    const payload = renderingPayload();
+    payload.sections.push(
+      {
+        id: "courses-training",
+        type: "courses_training",
+        title: "Courses & Mandatory Training",
+        order: 5,
+        meta: {},
+        plain_text: "",
+        blocks: [
+          block({
+            id: "course-1",
+            type: "course_entry",
+            fields: { name: "ALS", provider: "Resuscitation Council UK", date: "03/2025", expiry_date: "03/2029" },
+            normalized_fields: {
+              name: field("ALS", "ALS", ["ALS"]),
+              provider: field("Resuscitation Council UK", "Resuscitation Council UK", ["Resuscitation Council UK"]),
+              date: field("03/2025", "03/2025", ["03/2025"]),
+              expiry_date: field("03/2029", "03/2029", ["03/2029"])
+            },
+            plain_text: "ALS Resuscitation Council UK 03/2025 03/2029"
+          })
+        ]
+      },
+      {
+        id: "memberships",
+        type: "memberships",
+        title: "Professional Memberships",
+        order: 6,
+        meta: {},
+        plain_text: "",
+        blocks: [
+          block({
+            id: "membership-1",
+            type: "membership",
+            fields: {
+              organization: "Royal College of Physicians",
+              membership_status: "Member",
+              post_nominals: "MRCP(UK)",
+              member_since: "2022"
+            },
+            normalized_fields: {
+              organization: field("Royal College of Physicians", "Royal College of Physicians", ["Royal College of Physicians"]),
+              membership_status: field("Member", "Member", ["Member"]),
+              post_nominals: field("MRCP(UK)", "MRCP(UK)", ["MRCP(UK)"]),
+              member_since: field("2022", "2022", ["2022"])
+            },
+            plain_text: "Royal College of Physicians Member MRCP(UK) 2022"
+          })
+        ]
+      },
+      {
+        id: "career-gap",
+        type: "career_gap",
+        title: "Career Gaps",
+        order: 7,
+        meta: {},
+        plain_text: "",
+        blocks: [
+          block({
+            id: "gap-1",
+            type: "career_gap",
+            fields: { start_date: "01/2023", end_date: "06/2023", explanation: "Parental leave." },
+            normalized_fields: {
+              start_date: field("01/2023", "01/2023", ["01/2023"]),
+              end_date: field("06/2023", "06/2023", ["06/2023"]),
+              explanation: field("Parental leave.", "Parental leave.", ["Parental leave."])
+            },
+            plain_text: "01/2023 06/2023 Parental leave."
+          })
+        ]
+      }
+    );
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+
+    const course = presentation.sections.find((section) => section.type === "courses_training")?.items[0];
+    expect(course?.title).toBe("ALS");
+    expect(course?.subtitle).toBe("Resuscitation Council UK");
+    expect(course?.metadata_line).toBe("03/2025 • Valid until 03/2029");
+
+    const membership = presentation.sections.find((section) => section.type === "memberships")?.items[0];
+    expect(membership?.title).toBe("Royal College of Physicians (MRCP(UK))");
+    expect(membership?.subtitle).toBe("Member");
+    expect(membership?.metadata_line).toBe("Member since 2022");
+
+    const gap = presentation.sections.find((section) => section.type === "career_gap")?.items[0];
+    expect(gap?.metadata_line).toBe("01/2023 - 06/2023");
+    expect(gap?.body).toBe("Parental leave.");
+  });
+
+  it("falls back to the generic mapping for medical-typed blocks with unexpected keys", () => {
+    const payload = renderingPayload();
+    payload.sections.push({
+      id: "teaching",
+      type: "teaching",
+      title: "Teaching Experience",
+      order: 5,
+      meta: {},
+      plain_text: "Ran weekly bedside teaching for medical students",
+      blocks: [
+        block({
+          id: "teaching-import-1",
+          type: "text",
+          fields: { text: "Ran weekly bedside teaching for medical students" },
+          normalized_fields: {
+            text: field(
+              "Ran weekly bedside teaching for medical students",
+              "Ran weekly bedside teaching for medical students",
+              ["Ran weekly bedside teaching for medical students"]
+            )
+          },
+          derived: {
+            headline: "Ran weekly bedside teaching for medical students",
+            subheadline: null,
+            bullets: [],
+            date_range: null,
+            location: null
+          },
+          plain_text: "Ran weekly bedside teaching for medical students"
+        })
+      ]
+    });
+
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, null);
+    const section = presentation.sections.find((entry) => entry.type === "teaching");
+
+    expect(section?.items).toHaveLength(1);
+    expect(section?.items[0]?.title).toBe("Ran weekly bedside teaching for medical students");
+  });
 });

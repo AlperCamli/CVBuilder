@@ -230,6 +230,23 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         );
       }
 
+      if (block.body) {
+        // TextRun does not render "\n"; multi-line bodies become one paragraph per line.
+        const bodyLines = block.body
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+        for (const line of bodyLines) {
+          body.push(
+            paragraph(line, {
+              spacing: {
+                after: 40
+              }
+            })
+          );
+        }
+      }
+
       if (block.bullets.length > 0) {
         for (const bullet of block.bullets) {
           body.push(
@@ -243,14 +260,6 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             })
           );
         }
-      } else if (block.body) {
-        body.push(
-          paragraph(block.body, {
-            spacing: {
-              after: 40
-            }
-          })
-        );
       }
 
       body.push(

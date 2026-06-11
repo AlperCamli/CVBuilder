@@ -597,10 +597,266 @@ const resolveTemplateProfile = (template: TemplateSummary | null): PresentationT
   };
 };
 
+const exactText = (block: RenderingBlock, key: string): string | null =>
+  normalizeLine(block.normalized_fields[key]?.text ?? null);
+
+// Splits a narrative textarea field (which may use the "• " bullet convention) into a
+// lead paragraph and bullet entries, so bullet-edited text renders as a real list.
+const narrativeParts = (
+  block: RenderingBlock,
+  key: string
+): { body: string | null; bullets: string[] } => {
+  const raw = block.fields[key];
+  const text = typeof raw === "string" ? raw : (block.normalized_fields[key]?.text ?? "");
+
+  if (!text.trim()) {
+    return { body: null, bullets: [] };
+  }
+
+  const split = splitBulletLines(text);
+  return { body: normalizeLine(split.leadParagraph), bullets: dedupeText(split.bullets) };
+};
+
+const isEmptyPresentationItem = (item: PresentationItem): boolean =>
+  !item.title &&
+  !item.subtitle &&
+  !item.date_range &&
+  !item.location &&
+  !item.metadata_line &&
+  !item.body &&
+  item.bullets.length === 0;
+
+// Maps medical_uk module blocks onto presentation items field by field. The generic
+// key-guessing in deriveBlock does not know these schemas and used to dump every field
+// into one unlabeled body line. Returns null for non-medical blocks; callers fall back
+// to the generic mapping (also when the mapped item ends up empty, so imported blocks
+// with unexpected keys keep rendering through the generic path).
 const medicalBlockToPresentationItem = (
   sectionType: string,
   block: RenderingBlock
 ): PresentationItem | null => {
+  if (sectionType === "medical_registration" || block.type === "medical_registration") {
+    const gmcNumber = textByKey(block, ["gmc_number", "gmc"]);
+    const licenceStatus = exactText(block, "licence_status");
+    const registrationDate = exactText(block, "registration_date");
+    const ntn = exactText(block, "ntn");
+    const visaStatus = exactText(block, "visa_status");
+    const additional = narrativeParts(block, "additional_registrations");
+
+    const bodyLines = [
+      ntn ? `National Training Number: ${ntn}` : null,
+      visaStatus ? `Right to Work: ${visaStatus}` : null,
+      additional.body
+    ].filter((line): line is string => Boolean(line));
+
+    return {
+      id: block.id,
+      title: gmcNumber ? `GMC Number: ${gmcNumber}` : null,
+      subtitle: buildJoinedLine([
+        licenceStatus,
+        registrationDate ? `Registered ${registrationDate}` : null
+      ]),
+      date_range: null,
+      location: null,
+      metadata_line: null,
+      body: bodyLines.length > 0 ? bodyLines.join("\n") : null,
+      bullets: additional.bullets
+    };
+  }
+
+  if (sectionType === "medical_qualifications" || block.type === "medical_qualification") {
+    const qualification = exactText(block, "qualification") ?? textByKey(block, ["title", "name"]);
+    const institution = textByKey(block, ["institution", "awarding_body"]);
+    const year = exactText(block, "year") ?? exactText(block, "date");
+    const notes = narrativeParts(block, "notes");
+    // qualification_type is kept off the CV; it stays in the block fields as AI context.
+
+    return {
+      id: block.id,
+      title: qualification,
+      subtitle: institution,
+      date_range: year,
+      location: null,
+      metadata_line: year,
+      body: notes.body,
+      bullets: notes.bullets
+    };
+  }
+
+  if (sectionType === "clinical_experience" || block.type === "clinical_post") {
+    const jobTitle = textByKey(block, ["job_title", "position"]);
+    const grade = exactText(block, "grade");
+    const specialty = exactText(block, "specialty");
+    const hospital = textByKey(block, ["hospital", "trust"]);
+    const department = exactText(block, "department");
+    const startDate = exactText(block, "start_date");
+    const endDate = exactText(block, "end_date");
+    const isCurrent =
+      block.fields.is_current === true || exactText(block, "is_current")?.toLowerCase() === "true";
+    const duties = textItemsByKey(block, ["duties", "responsibilities"]);
+    const onCall = textByKey(block, ["on_call_frequency", "on_call"]);
+    const demographics = exactText(block, "patient_demographics");
+
+    const title =
+      jobTitle && grade && !collapseForCompare(jobTitle).includes(collapseForCompare(grade))
+        ? `${jobTitle} (${grade})`
+        : (jobTitle ?? grade);
+    const dateRange = startDate
+      ? `${startDate} - ${isCurrent ? "Present" : (endDate ?? "Present")}`
+      : endDate;
+
+    const bodyLines = [
+      onCall ? `On-call: ${onCall}` : null,
+      demographics ? `Setting: ${demographics}` : null
+    ].filter((line): line is string => Boolean(line));
+
+    return {
+      id: block.id,
+      title,
+      subtitle: buildJoinedLine([specialty, department, hospital]),
+      date_range: dateRange ?? null,
+      location: null,
+      metadata_line: dateRange ?? null,
+      body: bodyLines.length > 0 ? bodyLines.join("\n") : null,
+      bullets: duties
+    };
+  }
+
+  if (sectionType === "career_gap" || block.type === "career_gap") {
+    const startDate = exactText(block, "start_date");
+    const endDate = exactText(block, "end_date");
+    const explanation = narrativeParts(block, "explanation");
+    const dateRange = startDate && endDate ? `${startDate} - ${endDate}` : (startDate ?? endDate);
+
+    return {
+      id: block.id,
+      title: null,
+      subtitle: null,
+      date_range: dateRange,
+      location: null,
+      metadata_line: dateRange,
+      body: explanation.body,
+      bullets: explanation.bullets
+    };
+  }
+
+  if (sectionType === "additional_skills" || block.type === "additional_skill") {
+    const skill = exactText(block, "skill") ?? textByKey(block, ["title", "name"]);
+    const context = narrativeParts(block, "context");
+
+    return {
+      id: block.id,
+      title: skill,
+      subtitle: null,
+      date_range: null,
+      location: null,
+      metadata_line: null,
+      body: context.body,
+      bullets: context.bullets
+    };
+  }
+
+  if (sectionType === "teaching" || block.type === "teaching_activity") {
+    const topic = textByKey(block, ["topic", "programme", "title"]);
+    const format = titleizeValue(exactText(block, "format"));
+    const setting = exactText(block, "setting");
+    const audience = exactText(block, "audience");
+    const frequency = exactText(block, "frequency");
+    const evaluation = narrativeParts(block, "evaluation");
+    // audience_size is kept off the CV; it stays in the block fields as AI context.
+
+    return {
+      id: block.id,
+      title: topic,
+      subtitle: buildJoinedLine([format, setting, audience]),
+      date_range: null,
+      location: null,
+      metadata_line: frequency,
+      body: evaluation.body,
+      bullets: evaluation.bullets
+    };
+  }
+
+  if (sectionType === "management_leadership" || block.type === "management_role") {
+    const role = textByKey(block, ["role", "title", "position"]);
+    const organization = textByKey(block, ["organization", "organisation", "department"]);
+    const dates = exactText(block, "dates") ?? exactText(block, "date");
+    const description = Array.isArray(block.fields.description)
+      ? { body: null, bullets: textItemsByKey(block, ["description"]) }
+      : narrativeParts(block, "description");
+
+    return {
+      id: block.id,
+      title: role,
+      subtitle: organization,
+      date_range: dates,
+      location: null,
+      metadata_line: dates,
+      body: description.body,
+      bullets: description.bullets
+    };
+  }
+
+  if (sectionType === "courses_training" || block.type === "course_entry") {
+    const name = textByKey(block, ["name", "course", "title"]);
+    const provider = exactText(block, "provider");
+    const date = exactText(block, "date");
+    const expiryDate = exactText(block, "expiry_date");
+
+    return {
+      id: block.id,
+      title: name,
+      subtitle: provider,
+      date_range: date,
+      location: null,
+      metadata_line: buildJoinedLine([date, expiryDate ? `Valid until ${expiryDate}` : null]),
+      body: null,
+      bullets: []
+    };
+  }
+
+  if (sectionType === "memberships" || block.type === "membership") {
+    const organization = textByKey(block, ["organization", "organisation", "name"]);
+    const status = textByKey(block, ["membership_status", "status"]);
+    const postNominals = exactText(block, "post_nominals");
+    const memberSince = textByKey(block, ["member_since", "since"]);
+
+    return {
+      id: block.id,
+      title:
+        organization && postNominals
+          ? `${organization} (${postNominals})`
+          : (organization ?? postNominals),
+      subtitle: status,
+      date_range: memberSince,
+      location: null,
+      metadata_line: memberSince ? `Member since ${memberSince}` : null,
+      body: null,
+      bullets: []
+    };
+  }
+
+  if (sectionType === "interests" || block.type === "interests") {
+    const fromDescription = narrativeParts(block, "description");
+    const parts =
+      fromDescription.body || fromDescription.bullets.length > 0
+        ? fromDescription
+        : narrativeParts(block, "text");
+    const body =
+      parts.body ?? (parts.bullets.length === 0 ? normalizeLine(block.plain_text) : null);
+
+    return {
+      id: block.id,
+      title: null,
+      subtitle: null,
+      date_range: null,
+      location: null,
+      metadata_line: null,
+      body,
+      bullets: parts.bullets
+    };
+  }
+
   if (sectionType === "clinical_skills" || block.type === "clinical_skill") {
     const title = textByKey(block, ["skill", "procedure", "title", "name"]);
     const subtitle = buildJoinedLine([
@@ -657,20 +913,10 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
     return null;
   }
 
+  // An empty medical mapping falls through to the generic path instead of dropping the
+  // block, so imported blocks with unexpected field keys still render their content.
   const medicalItem = medicalBlockToPresentationItem(sectionType, block);
-  if (medicalItem) {
-    if (
-      !medicalItem.title &&
-      !medicalItem.subtitle &&
-      !medicalItem.date_range &&
-      !medicalItem.location &&
-      !medicalItem.metadata_line &&
-      !medicalItem.body &&
-      medicalItem.bullets.length === 0
-    ) {
-      return null;
-    }
-
+  if (medicalItem && !isEmptyPresentationItem(medicalItem)) {
     return medicalItem;
   }
 
@@ -722,15 +968,7 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
     bullets,
   };
 
-  if (
-    !item.title &&
-    !item.subtitle &&
-    !item.date_range &&
-    !item.location &&
-    !item.metadata_line &&
-    !item.body &&
-    item.bullets.length === 0
-  ) {
+  if (isEmptyPresentationItem(item)) {
     return null;
   }
 

@@ -515,6 +515,19 @@ const buildDefaultItemBlock = (
     });
   }
 
+  if (item.body) {
+    cursorY += 4 * style.fontScale;
+    cursorY += appendTextLines(lines, item.body, {
+      font: style.fonts.regular,
+      fontWeight: "regular",
+      size: style.itemBodySize,
+      color: "body",
+      maxWidth: width,
+      xOffset: 0,
+      yFromTop: cursorY,
+      lineHeight: bodyLH
+    });
+  }
   if (item.bullets.length > 0) {
     cursorY += 4 * style.fontScale;
     const bulletIndent = 14 * style.fontScale;
@@ -530,18 +543,6 @@ const buildDefaultItemBlock = (
         lineHeight: bulletLH
       });
     }
-  } else if (item.body) {
-    cursorY += 4 * style.fontScale;
-    cursorY += appendTextLines(lines, item.body, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
-      size: style.itemBodySize,
-      color: "body",
-      maxWidth: width,
-      xOffset: 0,
-      yFromTop: cursorY,
-      lineHeight: bodyLH
-    });
   }
 
   return { lines, shapes: [], images: [], height: cursorY + trailingMargin };
@@ -609,6 +610,19 @@ const buildTimelineItemBlock = (
       lineHeight: subtitleLH
     });
   }
+  if (item.body) {
+    contentY += 4 * style.fontScale;
+    contentY += appendTextLines(lines, item.body, {
+      font: style.fonts.regular,
+      fontWeight: "regular",
+      size: style.itemBodySize,
+      color: "body",
+      maxWidth: contentTextWidth,
+      xOffset: contentTextX,
+      yFromTop: contentY,
+      lineHeight: bodyLH
+    });
+  }
   if (item.bullets.length > 0) {
     contentY += 4 * style.fontScale;
     const bulletIndent = 12 * style.fontScale;
@@ -624,18 +638,6 @@ const buildTimelineItemBlock = (
         lineHeight: bulletLH
       });
     }
-  } else if (item.body) {
-    contentY += 4 * style.fontScale;
-    contentY += appendTextLines(lines, item.body, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
-      size: style.itemBodySize,
-      color: "body",
-      maxWidth: contentTextWidth,
-      xOffset: contentTextX,
-      yFromTop: contentY,
-      lineHeight: bodyLH
-    });
   }
 
   const totalHeight = Math.max(dateY, contentY);

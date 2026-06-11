@@ -112,36 +112,39 @@ const getSocialIcon = (type: string) => {
   }
 };
 
+// Body (lead paragraph / labeled detail lines) and bullets render together: items mapped
+// from bullet-edited narrative fields carry both, and dropping either loses content.
 const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode => {
-  if (item.bullets.length > 0) {
-    return (
-      <ul className="mt-1" style={{ paddingLeft: scaledPx(16), color: bodyColor, listStyle: "disc" }}>
-        {item.bullets.map((bullet, index) => (
-          <li key={`${item.id}-bullet-${index}`} style={{ fontSize: scaledPx(12), lineHeight: 1.5 }}>
-            {bullet}
-          </li>
-        ))}
-      </ul>
-    );
+  if (item.bullets.length === 0 && !item.body) {
+    return null;
   }
 
-  if (item.body) {
-    return (
-      <p
-        style={{
-          fontSize: scaledPx(12),
-          lineHeight: 1.6,
-          color: bodyColor,
-          whiteSpace: "pre-line",
-          marginTop: scaledPx(4)
-        }}
-      >
-        {item.body}
-      </p>
-    );
-  }
-
-  return null;
+  return (
+    <>
+      {item.body ? (
+        <p
+          style={{
+            fontSize: scaledPx(12),
+            lineHeight: 1.6,
+            color: bodyColor,
+            whiteSpace: "pre-line",
+            marginTop: scaledPx(4)
+          }}
+        >
+          {item.body}
+        </p>
+      ) : null}
+      {item.bullets.length > 0 ? (
+        <ul className="mt-1" style={{ paddingLeft: scaledPx(16), color: bodyColor, listStyle: "disc" }}>
+          {item.bullets.map((bullet, index) => (
+            <li key={`${item.id}-bullet-${index}`} style={{ fontSize: scaledPx(12), lineHeight: 1.5 }}>
+              {bullet}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
 };
 
 function SectionTitle({ title, color }: { title: string; color: string }) {
