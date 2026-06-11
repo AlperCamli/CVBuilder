@@ -474,7 +474,12 @@ const bulletizeNarrativeBlock = (block: CvBlock): CvBlock => {
   return changed ? { ...block, fields } : block;
 };
 
-export function CVEditor() {
+interface CVEditorProps {
+  forcedModuleType?: string;
+  forcedTitle?: string;
+}
+
+export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -788,22 +793,25 @@ export function CVEditor() {
     setRestoredDraftAt(null);
 
     try {
-      if (routeCvKind === "master" || id === "master") {
+      if (forcedModuleType || routeCvKind === "master" || id === "master") {
         let targetMasterId = location.state?.masterCvId as string | undefined;
 
-        if (!targetMasterId && id && id !== "master") {
+        if (!targetMasterId && !forcedModuleType && id && id !== "master") {
           targetMasterId = id;
         }
 
         if (!targetMasterId) {
           const masters = await api.listMasterCvs();
-          targetMasterId = masters[0]?.id;
+          targetMasterId = forcedModuleType
+            ? masters.find((master) => master.module_type === forcedModuleType)?.id
+            : masters[0]?.id;
         }
 
         if (!targetMasterId) {
           const created = await api.createMasterCv({
-            title: "My Main CV",
-            language: "en"
+            title: forcedTitle ?? "My Main CV",
+            language: "en",
+            ...(forcedModuleType ? { module_type: forcedModuleType } : {})
           });
           hydrateFromMaster(created);
           restoreDraftIfAllowed("master", created.id);
@@ -864,7 +872,7 @@ export function CVEditor() {
 
   useEffect(() => {
     void loadCv();
-  }, [id, isUploadedFlow, routeCvKind]);
+  }, [forcedModuleType, forcedTitle, id, isUploadedFlow, routeCvKind]);
 
   useEffect(() => {
     if (!cvId) {

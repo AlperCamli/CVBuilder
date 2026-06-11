@@ -51,6 +51,10 @@ export const router = createBrowserRouter([
     Component: PublicPricing
   },
   {
+    path: "/medical",
+    element: <Navigate to="/app/medical" replace />
+  },
+  {
     path: "/career-advice",
     Component: CareerAdvice
   },
@@ -108,6 +112,7 @@ export const router = createBrowserRouter([
       { path: "cv-score", Component: CVScore },
       { path: "ai-improving", Component: AIImproving },
       { path: "create-cv", element: <Navigate to="/app/cv/master" replace /> },
+      { path: "medical", element: <CVEditor forcedModuleType="medical_uk" forcedTitle="Medical CV" /> },
       { path: "cv/:id", Component: CVEditor },
       { path: "tailor/:id", Component: TailorCV },
       { path: "tailoring-flow/:id", Component: TailoringFlow },
