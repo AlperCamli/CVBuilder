@@ -63,7 +63,7 @@ export const medicalUkModule: CvModuleDefinition = {
     },
     {
       type: "medical_qualifications",
-      title: "Professional Qualifications",
+      title: "Medical Qualifications",
       essential: true,
       description: "Primary and postgraduate medical qualifications, PLAB/IELTS/OET",
       defaultOrder: 2,
@@ -155,11 +155,24 @@ export const medicalUkModule: CvModuleDefinition = {
       defaultBlockFields: { skill: "", competency_level: "", frequency: "" }
     },
     {
+      type: "additional_skills",
+      title: "Additional Skills",
+      essential: true,
+      description: "Relevant non-clinical skills such as IT, communication and leadership",
+      defaultOrder: 7,
+      blockType: "additional_skill",
+      fieldSchema: [
+        { key: "skill", label: "Skill", kind: "text", required: true },
+        { key: "context", label: "Context / Evidence", kind: "textarea" }
+      ],
+      defaultBlockFields: { skill: "", context: "" }
+    },
+    {
       type: "audit_qi",
       title: "Clinical Audit & Quality Improvement",
       essential: true,
       description: "Audit and QI projects with your role and outcomes",
-      defaultOrder: 7,
+      defaultOrder: 8,
       blockType: "audit_qi_project",
       fieldSchema: [
         { key: "title", label: "Project Title", kind: "text", required: true },
@@ -184,7 +197,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Teaching Experience",
       essential: true,
       description: "Teaching with setting, audience and evaluation",
-      defaultOrder: 8,
+      defaultOrder: 9,
       blockType: "teaching_activity",
       fieldSchema: [
         { key: "topic", label: "Topic / Programme", kind: "text", required: true },
@@ -207,7 +220,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Research & Publications",
       essential: false,
       description: "Full citations with all authors; posters and presentations",
-      defaultOrder: 9,
+      defaultOrder: 10,
       blockType: "publications",
       fieldSchema: [
         { key: "title", label: "Citation / Title", kind: "textarea" },
@@ -221,7 +234,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Management & Leadership",
       essential: false,
       description: "Committees, rota coordination and leadership roles",
-      defaultOrder: 10,
+      defaultOrder: 11,
       blockType: "management_role",
       fieldSchema: [
         { key: "role", label: "Role", kind: "text", required: true },
@@ -236,7 +249,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Courses & Mandatory Training",
       essential: true,
       description: "Courses, conferences and mandatory certifications (ALS, ATLS...)",
-      defaultOrder: 11,
+      defaultOrder: 12,
       blockType: "course_entry",
       fieldSchema: [
         { key: "name", label: "Course / Conference", kind: "text", required: true },
@@ -252,7 +265,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Professional Memberships",
       essential: false,
       description: "BMA, royal colleges and specialty societies",
-      defaultOrder: 12,
+      defaultOrder: 13,
       blockType: "membership",
       fieldSchema: [
         { key: "organization", label: "Organisation", kind: "text", required: true },
@@ -267,7 +280,7 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Awards & Prizes",
       essential: false,
       description: "Awarding body, reason and date",
-      defaultOrder: 13,
+      defaultOrder: 14,
       blockType: "awards",
       fieldSchema: [
         { key: "title", label: "Award", kind: "text" },
@@ -281,17 +294,33 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Interests",
       essential: false,
       description: "Non-clinical interests",
-      defaultOrder: 14,
+      defaultOrder: 15,
       blockType: "interests",
       fieldSchema: [{ key: "description", label: "Interests", kind: "textarea" }],
       defaultBlockFields: { description: "" }
+    },
+    {
+      type: "volunteer",
+      title: "Extracurricular Activities",
+      essential: false,
+      description: "Relevant extracurricular roles, societies and community activities",
+      defaultOrder: 16,
+      blockType: "volunteer_item",
+      fieldSchema: [
+        { key: "organization", label: "Organisation", kind: "text" },
+        { key: "role", label: "Role", kind: "text" },
+        { key: "start_date", label: "Start Date", kind: "date" },
+        { key: "end_date", label: "End Date", kind: "date" },
+        { key: "description", label: "Description", kind: "textarea" }
+      ],
+      defaultBlockFields: {}
     },
     {
       type: "references",
       title: "References",
       essential: false,
       description: "Three senior clinicians covering the last three years",
-      defaultOrder: 15,
+      defaultOrder: 17,
       blockType: "referee",
       fieldSchema: [
         { key: "referee_name", label: "Name", kind: "text", required: true },
@@ -319,7 +348,7 @@ export const medicalUkModule: CvModuleDefinition = {
     },
     {
       type: "medical_qualifications",
-      title: "Professional Qualifications",
+      title: "Medical Qualifications",
       aliases: [
         "professional qualifications",
         "postgraduate qualifications",
@@ -362,6 +391,12 @@ export const medicalUkModule: CvModuleDefinition = {
         "clinical competencies"
       ],
       keywords: ["procedure", "supervised", "independent", "competency"]
+    },
+    {
+      type: "additional_skills",
+      title: "Additional Skills",
+      aliases: ["additional skills", "other skills", "transferable skills", "non-clinical skills"],
+      keywords: ["it skills", "communication", "leadership", "teamwork"]
     },
     {
       type: "audit_qi",
@@ -424,6 +459,12 @@ export const medicalUkModule: CvModuleDefinition = {
       title: "Interests",
       aliases: ["interests", "hobbies and interests", "personal interests"],
       keywords: ["interest", "hobby"]
+    },
+    {
+      type: "volunteer",
+      title: "Extracurricular Activities",
+      aliases: ["extracurricular activities", "volunteer work", "volunteering", "societies"],
+      keywords: ["volunteer", "society", "committee", "extracurricular"]
     }
   ]
 };

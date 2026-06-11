@@ -270,10 +270,11 @@ const SECTION_TITLE_OVERRIDES: Record<string, string> = {
   references: "References",
   // medical_uk module section types
   medical_registration: "Professional Registration",
-  medical_qualifications: "Professional Qualifications",
+  medical_qualifications: "Medical Qualifications",
   clinical_experience: "Clinical Experience",
   career_gap: "Career Gaps",
   clinical_skills: "Clinical Skills & Procedures",
+  additional_skills: "Additional Skills",
   audit_qi: "Clinical Audit & Quality Improvement",
   teaching: "Teaching Experience",
   management_leadership: "Management & Leadership",
@@ -509,7 +510,11 @@ const combineExperienceHeading = (
   };
 };
 
-const getSectionTitle = (sectionType: string): string => {
+const getSectionTitle = (sectionType: string, moduleType?: string | null): string => {
+  if (moduleType === "medical_uk" && sectionType === "volunteer") {
+    return "Extracurricular Activities";
+  }
+
   if (sectionType.toLowerCase() === "custom" || GENERIC_SECTION_TYPE_PATTERN.test(sectionType)) {
     return "Additional Information";
   }
@@ -831,10 +836,11 @@ const collectLanguagesInlineText = (section: RenderingSection): string | null =>
 
 const mapSection = (
   section: RenderingSection,
-  skillsDisplay: SkillsDisplay = "inline"
+  skillsDisplay: SkillsDisplay = "inline",
+  moduleType?: string | null
 ): PresentationSection | null => {
   const type = section.type;
-  const title = getSectionTitle(type);
+  const title = getSectionTitle(type, moduleType);
   const normalizedType = type.toLowerCase();
 
   if (normalizedType === "header") {
@@ -1244,6 +1250,7 @@ export const mapRenderingPayloadToPresentation = (
   const theme = resolveTemplateProfile(template);
   const skillsDisplay =
     (TEMPLATE_PROFILES[template?.slug ?? "modern-clean"] ?? DEFAULT_PROFILE).skills_display ?? "inline";
+  const moduleType = template?.module_type ?? null;
   const headerSections = findHeaderSections(rendering);
 
   const metadataUrls = metadata.urls ? extractTextItems(metadata.urls) : [];
@@ -1271,7 +1278,7 @@ export const mapRenderingPayloadToPresentation = (
 
   const sections = rendering.sections
     .sort((a, b) => a.order - b.order)
-    .map((section) => mapSection(section, skillsDisplay))
+    .map((section) => mapSection(section, skillsDisplay, moduleType))
     .filter((section): section is PresentationSection => section !== null);
 
   return {

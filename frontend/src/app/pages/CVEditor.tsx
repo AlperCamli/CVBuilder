@@ -568,11 +568,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       medical_qualifications: GraduationCap,
       clinical_experience: Stethoscope,
       clinical_skills: Stethoscope,
+      additional_skills: Lightbulb,
       audit_qi: ClipboardList,
       courses_training: BadgeCheck,
       memberships: Users,
       teaching: Users,
-      management_leadership: Briefcase
+      management_leadership: Briefcase,
+      volunteer: Users
     };
 
     return activeCvModule.sectionCatalog.map((definition) => ({
@@ -1959,7 +1961,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         case "projects":
           return <ProjectsSection {...commonProps} />;
         case "volunteer":
-          return <VolunteerSection {...commonProps} />;
+          return (
+            <VolunteerSection
+              {...commonProps}
+              title={moduleType === "medical_uk" ? "Extracurricular Activities" : undefined}
+              addButtonLabel={moduleType === "medical_uk" ? "Add extracurricular activity" : undefined}
+            />
+          );
         case "awards":
           return <AwardsSection {...commonProps} />;
         case "publications":

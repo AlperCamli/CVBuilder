@@ -485,6 +485,81 @@ describe("rendering presentation mapper", () => {
     expect(item?.body).toBeNull();
   });
 
+  it("uses the medical extracurricular title without renaming standard volunteer sections", () => {
+    const standardPayload = renderingPayload();
+    standardPayload.sections.push({
+      id: "volunteer",
+      type: "volunteer",
+      title: "Volunteer Work",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "volunteer-1",
+          type: "volunteer_item",
+          derived: {
+            headline: "Student society treasurer",
+            subheadline: "Medical Society",
+            bullets: [],
+            date_range: null,
+            location: null
+          },
+          plain_text: "Student society treasurer Medical Society"
+        })
+      ]
+    });
+
+    const standardPresentation = mapRenderingPayloadToPresentation(
+      standardPayload,
+      {},
+      standardPayload.template.template
+    );
+    expect(standardPresentation.sections.find((section) => section.type === "volunteer")?.title).toBe(
+      "Volunteer Work"
+    );
+
+    const medicalPayload = renderingPayload();
+    medicalPayload.template.template = {
+      ...medicalPayload.template.template!,
+      id: "template-medical",
+      name: "Medical Classic",
+      slug: "medical-classic",
+      module_type: "medical_uk"
+    };
+    medicalPayload.sections.push({
+      id: "volunteer",
+      type: "volunteer",
+      title: "Extracurricular Activities",
+      order: 5,
+      meta: {},
+      plain_text: "",
+      blocks: [
+        block({
+          id: "volunteer-1",
+          type: "volunteer_item",
+          derived: {
+            headline: "Student society treasurer",
+            subheadline: "Medical Society",
+            bullets: [],
+            date_range: null,
+            location: null
+          },
+          plain_text: "Student society treasurer Medical Society"
+        })
+      ]
+    });
+
+    const medicalPresentation = mapRenderingPayloadToPresentation(
+      medicalPayload,
+      {},
+      medicalPayload.template.template
+    );
+    expect(medicalPresentation.sections.find((section) => section.type === "volunteer")?.title).toBe(
+      "Extracurricular Activities"
+    );
+  });
+
   it("maps medical audit/QI fields into outcomes and audit metadata", () => {
     const payload = renderingPayload();
     payload.sections.push({

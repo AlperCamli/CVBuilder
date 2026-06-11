@@ -1411,6 +1411,8 @@ interface VolunteerSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
+  title?: string;
+  addButtonLabel?: string;
 }
 
 interface VolunteerItemProps {
@@ -1583,7 +1585,15 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
   );
 }
 
-export function VolunteerSection({ data, isHidden, onToggleVisibility, onRemove, onChange }: VolunteerSectionProps) {
+export function VolunteerSection({
+  data,
+  isHidden,
+  onToggleVisibility,
+  onRemove,
+  onChange,
+  title = "Volunteer Work",
+  addButtonLabel = "Add volunteer position"
+}: VolunteerSectionProps) {
   const items = data.items || [];
 
   const addItem = () => {
@@ -1635,7 +1645,7 @@ export function VolunteerSection({ data, isHidden, onToggleVisibility, onRemove,
       <div className="flex items-start justify-between mb-4">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Volunteer Work
+          {title}
         </h3>
         <div className="flex items-center gap-2">
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
@@ -1668,7 +1678,7 @@ export function VolunteerSection({ data, isHidden, onToggleVisibility, onRemove,
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add volunteer position</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{addButtonLabel}</span>
           </button>
         </div>
       )}
