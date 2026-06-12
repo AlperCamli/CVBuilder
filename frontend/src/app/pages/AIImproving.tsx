@@ -3,11 +3,14 @@ import { useNavigate, useLocation } from "react-router";
 import { Sparkles, Zap, Target, TrendingUp, Loader2, RefreshCw, CheckCircle2 } from "lucide-react";
 import type { CvContent } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
+import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 
 export function AIImproving() {
   const navigate = useNavigate();
   const location = useLocation();
   const { api } = useAuth();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
@@ -96,7 +99,13 @@ export function AIImproving() {
                 }
               });
             } catch (err) {
-              if (err instanceof Error) {
+              if (isEntitlementExceeded(err)) {
+                showUpgradePrompt("limit_reached", {
+                  feature: resolveEntitlementFeature(err, "ai_action"),
+                  reason: err.message
+                });
+                setError(err.message);
+              } else if (err instanceof Error) {
                 setError(err.message);
               } else {
                 setError("AI improvement failed.");
@@ -112,7 +121,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, improvementGuidance, importId, navigate, parsedContent, steps]);
+  }, [api, improvementGuidance, importId, navigate, parsedContent, steps, showUpgradePrompt]);
 
   const currentStepData = steps[currentStep];
 

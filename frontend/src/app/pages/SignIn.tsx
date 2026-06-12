@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { resolvePostAuthDestination } from "../integration/auth-route-guards";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
@@ -17,11 +18,16 @@ export function SignIn() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const postAuthDestination = resolvePostAuthDestination(location.state);
+
   useEffect(() => {
-    const state = location.state as { message?: string } | null;
+    const state = location.state as { message?: string; from?: string } | null;
     if (state?.message) {
       setSuccessMessage(state.message);
-      navigate(location.pathname, { replace: true, state: null });
+      navigate(location.pathname, {
+        replace: true,
+        state: state.from ? { from: state.from } : null
+      });
     }
   }, [location.pathname, location.state, navigate]);
 
@@ -46,7 +52,7 @@ export function SignIn() {
 
     try {
       await signIn(email, password);
-      navigate("/app", { replace: true });
+      navigate(postAuthDestination, { replace: true });
     } catch (error) {
       setErrorMessage(mapAuthErrorMessage("sign_in", error));
     } finally {
@@ -227,7 +233,12 @@ export function SignIn() {
 
           <p className="text-center mt-8" style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
             Don&apos;t have an account?{" "}
-            <Link to="/signup" className="font-medium transition-colors" style={{ color: "var(--color-teal-600)" }}>
+            <Link
+              to="/signup"
+              state={location.state}
+              className="font-medium transition-colors"
+              style={{ color: "var(--color-teal-600)" }}
+            >
               Sign up
             </Link>
           </p>

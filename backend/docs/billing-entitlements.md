@@ -173,11 +173,14 @@ Idempotency approach:
 
 ## Frontend Upsell Triggers
 
-The frontend exposes a shared `UpgradePromptProvider` (mounted inside the authenticated layout) with a `useUpgradePrompt()` hook. Three trigger points fire the modal:
+> See `monetization-upsell-funnel.md` for the full, current trigger matrix, the context-aware copy rules, and the post-export return prompt added in June 2026.
+
+The frontend exposes a shared `UpgradePromptProvider` (mounted inside the authenticated layout) with a `useUpgradePrompt()` hook. Four trigger points fire the modal:
 
 - **welcome** — first dashboard view after signup. Persisted via `localStorage` key `upgrade_welcome_prompt_shown` so it only fires once per user/browser.
 - **export_first_in_session** — first time a non-pro/non-lifetime user clicks Export in a session. Persisted via `sessionStorage` key `cv-editor:export-upsell-shown`. Does not block the export.
-- **limit_reached** — fired when the frontend receives an `ApiClientError` with `code === "ENTITLEMENT_EXCEEDED"`. The modal's copy interpolates the specific feature (`exports`, `tailored CVs`, `AI actions`).
+- **limit_reached** — fired **every time** the frontend receives an `ApiClientError` with `code === "ENTITLEMENT_EXCEEDED"`, on every surface that can produce one (CV editor AI actions and exports, job analysis, tailoring flow, cover letter generation/export, import improvement). The modal's copy is keyed off the gated action reported in `details.action` and leads with the backend's reason message.
+- **post_export** — fired when a free-plan user returns to the tab/window after a successful CV export, pairing the subscription offer with a next-step CTA (cover letter for a tailored CV, job-specific customization for a master CV).
 
 All three variants share the same CTAs: **Start 3-day free trial** (`createBillingCheckout({ plan_code: "pro" })`), **Subscribe now without trial** (`createBillingCheckout({ plan_code: "pro", with_trial: false })`), and **Get Lifetime — $99** (`createBillingCheckout({ plan_code: "lifetime" })`).
 

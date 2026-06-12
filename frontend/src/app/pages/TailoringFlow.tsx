@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
+import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { FollowUpQuestion, JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
 
@@ -50,6 +52,7 @@ export function TailoringFlow() {
   const { id } = useParams();
   const location = useLocation();
   const { api } = useAuth();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
   const state = (location.state ?? {}) as TailoringFlowState;
   const masterCvId = state.masterCvId ?? id;
@@ -161,7 +164,13 @@ export function TailoringFlow() {
         }
       });
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "tailored_cv_generation"),
+          reason: err.message
+        });
+        setError(err.message);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Failed to generate customized CV draft.");
@@ -205,7 +214,13 @@ export function TailoringFlow() {
       setFollowUpQuestions(followUpRun.result.questions ?? []);
       setCurrentStep(1);
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setError(err.message);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Failed to generate follow-up questions.");

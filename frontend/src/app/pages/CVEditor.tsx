@@ -78,6 +78,7 @@ import type {
   TemplateSummary
 } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
+import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import {
   cvContentToEditorSections,
   editorSectionsToCvContent,
@@ -548,13 +549,20 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [exportingFormat, setExportingFormat] = useState<"pdf" | "docx" | null>(null);
   const [exportHistory, setExportHistory] = useState<ExportSummaryItem[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Armed after a successful export for free-plan users. `away` flips once the user
+  // leaves the tab/window (opening the downloaded PDF); the prompt fires on return.
+  const postExportReturnRef = useRef<{ kind: "master" | "tailored"; away: boolean } | null>(null);
 
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [revisions, setRevisions] = useState<CvBlockRevisionSummary[]>([]);
   const [revisionCompareText, setRevisionCompareText] = useState<string | null>(null);
   const [revisionLoading, setRevisionLoading] = useState(false);
 
-  const [tailoredJobData, setTailoredJobData] = useState<{ role: string; company: string } | null>(null);
+  const [tailoredJobData, setTailoredJobData] = useState<{
+    role: string;
+    company: string;
+    jobId?: string;
+  } | null>(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
   const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
@@ -637,7 +645,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       tailored.job
         ? {
           role: tailored.job.job_title,
-          company: tailored.job.company_name
+          company: tailored.job.company_name,
+          jobId: tailored.job.id
         }
         : null
     );
@@ -854,7 +863,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           if (source.job) {
             setTailoredJobData({
               role: source.job.job_title,
-              company: source.job.company_name
+              company: source.job.company_name,
+              jobId: source.job.id
             });
           }
         } catch {
@@ -1068,7 +1078,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           updated.job
             ? {
               role: updated.job.job_title,
-              company: updated.job.company_name
+              company: updated.job.company_name,
+              jobId: updated.job.id
             }
             : null
         );
@@ -1295,6 +1306,18 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
   };
 
+  const armPostExportReturnPrompt = async (): Promise<void> => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const plan = await api.getBillingPlan();
+      if (plan.plan_code === "pro" || plan.plan_code === "lifetime") return;
+      postExportReturnRef.current = { kind: cvKind, away: false };
+    } catch {
+      // No return prompt if the billing plan can't be resolved.
+    }
+  };
+
   const openExportDialog = async () => {
     if (!cvId) {
       setExportError("CV id is missing.");
@@ -1377,11 +1400,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         window.localStorage.setItem(MASTER_EXPORT_GUIDE_FLAG, "true");
         toast.success("Now let's customize this CV for a job!");
         navigate(`/app/tailor/${cvId}`);
+      } else {
+        void armPostExportReturnPrompt();
       }
     } catch (err) {
-      if (err instanceof ApiClientError && err.code === "ENTITLEMENT_EXCEEDED") {
+      if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
-          feature: format === "pdf" ? "export_pdf" : "export_docx",
+          feature: resolveEntitlementFeature(err, format === "pdf" ? "export_pdf" : "export_docx"),
           reason: err.message
         });
         setExportError(err.message);
@@ -1535,7 +1560,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       }
       setShowSkillsPoolDialog(true);
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setSkillsPoolError(err.message);
+      } else if (err instanceof Error) {
         setSkillsPoolError(err.message);
       } else {
         setSkillsPoolError("Skills pool generation failed.");
@@ -1606,7 +1637,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         await loadAiData(cvKind, cvId);
       }
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setSkillsPoolError(err.message);
+      } else if (err instanceof Error) {
         setSkillsPoolError(err.message);
       } else {
         setSkillsPoolError("Skills pool refresh failed.");
@@ -1771,7 +1808,14 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       setShowAIPopup(false);
       toast.success("Block updated with AI.");
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        setShowAIPopup(false);
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setError(err.message);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("AI action failed.");
@@ -1879,6 +1923,66 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     const items = Array.isArray(data.items) ? data.items : [];
     return items.some((item) => matchesBlockReference(item as Record<string, unknown>, blockId));
   };
+
+  // After an export, the user typically opens the downloaded PDF and then comes back
+  // to the tab. The ref is armed on export success; the moment they return we prompt
+  // with a subscription offer plus the natural next step (cover letter for a tailored
+  // CV, job-specific customization for a master CV).
+  useEffect(() => {
+    const firePostExportReturnPrompt = (kind: "master" | "tailored") => {
+      if (kind === "tailored") {
+        const jobId = tailoredJobData?.jobId;
+        showUpgradePrompt("post_export", {
+          exportedCvKind: "tailored",
+          nextStep: {
+            label: "Write my cover letter",
+            onSelect: () => navigate(jobId ? `/app/cover-letter/${jobId}` : "/app/cover-letters")
+          }
+        });
+        return;
+      }
+
+      showUpgradePrompt("post_export", {
+        exportedCvKind: "master",
+        nextStep: {
+          label: "Create a job-specific CV",
+          onSelect: () => navigate(cvId ? `/app/tailor/${cvId}` : "/app")
+        }
+      });
+    };
+
+    const markAway = () => {
+      if (postExportReturnRef.current) {
+        postExportReturnRef.current.away = true;
+      }
+    };
+
+    const maybePrompt = () => {
+      const pending = postExportReturnRef.current;
+      if (!pending?.away) {
+        return;
+      }
+      postExportReturnRef.current = null;
+      firePostExportReturnPrompt(pending.kind);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        markAway();
+      } else {
+        maybePrompt();
+      }
+    };
+
+    window.addEventListener("blur", markAway);
+    window.addEventListener("focus", maybePrompt);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", markAway);
+      window.removeEventListener("focus", maybePrompt);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [cvId, tailoredJobData, navigate, showUpgradePrompt]);
 
   const handlePostExportNavigation = () => {
     if (cvKind === "tailored" && tailoredJobData) {

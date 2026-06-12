@@ -1,6 +1,13 @@
-import { Navigate } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import type { ReactNode } from "react";
 import { useAuth } from "./auth-context";
+
+// Reads the destination a guard stashed before bouncing to an auth page, so the
+// user lands where they originally intended after signing in or up.
+export const resolvePostAuthDestination = (state: unknown): string => {
+  const from = (state as { from?: unknown } | null)?.from;
+  return typeof from === "string" && from.startsWith("/app") ? from : "/app";
+};
 
 const AuthLoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--color-background-secondary)" }}>
@@ -20,13 +27,22 @@ const AuthLoadingScreen = () => (
 
 export const RequireAuth = ({ children }: { children: ReactNode }) => {
   const { initialized, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (!initialized) {
     return <AuthLoadingScreen />;
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/signin" replace />;
+    // New visitors land on sign-up (not sign-in) and keep their destination, so a
+    // marketing CTA like "Create your CV" resumes exactly where it pointed.
+    return (
+      <Navigate
+        to="/signup"
+        state={{ from: `${location.pathname}${location.search}` }}
+        replace
+      />
+    );
   }
 
   return <>{children}</>;
@@ -34,13 +50,14 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
 
 export const RedirectIfAuthenticated = ({ children }: { children: ReactNode }) => {
   const { initialized, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (!initialized) {
     return <AuthLoadingScreen />;
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to={resolvePostAuthDestination(location.state)} replace />;
   }
 
   return <>{children}</>;

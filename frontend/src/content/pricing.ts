@@ -1,5 +1,8 @@
 export type CheckoutTarget = "pro" | "lifetime";
 
+export const PRO_MONTHLY_PRICE = "$10";
+export const LIFETIME_PRICE = "$99";
+
 export interface PlanCard {
   code: "free" | "pro" | "lifetime";
   name: string;
@@ -28,7 +31,7 @@ export const PLAN_CARDS: PlanCard[] = [
   {
     code: "pro",
     name: "Monthly Pro",
-    price: "$10",
+    price: PRO_MONTHLY_PRICE,
     period: "per month",
     description: "Everything you need for an active job search.",
     highlighted: true,
@@ -44,7 +47,7 @@ export const PLAN_CARDS: PlanCard[] = [
   {
     code: "lifetime",
     name: "Lifetime Pro",
-    price: "$99",
+    price: LIFETIME_PRICE,
     period: "one-time",
     description: "Pay once. Use forever.",
     badge: "Best value",

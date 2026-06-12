@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { CAREER_ARTICLES, getCareerArticlePath } from "../../content/career-advice";
 import { PublicHeader } from "../components/PublicHeader";
+import { useAuth } from "../integration/auth-context";
 
 type Step = {
   number: string;
@@ -351,6 +352,12 @@ function FaqItem({ faq }: { faq: Faq }) {
 }
 
 export function Landing() {
+  const { isAuthenticated } = useAuth();
+  // New visitors go straight to sign-up and resume at the CV creation flow after
+  // authenticating, instead of bouncing through the sign-in page.
+  const createCvTarget = isAuthenticated ? "/app/create" : "/signup";
+  const createCvState = isAuthenticated ? undefined : { from: "/app/create" };
+
   return (
     <div className="min-h-screen bg-white">
       <PublicHeader />
@@ -373,7 +380,8 @@ export function Landing() {
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
-              to="/app/create"
+              to={createCvTarget}
+              state={createCvState}
               className="interactive-button px-6 py-3 rounded-lg font-medium transition-colors"
               style={{
                 fontSize: "13px",
@@ -381,7 +389,7 @@ export function Landing() {
                 color: "var(--color-teal-50)",
               }}
             >
-              Create your CV
+              Create your CV — it's free
             </Link>
             <a
               href="#how-it-works"
@@ -396,6 +404,12 @@ export function Landing() {
               See how it works
             </a>
           </div>
+          <p
+            className="mt-3"
+            style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
+          >
+            Free to start · No credit card required
+          </p>
         </div>
 
         {/* Product Preview */}
@@ -643,7 +657,8 @@ export function Landing() {
             Create your first customized CV in minutes.
           </p>
           <Link
-            to="/app/create"
+            to={createCvTarget}
+            state={createCvState}
             className="interactive-button inline-block px-6 py-3 rounded-lg font-medium transition-colors"
             style={{
               fontSize: "13px",
@@ -651,8 +666,14 @@ export function Landing() {
               color: "var(--color-teal-50)",
             }}
           >
-            Create your CV
+            Create your CV — it's free
           </Link>
+          <p
+            className="mt-3"
+            style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
+          >
+            Free to start · No credit card required
+          </p>
         </div>
       </section>
 

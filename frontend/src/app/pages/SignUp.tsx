@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { resolvePostAuthDestination } from "../integration/auth-route-guards";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
 export function SignUp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signUp, signInWithGoogle } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -41,7 +43,7 @@ export function SignUp() {
         navigate("/email-sent", { state: { email }, replace: true });
         return;
       } else {
-        navigate("/app", { replace: true });
+        navigate(resolvePostAuthDestination(location.state), { replace: true });
       }
     } catch (error) {
       setErrorMessage(mapAuthErrorMessage("sign_up", error));
@@ -244,7 +246,12 @@ export function SignUp() {
 
           <p className="text-center mt-8" style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
             Already have an account?{" "}
-            <Link to="/signin" className="font-medium transition-colors" style={{ color: "var(--color-teal-600)" }}>
+            <Link
+              to="/signin"
+              state={location.state}
+              className="font-medium transition-colors"
+              style={{ color: "var(--color-teal-600)" }}
+            >
               Sign in
             </Link>
           </p>

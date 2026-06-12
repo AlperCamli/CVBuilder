@@ -13,6 +13,11 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
   const { isAuthenticated } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Anonymous visitors go straight to sign-up (not a sign-in bounce) and resume
+  // at the CV creation flow once authenticated.
+  const getStartedTarget = isAuthenticated ? "/app/create" : "/signup";
+  const getStartedState = isAuthenticated ? undefined : { from: "/app/create" };
+
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const mobileDrawer =
     isMobileMenuOpen && typeof document !== "undefined"
@@ -139,7 +144,8 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
                   </Link>
                 )}
                 <Link
-                  to="/app/create"
+                  to={getStartedTarget}
+                  state={getStartedState}
                   onClick={closeMobileMenu}
                   className="interactive-button px-4 py-3 rounded-lg font-medium text-center transition-colors"
                   style={{
@@ -233,7 +239,8 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
             </Link>
           )}
           <Link
-            to="/app/create"
+            to={getStartedTarget}
+            state={getStartedState}
             className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
             style={{
               fontSize: "13px",

@@ -1,11 +1,22 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { UpgradePromptModal } from "../components/UpgradePromptModal";
 
-export type UpgradePromptVariant = "welcome" | "export_first_in_session" | "limit_reached";
+export type UpgradePromptVariant =
+  | "welcome"
+  | "export_first_in_session"
+  | "limit_reached"
+  | "post_export";
+
+export interface UpgradePromptNextStep {
+  label: string;
+  onSelect: () => void;
+}
 
 export interface UpgradePromptOptions {
   feature?: string;
   reason?: string | null;
+  exportedCvKind?: "master" | "tailored";
+  nextStep?: UpgradePromptNextStep;
 }
 
 interface UpgradePromptState {

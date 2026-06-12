@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Save, Download, Sparkles, Loader2, FileText } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
+import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { CoverLetterDetail, CoverLetterExportSummaryItem } from "../integration/api-types";
 
 interface CoverLetterDraft {
@@ -78,6 +80,7 @@ export function CoverLetterEditor() {
   const { jobId } = useParams();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
+  const { showUpgradePrompt } = useUpgradePrompt();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -264,7 +267,13 @@ export function CoverLetterEditor() {
 
       await loadExportHistory(coverLetter.id);
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "export_pdf"),
+          reason: err.message
+        });
+        setExportError(err.message);
+      } else if (err instanceof Error) {
         setExportError(err.message);
       } else {
         setExportError("Export failed.");
@@ -308,7 +317,13 @@ export function CoverLetterEditor() {
       setContent(generated.content);
       markDirty();
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setError(err.message);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("AI Generation failed.");

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
+import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
 
@@ -21,6 +23,7 @@ export function TailorCV() {
   const { id } = useParams();
   const location = useLocation();
   const { api } = useAuth();
+  const { showUpgradePrompt } = useUpgradePrompt();
   const state = (location.state ?? {}) as TailorCvLocationState;
   const prefillJob = state.prefillJob;
 
@@ -148,7 +151,13 @@ export function TailorCV() {
         }
       });
     } catch (err) {
-      if (err instanceof Error) {
+      if (isEntitlementExceeded(err)) {
+        showUpgradePrompt("limit_reached", {
+          feature: resolveEntitlementFeature(err, "ai_action"),
+          reason: err.message
+        });
+        setError(err.message);
+      } else if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("Failed to analyze job description.");

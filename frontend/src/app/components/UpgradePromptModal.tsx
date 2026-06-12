@@ -1,9 +1,10 @@
-import { Check, Loader2, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, Check, Loader2, Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { useAuth } from "../integration/auth-context";
 import { startStripeCheckout } from "../integration/checkout-redirect";
+import { LIFETIME_PRICE, PRO_MONTHLY_PRICE } from "../../content/pricing";
 import type { UpgradePromptOptions, UpgradePromptVariant } from "../contexts/UpgradePromptContext";
 
 interface UpgradePromptModalProps {
@@ -43,6 +44,34 @@ const featureLabel = (feature: string | undefined): string => {
   }
 };
 
+// Limit-hit copy must explain why the offer is appearing right now: name the
+// exact limit the user just hit, then pitch the unlimited alternative with a price.
+const limitReachedCopy = (feature: string | undefined): { title: string; pitch: string } => {
+  switch (feature) {
+    case "ai_action":
+      return {
+        title: "You've hit your monthly AI limit",
+        pitch: `Get unlimited AI improvements, rewrites, and suggestions with Pro — just ${PRO_MONTHLY_PRICE}/month.`
+      };
+    case "export_pdf":
+    case "export_docx":
+      return {
+        title: "You've hit your monthly export limit",
+        pitch: `Get unlimited PDF and DOCX exports with Pro — just ${PRO_MONTHLY_PRICE}/month.`
+      };
+    case "tailored_cv_generation":
+      return {
+        title: "You've hit your customized CV limit",
+        pitch: `Create unlimited job-specific CVs with Pro — just ${PRO_MONTHLY_PRICE}/month.`
+      };
+    default:
+      return {
+        title: "You've hit your Free plan limit",
+        pitch: `Go unlimited with Pro — just ${PRO_MONTHLY_PRICE}/month.`
+      };
+  }
+};
+
 const getCopy = (
   variant: UpgradePromptVariant,
   options: UpgradePromptOptions,
@@ -60,7 +89,7 @@ const getCopy = (
           ? "Unlock unlimited customized CVs, exports, and AI rewrites for 3 days. Cancel any time before the trial ends — no charge."
           : "Unlock unlimited customized CVs, exports, and AI rewrites. Subscribe to Pro and cancel any time.",
         ctaPrimary: proCta,
-        ctaSecondary: "Get Lifetime — $99",
+        ctaSecondary: `Get Lifetime — ${LIFETIME_PRICE}`,
         dismiss: "Maybe later"
       };
     case "export_first_in_session":
@@ -71,20 +100,40 @@ const getCopy = (
           ? "You're on the Free plan, which is capped at 5 exports per month. Start a 3-day free trial to export as much as you want."
           : "You're on the Free plan, which is capped at 5 exports per month. Subscribe to Pro to export as much as you want.",
         ctaPrimary: proCta,
-        ctaSecondary: "Get Lifetime — $99",
+        ctaSecondary: `Get Lifetime — ${LIFETIME_PRICE}`,
         dismiss: "Continue with Free"
       };
-    case "limit_reached":
+    case "limit_reached": {
+      const { title, pitch } = limitReachedCopy(options.feature);
+      const reasonSentence = options.reason
+        ? `${options.reason.replace(/\.?\s*$/, ".")} `
+        : `You've used all of your free ${featureLabel(options.feature)} for this month. `;
       return {
         eyebrow: "You've hit your Free limit",
-        title: `Upgrade for unlimited ${featureLabel(options.feature)}`,
-        body:
-          options.reason ??
-          (trialEligible
-            ? "You've reached the Free plan limit. Upgrade to Pro for unlimited usage — start with a 3-day free trial."
-            : "You've reached the Free plan limit. Subscribe to Pro for unlimited usage."),
+        title,
+        body: `${reasonSentence}${pitch}${trialEligible ? " Start with a 3-day free trial." : ""}`,
         ctaPrimary: proCta,
-        ctaSecondary: "Get Lifetime — $99",
+        ctaSecondary: `Get Lifetime — ${LIFETIME_PRICE}`,
+        dismiss: "Not now"
+      };
+    }
+    case "post_export":
+      if (options.exportedCvKind === "tailored") {
+        return {
+          eyebrow: "Your CV is exported",
+          title: "Need a cover letter to go with it?",
+          body: `Pair the CV you just exported with a matching, job-specific cover letter — written by AI from your CV and the job description. Pro gives you unlimited AI writing for ${PRO_MONTHLY_PRICE}/month.`,
+          ctaPrimary: proCta,
+          ctaSecondary: `Get Lifetime — ${LIFETIME_PRICE}`,
+          dismiss: "Not now"
+        };
+      }
+      return {
+        eyebrow: "Your CV is exported",
+        title: "Make your next job application with us",
+        body: `Do you need a job-specific CV? Customize the CV you just exported for a specific job posting — customized CVs get up to 3x more interviews. Pro gives you unlimited customized CVs for ${PRO_MONTHLY_PRICE}/month.`,
+        ctaPrimary: proCta,
+        ctaSecondary: `Get Lifetime — ${LIFETIME_PRICE}`,
         dismiss: "Not now"
       };
   }
@@ -153,6 +202,12 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     navigate("/app/pricing");
   };
 
+  const handleNextStep = () => {
+    const nextStep = options.nextStep;
+    onClose();
+    nextStep?.onSelect();
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden gap-0">
@@ -209,6 +264,24 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
             >
               {error}
             </div>
+          )}
+
+          {variant === "post_export" && options.nextStep && (
+            <button
+              type="button"
+              onClick={handleNextStep}
+              disabled={busy !== null}
+              className="w-full mb-3 px-5 py-2.5 rounded-lg font-medium border transition-colors inline-flex justify-center items-center gap-2"
+              style={{
+                fontSize: "13px",
+                borderColor: "var(--color-teal-600)",
+                background: "var(--color-teal-50)",
+                color: "var(--color-teal-800)"
+              }}
+            >
+              {options.nextStep.label}
+              <ArrowRight size={14} />
+            </button>
           )}
 
           <div className="flex flex-col sm:flex-row gap-2.5">
