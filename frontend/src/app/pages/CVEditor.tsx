@@ -85,6 +85,7 @@ import {
   type EditorSection
 } from "../integration/cv-mappers";
 import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
+import { injectPreviewPlaceholders } from "../integration/preview-placeholders";
 import {
   canUseAiForSectionBlock,
   matchesBlockReference,
@@ -886,7 +887,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
     let cancelled = false;
     const timeout = setTimeout(() => {
-      const content = buildCurrentContent();
+      // Placeholders are preview-only: they are injected into the request payload, never
+      // into the editor state, so saved content and exports stay clean.
+      const content = injectPreviewPlaceholders(buildCurrentContent(), moduleType);
       void api
         .postRenderingPreview({
           cv_kind: cvKind,
@@ -908,7 +911,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [api, buildCurrentContent, cvId, cvKind, language, templateId]);
+  }, [api, buildCurrentContent, cvId, cvKind, language, moduleType, templateId]);
 
   useEffect(() => {
     if (!templateId) {
@@ -1235,7 +1238,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           try {
             const preview = await api.postRenderingPreview({
               cv_kind: cvKind,
-              current_content: buildCurrentContent(),
+              current_content: injectPreviewPlaceholders(buildCurrentContent(), moduleType),
               template_id: null,
               language
             });
@@ -1248,7 +1251,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           try {
             const preview = await api.postRenderingPreview({
               cv_kind: cvKind,
-              current_content: buildCurrentContent(),
+              current_content: injectPreviewPlaceholders(buildCurrentContent(), moduleType),
               template_id: template.id,
               language
             });
@@ -1270,7 +1273,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     return () => {
       cancelled = true;
     };
-  }, [api, buildCurrentContent, cvKind, language, showTemplateGallery, templates]);
+  }, [api, buildCurrentContent, cvKind, language, moduleType, showTemplateGallery, templates]);
 
   const maybeShowExportUpsell = async (): Promise<void> => {
     if (typeof window === "undefined") return;

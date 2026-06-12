@@ -15,6 +15,7 @@ import type {
   PresentationTheme,
   RenderingPresentation
 } from "../integration/api-types";
+import { PLACEHOLDER_OPEN, PLACEHOLDER_SEGMENT_RE } from "../integration/preview-placeholders";
 
 type PreviewMode = "full" | "thumbnail";
 
@@ -112,6 +113,38 @@ const getSocialIcon = (type: string) => {
   }
 };
 
+// Placeholder segments (wrapped in ⟪…⟫ by preview-placeholders.ts before the preview
+// request) render with lower contrast so users see where each field lands on the template
+// before writing. Real content contains no markers and passes through unchanged.
+const renderPreviewText = (text: string): ReactNode => {
+  if (!text.includes(PLACEHOLDER_OPEN)) {
+    return text;
+  }
+
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(PLACEHOLDER_SEGMENT_RE)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start));
+    }
+    nodes.push(
+      <span key={`ph-${key++}`} style={{ opacity: 0.4, fontStyle: "italic" }}>
+        {match[1]}
+      </span>
+    );
+    lastIndex = start + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+};
+
 // Body (lead paragraph / labeled detail lines) and bullets render together: items mapped
 // from bullet-edited narrative fields carry both, and dropping either loses content.
 const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode => {
@@ -131,14 +164,14 @@ const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode =>
             marginTop: scaledPx(4)
           }}
         >
-          {item.body}
+          {renderPreviewText(item.body)}
         </p>
       ) : null}
       {item.bullets.length > 0 ? (
         <ul className="mt-1" style={{ paddingLeft: scaledPx(16), color: bodyColor, listStyle: "disc" }}>
           {item.bullets.map((bullet, index) => (
             <li key={`${item.id}-bullet-${index}`} style={{ fontSize: scaledPx(12), lineHeight: 1.5 }}>
-              {bullet}
+              {renderPreviewText(bullet)}
             </li>
           ))}
         </ul>
@@ -161,15 +194,17 @@ function DefaultItemBody({ item, colors }: { item: PresentationItem; colors: Pre
       <div className="flex items-start justify-between gap-3">
         <div>
           {item.title ? (
-            <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>{item.title}</h3>
+            <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
+              {renderPreviewText(item.title)}
+            </h3>
           ) : null}
           {item.subtitle ? (
-            <p style={{ fontSize: scaledPx(12), color: colors.body }}>{item.subtitle}</p>
+            <p style={{ fontSize: scaledPx(12), color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
           ) : null}
         </div>
         {item.metadata_line || item.date_range ? (
           <span style={{ fontSize: scaledPx(11), color: colors.muted, textAlign: "right" }}>
-            {item.metadata_line || item.date_range}
+            {renderPreviewText(item.metadata_line || item.date_range || "")}
           </span>
         ) : null}
       </div>
@@ -182,7 +217,7 @@ function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: Pr
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: `${scaledPx(110)} 1fr` }}>
       <div style={{ fontSize: scaledPx(11), color: colors.muted, paddingTop: scaledPx(2) }}>
-        {item.metadata_line || item.date_range || ""}
+        {renderPreviewText(item.metadata_line || item.date_range || "")}
       </div>
       <div className="relative" style={{ paddingLeft: scaledPx(16) }}>
         <span
@@ -207,10 +242,12 @@ function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: Pr
           }}
         />
         {item.title ? (
-          <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>{item.title}</h3>
+          <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
+            {renderPreviewText(item.title)}
+          </h3>
         ) : null}
         {item.subtitle ? (
-          <p style={{ fontSize: scaledPx(12), color: colors.body }}>{item.subtitle}</p>
+          <p style={{ fontSize: scaledPx(12), color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
         ) : null}
         {renderItemBody(item, colors.body)}
       </div>
@@ -241,7 +278,9 @@ function buildSectionBlocks(
         <div style={{ marginBottom: scaledPx(sectionSpacing) }}>
           <SectionTitle title={section.title} color={colors.heading} />
           {section.inline_text ? (
-            <p style={{ fontSize: scaledPx(12), lineHeight: 1.6, color: colors.body }}>{section.inline_text}</p>
+            <p style={{ fontSize: scaledPx(12), lineHeight: 1.6, color: colors.body }}>
+              {renderPreviewText(section.inline_text)}
+            </p>
           ) : null}
         </div>
       )
@@ -270,7 +309,7 @@ function buildSectionBlocks(
             marginBottom: scaledPx(blockSpacing)
           }}
         >
-          {section.inline_text}
+          {renderPreviewText(section.inline_text)}
         </p>
       )
     });
@@ -332,14 +371,16 @@ function buildHeaderBlocks(
               fontWeight: 600
             }}
           >
-            {header.name || "Your Name"}
+            {header.name ? renderPreviewText(header.name) : "Your Name"}
           </h1>
           {header.title ? (
-            <p style={{ fontSize: scaledPx(14), color: colors.accent, marginTop: scaledPx(2) }}>{header.title}</p>
+            <p style={{ fontSize: scaledPx(14), color: colors.accent, marginTop: scaledPx(2) }}>
+              {renderPreviewText(header.title)}
+            </p>
           ) : null}
           {header.contact_items.length > 0 ? (
             <p style={{ fontSize: scaledPx(11), color: colors.muted, marginTop: scaledPx(6) }}>
-              {header.contact_items.join(" • ")}
+              {renderPreviewText(header.contact_items.join(" • "))}
             </p>
           ) : null}
           {header.social_links.length > 0 ? (
