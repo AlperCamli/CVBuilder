@@ -81,7 +81,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "year", label: "Year", kind: "text" },
         { key: "notes", label: "Notes", kind: "textarea" }
       ],
-      defaultBlockFields: { qualification: "", qualification_type: "", institution: "", year: "" }
+      defaultBlockFields: { qualification: "", qualification_type: "", institution: "", year: "" },
+      aiSuggest: { editableFields: ["notes"] }
     },
     {
       type: "summary",
@@ -113,7 +114,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "on_call_frequency", label: "On-call Frequency / Rota", kind: "text" },
         { key: "patient_demographics", label: "Patient Demographics / Setting", kind: "text" }
       ],
-      defaultBlockFields: { job_title: "", grade: "", specialty: "", hospital: "", duties: [] }
+      defaultBlockFields: { job_title: "", grade: "", specialty: "", hospital: "", duties: [] },
+      aiSuggest: { editableFields: ["duties"] }
     },
     {
       type: "career_gap",
@@ -127,7 +129,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "end_date", label: "To", kind: "date" },
         { key: "explanation", label: "Explanation", kind: "textarea", required: true }
       ],
-      defaultBlockFields: { explanation: "" }
+      defaultBlockFields: { explanation: "" },
+      aiSuggest: { editableFields: ["explanation"] }
     },
     {
       type: "clinical_skills",
@@ -147,7 +150,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "frequency", label: "Frequency Performed", kind: "text" },
         { key: "context", label: "Context / Setting", kind: "text" }
       ],
-      defaultBlockFields: { skill: "", competency_level: "", frequency: "" }
+      defaultBlockFields: { skill: "", competency_level: "", frequency: "" },
+      aiSuggest: { editableFields: ["context"] }
     },
     {
       type: "additional_skills",
@@ -160,7 +164,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "skill", label: "Skill", kind: "text", required: true },
         { key: "context", label: "Context / Evidence", kind: "textarea" }
       ],
-      defaultBlockFields: { skill: "", context: "" }
+      defaultBlockFields: { skill: "", context: "" },
+      aiSuggest: { editableFields: ["context"] }
     },
     {
       type: "audit_qi",
@@ -180,7 +185,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "loop_closed", label: "Audit Loop Closed", kind: "boolean" },
         { key: "presented_at", label: "Presented At", kind: "text" }
       ],
-      defaultBlockFields: { title: "", project_type: "", role: "", outcomes: [] }
+      defaultBlockFields: { title: "", project_type: "", role: "", outcomes: [] },
+      aiSuggest: { editableFields: ["outcomes"] }
     },
     {
       type: "teaching",
@@ -203,7 +209,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "frequency", label: "Frequency", kind: "text" },
         { key: "evaluation", label: "Evaluation / Feedback", kind: "textarea" }
       ],
-      defaultBlockFields: { topic: "", setting: "", audience: "" }
+      defaultBlockFields: { topic: "", setting: "", audience: "" },
+      aiSuggest: { editableFields: ["evaluation"] }
     },
     {
       type: "publications",
@@ -228,7 +235,8 @@ export const medicalUkModule: CvModuleDefinition = {
         { key: "dates", label: "Dates", kind: "text" },
         { key: "description", label: "Description", kind: "bullets" }
       ],
-      defaultBlockFields: { role: "", organization: "", description: [] }
+      defaultBlockFields: { role: "", organization: "", description: [] },
+      aiSuggest: { editableFields: ["description"] }
     },
     {
       type: "courses_training",

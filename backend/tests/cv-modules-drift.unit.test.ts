@@ -44,6 +44,35 @@ describe("cv module registry drift guard", () => {
     }
   });
 
+  it("keeps medical_uk aiSuggest policies in sync and limited to schema fields", () => {
+    const backendByType = new Map(
+      backendMedicalUk.sectionCatalog.map((definition) => [definition.type, definition])
+    );
+    const standardHandledTypes = new Set(sectionTypes(frontendStandard.sectionCatalog));
+
+    for (const frontendDefinition of frontendMedicalUk.sectionCatalog) {
+      const backendDefinition = backendByType.get(frontendDefinition.type);
+      expect(backendDefinition, `backend is missing section type ${frontendDefinition.type}`).toBeDefined();
+
+      const frontendEditable = [...(frontendDefinition.aiSuggest?.editableFields ?? [])].sort();
+      const backendEditable = [...(backendDefinition!.aiSuggest?.editableFields ?? [])].sort();
+      expect(frontendEditable, `aiSuggest diverged for ${frontendDefinition.type}`).toEqual(
+        backendEditable
+      );
+
+      if (standardHandledTypes.has(frontendDefinition.type)) {
+        // Standard-handled types keep the standard AI behavior; module policy must stay off.
+        expect(backendEditable).toEqual([]);
+        continue;
+      }
+
+      const backendFieldKeys = new Set(backendDefinition!.fieldSchema.map((field) => field.key));
+      for (const key of backendEditable) {
+        expect(backendFieldKeys.has(key), `editable field ${key} missing from ${frontendDefinition.type} schema`).toBe(true);
+      }
+    }
+  });
+
   it("keeps medical_uk template slugs and module ids in sync", () => {
     expect(frontendMedicalUk.id).toBe(backendMedicalUk.id);
     expect([...frontendMedicalUk.templateSlugs].sort()).toEqual(

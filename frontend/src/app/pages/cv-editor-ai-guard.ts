@@ -1,4 +1,6 @@
 import type { EditorSection } from "../integration/cv-mappers";
+import { getModuleManagedSectionDefinition } from "../modules/module-registry";
+import type { SectionTypeDefinition } from "../modules/cv-module.types";
 
 export const asTrimmedString = (value: unknown): string => {
   if (typeof value === "string") {
@@ -51,7 +53,36 @@ const getTargetItem = (section: EditorSection, blockReference?: string): Record<
   return matched ?? null;
 };
 
-export const hasContentForAi = (section: EditorSection, blockReference?: string): boolean => {
+// Module-managed items hold their values in rawFields; an item has AI-usable content
+// when any schema field (booleans aside) is filled — facts alone are enough, because
+// module AI synthesizes the narrative field from them.
+const moduleItemHasContent = (
+  item: Record<string, unknown>,
+  definition: SectionTypeDefinition
+): boolean => {
+  const rawFields = (item.rawFields ?? {}) as Record<string, unknown>;
+
+  return definition.fieldSchema.some((field) => {
+    if (field.kind === "boolean") {
+      return false;
+    }
+
+    const value = rawFields[field.key];
+    return asTrimmedString(value).length > 0 || hasNonEmptyArrayValue(value);
+  });
+};
+
+export const hasContentForAi = (
+  section: EditorSection,
+  blockReference?: string,
+  moduleType?: string | null
+): boolean => {
+  const moduleDefinition = getModuleManagedSectionDefinition(moduleType ?? null, section.type);
+  if (moduleDefinition) {
+    const targetItem = getTargetItem(section, blockReference);
+    return targetItem !== null && moduleItemHasContent(targetItem, moduleDefinition);
+  }
+
   const data = (section.data ?? {}) as Record<string, unknown>;
 
   if (section.type === "summary") {
@@ -84,13 +115,23 @@ export const hasContentForAi = (section: EditorSection, blockReference?: string)
   return candidateKeys.some((key) => asTrimmedString(targetItem[key]).length > 0);
 };
 
-export const canUseAiForSectionBlock = (section: EditorSection, blockReference?: string): boolean => {
+export const canUseAiForSectionBlock = (
+  section: EditorSection,
+  blockReference?: string,
+  moduleType?: string | null
+): boolean => {
+  const moduleDefinition = getModuleManagedSectionDefinition(moduleType ?? null, section.type);
+  if (moduleDefinition && !moduleDefinition.aiSuggest) {
+    // Fact-only module sections (e.g. medical registration) never get AI.
+    return false;
+  }
+
   if (section.type === "skills") {
     // Skills AI should be allowed even when the current skill list is empty.
     return true;
   }
 
-  if (!hasContentForAi(section, blockReference)) {
+  if (!hasContentForAi(section, blockReference, moduleType)) {
     return false;
   }
 

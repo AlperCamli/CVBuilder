@@ -11,7 +11,7 @@ import {
 } from "../../shared/cv-content/cv-content.utils";
 import { looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
 import type { CvBlock } from "../../shared/cv-content/cv-content.types";
-import { getCvModule } from "../../shared/cv-modules/module-registry";
+import { getCvModule, resolveModuleBlockAiPolicy } from "../../shared/cv-modules/module-registry";
 import {
   AiFlowFailedError,
   AiProviderError,
@@ -38,6 +38,11 @@ import type { TemplatesService } from "../templates/templates.service";
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { BillingService } from "../billing/billing.service";
 import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
+import {
+  buildModuleBlockSuggestPayload,
+  buildModuleBlockSuggestUserPrompt,
+  enforceModuleBlockAiPolicy
+} from "./module-block-suggest";
 import { cvParseOutputSchema } from "./flows/flow-contracts";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
@@ -127,28 +132,35 @@ const asStringArray = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
-// Block types whose narrative fields are edited as bullet lists in the CV editor.
-const NARRATIVE_BULLET_BLOCK_TYPES = new Set([
-  "experience_item",
-  "education_item",
-  "project_item",
-  "volunteer_item",
-  "award_item",
-  "publication_item"
-]);
-const NARRATIVE_BULLET_FIELDS = ["description", "responsibilities", "highlights"];
+// String narrative fields edited as bullet lists in the CV editor, per block type.
+// Array-shaped bullet fields (e.g. medical duties/outcomes) are not listed here: the
+// bulletizer only normalizes strings.
+const NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE: Record<string, string[]> = {
+  experience_item: ["description", "responsibilities", "highlights"],
+  education_item: ["description", "responsibilities", "highlights"],
+  project_item: ["description", "responsibilities", "highlights"],
+  volunteer_item: ["description", "responsibilities", "highlights"],
+  award_item: ["description", "responsibilities", "highlights"],
+  publication_item: ["description", "responsibilities", "highlights"],
+  // medical_uk textarea fields using the "• " bullet convention
+  medical_qualification: ["notes"],
+  career_gap: ["explanation"],
+  additional_skill: ["context"],
+  teaching_activity: ["evaluation"]
+};
 
 // Normalize AI bullet answers (dashes / numbers / "•" / multi-line) into the "• " convention
 // for experience-style blocks so they round-trip and render as bullets. Summary and skills
 // blocks are left untouched. Idempotent on already-normalized text.
 const bulletizeNarrativeFields = (block: CvBlock): CvBlock => {
-  if (!NARRATIVE_BULLET_BLOCK_TYPES.has(block.type)) {
+  const narrativeKeys = NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE[block.type];
+  if (!narrativeKeys) {
     return block;
   }
 
   let changed = false;
   const fields = { ...block.fields };
-  for (const key of NARRATIVE_BULLET_FIELDS) {
+  for (const key of narrativeKeys) {
     const value = fields[key];
     if (typeof value === "string" && looksLikeBulletAnswer(value)) {
       const normalized = normalizeToBullets(value);
@@ -1626,7 +1638,15 @@ export class AiService {
     const target = await this.resolveAiBlockTarget(session.appUser.id, input);
     const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
     const blockType = asString(currentBlock.block.type).toLowerCase();
-    const isSkillsBlock = blockType.includes("skill");
+    const policyResolution = resolveModuleBlockAiPolicy(target.module_type, blockType);
+
+    if (policyResolution.mode === "disabled") {
+      throw new ConflictError("AI improvement is not available for this section.");
+    }
+
+    // Module-managed blocks (e.g. medical clinical_skill / additional_skill) must not
+    // fall into the standard skills-pool branch; only standard skills blocks do.
+    const isSkillsBlock = policyResolution.mode === "standard" && blockType.includes("skill");
 
     if (isSkillsBlock) {
       const currentPoolMeta = extractSkillsPoolMetadata(currentBlock.block.meta);
@@ -1713,6 +1733,54 @@ export class AiService {
         action_type: input.action_type,
         before_block: asRecord(currentBlock.block),
         suggested_block: asRecord(suggestedBlock)
+      });
+
+      await this.billingService.recordAiActionUsage(session.appUser.id);
+      return applied;
+    }
+
+    if (policyResolution.mode === "facts_guarded") {
+      const policy = policyResolution.policy;
+
+      // The model only sees the block's non-empty schema fields plus editable_fields,
+      // and the user_prompt names the fields it may rewrite. If a DB prompt-config row
+      // for block_suggest ever overrides this user_prompt, fact safety still holds:
+      // enforceModuleBlockAiPolicy restores every non-editable field afterwards.
+      const executed = await this.executeFlow({
+        flow_type: "block_suggest",
+        action_type: input.action_type,
+        user_id: session.appUser.id,
+        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+        job_id: target.linked_job?.id ?? null,
+        prompt_profile: this.resolveModulePromptProfile(target.module_type),
+        input_payload: buildModuleBlockSuggestPayload({
+          actionType: input.action_type,
+          block: currentBlock.block,
+          policy,
+          userInstruction: input.user_instruction ?? "",
+          jobDescription: target.linked_job?.job_description ?? ""
+        }),
+        user_prompt: buildModuleBlockSuggestUserPrompt({
+          actionType: input.action_type,
+          policy
+        })
+      });
+
+      const guardedBlock = enforceModuleBlockAiPolicy({
+        currentBlock: currentBlock.block,
+        suggestedBlock: asRecord(asRecord(executed.output).suggested_block),
+        policy
+      });
+
+      const applied = await this.applyGeneratedBlockSuggestion({
+        user_id: session.appUser.id,
+        target,
+        ai_run_id: executed.ai_run.id,
+        block_id: input.block_id,
+        action_type: input.action_type,
+        before_block: asRecord(currentBlock.block),
+        suggested_block: asRecord(guardedBlock)
       });
 
       await this.billingService.recordAiActionUsage(session.appUser.id);

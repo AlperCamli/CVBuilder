@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { cloneCvContent, normalizeCvJsonRecord } from "../../shared/cv-content/cv-content.utils";
 import type { CvBlock, CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
+import { removeEmptyFields } from "./empty-fields";
 
 interface ImportImproveAliasMap {
   section_alias_to_id: Record<string, string>;
@@ -13,8 +14,6 @@ export interface ImportImproveModelContentContext {
 }
 
 const HEADER_SECTION_TYPES = new Set(["header", "contact", "contact_info", "personal_info"]);
-const UUID_LIKE_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const cloneJson = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -26,57 +25,6 @@ const toSortedSections = (content: CvContent): CvSection[] =>
 
 const toSortedBlocks = (section: CvSection): CvBlock[] =>
   [...section.blocks].sort((left, right) => left.order - right.order);
-
-const removeEmptyFields = (fields: Record<string, CvJsonValue>): Record<string, CvJsonValue> => {
-  const next: Record<string, CvJsonValue> = {};
-
-  for (const [key, value] of Object.entries(fields)) {
-    if (key === "id" || key.endsWith("_id")) {
-      continue;
-    }
-    if (isEmptyValue(value)) {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      const filtered = value.filter((item) => !isEmptyValue(item));
-      if (filtered.length > 0) {
-        next[key] = filtered;
-      }
-      continue;
-    }
-    if (typeof value === "object" && value !== null) {
-      const nested = removeEmptyFields(value);
-      if (Object.keys(nested).length > 0) {
-        next[key] = nested;
-      }
-      continue;
-    }
-
-    next[key] = value;
-  }
-
-  return next;
-};
-
-const isEmptyValue = (value: CvJsonValue): boolean => {
-  if (value === null) {
-    return true;
-  }
-  if (typeof value === "string") {
-    return value.trim().length === 0 || UUID_LIKE_PATTERN.test(value.trim());
-  }
-  if (typeof value === "number") {
-    return !Number.isFinite(value);
-  }
-  if (typeof value === "boolean") {
-    return false;
-  }
-  if (Array.isArray(value)) {
-    return value.length === 0 || value.every((item) => isEmptyValue(item));
-  }
-
-  return Object.keys(removeEmptyFields(value)).length === 0;
-};
 
 const aliasFor = (type: string, index: number, suffix: string): string => {
   const normalized =

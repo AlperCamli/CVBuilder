@@ -441,27 +441,33 @@ interface SkillPoolState {
   shuffleUsed: boolean;
 }
 
-// Block types whose narrative fields are edited as bullet lists.
-const NARRATIVE_BULLET_BLOCK_TYPES = new Set([
-  "experience_item",
-  "education_item",
-  "project_item",
-  "volunteer_item",
-  "award_item",
-  "publication_item"
-]);
-const NARRATIVE_BULLET_FIELDS = ["description", "responsibilities", "highlights"];
+// String narrative fields edited as bullet lists, per block type. Array-shaped bullet
+// fields (e.g. medical duties/outcomes) are not listed: the bulletizer only handles strings.
+const NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE: Record<string, string[]> = {
+  experience_item: ["description", "responsibilities", "highlights"],
+  education_item: ["description", "responsibilities", "highlights"],
+  project_item: ["description", "responsibilities", "highlights"],
+  volunteer_item: ["description", "responsibilities", "highlights"],
+  award_item: ["description", "responsibilities", "highlights"],
+  publication_item: ["description", "responsibilities", "highlights"],
+  // medical_uk textarea fields using the "• " bullet convention
+  medical_qualification: ["notes"],
+  career_gap: ["explanation"],
+  additional_skill: ["context"],
+  teaching_activity: ["evaluation"]
+};
 
 // Frontend safety net mirroring the backend: normalize AI bullet answers into the "• "
 // convention so applied suggestions show clean bullets immediately. Summary/skills untouched.
 const bulletizeNarrativeBlock = (block: CvBlock): CvBlock => {
-  if (!NARRATIVE_BULLET_BLOCK_TYPES.has(block.type)) {
+  const narrativeKeys = NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE[block.type];
+  if (!narrativeKeys) {
     return block;
   }
 
   let changed = false;
   const fields = { ...block.fields };
-  for (const key of NARRATIVE_BULLET_FIELDS) {
+  for (const key of narrativeKeys) {
     const value = fields[key];
     if (typeof value === "string" && looksLikeBulletAnswer(value)) {
       const normalized = normalizeToBullets(value);
@@ -1654,7 +1660,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
 
     const resolvedBlockReference = blockId ?? getSectionFirstBlockId(targetSection) ?? undefined;
-    const isEmpty = !canUseAiForSectionBlock(targetSection, resolvedBlockReference);
+    const isEmpty = !canUseAiForSectionBlock(targetSection, resolvedBlockReference, moduleType);
 
     if (isEmpty) {
       toast.error(EMPTY_AI_BLOCK_MESSAGE);
@@ -1730,7 +1736,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
 
     const targetSection = resolveSectionForAiBlock(blockId);
-    if (!targetSection || !canUseAiForSectionBlock(targetSection, aiTargetBlockId ?? blockId)) {
+    if (!targetSection || !canUseAiForSectionBlock(targetSection, aiTargetBlockId ?? blockId, moduleType)) {
       toast.error(EMPTY_AI_BLOCK_MESSAGE);
       return;
     }
@@ -1923,7 +1929,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
     const content = (() => {
       if (moduleDefinition) {
-        return <ModuleSection {...commonProps} definition={moduleDefinition} />;
+        return (
+          <ModuleSection
+            {...commonProps}
+            definition={moduleDefinition}
+            getAiVersionNavigator={getAiVersionNavigator}
+          />
+        );
       }
 
       switch (section.type) {

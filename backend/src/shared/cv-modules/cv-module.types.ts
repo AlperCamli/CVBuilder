@@ -19,6 +19,10 @@ export interface SectionTypeDefinition {
   blockType: string;
   fieldSchema: FieldDescriptor[];
   defaultBlockFields: Record<string, CvJsonValue>;
+  // Block-suggest AI policy for module-managed sections. Absent => no AI for the
+  // section. editableFields lists the only fields AI may rewrite; every other
+  // fieldSchema key is a read-only fact the model can use as context.
+  aiSuggest?: { editableFields: string[] };
 }
 
 export interface ParserSectionHint {

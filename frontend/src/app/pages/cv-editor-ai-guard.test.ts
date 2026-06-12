@@ -153,4 +153,58 @@ describe("cv-editor-ai-guard", () => {
     expect(matchesBlockReference(item, "local-77")).toBe(true);
     expect(matchesBlockReference(item, "unknown")).toBe(false);
   });
+
+  it("blocks AI for medical module sections without an aiSuggest policy", () => {
+    const registrationSection = makeSection("medical_registration", {
+      items: [
+        {
+          id: "local-1",
+          blockId: "registration-1",
+          rawFields: { gmc_number: "1234567", licence_status: "Full licence to practise" }
+        }
+      ]
+    });
+
+    expect(canUseAiForSectionBlock(registrationSection, "registration-1", "medical_uk")).toBe(false);
+  });
+
+  it("requires real rawFields content for AI-enabled medical items (id alone is not content)", () => {
+    const emptyTeaching = makeSection("teaching", {
+      items: [{ id: "local-1", blockId: "teaching-1", rawFields: { topic: "  ", is_mandatory: true } }]
+    });
+
+    expect(hasContentForAi(emptyTeaching, "teaching-1", "medical_uk")).toBe(false);
+    expect(canUseAiForSectionBlock(emptyTeaching, "teaching-1", "medical_uk")).toBe(false);
+  });
+
+  it("allows AI on medical items when fact fields alone are filled", () => {
+    const qualificationSection = makeSection("medical_qualifications", {
+      items: [
+        {
+          id: "local-1",
+          blockId: "qualification-1",
+          rawFields: { qualification: "MBBS", institution: "King's College London", notes: "" }
+        }
+      ]
+    });
+    const clinicalSection = makeSection("clinical_experience", {
+      items: [
+        {
+          id: "local-2",
+          blockId: "post-1",
+          rawFields: { job_title: "", duties: ["Ward rounds"] }
+        }
+      ]
+    });
+
+    expect(canUseAiForSectionBlock(qualificationSection, "qualification-1", "medical_uk")).toBe(true);
+    expect(canUseAiForSectionBlock(clinicalSection, "post-1", "medical_uk")).toBe(true);
+  });
+
+  it("keeps standard sections unaffected when moduleType is standard or omitted", () => {
+    const filledSummary = makeSection("summary", { text: "Doctor with 6 years of experience" });
+
+    expect(canUseAiForSectionBlock(filledSummary, undefined, "standard")).toBe(true);
+    expect(canUseAiForSectionBlock(filledSummary, undefined, "medical_uk")).toBe(true);
+  });
 });

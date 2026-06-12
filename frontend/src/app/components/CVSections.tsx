@@ -507,14 +507,14 @@ interface SummarySectionProps {
   aiVersionNavigator?: AiVersionNavigatorState;
 }
 
-interface AiVersionNavigatorState {
+export interface AiVersionNavigatorState {
   current: number;
   total: number;
   onPrev: () => void;
   onNext: () => void;
 }
 
-function AIVersionNavigator({ state }: { state: AiVersionNavigatorState | undefined }) {
+export function AIVersionNavigator({ state }: { state: AiVersionNavigatorState | undefined }) {
   if (!state || state.total <= 1) {
     return null;
   }

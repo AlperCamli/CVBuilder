@@ -1,6 +1,7 @@
-import { GripVertical, Eye, EyeOff, Trash2, Plus } from "lucide-react";
+import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles } from "lucide-react";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
+import { AIVersionNavigator, type AiVersionNavigatorState } from "./CVSections";
 import type { FieldDescriptor, SectionTypeDefinition } from "../modules/cv-module.types";
 
 // Descriptor-driven editor for job-module section types (e.g. medical_uk). Field
@@ -14,6 +15,8 @@ interface ModuleSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
+  onAIAssist?: (blockId?: string) => void;
+  getAiVersionNavigator?: (blockId?: string) => AiVersionNavigatorState | undefined;
 }
 
 const fieldValue = (item: any, key: string): unknown => {
@@ -55,7 +58,9 @@ export function ModuleSection({
   isHidden,
   onToggleVisibility,
   onRemove,
-  onChange
+  onChange,
+  onAIAssist,
+  getAiVersionNavigator
 }: ModuleSectionProps) {
   const items = Array.isArray(data?.items) ? data.items : [];
 
@@ -268,6 +273,27 @@ export function ModuleSection({
               <div className="flex items-start justify-between">
                 <div className="flex-1 space-y-2">
                   {!item.hidden && definition.fieldSchema.map((field) => renderField(item, index, field))}
+                  {!item.hidden && definition.aiSuggest && onAIAssist ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onAIAssist(item.blockId ?? String(item.id ?? ""))}
+                        className="px-3 py-1 rounded-lg flex items-center gap-1.5"
+                        style={{
+                          fontSize: "12px",
+                          background: "var(--color-teal-50)",
+                          color: "var(--color-teal-800)"
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        Improve with AI
+                      </button>
+                      <AIVersionNavigator
+                        state={getAiVersionNavigator?.(
+                          typeof item.blockId === "string" ? item.blockId : undefined
+                        )}
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="ml-2 flex flex-col gap-1">
                   <button onClick={() => toggleItemVisibility(index)} style={{ color: "var(--color-text-secondary)" }}>
