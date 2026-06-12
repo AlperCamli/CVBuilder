@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
+import { consumePostAuthRedirect } from "../integration/post-auth-redirect";
 
 export function AuthCallback() {
   const navigate = useNavigate();
@@ -8,9 +9,10 @@ export function AuthCallback() {
   useEffect(() => {
     // Supabase handles the OAuth token exchange automatically via the URL hash.
     // The AuthProvider's onAuthStateChange listener will detect the new session.
-    // We just need to wait briefly and redirect to /app.
+    // We just need to wait briefly and redirect — to the stashed post-signup
+    // destination (e.g. /app/create) when one exists, otherwise /app.
     const timeout = setTimeout(() => {
-      navigate("/app", { replace: true });
+      navigate(consumePostAuthRedirect() ?? "/app", { replace: true });
     }, 1500);
 
     return () => clearTimeout(timeout);

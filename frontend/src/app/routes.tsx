@@ -3,6 +3,7 @@ import { SidebarProvider } from "./contexts/SidebarContext";
 import { UpgradePromptProvider } from "./contexts/UpgradePromptContext";
 import { Layout } from "./components/Layout";
 import { CheckoutIntentResumer } from "./components/CheckoutIntentResumer";
+import { PostAuthRedirectResumer } from "./components/PostAuthRedirectResumer";
 import { Landing } from "./pages/Landing";
 import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
@@ -35,6 +36,7 @@ function LayoutWrapper() {
     <SidebarProvider>
       <UpgradePromptProvider>
         <CheckoutIntentResumer />
+        <PostAuthRedirectResumer />
         <Layout />
       </UpgradePromptProvider>
     </SidebarProvider>

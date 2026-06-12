@@ -91,7 +91,16 @@ The marketing CTAs ("Get started", "Create your CV") pointed at `/app/create`. F
 - `PublicHeader` and `Landing` CTAs are now auth-aware: anonymous visitors go straight to `/signup` with `from: "/app/create"` (no redirect flicker); authenticated users go straight to `/app/create`.
 - Landing CTA copy: "Create your CV — it's free" with "Free to start · No credit card required" microcopy under both the hero and the bottom CTA, reducing perceived signup risk.
 
-Known limitation: the `from` destination does not survive the Google OAuth round-trip or the email-verification flow (both land on `/app` via `/auth/callback`); carrying it through `localStorage` (like the existing `PendingCheckoutIntent`) is a possible follow-up.
+### Post-signup destination: `/app/create`
+
+Every signup path now lands the new user in the CV creation flow (`/app/create`) instead of the dashboard — unless a deeper destination was preserved via `from` (e.g. a deep link or the pending-checkout journey), which always wins.
+
+- **Password signup with immediate session** — `SignUp` navigates directly to `resolvePostAuthDestination(state, "/app/create")`.
+- **Google OAuth and email verification** — these round-trips leave the app and cannot carry router state, so the destination is stashed in `localStorage` (`cv-builder:post-auth-redirect`, 24-hour expiry, `/app`-prefixed paths only) by `frontend/src/app/integration/post-auth-redirect.ts` — the same pattern as `PendingCheckoutIntent`. It is consumed once by whichever consumer sees it first:
+  - `AuthCallback` (`/auth/callback`, the OAuth return) navigates to the stashed path instead of `/app`.
+  - `PostAuthRedirectResumer` (mounted in the authenticated layout next to `CheckoutIntentResumer`) catches re-entries that skip `/auth/callback`, such as the email-verification link, the first time the user lands anywhere in `/app`.
+
+Plain sign-in is unaffected: `SignIn` never stashes, and its default destination remains `/app`.
 
 ## Upsell trigger matrix (after this update)
 
@@ -113,5 +122,6 @@ All variants share the checkout CTAs: Start 3-day free trial (or "Start your sub
 - `frontend/src/app/pages/CVEditor.tsx` — AI limit catches, job id capture, post-export return prompt
 - `frontend/src/app/pages/TailorCV.tsx`, `TailoringFlow.tsx`, `CoverLetterEditor.tsx`, `AIImproving.tsx` — limit catches
 - `frontend/src/app/integration/auth-route-guards.tsx`, `pages/SignIn.tsx`, `pages/SignUp.tsx`, `components/PublicHeader.tsx`, `pages/Landing.tsx` — funnel
+- `frontend/src/app/integration/post-auth-redirect.ts` (**new**), `components/PostAuthRedirectResumer.tsx` (**new**), `pages/AuthCallback.tsx`, `routes.tsx` — post-signup `/app/create` landing
 
 Verified with `vite build` and the vitest suite (38 tests passing). No backend changes; `billing-entitlements.md`'s "Frontend Upsell Triggers" section is superseded by the matrix above.

@@ -3,10 +3,11 @@ import type { ReactNode } from "react";
 import { useAuth } from "./auth-context";
 
 // Reads the destination a guard stashed before bouncing to an auth page, so the
-// user lands where they originally intended after signing in or up.
-export const resolvePostAuthDestination = (state: unknown): string => {
+// user lands where they originally intended after signing in or up. New signups
+// pass "/app/create" as the fallback so they land directly in the CV creation flow.
+export const resolvePostAuthDestination = (state: unknown, fallback = "/app"): string => {
   const from = (state as { from?: unknown } | null)?.from;
-  return typeof from === "string" && from.startsWith("/app") ? from : "/app";
+  return typeof from === "string" && from.startsWith("/app") ? from : fallback;
 };
 
 const AuthLoadingScreen = () => (

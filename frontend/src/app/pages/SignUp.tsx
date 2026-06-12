@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import { resolvePostAuthDestination } from "../integration/auth-route-guards";
+import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
@@ -19,11 +20,17 @@ export function SignUp() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // New signups land in the CV creation flow unless a deep link was preserved.
+  const postSignupDestination = resolvePostAuthDestination(location.state, "/app/create");
+
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
     setIsGoogleLoading(true);
 
     try {
+      // OAuth leaves the app, so the destination is stashed in localStorage and
+      // consumed by AuthCallback / the authenticated layout on return.
+      stashPostAuthRedirect(postSignupDestination);
       await signInWithGoogle();
     } catch (error) {
       setErrorMessage(mapAuthErrorMessage("google_oauth", error));
@@ -40,10 +47,13 @@ export function SignUp() {
     try {
       const result = await signUp(name, email, password);
       if (result.needsEmailVerification) {
+        // The verification link re-enters the app outside router state, so stash
+        // the destination for the authenticated layout to pick up.
+        stashPostAuthRedirect(postSignupDestination);
         navigate("/email-sent", { state: { email }, replace: true });
         return;
       } else {
-        navigate(resolvePostAuthDestination(location.state), { replace: true });
+        navigate(postSignupDestination, { replace: true });
       }
     } catch (error) {
       setErrorMessage(mapAuthErrorMessage("sign_up", error));
