@@ -4,75 +4,102 @@
       "slug": "resume-cv-basics",
       "name": "Resume / CV Basics",
       "navLabel": "CV Basics",
-      "description": "Foundational guides for writing clear resumes and CVs that are easy for recruiters to understand."
+      "description": "Beginner-friendly guides for writing a clear CV or resume, then turning it into a stronger job-specific application."
     },
     {
       "slug": "job-specific-cv-tailoring",
       "name": "Job-Specific CV Tailoring",
-      "navLabel": "Tailoring for a Job",
-      "description": "Guides for adapting one strong CV or resume to each role without starting from scratch."
+      "navLabel": "Tailoring",
+      "description": "Guides for turning one strong CV into a targeted version for each job description, including NHS and medical applications."
     },
     {
       "slug": "ats-friendly-resume-optimization",
       "name": "ATS-Friendly Resume Optimization",
-      "navLabel": "What is ATS?",
-      "description": "Practical advice for formatting, keywords, and structure that applicant tracking systems can parse."
+      "navLabel": "ATS",
+      "description": "Practical ATS guidance for clean formatting, role-specific keywords, and CVs that match the job description without keyword stuffing."
     },
     {
       "slug": "examples-templates-checklists",
       "name": "Examples, Templates & Checklists",
-      "navLabel": "CV Tricks",
-      "description": "Checklists and templates you can use to review and improve a resume before applying."
+      "navLabel": "Examples",
+      "description": "Before-and-after examples, checklists, and templates for checking whether your CV is ready for a specific application."
     }
   ],
   "articles": [
     {
       "slug": "how-to-write-a-resume-that-gets-interviews",
-      "title": "How to Write a Resume That Gets Interviews: A Step-by-Step Guide",
-      "description": "Learn how to write a resume that gets interviews with a clear structure, focused summary, relevant skills, and stronger bullet points.",
+      "title": "How to Write a Resume That Gets Interviews: Structure, Keywords and Examples",
+      "description": "Learn how to write a resume that gets interviews, then adapt it for each job with a clear structure, stronger bullet points, and relevant keywords.",
       "categorySlug": "resume-cv-basics",
       "priorityRule": "Top 2 High Priority",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "11 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-write-resume.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "A good resume does not just list your work history."
+          "text": "A resume that gets interviews does two jobs at once: it explains your background clearly, and it makes your fit for a specific role easy to see."
         },
         {
           "type": "paragraph",
-          "text": "It shows why you are a strong fit for the job."
+          "text": "The mistake many candidates make is treating their resume as a complete career archive. Recruiters are usually looking for the clearest evidence that you match the role they are trying to fill."
         },
         {
           "type": "paragraph",
-          "text": "Many candidates have valuable experience, useful skills, and real achievements, but their resumes do not communicate those things clearly. They use vague summaries, generic bullet points, crowded layouts, or the same CV for every application."
+          "text": "Use this guide to build a strong base resume first. Then use the tailoring guides to adapt that resume for each job description instead of rewriting everything from scratch."
         },
         {
-          "type": "paragraph",
-          "text": "The result is a resume that says what they have done, but not why it matters."
-        },
-        {
-          "type": "paragraph",
-          "text": "If you want more interviews, your resume needs to be clear, relevant, easy to scan, and tailored to the role you are applying for.",
-          "links": [
-            {
-              "text": "tailored to the role",
-              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
-            }
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You need a strong base CV before you tailor it to specific roles.",
+              "Structure, summary, skills, bullet points, and relevance.",
+              "Build the base resume, then tailor it to the job description."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "In this guide, you will learn how to write a resume step by step, from choosing the right structure to writing stronger bullet points and making your CV easier for recruiters and applicant tracking systems to read."
+          "text": "If you are still deciding what to call the document, start with the resume vs CV guide. When your base version is ready, move to the guide on tailoring your CV to a job description and the resume checklist before you apply.",
+          "links": [
+            {
+              "text": "resume vs CV guide",
+              "href": "/career-advice/resume-cv-basics/cv-vs-resume-whats-the-difference"
+            },
+            {
+              "text": "tailoring your CV to a job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Write one strong CV, then tailor it for every job.",
-          "text": "Upload your resume, paste the job description, and create an ATS-friendly version in minutes.",
-          "buttonText": "Create your CV",
+          "heading": "Turn your base CV into a job-specific version.",
+          "text": "Upload your CV, paste the job description, and create a focused, ATS-friendly version for your next application.",
+          "buttonText": "Tailor your CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -652,7 +679,7 @@
         },
         {
           "type": "paragraph",
-          "text": "A simple checklist can help you catch mistakes before they hurt your application.",
+          "text": "A simple resume checklist can help you catch mistakes before they hurt your application.",
           "links": [
             {
               "text": "resume checklist",
@@ -709,8 +736,8 @@
         },
         {
           "type": "cta",
-          "heading": "Write one strong CV, then tailor it for every job.",
-          "text": "Upload your resume, paste the job description, and create an ATS-friendly version in minutes.",
+          "heading": "Turn your base CV into a job-specific version faster.",
+          "text": "Upload your CV, paste the job description, and create a focused, ATS-friendly version for your next application.",
           "buttonText": "Tailor your CV",
           "href": "/signup"
         },
@@ -806,9 +833,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Write one strong CV, then tailor it for every job. Upload your resume, paste the job description, and create an ATS-friendly version in minutes.",
-          "buttonText": "Build your CV",
+          "heading": "Turn your base CV into a job-specific version.",
+          "text": "Upload your CV, paste the job description, and create a focused, ATS-friendly version for your next application.",
+          "buttonText": "Tailor your CV",
           "href": "/signup"
         },
         {
@@ -843,55 +870,74 @@
     },
     {
       "slug": "cv-vs-resume-whats-the-difference",
-      "title": "CV vs Resume: What's the Difference and Which One Should You Use?",
-      "description": "Learn the difference between a CV and a resume, when to use each one, and how to create a clear, ATS-friendly document for job applications.",
+      "title": "CV vs Resume: Meaning, Differences and Which One to Use for a Job Application",
+      "description": "Understand the difference between a CV and a resume, when each term is used, and how to create a clear document for a specific job application.",
       "categorySlug": "resume-cv-basics",
       "priorityRule": "Top 2 High Priority",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "13 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "10 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-cv-vs-resume.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Should you upload a CV or a resume?"
+          "text": "CV and resume can mean different things depending on the country, industry, and type of role. For most job applications, the label matters less than the document doing the right job."
         },
         {
           "type": "paragraph",
-          "text": "If you have ever applied for jobs online, you have probably seen both words used in different places. Some companies ask for a resume. Others ask for a CV. Some job boards use the terms almost interchangeably."
+          "text": "A strong CV or resume should help an employer quickly understand your relevant experience, skills, qualifications, and evidence for the role."
         },
         {
           "type": "paragraph",
-          "text": "This can be confusing, especially if you are applying to international companies or remote roles."
+          "text": "This guide explains the practical difference, then shows how to move from terminology to the part that affects interviews: tailoring the document to the job."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You are unsure whether an employer expects a CV, resume, or job-specific application document.",
+              "Terminology, regional differences, document length, and application intent.",
+              "Use the right label, then focus the content on the role."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "The good news is that for most job applications, the difference is not as complicated as it seems."
-        },
-        {
-          "type": "paragraph",
-          "text": "In many business and tech hiring contexts, a CV and a resume often serve the same purpose: they summarize your experience, skills, education, and qualifications so an employer can decide whether to invite you to an interview."
-        },
-        {
-          "type": "paragraph",
-          "text": "However, there are some important differences depending on country, industry, and role type."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this guide, you will learn the difference between a CV and a resume, when to use each one, and how to write a resume that works for recruiters and applicant tracking systems.",
+          "text": "After this guide, read how to write a resume that gets interviews, then use the job-specific CV guide to adapt your document for each application.",
           "links": [
             {
-              "text": "write a resume",
+              "text": "how to write a resume that gets interviews",
               "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
+            },
+            {
+              "text": "job-specific CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Upload your CV, paste the job description, and create a polished, ATS-friendly version in minutes.",
-          "buttonText": "Tailor your CV",
+          "heading": "Use the right document for the role.",
+          "text": "Upload your CV or resume, paste the job description, and create a tailored version that matches the employer’s language.",
+          "buttonText": "Create a job-specific CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -1554,9 +1600,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Upload your document, paste the job description, and create a polished, ATS-friendly version in minutes.",
-          "buttonText": "Tailor your CV",
+          "heading": "Use the right document for the role faster.",
+          "text": "Upload your CV or resume, paste the job description, and create a tailored version that matches the employer’s language.",
+          "buttonText": "Create a job-specific CV",
           "href": "/signup"
         },
         {
@@ -1611,9 +1657,9 @@
         },
         {
           "type": "cta",
-          "heading": "Not sure whether to send a CV or resume?",
-          "text": "Start with one strong CV, paste the job description, and create a tailored, ATS-friendly version for your next application.",
-          "buttonText": "Tailor your CV",
+          "heading": "Use the right document for the role.",
+          "text": "Upload your CV or resume, paste the job description, and create a tailored version that matches the employer’s language.",
+          "buttonText": "Create a job-specific CV",
           "href": "/signup"
         },
         {
@@ -1648,51 +1694,74 @@
     },
     {
       "slug": "how-to-tailor-your-resume-to-a-job-description",
-      "title": "How to Tailor Your Resume to a Job Description Without Rewriting Everything",
-      "description": "Learn how to tailor your resume to a job description with focused edits to your summary, skills, keywords, and strongest bullet points.",
+      "title": "How to Tailor Your CV to a Job Description in Minutes",
+      "description": "Learn how to tailor your CV to a job description by matching the role’s keywords, priorities, skills, and strongest evidence without rewriting everything.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "11 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "12 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-tailor-resume.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Most job seekers know they should tailor their resume for each job application."
+          "text": "Tailoring your CV means making the most relevant parts of your experience easier to find for this specific employer."
         },
         {
           "type": "paragraph",
-          "text": "But here is the problem: rewriting your resume from scratch every time is exhausting."
+          "text": "It does not mean inventing skills, stuffing keywords, or rewriting your entire career history. The strongest tailored CVs keep the facts accurate while changing the order, emphasis, wording, and proof points to match the role."
         },
         {
           "type": "paragraph",
-          "text": "You find a job post, read the requirements, open your resume, change a few words, worry that it still sounds too generic, and then repeat the same process for the next role. After a few applications, it becomes tempting to send the same resume everywhere."
+          "text": "Use this page as the core workflow for turning one generic CV into a job-specific CV in minutes."
         },
         {
-          "type": "paragraph",
-          "text": "That is where many good candidates lose opportunities."
-        },
-        {
-          "type": "paragraph",
-          "text": "A generic resume may show your experience, but a tailored resume shows why your experience fits this specific job. The goal is not to invent a new version of yourself. The goal is to make your most relevant skills, achievements, and experience easier for recruiters and applicant tracking systems to notice.",
-          "links": [
-            {
-              "text": "generic resume",
-              "href": "/career-advice/job-specific-cv-tailoring/job-specific-resume-why-one-generic-cv-is-not-enough"
-            }
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You have a job description and need your CV to look relevant quickly.",
+              "Job description analysis, keyword matching, summary edits, skills order, and bullet rewrites.",
+              "Paste the job description and create a tailored CV version."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "In this guide, you will learn how to tailor your resume to a job description without rewriting the whole thing every time."
+          "text": "For more context, compare a generic CV vs a tailored CV, then use the resume keywords guide to pull the right phrases from the job description.",
+          "links": [
+            {
+              "text": "generic CV vs a tailored CV",
+              "href": "/career-advice/job-specific-cv-tailoring/job-specific-resume-why-one-generic-cv-is-not-enough"
+            },
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Tailor your CV for your next application in minutes. Upload your resume, paste the job description, and get a polished, ATS-friendly version built for that exact role.",
+          "heading": "Tailor your CV to this job description.",
+          "text": "Upload your CV, paste the job description, choose the relevant keywords, and generate a job-specific version in minutes.",
           "buttonText": "Tailor your CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -2253,8 +2322,8 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Tailor your CV for your next application in minutes. Upload your resume, paste the job description, and get a polished, ATS-friendly version built for that exact role.",
+          "heading": "Tailor your CV to this job description faster.",
+          "text": "Upload your CV, paste the job description, choose the relevant keywords, and generate a job-specific version in minutes.",
           "buttonText": "Tailor your CV",
           "href": "/signup"
         },
@@ -2416,9 +2485,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Upload your resume, paste a job description, and create a job-specific CV in minutes.",
-          "buttonText": "Create a tailored CV",
+          "heading": "Tailor your CV to this job description.",
+          "text": "Upload your CV, paste the job description, choose the relevant keywords, and generate a job-specific version in minutes.",
+          "buttonText": "Tailor your CV",
           "href": "/signup"
         },
         {
@@ -2450,54 +2519,77 @@
     {
       "slug": "how-to-customize-your-cv-for-every-job-in-minutes",
       "title": "How to Customize Your CV for Every Job in Minutes",
-      "description": "Learn how to customize your CV for every job application without rewriting everything. Tailor your summary, skills, keywords, and bullet points.",
+      "description": "Use a fast CV customization workflow to adjust your summary, skills, keywords, and strongest bullets for each job application.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "13 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-customize-cv.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Applying for jobs should not feel like rewriting your entire career story every time."
+          "text": "Customizing your CV for every job sounds slow until you use a repeatable system."
         },
         {
           "type": "paragraph",
-          "text": "But for many job seekers, that is exactly what happens."
+          "text": "The goal is not to create a brand-new CV each time. The goal is to start from one strong master CV and adjust the summary, skills order, keywords, and strongest proof points for the job in front of you."
         },
         {
           "type": "paragraph",
-          "text": "You find a promising role, open your CV, read the job description, and start wondering what to change. Should you rewrite the summary? Add different skills? Move bullet points around? Change your job title? Add more keywords?"
+          "text": "This guide focuses on speed: what to change, what to leave alone, and how to avoid turning every application into a long rewrite."
         },
         {
-          "type": "paragraph",
-          "text": "By the time you finish one application, you may already feel tired."
-        },
-        {
-          "type": "paragraph",
-          "text": "The good news is that you do not need to rebuild your CV from scratch for every job. You need a faster system."
-        },
-        {
-          "type": "paragraph",
-          "text": "The process of customizing your CV means making focused changes so your experience looks more relevant to a specific role. The goal is not to create a completely new document every time. The goal is to show the right parts of your experience more clearly.",
-          "links": [
-            {
-              "text": "customizing your CV",
-              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
-            }
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You apply to multiple roles and need a repeatable customization workflow.",
+              "A fast routine for adapting one master CV without starting over.",
+              "Create a reusable master CV, then customize the parts that matter."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "In this guide, you will learn how to customize your CV for every job in minutes using a simple repeatable process."
+          "text": "Use this after you understand the basic tailoring process. For examples, compare a generic CV with tailored versions and review the final checklist before submitting.",
+          "links": [
+            {
+              "text": "basic tailoring process",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "generic CV with tailored versions",
+              "href": "/career-advice/examples-templates-checklists/before-and-after-resume-examples-generic-cv-vs-tailored-cv"
+            },
+            {
+              "text": "final checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Customize it for every job.",
-          "text": "Upload your CV, paste the job description, and get a polished, ATS-friendly version in minutes.",
+          "heading": "Customize your CV for the next role in minutes.",
+          "text": "Paste the job description and create a focused version of your CV without manually rebuilding the whole document.",
           "buttonText": "Customize your CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -2639,7 +2731,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Your master CV is not always the version you submit. It is the source you customize from.",
+          "text": "A strong master CV is not always the version you submit. It is the source you customize from.",
           "links": [
             {
               "text": "strong master CV",
@@ -3248,8 +3340,8 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Customize it for every job.",
-          "text": "Upload your CV, paste the job description, and get a polished, ATS-friendly version in minutes.",
+          "heading": "Customize your CV for the next role in minutes faster.",
+          "text": "Paste the job description and create a focused version of your CV without manually rebuilding the whole document.",
           "buttonText": "Customize your CV",
           "href": "/signup"
         },
@@ -3472,9 +3564,9 @@
         },
         {
           "type": "cta",
-          "heading": "Customize your CV for your next job application in minutes.",
-          "text": "Build one CV. Customize it for every job. Upload your CV, paste the job description, and get a polished, ATS-friendly version in minutes.",
-          "buttonText": "Create a customized CV",
+          "heading": "Customize your CV for the next role in minutes.",
+          "text": "Paste the job description and create a focused version of your CV without manually rebuilding the whole document.",
+          "buttonText": "Customize your CV",
           "href": "/signup"
         },
         {
@@ -3509,59 +3601,74 @@
     },
     {
       "slug": "job-specific-resume-why-one-generic-cv-is-not-enough",
-      "title": "The Job-Specific Resume: Why One Generic CV Is Not Enough Anymore",
-      "description": "Learn why one generic CV is not enough anymore and how a job-specific resume can help you show stronger role fit and use the right keywords.",
+      "title": "Generic CV vs Tailored CV: Before-and-After Examples",
+      "description": "See why one generic CV is not enough for every application, with before-and-after examples that show how tailored CVs improve role fit.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "12 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-job-specific-resume.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "For years, job seekers were told to create one strong CV and send it everywhere."
+          "text": "A generic CV asks the employer to work out where you fit. A tailored CV makes the match obvious."
         },
         {
           "type": "paragraph",
-          "text": "That advice no longer works as well as it used to."
+          "text": "The difference is often not a complete rewrite. It is a better summary, a tighter skills section, stronger ordering, and bullet points that prove the requirements in the job description."
         },
         {
           "type": "paragraph",
-          "text": "Today, most job applications are filtered, scanned, compared, and reviewed quickly. Recruiters are often looking for a very specific match. Applicant tracking systems may search for keywords, skills, job titles, tools, and qualifications before a human even reads the CV."
+          "text": "This guide shows why one generic CV is usually too broad, then walks through the before-and-after changes that make a CV feel specific to the role."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You want to see the practical difference between a generic CV and a tailored CV.",
+              "Before-and-after positioning, relevance, keywords, and proof.",
+              "Use the examples to create a job-specific version of your own CV."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "That means a generic CV can easily get overlooked, even if the candidate is qualified."
-        },
-        {
-          "type": "paragraph",
-          "text": "A job-specific resume is different."
-        },
-        {
-          "type": "paragraph",
-          "text": "Instead of presenting your full career in the same way for every opportunity, it highlights the parts of your experience that are most relevant to one specific role."
-        },
-        {
-          "type": "paragraph",
-          "text": "You are not changing your background. You are changing the focus."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this article, we will explain what a job-specific resume is, why generic CVs often underperform, and how to create a tailored resume without rewriting everything from scratch.",
+          "text": "For a step-by-step workflow, read how to tailor your CV to a job description. For more worked examples, use the dedicated before-and-after resume examples page.",
           "links": [
             {
-              "text": "tailored resume",
+              "text": "tailor your CV to a job description",
               "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "before-and-after resume examples",
+              "href": "/career-advice/examples-templates-checklists/before-and-after-resume-examples-generic-cv-vs-tailored-cv"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Upload your CV, paste a job description, and create a job-specific, ATS-friendly version in minutes.",
-          "buttonText": "Create a job-specific CV",
+          "heading": "Stop sending the same generic CV to every job.",
+          "text": "Upload your CV, paste a job description, and create a tailored version that highlights the right evidence.",
+          "buttonText": "Create a tailored CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -4144,9 +4251,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one CV. Tailor it for every job.",
-          "text": "Upload your CV, paste a job description, and create a job-specific, ATS-friendly version in minutes.",
-          "buttonText": "Tailor your CV",
+          "heading": "Stop sending the same generic CV to every job faster.",
+          "text": "Upload your CV, paste a job description, and create a tailored version that highlights the right evidence.",
+          "buttonText": "Create a tailored CV",
           "href": "/signup"
         },
         {
@@ -4339,7 +4446,7 @@
         {
           "type": "cta",
           "heading": "Stop sending the same generic CV to every job.",
-          "text": "Build one CV. Tailor it for every job. Upload your CV, paste a job description, and create a job-specific, ATS-friendly version in minutes.",
+          "text": "Upload your CV, paste a job description, and create a tailored version that highlights the right evidence.",
           "buttonText": "Create a tailored CV",
           "href": "/signup"
         },
@@ -4379,51 +4486,78 @@
     },
     {
       "slug": "how-to-create-a-medical-cv",
-      "title": "How to Write a Medical CV for Healthcare Jobs: Doctors, Nurses and Paramedics",
-      "description": "Learn how to write a medical CV for UK and US healthcare jobs, including registration, clinical experience, audit, teaching, and certifications.",
+      "title": "How to Write a Medical CV for UK and US Healthcare Jobs",
+      "description": "Learn how to write a medical CV for healthcare jobs, including registration, clinical experience, audit, QI, teaching, research, and role-specific evidence.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "High",
       "publishedDate": "2026-06-09",
-      "updatedDate": "2026-06-09",
-      "readingTime": "12 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "14 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-medical-cv-uk-us.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "A medical CV is not the same as a standard office CV."
+          "text": "A medical CV needs to prove clinical fit, professional registration, scope of practice, and patient-facing responsibility clearly."
         },
         {
           "type": "paragraph",
-          "text": "Healthcare employers are not only looking for job titles, education, and soft skills. They need to see clinical experience, professional registration, patient safety awareness, training, competencies, audits, research, leadership, teaching, and evidence that you can work safely in a regulated healthcare environment."
+          "text": "For doctors, nurses, paramedics, and allied health professionals, a generic CV structure often hides the evidence recruiters need most: registration, clinical exposure, competencies, audits, teaching, research, and role-specific experience."
         },
         {
           "type": "paragraph",
-          "text": "That means a medical CV needs to be clear, accurate, structured, and specific."
+          "text": "Use this guide to build a strong medical CV foundation, then tailor that foundation to the job description or NHS person specification for each application."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You need a medical CV that works for healthcare applications, not a generic professional resume.",
+              "Clinical structure, registration, skills, audit/QI, teaching, research, and job-specific evidence.",
+              "Build a strong medical CV, then tailor it to the healthcare job description."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "Whether you are a doctor, nurse, paramedic, healthcare assistant, clinical fellow, allied health professional, or international healthcare applicant, your CV should quickly answer one question:"
-        },
-        {
-          "type": "paragraph",
-          "text": "Can this person safely and effectively do this healthcare role?"
-        },
-        {
-          "type": "paragraph",
-          "text": "In this guide, you will learn how to write a strong medical CV, what sections to include, how to tailor your CV to the job description for different healthcare jobs, and how to avoid the most common mistakes.",
+          "text": "If you are applying in the UK, read the NHS medical CV guide next. Doctors should also review the NHS doctor CV example, and nurses should use the NHS nurse CV checklist.",
           "links": [
             {
-              "text": "tailor your CV to the job description",
-              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+              "text": "NHS medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide"
+            },
+            {
+              "text": "NHS doctor CV example",
+              "href": "/career-advice/job-specific-cv-tailoring/doctor-cv-formula"
+            },
+            {
+              "text": "NHS nurse CV checklist",
+              "href": "/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one medical CV. Tailor it for every healthcare job.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a medical CV",
+          "heading": "Tailor your medical CV to the healthcare role.",
+          "text": "Upload your medical CV, paste the job description, and create a role-specific version that reflects the right clinical skills and evidence.",
+          "buttonText": "Tailor your medical CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -5524,8 +5658,8 @@
         },
         {
           "type": "cta",
-          "heading": "Build one medical CV. Tailor it for every healthcare job.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
+          "heading": "Tailor your medical CV to the healthcare role faster.",
+          "text": "Upload your medical CV, paste the job description, and create a role-specific version that reflects the right clinical skills and evidence.",
           "buttonText": "Tailor your medical CV",
           "href": "/signup"
         },
@@ -5585,9 +5719,9 @@
         },
         {
           "type": "cta",
-          "heading": "Create a medical CV tailored to the healthcare role you want.",
-          "text": "Build one medical CV. Tailor it for every healthcare job. Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a tailored medical CV",
+          "heading": "Tailor your medical CV to the healthcare role.",
+          "text": "Upload your medical CV, paste the job description, and create a role-specific version that reflects the right clinical skills and evidence.",
+          "buttonText": "Tailor your medical CV",
           "href": "/signup"
         },
         {
@@ -5622,51 +5756,78 @@
     },
     {
       "slug": "nhs-medical-cv-guide",
-      "title": "NHS Medical CV Guide: What to Include for UK Healthcare Applications",
-      "description": "Learn how to write an NHS medical CV for UK healthcare roles. See what to include for doctors, nurses, paramedics and clinical applicants, from registration to person specification evidence.",
+      "title": "NHS Medical CV Guide: What UK Recruiters Expect",
+      "description": "Learn what UK recruiters expect in an NHS medical CV, from GMC or NMC registration to clinical experience, audit, QI, teaching, research, and person specification evidence.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "High",
       "publishedDate": "2026-06-09",
-      "updatedDate": "2026-06-09",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "13 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-nhs-medical-cv-guide.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Applying for an NHS healthcare role is different from applying for a general office job."
+          "text": "An NHS medical CV should make your clinical fit easy to assess against the job description and person specification."
         },
         {
           "type": "paragraph",
-          "text": "Your CV needs to show more than your job history. It should prove that you understand clinical practice, patient safety, professional standards, teamwork, and the specific requirements of the role."
+          "text": "UK recruiters are not only looking for a list of placements or duties. They need clear evidence of registration, clinical experience, patient safety, audit and quality improvement, teaching, research, leadership, and the essential criteria for the role."
         },
         {
           "type": "paragraph",
-          "text": "Whether you are applying as a doctor, nurse, paramedic, healthcare assistant, clinical fellow, allied health professional, or international healthcare applicant, your NHS CV should be clear, accurate, and tailored to the post."
+          "text": "This is the central NHS medical CV guide for the cluster. Use it to understand the structure, then use the doctor and nurse pages for role-specific detail."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You are applying for an NHS healthcare role and need your CV to match UK expectations.",
+              "NHS person specifications, registration, clinical evidence, audit/QI, teaching, research, and formatting.",
+              "Tailor your medical CV to the exact NHS job description."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "The strongest NHS CVs do one thing very well:"
-        },
-        {
-          "type": "paragraph",
-          "text": "They match your experience to the job description and person specification."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this guide, you will learn what to include in an NHS medical CV, how to structure it, how to use the person specification, and how to avoid common mistakes that can make a good healthcare candidate look less relevant.",
+          "text": "Doctors should read the NHS doctor CV example, nurses should use the NHS nurse CV checklist, and all healthcare applicants should review how to tailor a CV to a job description before applying.",
           "links": [
             {
-              "text": "medical CV",
-              "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+              "text": "NHS doctor CV example",
+              "href": "/career-advice/job-specific-cv-tailoring/doctor-cv-formula"
+            },
+            {
+              "text": "NHS nurse CV checklist",
+              "href": "/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs"
+            },
+            {
+              "text": "tailor a CV to a job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one medical CV. Tailor it for every NHS application.",
-          "text": "Upload your CV, paste the NHS job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create an NHS medical CV",
+          "heading": "Tailor your medical CV to an NHS job description.",
+          "text": "Paste the NHS job description or person specification and create a focused medical CV that highlights the right clinical evidence.",
+          "buttonText": "Tailor your NHS CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -6538,9 +6699,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one medical CV. Tailor it for every NHS application.",
-          "text": "Upload your CV, paste the NHS job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create an NHS medical CV",
+          "heading": "Tailor your medical CV to an NHS job description faster.",
+          "text": "Paste the NHS job description or person specification and create a focused medical CV that highlights the right clinical evidence.",
+          "buttonText": "Tailor your NHS CV",
           "href": "/signup"
         },
         {
@@ -6579,55 +6740,78 @@
     },
     {
       "slug": "doctor-cv-formula",
-      "title": "The Doctor CV Formula: Clinical Experience, Audit, Teaching and Research Done Right",
-      "description": "Learn how to write a stronger doctor CV with the right balance of clinical experience, audit, teaching, research, leadership and GMC registration for NHS and medical roles.",
+      "title": "NHS Doctor CV Example: Sections, Skills and Structure",
+      "description": "Use this NHS doctor CV example guide to structure GMC registration, clinical experience, audit, QI, teaching, research, leadership, and specialty evidence.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "High",
       "publishedDate": "2026-06-09",
-      "updatedDate": "2026-06-09",
-      "readingTime": "9 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "12 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-doctor-cv-formula.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "A doctor CV is not just a list of hospitals, rotations, and qualifications."
+          "text": "A strong doctor CV is not just a list of rotations. It shows clinical responsibility, specialty fit, professional registration, and evidence of the qualities NHS recruiters expect."
         },
         {
           "type": "paragraph",
-          "text": "It is evidence."
+          "text": "For NHS roles, your CV should make GMC status, clinical experience, audit and QI, teaching, research, leadership, and relevant courses easy to find."
         },
         {
           "type": "paragraph",
-          "text": "When a recruiter, consultant, clinical lead, or NHS hiring team reads your CV, they are looking for proof that you are clinically safe, professionally prepared, and genuinely suited to the role."
+          "text": "Use this guide as a practical doctor CV example: the sections to include, what each section should prove, and how to tailor the content to a specific role."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You are a doctor preparing a CV for NHS or UK medical applications.",
+              "GMC registration, clinical posts, specialty fit, audit/QI, teaching, research, and leadership.",
+              "Adapt the doctor CV structure to the target specialty and person specification."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "For doctors, the strongest CVs usually do four things well:"
-        },
-        {
-          "type": "paragraph",
-          "text": "They show clinical experience, audit or quality improvement, teaching, and research or academic engagement clearly."
-        },
-        {
-          "type": "paragraph",
-          "text": "That does not mean every doctor needs a long publication list or a perfect academic record. But it does mean your CV should make your medical experience easy to understand, easy to trust, and easy to match to the role."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this medical CV guide, you will learn the doctor CV formula: how to present clinical experience, audit, teaching, research, leadership, and registration in a way that feels focused and relevant.",
+          "text": "For broader UK healthcare expectations, start with the NHS medical CV guide. If you are converting a general medical CV, review the medical CV structure and the keyword matching guide.",
           "links": [
             {
-              "text": "medical CV",
+              "text": "NHS medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide"
+            },
+            {
+              "text": "medical CV structure",
               "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+            },
+            {
+              "text": "keyword matching guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one doctor CV. Tailor it for every medical role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a doctor CV",
+          "heading": "Tailor your doctor CV to the NHS role.",
+          "text": "Upload your doctor CV, paste the NHS job description, and create a version that highlights the right clinical, audit, teaching, and specialty evidence.",
+          "buttonText": "Tailor your doctor CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -7226,9 +7410,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one doctor CV. Tailor it for every medical role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a doctor CV",
+          "heading": "Tailor your doctor CV to the NHS role faster.",
+          "text": "Upload your doctor CV, paste the NHS job description, and create a version that highlights the right clinical, audit, teaching, and specialty evidence.",
+          "buttonText": "Tailor your doctor CV",
           "href": "/signup"
         },
         {
@@ -7253,9 +7437,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one doctor CV. Tailor it for every medical role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a doctor CV",
+          "heading": "Tailor your doctor CV to the NHS role.",
+          "text": "Upload your doctor CV, paste the NHS job description, and create a version that highlights the right clinical, audit, teaching, and specialty evidence.",
+          "buttonText": "Tailor your doctor CV",
           "href": "/signup"
         },
         {
@@ -7294,51 +7478,78 @@
     },
     {
       "slug": "nurse-cv-checklist-nhs-jobs",
-      "title": "Nurse CV Checklist: What to Fix Before Applying for NHS Jobs",
-      "description": "Use this nurse CV checklist before applying for NHS jobs. Fix your NMC registration, clinical skills, patient care, medication safety, safeguarding, documentation and ward experience.",
+      "title": "NHS Nurse CV Checklist: What to Include Before Applying",
+      "description": "Use this NHS nurse CV checklist to review NMC registration, clinical skills, patient care, medication safety, safeguarding, documentation, and ward experience.",
       "categorySlug": "job-specific-cv-tailoring",
       "priorityRule": "High",
       "publishedDate": "2026-06-09",
-      "updatedDate": "2026-06-09",
-      "readingTime": "8 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "10 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-nurse-cv-checklist-nhs-jobs.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Before applying for an NHS nursing role, take a few minutes to check your CV."
+          "text": "A good NHS nurse CV should quickly show that you are registered, clinically safe, and relevant to the ward, service, or specialty you are applying for."
         },
         {
           "type": "paragraph",
-          "text": "A nurse CV needs to show more than previous job titles. It should prove that you can deliver safe patient care, communicate clearly, follow clinical standards, document accurately, and work well with multidisciplinary teams."
+          "text": "Recruiters need more than broad statements like “good communication skills.” They need evidence of patient care, medication safety, safeguarding, documentation, escalation, MDT communication, and the clinical environment you know."
         },
         {
           "type": "paragraph",
-          "text": "For NHS nursing applications, small details matter."
+          "text": "Use this checklist before applying so your nurse CV is clear, specific, and aligned with the NHS job description."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You are preparing a nurse CV for NHS jobs and want to check it before applying.",
+              "NMC registration, clinical skills, patient care evidence, medication safety, safeguarding, and NHS job matching.",
+              "Fix gaps, then tailor the nurse CV to the specific NHS job description."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "If your NMC registration is hard to find, your ward experience is too vague, or your clinical skills are not matched to the job description, your CV may look weaker than your actual experience."
-        },
-        {
-          "type": "paragraph",
-          "text": "Use this nurse CV checklist before you apply for NHS jobs."
-        },
-        {
-          "type": "paragraph",
-          "text": "It will help you fix the sections that matter most in an NHS medical CV: registration, patient care, medication safety, clinical skills, ward experience, safeguarding, documentation, and role-specific evidence.",
+          "text": "For the broader UK healthcare structure, read the NHS medical CV guide. If you need a full healthcare CV framework, use the medical CV guide and the CV tailoring workflow.",
           "links": [
             {
-              "text": "NHS medical CV",
+              "text": "NHS medical CV guide",
               "href": "/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide"
+            },
+            {
+              "text": "medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+            },
+            {
+              "text": "CV tailoring workflow",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Build one nurse CV. Tailor it for every NHS role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a nurse CV",
+          "heading": "Tailor your nurse CV to an NHS job description.",
+          "text": "Paste the NHS vacancy details and create a nurse CV version that reflects the right clinical skills, safety evidence, and ward experience.",
+          "buttonText": "Tailor your nurse CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -7903,9 +8114,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one nurse CV. Tailor it for every NHS role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a nurse CV",
+          "heading": "Tailor your nurse CV to an NHS job description faster.",
+          "text": "Paste the NHS vacancy details and create a nurse CV version that reflects the right clinical skills, safety evidence, and ward experience.",
+          "buttonText": "Tailor your nurse CV",
           "href": "/signup"
         },
         {
@@ -7934,9 +8145,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build one nurse CV. Tailor it for every NHS role.",
-          "text": "Upload your CV, paste the job description, and create a polished, role-specific version in minutes.",
-          "buttonText": "Create a nurse CV",
+          "heading": "Tailor your nurse CV to an NHS job description.",
+          "text": "Paste the NHS vacancy details and create a nurse CV version that reflects the right clinical skills, safety evidence, and ward experience.",
+          "buttonText": "Tailor your nurse CV",
           "href": "/signup"
         },
         {
@@ -7971,59 +8182,78 @@
     },
     {
       "slug": "what-is-an-ats-resume",
-      "title": "What Is an ATS Resume? How to Make Your CV Pass Applicant Tracking Systems",
-      "description": "Learn what an ATS resume is, how applicant tracking systems read your CV, and how to create an ATS-friendly resume.",
+      "title": "What Is an ATS Resume? Meaning, Format and Examples",
+      "description": "Learn what an ATS resume is, how applicant tracking systems read CVs, and how to use clean formatting and job-description keywords naturally.",
       "categorySlug": "ats-friendly-resume-optimization",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "12 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-what-is-ats.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "You may have a strong CV, relevant experience, and the right skills for a job."
+          "text": "An ATS resume is a resume or CV formatted so applicant tracking systems can read it and recruiters can still understand it quickly."
         },
         {
           "type": "paragraph",
-          "text": "But if your resume is difficult for hiring software to read, it may not get the attention it deserves."
+          "text": "The point is not to “beat” software with keyword stuffing. The point is to make your document clear, structured, and relevant to the exact job description."
         },
         {
           "type": "paragraph",
-          "text": "Many companies use applicant tracking systems, often called ATS, to collect, organize, and review job applications. These systems help employers manage large numbers of resumes. They may scan your CV for keywords, job titles, skills, education, certifications, and other information related to the role."
+          "text": "This beginner-friendly guide explains what ATS means, how these systems read CVs, and how to improve your format and keywords without making your CV worse for humans."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You want a plain-English explanation of ATS and what it means for your CV.",
+              "ATS meaning, parsing, readable format, keywords, examples, and common myths.",
+              "Make your CV easy to parse and relevant to the target job."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "That is why many job seekers ask the same question:"
-        },
-        {
-          "type": "paragraph",
-          "text": "How do I make my resume ATS-friendly?"
-        },
-        {
-          "type": "paragraph",
-          "text": "An ATS resume is not a special type of resume with complicated tricks. It is simply a resume that is clear, readable, well-structured, and aligned with the job description."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this guide, you will learn what an ATS resume is, how applicant tracking systems read your CV, common mistakes to avoid, and how to create a resume that works for both software and human recruiters."
-        },
-        {
-          "type": "paragraph",
-          "text": "A clean ATS-friendly resume format is the foundation.",
+          "text": "After this explainer, use the ATS-friendly resume format guide for layout rules and the resume keywords guide to match your CV to a job description.",
           "links": [
             {
               "text": "ATS-friendly resume format",
               "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            },
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            },
+            {
+              "text": "match your CV to a job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Make your CV easier for ATS software and recruiters to read.",
-          "text": "Upload your CV, paste the job description, and create a tailored, ATS-friendly version in minutes.",
+          "heading": "Create an ATS-friendly CV for a specific job.",
+          "text": "Upload your CV, paste the job description, and create a clean, role-matched version that works for ATS systems and recruiters.",
           "buttonText": "Create an ATS-friendly CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -8891,8 +9121,8 @@
         },
         {
           "type": "cta",
-          "heading": "Create an ATS-friendly CV for your next job application.",
-          "text": "Make your CV easier for ATS software and recruiters to read. Upload your CV, paste the job description, and create a tailored, ATS-friendly version in minutes.",
+          "heading": "Create an ATS-friendly CV for a specific job faster.",
+          "text": "Upload your CV, paste the job description, and create a clean, role-matched version that works for ATS systems and recruiters.",
           "buttonText": "Create an ATS-friendly CV",
           "href": "/signup"
         },
@@ -8922,9 +9152,9 @@
         },
         {
           "type": "cta",
-          "heading": "Create an ATS-friendly CV for your next job application.",
-          "text": "Upload your CV, paste the job description, and get a tailored version in minutes.",
-          "buttonText": "Tailor your CV",
+          "heading": "Create an ATS-friendly CV for a specific job.",
+          "text": "Upload your CV, paste the job description, and create a clean, role-matched version that works for ATS systems and recruiters.",
+          "buttonText": "Create an ATS-friendly CV",
           "href": "/signup"
         },
         {
@@ -8959,55 +9189,78 @@
     },
     {
       "slug": "ats-friendly-resume-format",
-      "title": "ATS-Friendly Resume Format: The Simple Layout Recruiters and Software Can Read",
-      "description": "Learn the best ATS-friendly resume format, including layout, section headings, fonts, file types, and formatting mistakes to avoid.",
+      "title": "ATS-Friendly Resume Format: Simple Layout Rules That Work",
+      "description": "Use these ATS-friendly resume format rules for section headings, layout, fonts, file types, and keyword placement that stays readable for recruiters.",
       "categorySlug": "ats-friendly-resume-optimization",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "11 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-ats-friendly-format.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "A good resume should do two things at the same time."
+          "text": "ATS-friendly resume format means using a layout that software can parse without making the CV look weak or robotic."
         },
         {
           "type": "paragraph",
-          "text": "It should be easy for recruiters to scan."
+          "text": "The best format is usually simple: clear section headings, readable fonts, normal bullet points, consistent dates, and no important information trapped inside images or complex tables."
         },
         {
           "type": "paragraph",
-          "text": "And it should be easy for applicant tracking systems to read."
+          "text": "Formatting is only one part of ATS optimization. Once the structure is clean, the content still needs to match the job description."
         },
         {
-          "type": "paragraph",
-          "text": "That is why resume format matters."
-        },
-        {
-          "type": "paragraph",
-          "text": "Many job seekers focus on making their CV look beautiful. They use icons, columns, graphics, text boxes, tables, and creative templates. Some of these designs look impressive at first glance, but they can create problems when you apply through online job portals."
-        },
-        {
-          "type": "paragraph",
-          "text": "An ATS-friendly resume format is simple, structured, and readable. It helps hiring software understand your information and helps recruiters quickly see why you are a strong candidate.",
-          "links": [
-            {
-              "text": "ATS-friendly resume",
-              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
-            }
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You need a clean CV layout that ATS systems can parse and recruiters can scan.",
+              "Simple structure, section headings, fonts, file types, and formatting mistakes to avoid.",
+              "Use a clean format, then tailor the content to the job description."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "In this guide, you will learn what an ATS-friendly resume format looks like, which layout choices to avoid, and how to structure your CV so both software and humans can read it easily."
+          "text": "For the concept behind ATS, read what an ATS resume is. Then use the ATS resume template and resume keywords guide to make the content more relevant.",
+          "links": [
+            {
+              "text": "what an ATS resume is",
+              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
+            },
+            {
+              "text": "ATS resume template",
+              "href": "/career-advice/examples-templates-checklists/ats-resume-template-simple-structure"
+            },
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Build a clean, ATS-friendly CV in minutes.",
-          "text": "Upload your resume, paste the job description, and get a tailored version that is easy for software and recruiters to read.",
+          "heading": "Use a clean format and job-specific content.",
+          "text": "Upload your CV and create an ATS-friendly version tailored to the job description, not just a generic template.",
           "buttonText": "Build an ATS-friendly CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -9724,9 +9977,9 @@
         },
         {
           "type": "cta",
-          "heading": "Build a clean, ATS-friendly CV in minutes.",
-          "text": "Upload your resume, paste the job description, and get a tailored version that is easy for software and recruiters to read.",
-          "buttonText": "Create an ATS-friendly CV",
+          "heading": "Use a clean format and job-specific content faster.",
+          "text": "Upload your CV and create an ATS-friendly version tailored to the job description, not just a generic template.",
+          "buttonText": "Build an ATS-friendly CV",
           "href": "/signup"
         },
         {
@@ -9755,9 +10008,9 @@
         },
         {
           "type": "cta",
-          "heading": "Create a clean, ATS-friendly CV for your next job application.",
-          "text": "Build a clean, ATS-friendly CV in minutes. Upload your resume, paste the job description, and get a tailored version that is easy for software and recruiters to read.",
-          "buttonText": "Create your CV",
+          "heading": "Use a clean format and job-specific content.",
+          "text": "Upload your CV and create an ATS-friendly version tailored to the job description, not just a generic template.",
+          "buttonText": "Build an ATS-friendly CV",
           "href": "/signup"
         },
         {
@@ -9788,55 +10041,74 @@
     },
     {
       "slug": "resume-keywords-for-ats",
-      "title": "Resume Keywords for ATS: How to Use Them Without Keyword Stuffing",
-      "description": "Learn how to find and use resume keywords for ATS without keyword stuffing. See natural keyword placement examples for your CV.",
+      "title": "Resume Keywords for ATS: How to Match a Job Description",
+      "description": "Learn how to find resume keywords from a job description and use them naturally in your summary, skills, and bullet points without keyword stuffing.",
       "categorySlug": "ats-friendly-resume-optimization",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "13 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-resume-keywords.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Resume keywords can help your CV look more relevant to a job."
+          "text": "Resume keywords for ATS are the words and phrases that connect your CV to the job description."
         },
         {
           "type": "paragraph",
-          "text": "But they can also hurt your application if you use them badly."
+          "text": "They can include job titles, technical skills, clinical skills, tools, certifications, responsibilities, and outcomes. The right keywords help only when they are backed by real experience."
         },
         {
           "type": "paragraph",
-          "text": "Many job seekers hear that applicant tracking systems scan resumes for keywords, so they try to add as many keywords as possible. They copy phrases from the job description, repeat the same words again and again, or create long skills lists that do not feel natural.",
-          "links": [
-            {
-              "text": "applicant tracking systems",
-              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
-            }
+          "text": "This guide shows how to find keywords from a job description, decide which ones belong in your CV, and place them naturally without keyword stuffing."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You need to find the right keywords from a job description and add them naturally.",
+              "Keyword extraction, must-have requirements, proof, placement, and avoiding stuffing.",
+              "Choose relevant keywords, then tailor your CV around real evidence."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "That is keyword stuffing."
-        },
-        {
-          "type": "paragraph",
-          "text": "And it makes your resume weaker."
-        },
-        {
-          "type": "paragraph",
-          "text": "The goal is not to fill your CV with random keywords. The goal is to use the right words in the right places, supported by real experience."
-        },
-        {
-          "type": "paragraph",
-          "text": "In this guide, you will learn what resume keywords are, why they matter for ATS, how to find keywords in a job description, and how to use them naturally without making your CV sound robotic."
+          "text": "Use this guide with the CV tailoring workflow. If your layout is the problem, start with the ATS-friendly format guide first.",
+          "links": [
+            {
+              "text": "CV tailoring workflow",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "ATS-friendly format guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Find the right resume keywords for every job.",
-          "text": "Upload your CV, paste the job description, and create a tailored, ATS-friendly version in minutes.",
-          "buttonText": "Find resume keywords",
+          "heading": "Find the right keywords from your job description.",
+          "text": "Paste the job description, review the relevant keywords, and create a CV version that uses them with real evidence.",
+          "buttonText": "Match CV keywords",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -10744,9 +11016,9 @@
         },
         {
           "type": "cta",
-          "heading": "Find the right resume keywords for every job.",
-          "text": "Upload your CV, paste the job description, and create a tailored, ATS-friendly version in minutes.",
-          "buttonText": "Optimize resume keywords",
+          "heading": "Find the right keywords from your job description faster.",
+          "text": "Paste the job description, review the relevant keywords, and create a CV version that uses them with real evidence.",
+          "buttonText": "Match CV keywords",
           "href": "/signup"
         },
         {
@@ -10830,9 +11102,9 @@
         },
         {
           "type": "cta",
-          "heading": "Use the right resume keywords without sounding robotic.",
-          "text": "Find the right resume keywords for every job. Upload your CV, paste the job description, and create a tailored, ATS-friendly version in minutes.",
-          "buttonText": "Create a keyword-focused CV",
+          "heading": "Find the right keywords from your job description.",
+          "text": "Paste the job description, review the relevant keywords, and create a CV version that uses them with real evidence.",
+          "buttonText": "Match CV keywords",
           "href": "/signup"
         },
         {
@@ -10868,50 +11140,77 @@
     {
       "slug": "resume-checklist-25-things-to-fix-before-you-apply",
       "title": "Resume Checklist: 25 Things to Fix Before You Apply",
-      "description": "Use this 25-point resume checklist before applying. Check keywords, formatting, ATS readability, bullet points, file name, grammar, and relevance.",
+      "description": "Use this resume checklist to review relevance, ATS formatting, keywords, bullet points, file name, grammar, and job-specific fit before you apply.",
       "categorySlug": "examples-templates-checklists",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "10 min read",
+      "updatedDate": "2026-06-17",
+      "readingTime": "11 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-resume-checklist.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "Before you apply for a job, take a few minutes to review your resume."
+          "text": "A resume checklist is most useful right before you apply, when small issues can still cost you an interview."
         },
         {
           "type": "paragraph",
-          "text": "A small mistake can make a strong candidate look careless. A missing keyword can make your CV seem less relevant. A confusing layout can make it harder for applicant tracking systems and recruiters to understand your experience."
+          "text": "Do not only check grammar and formatting. Check whether the CV clearly matches the job description, includes the right keywords, proves the required skills, and makes your strongest evidence easy to find."
         },
         {
           "type": "paragraph",
-          "text": "The good news is that you do not need to rewrite your entire resume before every application."
+          "text": "Use this 25-point checklist as a final pass before submitting any CV or resume."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You are about to apply and want to catch CV problems before sending it.",
+              "Final checks for relevance, keywords, formatting, proof, clarity, and application readiness.",
+              "Fix the checklist items, then submit a job-specific version."
+            ]
+          ]
         },
         {
           "type": "paragraph",
-          "text": "You need a simple checklist."
-        },
-        {
-          "type": "paragraph",
-          "text": "Use this resume checklist before you submit your next job application. It will help you catch common problems, improve readability, strengthen your bullet points, and make your CV more relevant to the role."
-        },
-        {
-          "type": "paragraph",
-          "text": "The fastest place to start is to tailor your resume before applying so the document reflects the role in front of you.",
+          "text": "If the CV feels too generic, use the tailoring guide first. If keywords or layout are weak, review the resume keywords guide and ATS-friendly format guide.",
           "links": [
             {
-              "text": "tailor your resume before applying",
+              "text": "tailoring guide",
               "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            },
+            {
+              "text": "ATS-friendly format guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
             }
           ]
         },
         {
           "type": "cta",
-          "heading": "Check and tailor your CV before you apply.",
-          "text": "Upload your resume, paste the job description, and get a polished, ATS-friendly version in minutes.",
-          "buttonText": "Check your CV",
+          "heading": "Run a job-specific check before you apply.",
+          "text": "Upload your CV, paste the job description, and create a cleaner version before submitting your application.",
+          "buttonText": "Check and tailor your CV",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -11025,7 +11324,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Resume keywords help connect your CV to the job description.",
+          "text": "The right resume keywords help connect your CV to the job description.",
           "links": [
             {
               "text": "resume keywords",
@@ -11738,9 +12037,9 @@
         },
         {
           "type": "cta",
-          "heading": "Fix your CV before you apply.",
-          "text": "Check and tailor your CV before you apply. Upload your resume, paste the job description, and get a polished, ATS-friendly version in minutes.",
-          "buttonText": "Fix your CV",
+          "heading": "Run a job-specific check before you apply faster.",
+          "text": "Upload your CV, paste the job description, and create a cleaner version before submitting your application.",
+          "buttonText": "Check and tailor your CV",
           "href": "/signup"
         },
         {
@@ -11769,9 +12068,9 @@
         },
         {
           "type": "cta",
-          "heading": "Fix your CV before you apply.",
-          "text": "Upload your resume, paste the job description, and get a tailored, ATS-friendly version in minutes.",
-          "buttonText": "Tailor your CV",
+          "heading": "Run a job-specific check before you apply.",
+          "text": "Upload your CV, paste the job description, and create a cleaner version before submitting your application.",
+          "buttonText": "Check and tailor your CV",
           "href": "/signup"
         },
         {
@@ -11807,50 +12106,77 @@
     {
       "slug": "ats-resume-template-simple-structure",
       "title": "ATS Resume Template: A Simple Structure You Can Use Today",
-      "description": "Use this simple ATS resume template to create a clean, readable CV with a clear summary, skills, experience, education, certifications, and projects.",
+      "description": "Use this ATS resume template structure for a clean CV with clear sections, readable bullet points, and space to tailor keywords for each job.",
       "categorySlug": "examples-templates-checklists",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
+      "updatedDate": "2026-06-17",
       "readingTime": "10 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-ats-template.png",
       "body": [
         {
           "type": "paragraph",
-          "text": "A resume does not need to be complicated to be effective."
+          "text": "An ATS resume template should make your information easy to parse, not distract from your evidence."
         },
         {
           "type": "paragraph",
-          "text": "In fact, when you apply online, simple is often better."
+          "text": "The best template is usually simple: contact details, summary, skills, experience, education, certifications, and optional projects or additional sections when relevant."
         },
         {
           "type": "paragraph",
-          "text": "Many companies use applicant tracking systems, also called ATS, to collect and organize resumes. These systems may scan your CV for contact details, work experience, skills, education, dates, certifications, and keywords from the job description."
+          "text": "Use this structure as a base. Then customize the summary, skills, and bullet points for the job description before you apply."
         },
         {
-          "type": "paragraph",
-          "text": "If your resume uses a complicated design, important information may be harder to read."
-        },
-        {
-          "type": "paragraph",
-          "text": "That is why an ATS resume template should be clean, structured, and easy to scan.",
-          "links": [
-            {
-              "text": "ATS resume",
-              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
-            }
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You want a simple ATS-friendly CV structure without overdesigned templates.",
+              "Section order, headings, bullet structure, template mistakes, and job-specific customization.",
+              "Use the structure as a base, then customize it for the job description."
+            ]
           ]
         },
         {
           "type": "paragraph",
-          "text": "In this guide, you will get a simple ATS-friendly resume template you can use today, plus tips for writing each section clearly."
+          "text": "For layout rules, read the ATS-friendly resume format guide. For content, use the resume keywords guide and the CV tailoring workflow.",
+          "links": [
+            {
+              "text": "ATS-friendly resume format guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            },
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            },
+            {
+              "text": "CV tailoring workflow",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            }
+          ]
         },
         {
           "type": "cta",
-          "heading": "Create an ATS-friendly CV from your existing resume.",
-          "text": "Upload your CV, paste the job description, and get a tailored version in minutes.",
-          "buttonText": "Create your ATS-friendly CV",
+          "heading": "Start with a clean template, then tailor it.",
+          "text": "Upload your current CV and create an ATS-friendly, job-specific version without rebuilding the whole document.",
+          "buttonText": "Use this structure",
           "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Quick takeaway"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Match the page to one clear search intent instead of trying to answer every CV question at once.",
+            "Use the job description as the source of truth for keywords, evidence, and ordering.",
+            "Keep the CV readable for recruiters while making the right details easy for ATS systems to parse."
+          ]
         },
         {
           "type": "heading",
@@ -11941,7 +12267,7 @@
         },
         {
           "type": "paragraph",
-          "text": "This template works because it is simple, readable, and easy to customize.",
+          "text": "This template works because it is simple, readable, and easy to customize your CV.",
           "links": [
             {
               "text": "customize your CV",
@@ -12450,8 +12776,8 @@
         },
         {
           "type": "cta",
-          "heading": "Create an ATS-friendly CV from your existing resume.",
-          "text": "Upload your CV, paste the job description, and get a tailored version in minutes.",
+          "heading": "Start with a clean template, then tailor it faster.",
+          "text": "Upload your current CV and create an ATS-friendly, job-specific version without rebuilding the whole document.",
           "buttonText": "Use this structure",
           "href": "/signup"
         },
@@ -12643,9 +12969,9 @@
         },
         {
           "type": "cta",
-          "heading": "Use a clean ATS resume template without starting from scratch.",
-          "text": "Create an ATS-friendly CV from your existing resume. Upload your CV, paste the job description, and get a tailored version in minutes.",
-          "buttonText": "Create a tailored CV",
+          "heading": "Start with a clean template, then tailor it.",
+          "text": "Upload your current CV and create an ATS-friendly, job-specific version without rebuilding the whole document.",
+          "buttonText": "Use this structure",
           "href": "/signup"
         },
         {
@@ -12681,14 +13007,350 @@
     {
       "slug": "before-and-after-resume-examples-generic-cv-vs-tailored-cv",
       "title": "Before and After Resume Examples: Generic CV vs Tailored CV",
-      "description": "A planned guide comparing generic resume examples with tailored CV versions for specific job applications.",
+      "description": "See practical before-and-after resume examples that show how a generic CV becomes a tailored CV for specific job applications.",
       "categorySlug": "examples-templates-checklists",
       "priorityRule": "Very High",
       "publishedDate": "2026-05-28",
-      "updatedDate": "2026-05-28",
-      "readingTime": "Draft",
+      "updatedDate": "2026-06-17",
+      "readingTime": "9 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-before-after.png",
-      "body": []
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "Before-and-after resume examples make CV tailoring easier to understand because they show the actual difference between a generic application and a role-specific one."
+        },
+        {
+          "type": "paragraph",
+          "text": "The strongest tailored CVs do not invent experience. They reorder, clarify, and rewrite existing evidence so the employer can immediately see why the candidate matches the job description."
+        },
+        {
+          "type": "paragraph",
+          "text": "Use these examples to learn what changes when you tailor a CV: the summary becomes sharper, the skills section reflects the role, and bullet points prove the requirements instead of listing duties."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Reader intent",
+            "What to improve",
+            "Best next step"
+          ],
+          "rows": [
+            [
+              "You want practical examples of generic vs tailored CV writing.",
+              "Summary, skills, bullet points, keywords, and relevance.",
+              "Compare the examples, then tailor your own CV to the job description."
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "For the full workflow, start with how to tailor your CV to a job description. If you need keyword help, use the resume keywords for ATS guide.",
+          "links": [
+            {
+              "text": "how to tailor your CV to a job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "resume keywords for ATS",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
+        },
+        {
+          "type": "cta",
+          "heading": "Create your own before-and-after CV version.",
+          "text": "Upload your current CV, paste the job description, and create a tailored version that highlights the right evidence.",
+          "buttonText": "Tailor your CV",
+          "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "What changes in a tailored CV?"
+        },
+        {
+          "type": "paragraph",
+          "text": "A tailored CV usually changes five things: positioning, keyword focus, section order, bullet point evidence, and irrelevant detail."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Positioning: the summary names the type of role and strongest matching evidence.",
+            "Keyword focus: relevant terms from the job description appear naturally in the right sections.",
+            "Section order: the most relevant skills and experience are easier to find.",
+            "Bullet evidence: duties become proof of impact, scope, tools, or outcomes.",
+            "Relevance: weaker or unrelated details are shortened so they do not bury the match."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Example 1: Marketing coordinator role"
+        },
+        {
+          "type": "paragraph",
+          "text": "The job description asks for campaign coordination, email marketing, social scheduling, reporting, and collaboration with sales."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Section",
+            "Generic version",
+            "Tailored version"
+          ],
+          "rows": [
+            [
+              "Summary",
+              "Organized marketing professional with experience supporting different business activities.",
+              "Marketing coordinator with experience supporting email campaigns, social scheduling, campaign reporting, and sales enablement for B2B teams."
+            ],
+            [
+              "Skills",
+              "Communication, organization, teamwork, Microsoft Office, marketing.",
+              "Email marketing, social scheduling, campaign coordination, CRM updates, performance reporting, sales collateral, stakeholder communication."
+            ],
+            [
+              "Bullet point",
+              "Helped the marketing team with campaigns and admin tasks.",
+              "Coordinated weekly email and social campaign tasks, maintained the campaign calendar, and prepared performance summaries for sales and marketing leads."
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The tailored version is stronger because it uses the employer’s language and shows the actual marketing work, not just generic support."
+        },
+        {
+          "type": "heading",
+          "text": "Example 2: Customer success role"
+        },
+        {
+          "type": "paragraph",
+          "text": "The job description asks for onboarding, account retention, customer communication, CRM notes, and product adoption."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Section",
+            "Generic version",
+            "Tailored version"
+          ],
+          "rows": [
+            [
+              "Summary",
+              "Customer-focused professional with strong communication skills.",
+              "Customer success associate with experience onboarding users, tracking account health, documenting CRM notes, and supporting retention through proactive follow-up."
+            ],
+            [
+              "Skills",
+              "Customer service, teamwork, problem solving, organization.",
+              "Customer onboarding, account follow-up, CRM documentation, retention support, product adoption, support handoffs, customer communication."
+            ],
+            [
+              "Bullet point",
+              "Answered customer questions and helped solve problems.",
+              "Supported onboarding for new customers, documented follow-up actions in the CRM, and escalated product issues to improve adoption and retention."
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The tailored version does not exaggerate. It simply connects the candidate’s real support experience to the customer success requirements."
+        },
+        {
+          "type": "heading",
+          "text": "Example 3: NHS nurse role"
+        },
+        {
+          "type": "paragraph",
+          "text": "The NHS job description asks for NMC registration, medication safety, safeguarding, documentation, patient care, MDT communication, and escalation."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Section",
+            "Generic version",
+            "Tailored version"
+          ],
+          "rows": [
+            [
+              "Summary",
+              "Hardworking nurse with experience caring for patients in a busy environment.",
+              "NMC-registered nurse with ward-based experience in patient assessment, medication safety, safeguarding escalation, clinical documentation, and MDT communication."
+            ],
+            [
+              "Skills",
+              "Patient care, communication, teamwork, time management.",
+              "NMC registration, medication administration, patient assessment, safeguarding, NEWS2 escalation, care planning, clinical documentation, MDT handover."
+            ],
+            [
+              "Bullet point",
+              "Looked after patients and completed nursing tasks on the ward.",
+              "Delivered ward-based patient care, completed clinical documentation, supported medication rounds, and escalated changes in patient condition according to local safeguarding and safety procedures."
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "For NHS applications, tailoring matters because the person specification often names the exact clinical, safety, and communication evidence the recruiter wants to see."
+        },
+        {
+          "type": "paragraph",
+          "text": "For more NHS-specific guidance, use the NHS medical CV guide and the NHS nurse CV checklist.",
+          "links": [
+            {
+              "text": "NHS medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide"
+            },
+            {
+              "text": "NHS nurse CV checklist",
+              "href": "/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Before-and-after summary formula"
+        },
+        {
+          "type": "paragraph",
+          "text": "A generic summary usually says who you are. A tailored summary says who you are for this role."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Formula part",
+            "What to write",
+            "Example"
+          ],
+          "rows": [
+            [
+              "Role target",
+              "Name the role, specialty, or function you are applying for.",
+              "Operations coordinator, NHS staff nurse, junior doctor, customer success associate."
+            ],
+            [
+              "Relevant evidence",
+              "Mention the experience that matches the job description.",
+              "Scheduling, patient care, audit/QI, onboarding, reporting, stakeholder coordination."
+            ],
+            [
+              "Proof or context",
+              "Add setting, tools, scope, or outcome where possible.",
+              "Ward-based, B2B SaaS, high-volume clinic, cross-functional team, CRM-based workflow."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Before-and-after skills section"
+        },
+        {
+          "type": "paragraph",
+          "text": "The skills section should not be a random list. It should help the recruiter and ATS connect your CV to the job description."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Move the most relevant skills to the top.",
+            "Use the same standard wording as the job description when it is accurate.",
+            "Remove broad filler skills if they crowd out role-specific skills.",
+            "Group related skills when the page is becoming hard to scan.",
+            "Keep only skills you can support with experience elsewhere in the CV."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Before-and-after bullet points"
+        },
+        {
+          "type": "paragraph",
+          "text": "Generic bullets usually describe tasks. Tailored bullets connect tasks to the requirements of the role."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Weak bullet",
+            "Better tailored bullet"
+          ],
+          "rows": [
+            [
+              "Responsible for reports and meetings.",
+              "Prepared weekly performance reports and coordinated follow-up meetings with operations and sales teams."
+            ],
+            [
+              "Worked with patients and staff.",
+              "Supported patient assessments, completed accurate care documentation, and communicated changes to the MDT during ward handovers."
+            ],
+            [
+              "Helped customers use the product.",
+              "Guided new users through onboarding steps, tracked product adoption blockers, and escalated recurring issues to the support team."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "What not to change"
+        },
+        {
+          "type": "paragraph",
+          "text": "A tailored CV should still be truthful and recognizable as your career history. Do not add skills you do not have, invent metrics, or copy entire paragraphs from the job advert."
+        },
+        {
+          "type": "list",
+          "items": [
+            "Do not claim experience that is not in your background.",
+            "Do not repeat the same keyword unnaturally.",
+            "Do not remove important qualifications just because they are not in the advert.",
+            "Do not make the CV so narrow that your broader value disappears.",
+            "Do not use a complex design if it makes the tailored content harder to read."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Generic CV vs tailored CV checklist"
+        },
+        {
+          "type": "list",
+          "items": [
+            "Does the summary mention the type of role you are applying for?",
+            "Are the top skills aligned with the job description?",
+            "Do your strongest bullet points prove the must-have requirements?",
+            "Have you used relevant keywords naturally?",
+            "Have you removed or shortened details that distract from the target role?",
+            "Can a recruiter understand your fit within a quick scan?",
+            "Is the format still simple enough for ATS parsing?"
+          ]
+        },
+        {
+          "type": "cta",
+          "heading": "Turn your generic CV into a tailored version.",
+          "text": "Upload your current CV and paste the job description. jobspecificCV helps you choose relevant keywords and create a job-specific version in minutes.",
+          "buttonText": "Create a tailored CV",
+          "href": "/signup"
+        },
+        {
+          "type": "heading",
+          "text": "Final thoughts"
+        },
+        {
+          "type": "paragraph",
+          "text": "The best before-and-after CV changes are specific but honest. They make the same background look more relevant by connecting it to the job description."
+        },
+        {
+          "type": "paragraph",
+          "text": "If you can make the employer’s requirements visible in your summary, skills, and strongest bullets, your CV becomes easier for both recruiters and ATS systems to understand."
+        },
+        {
+          "type": "paragraph",
+          "text": "Start with one strong master CV, then create a tailored version for each serious application instead of sending the same generic document everywhere."
+        },
+        {
+          "type": "cta",
+          "heading": "Build one CV. Tailor it for every serious application.",
+          "text": "Create a focused version of your CV for the role you want next, without rewriting everything manually.",
+          "buttonText": "Tailor your CV",
+          "href": "/signup"
+        }
+      ]
     }
   ]
 }

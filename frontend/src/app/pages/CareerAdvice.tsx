@@ -26,13 +26,13 @@ export function CareerAdvice() {
               className="font-medium mb-4"
               style={{ fontSize: "34px", lineHeight: "1.18", color: "var(--color-text-primary)" }}
             >
-              Practical CV guides for focused job applications
+              CV Advice for Getting More Interviews
             </h1>
             <p
               style={{ fontSize: "15px", lineHeight: "1.7", color: "var(--color-text-secondary)" }}
             >
-              Learn how to build a clear CV, tailor it to a specific role, and make
-              every application easier for recruiters and ATS systems to understand.
+              Learn how to write a clearer CV, tailor it to a job description,
+              improve ATS readability, and build stronger medical and NHS applications.
             </p>
           </div>
         </section>

@@ -38,9 +38,9 @@ const STEPS: Step[] = [
   {
     number: "02",
     icon: Target,
-    title: "Customize for a job",
+    title: "Paste the job description",
     description:
-      "Enter the role, the company, and paste the job description. The app builds a focused brief so every later step is grounded in what this employer actually wants.",
+      "Enter the role, the company, and paste the job description. The app identifies what this employer actually wants so every later edit stays focused.",
     videoSrc: "/videos/step-2-tailor.mp4",
   },
   {
@@ -54,7 +54,7 @@ const STEPS: Step[] = [
   {
     number: "04",
     icon: Download,
-    title: "Export your CV",
+    title: "Export your tailored CV",
     description:
       "Preview the customized CV, tweak anything that needs a final touch, then export a polished, ATS-friendly PDF in seconds. Keep a fresh version for every application.",
     videoSrc: "/videos/step-4-export.mp4",
@@ -174,7 +174,7 @@ const STATS: { icon: LucideIcon; value: string; label: string }[] = [
 ];
 
 const WHY_BENEFITS = [
-  "Mirror the exact keywords ATS systems scan for",
+  "Mirror the exact job-description keywords ATS systems scan for",
   "Lead with the experience this role actually needs",
   "Cut filler that buries your strongest work",
   "Ship a fresh version for every application in minutes",
@@ -369,14 +369,14 @@ export function Landing() {
             className="font-medium mb-4"
             style={{ fontSize: "32px", lineHeight: "1.2", color: "var(--color-text-primary)" }}
           >
-            Build one CV. Customize it for every job.
+            Tailor Your CV to Any Job Description in Minutes
           </h1>
           <p
             className="mb-8"
             style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}
           >
-            Upload your CV once, point it at a job, and get a polished, ATS-friendly
-            version tuned to that exact role — in minutes, not hours.
+            Upload your CV, paste a job description, and get a polished,
+            ATS-friendly version tuned to that exact role in minutes.
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
@@ -389,7 +389,7 @@ export function Landing() {
                 color: "var(--color-teal-50)",
               }}
             >
-              Create your CV — it's free
+              Tailor your CV — it's free
             </Link>
             <a
               href="#how-it-works"
@@ -505,15 +505,15 @@ export function Landing() {
               className="font-medium mb-4"
               style={{ fontSize: "24px", color: "var(--color-teal-800)" }}
             >
-              Why a customized CV beats a generic one
+              Why a tailored CV beats a generic one
             </h2>
             <p
               className="mx-auto mb-8"
               style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-teal-800)" }}
             >
-              Recruiters and ATS systems are matching your CV against a specific job —
-              not your career. A customized CV speaks their language and proves you're the
-              right fit before anyone reads a single sentence in full.
+              Recruiters and ATS systems compare your CV against a specific job
+              description, not your whole career. A tailored CV speaks their
+              language and proves you are the right fit before anyone reads every line.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left max-w-2xl mx-auto">
               {WHY_BENEFITS.map((benefit, index) => (
@@ -546,11 +546,11 @@ export function Landing() {
               className="font-medium mb-3"
               style={{ fontSize: "26px", color: "var(--color-text-primary)" }}
             >
-              Learn how to build and tailor a better CV
+              CV Advice for Getting More Interviews
             </h2>
             <p style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}>
-              Practical guides for creating a readable CV, matching job descriptions, and
-              making every application more focused.
+              Practical guides for writing a clearer CV, matching job descriptions,
+              improving ATS readability, and building stronger NHS and medical applications.
             </p>
           </div>
           <Link
@@ -654,7 +654,7 @@ export function Landing() {
             className="mb-6"
             style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
           >
-            Create your first customized CV in minutes.
+            Create your first job-specific CV in minutes.
           </p>
           <Link
             to={createCvTarget}
@@ -666,7 +666,7 @@ export function Landing() {
               color: "var(--color-teal-50)",
             }}
           >
-            Create your CV — it's free
+            Tailor your CV — it's free
           </Link>
           <p
             className="mt-3"

@@ -54,6 +54,16 @@ function categoryForArticle(article) {
   return categories.find((category) => category.slug === article.categorySlug);
 }
 
+function latestCategoryUpdatedDate(category) {
+  const dates = articles
+    .filter((article) => article.categorySlug === category.slug)
+    .map((article) => article.updatedDate)
+    .filter(Boolean)
+    .sort();
+
+  return dates[dates.length - 1] || "2026-06-17";
+}
+
 function categoryRoute(category) {
   const path = categoryPath(category);
   return {
@@ -71,7 +81,7 @@ function categoryRoute(category) {
     twitterDescription: category.description,
     twitterImage: OG_IMAGE,
     twitterImageAlt: `${category.name} - jobspecificCV career advice`,
-    lastmod: "2026-05-26",
+    lastmod: latestCategoryUpdatedDate(category),
     includeInSitemap: true,
     jsonLd: [
       {
@@ -155,19 +165,19 @@ export const ROUTES = [
   {
     path: "/",
     snapshot: "landing",
-    title: "jobspecificCV | AI CV Builder for Job-Specific Resumes",
+    title: "Tailor Your CV to Any Job Description in Minutes | jobspecificCV",
     description:
-      "Create ATS-friendly CVs tailored to each job description. Upload your CV, match the role's keywords, and export a polished job-specific resume in minutes.",
+      "Upload your CV, paste a job description, and create a tailored, ATS-friendly CV for your next application in minutes.",
     canonical: absoluteUrl("/"),
     ogType: "website",
-    ogTitle: "jobspecificCV | AI CV Builder for Job-Specific Resumes",
+    ogTitle: "Tailor Your CV to Any Job Description in Minutes",
     ogDescription:
-      "Build one CV, customize it for every job, and export an ATS-friendly PDF tuned to the role.",
+      "Upload your CV, paste a job description, and export an ATS-friendly version tuned to the role.",
     ogImage: OG_IMAGE,
-    twitterTitle: "jobspecificCV | AI CV Builder for Job-Specific Resumes",
-    twitterDescription: "Create ATS-friendly CVs tailored to each job description in minutes.",
+    twitterTitle: "Tailor Your CV to Any Job Description in Minutes",
+    twitterDescription: "Create an ATS-friendly CV tailored to a specific job description in minutes.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-05-26",
+    lastmod: "2026-06-17",
     includeInSitemap: true,
     jsonLd: [
       faqPageJsonLd([
@@ -239,28 +249,28 @@ export const ROUTES = [
   {
     path: "/career-advice",
     snapshot: "career-advice",
-    title: "Career Advice for CVs and Job Applications | jobspecificCV",
+    title: "CV Advice for Getting More Interviews | jobspecificCV",
     description:
-      "Read practical guides on creating a clear CV, tailoring it to job descriptions, and improving every job application.",
+      "Read practical CV guides for tailoring your CV to job descriptions, improving ATS readability, and building stronger medical and NHS applications.",
     canonical: absoluteUrl("/career-advice"),
     ogType: "website",
-    ogTitle: "Career Advice for CVs and Job Applications",
+    ogTitle: "CV Advice for Getting More Interviews",
     ogDescription:
-      "Practical guides for building better CVs and tailoring them to specific jobs.",
+      "Practical CV guides for ATS, job descriptions, NHS applications, and stronger interview-focused resumes.",
     ogImage: OG_IMAGE,
-    twitterTitle: "Career Advice for CVs and Job Applications",
+    twitterTitle: "CV Advice for Getting More Interviews",
     twitterDescription:
-      "Practical guides for building better CVs and tailoring them to specific jobs.",
+      "Practical CV guides for ATS, job descriptions, NHS applications, and stronger interview-focused resumes.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-05-26",
+    lastmod: "2026-06-17",
     includeInSitemap: true,
     jsonLd: [
       {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
-        name: "Career Advice",
+        name: "CV Advice for Getting More Interviews",
         description:
-          "Guides for creating a clear CV, tailoring it to job descriptions, and improving job applications.",
+          "Guides for tailoring CVs to job descriptions, improving ATS readability, and building stronger medical and NHS applications.",
         url: absoluteUrl("/career-advice"),
       },
       breadcrumbJsonLd([
