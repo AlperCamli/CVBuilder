@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
@@ -6,6 +6,7 @@ import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
+import { trackJobDescriptionPasted } from "../integration/analytics";
 
 interface TailorCvLocationState {
   prefillJob?: {
@@ -41,6 +42,7 @@ export function TailorCV() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const jobDescriptionPasteTrackedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -168,6 +170,23 @@ export function TailorCV() {
     }
   };
 
+  const handleJobDescriptionPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (jobDescriptionPasteTrackedRef.current) {
+      return;
+    }
+
+    jobDescriptionPasteTrackedRef.current = true;
+    const pastedText = event.clipboardData.getData("text");
+    trackJobDescriptionPasted({
+      source: "tailor_cv_form",
+      pasted_character_count: pastedText.length,
+      has_role: Boolean(formData.role.trim()),
+      has_company: Boolean(formData.company.trim()),
+      has_job_posting_url: Boolean(formData.jobPostingUrl.trim()),
+      master_cv_loaded: Boolean(masterCvId)
+    });
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="max-w-5xl w-full">
@@ -288,6 +307,7 @@ export function TailorCV() {
                       background: "var(--color-background-primary)"
                     }}
                     value={formData.jobDescription}
+                    onPaste={handleJobDescriptionPaste}
                     onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
                   />
                 </div>

@@ -1,11 +1,19 @@
 import { Check, Loader2, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { BillingPlanResponseData, EntitlementSummary, UsageSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
 import { startStripeCheckout } from "../integration/checkout-redirect";
+import {
+  clearCheckoutAttribution,
+  hasTrackedPaymentCompleted,
+  markPaymentCompletedTracked,
+  paymentCompletedTrackingKey,
+  readCheckoutAttribution,
+  trackPaymentCompleted
+} from "../integration/analytics";
 import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 const formatTrialEnd = (iso: string | null): string | null => {
@@ -25,6 +33,7 @@ export function Pricing() {
   const [plan, setPlan] = useState<BillingPlanResponseData | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [entitlements, setEntitlements] = useState<EntitlementSummary | null>(null);
+  const paymentCompletedTrackedRef = useRef(false);
 
   useEffect(() => {
     setSidebarVisible(true);
@@ -72,7 +81,7 @@ export function Pricing() {
     setBusyTarget(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target, { withTrial });
+      await startStripeCheckout(api, target, { withTrial, source: "pricing_page" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open checkout.");
       setBusyTarget(null);
@@ -110,6 +119,34 @@ export function Pricing() {
   const trialEligible = plan?.trial_eligible ?? true;
   const trialEnd = useMemo(() => formatTrialEnd(plan?.current_period_end ?? null), [plan]);
   const checkoutState = new URLSearchParams(location.search).get("checkout");
+
+  useEffect(() => {
+    if (checkoutState !== "success" || paymentCompletedTrackedRef.current) {
+      return;
+    }
+
+    const attribution = readCheckoutAttribution();
+    const trackingKey = paymentCompletedTrackingKey(attribution);
+    paymentCompletedTrackedRef.current = true;
+
+    if (hasTrackedPaymentCompleted(trackingKey)) {
+      clearCheckoutAttribution();
+      return;
+    }
+
+    trackPaymentCompleted({
+      source: "stripe_success_return",
+      plan_code: attribution?.plan_code,
+      plan_name: attribution?.plan_name,
+      trial_applied: attribution?.trial_applied,
+      trial_period_days: attribution?.trial_period_days,
+      value: attribution?.value,
+      currency: attribution?.currency
+    });
+
+    markPaymentCompletedTracked(trackingKey);
+    clearCheckoutAttribution();
+  }, [checkoutState]);
 
   const resolveCta = (card: PlanCard): { label: string; disabled: boolean; onClick?: () => void } => {
     if (card.code === "free") {

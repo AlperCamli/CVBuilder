@@ -1,5 +1,6 @@
 import type { CheckoutTarget } from "../../content/pricing";
 import type { BackendApi } from "./backend-api";
+import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 
 // Creates a Stripe Checkout session for the given plan and sends the browser to
 // it. Shared by the in-app pricing page, the public pricing page, and the
@@ -8,7 +9,7 @@ import type { BackendApi } from "./backend-api";
 export async function startStripeCheckout(
   api: BackendApi,
   plan: CheckoutTarget,
-  options?: { withTrial?: boolean }
+  options?: { withTrial?: boolean; source?: string }
 ): Promise<void> {
   const base = window.location.origin;
   const response = await api.createBillingCheckout({
@@ -16,6 +17,30 @@ export async function startStripeCheckout(
     success_url: `${base}/app/pricing?checkout=success`,
     cancel_url: `${base}/app/pricing?checkout=cancel`,
     ...(plan === "pro" && options?.withTrial === false ? { with_trial: false } : {})
+  });
+
+  const value =
+    response.plan_code === "lifetime" ? 99 : response.plan_code === "pro" ? (response.trial_applied ? 0 : 10) : undefined;
+  const currency = value !== undefined ? "USD" : undefined;
+
+  rememberCheckoutAttribution({
+    checkout_session_id: response.checkout_session_id,
+    plan_code: response.plan_code,
+    plan_name: response.plan_name,
+    trial_applied: response.trial_applied,
+    trial_period_days: response.trial_period_days,
+    value,
+    currency
+  });
+
+  trackPaymentStarted({
+    source: options?.source ?? "stripe_checkout",
+    plan_code: response.plan_code,
+    plan_name: response.plan_name,
+    trial_applied: response.trial_applied,
+    trial_period_days: response.trial_period_days,
+    value,
+    currency
   });
 
   window.location.href = response.checkout_url;

@@ -34,7 +34,10 @@ export function CheckoutIntentResumer() {
 
     void (async () => {
       try {
-        await startStripeCheckout(api, intent.plan_code, { withTrial: intent.with_trial });
+        await startStripeCheckout(api, intent.plan_code, {
+          withTrial: intent.with_trial,
+          source: "post_signup_checkout_resume"
+        });
         // On success the browser is already navigating away to Stripe.
       } catch (err) {
         setError(

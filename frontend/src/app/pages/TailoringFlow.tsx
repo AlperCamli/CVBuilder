@@ -6,6 +6,7 @@ import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { FollowUpQuestion, JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
+import { trackTailoredCvGenerated } from "../integration/analytics";
 
 interface TailoringFlowState {
   masterCvId?: string;
@@ -151,6 +152,18 @@ export function TailoringFlow() {
         tailored_cv: { id: string };
         job: { job_title: string; company_name: string };
       };
+
+      trackTailoredCvGenerated({
+        source: "tailoring_flow",
+        selected_topic_count: selectedTopics.length,
+        selected_keyword_count: selectedKeywords.length,
+        answered_follow_up_count: answers.filter((answer) => "answer_text" in answer).length,
+        generated_question_count: followUpQuestions.length,
+        has_company: Boolean(jobData.company.trim()),
+        has_job_posting_url: Boolean(jobData.jobPostingUrl?.trim()),
+        has_location: Boolean(jobData.locationText?.trim()),
+        has_notes: Boolean(jobData.notes?.trim())
+      });
 
       navigate(`/app/cv/${draftPayload.tailored_cv.id}`, {
         state: {

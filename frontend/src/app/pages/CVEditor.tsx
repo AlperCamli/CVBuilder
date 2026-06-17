@@ -87,6 +87,7 @@ import {
 } from "../integration/cv-mappers";
 import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
 import { injectPreviewPlaceholders } from "../integration/preview-placeholders";
+import { trackCvExported } from "../integration/analytics";
 import {
   canUseAiForSectionBlock,
   matchesBlockReference,
@@ -1385,6 +1386,16 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         triggerDownload(fallback.download_url, filename);
       }
 
+      trackCvExported({
+        source: "new_export",
+        format,
+        cv_kind: cvKind,
+        export_status: detail.export.status,
+        download_available: detail.export.download_available,
+        has_template: Boolean(templateId),
+        page_count: pageCount
+      });
+
       const history =
         cvKind === "tailored"
           ? await api.listTailoredCvExports(cvId)
@@ -1424,6 +1435,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     try {
       const download = await api.getExportDownload(exportId);
       triggerDownload(download.download_url, buildExportFilename(title, format));
+      trackCvExported({
+        source: "history_download",
+        format,
+        cv_kind: cvKind,
+        has_template: Boolean(templateId),
+        page_count: pageCount
+      });
     } catch (err) {
       if (err instanceof Error) {
         setExportError(err.message);

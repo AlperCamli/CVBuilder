@@ -10,6 +10,7 @@ import {
   getCareerCategory,
   getCareerCategoryPath,
 } from "../../content/career-advice";
+import { trackBlogCtaClick } from "../integration/analytics";
 
 function renderLinkedText(text: string, links: ArticleTextLink[] = []): ReactNode {
   if (links.length === 0) {
@@ -195,6 +196,9 @@ export function CareerArticle() {
               }
 
               if (block.type === "cta") {
+                const ctaIndex =
+                  article.body.slice(0, index).filter((item) => item.type === "cta").length + 1;
+
                 return (
                   <div
                     key={`${block.type}-${index}`}
@@ -218,6 +222,15 @@ export function CareerArticle() {
                     </p>
                     <Link
                       to={block.href}
+                      onClick={() =>
+                        trackBlogCtaClick({
+                          article_slug: article.slug,
+                          category_slug: article.categorySlug,
+                          cta_index: ctaIndex,
+                          cta_text: block.buttonText,
+                          destination: block.href
+                        })
+                      }
                       className="inline-flex items-center gap-2 rounded-md px-4 py-2"
                       style={{
                         fontSize: "14px",

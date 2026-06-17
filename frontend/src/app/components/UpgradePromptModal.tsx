@@ -190,7 +190,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     setBusy(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target);
+      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open checkout.");
       setBusy(null);

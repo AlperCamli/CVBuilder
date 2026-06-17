@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { FileText, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import { supabase } from "../integration/supabase-client";
+import { fileAnalyticsParams, trackCvUploadCompleted } from "../integration/analytics";
 
 interface UploadStep {
   label: string;
@@ -86,6 +87,17 @@ export function UploadProcessing() {
         if (cancelled) {
           return;
         }
+
+        trackCvUploadCompleted({
+          source: "upload_processing",
+          module_type: importSession.import.module_type,
+          parse_status: parseResponse.parse_summary.status,
+          parser_name: parseResponse.parse_summary.parser_name,
+          section_count: parseResponse.parse_summary.section_count,
+          block_count: parseResponse.parse_summary.block_count,
+          parse_quality: parseResponse.parse_summary.diagnostics?.quality.confidence,
+          ...fileAnalyticsParams(file)
+        });
 
         setCurrentStep(3);
         setProgress(steps[3].progress);

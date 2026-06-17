@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
@@ -6,6 +6,7 @@ import { resolvePostAuthDestination } from "../integration/auth-route-guards";
 import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
+import { trackSignupPageView } from "../integration/analytics";
 
 export function SignUp() {
   const navigate = useNavigate();
@@ -22,6 +23,14 @@ export function SignUp() {
 
   // New signups land in the CV creation flow unless a deep link was preserved.
   const postSignupDestination = resolvePostAuthDestination(location.state, "/app/create");
+
+  useEffect(() => {
+    trackSignupPageView({
+      path: location.pathname,
+      post_auth_destination: postSignupDestination,
+      has_redirect_state: Boolean(location.state)
+    });
+  }, [location.pathname, location.state, postSignupDestination]);
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);

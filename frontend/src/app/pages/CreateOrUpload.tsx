@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router";
 import { FileText, Upload, CheckCircle } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useEffect, useRef } from "react";
+import { fileAnalyticsParams, trackCvUploadStarted } from "../integration/analytics";
 
 export function CreateOrUpload() {
   const navigate = useNavigate();
@@ -25,6 +26,10 @@ export function CreateOrUpload() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      trackCvUploadStarted({
+        source: "create_or_upload",
+        ...fileAnalyticsParams(file)
+      });
       // Navigate to upload processing page with file
       navigate("/app/upload-processing", { state: { file } });
     }
