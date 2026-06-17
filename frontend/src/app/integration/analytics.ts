@@ -53,7 +53,11 @@ export function initializeAnalytics(): void {
   if (!hasWindow() || !GA_MEASUREMENT_ID) return;
 
   window.dataLayer = window.dataLayer ?? [];
-  window.gtag = window.gtag ?? ((...args: GtagCommand) => window.dataLayer?.push(args));
+  window.gtag =
+    window.gtag ??
+    function gtag(..._args: GtagCommand): void {
+      window.dataLayer?.push(arguments);
+    };
 
   if (!document.getElementById(GA_SCRIPT_ID)) {
     const script = document.createElement("script");
