@@ -174,10 +174,10 @@ const STATS: { icon: LucideIcon; value: string; label: string }[] = [
 ];
 
 const WHY_BENEFITS = [
-  "Mirror the exact job-description keywords ATS systems scan for",
+  "Use the job description's language without keyword stuffing",
   "Lead with the experience this role actually needs",
-  "Cut filler that buries your strongest work",
-  "Ship a fresh version for every application in minutes",
+  "Remove details that distract from the match",
+  "Keep a clear version for each application",
 ];
 
 // An answer is a sequence of blocks: a plain paragraph (string) or a bullet
@@ -375,8 +375,8 @@ export function Landing() {
             className="mb-8"
             style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}
           >
-            Upload your CV, paste a job description, and get a polished,
-            ATS-friendly version tuned to that exact role in minutes.
+            Upload your CV, paste a job description, and get a cleaner,
+            ATS-friendly version focused on the role in front of you.
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
@@ -512,8 +512,8 @@ export function Landing() {
               style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-teal-800)" }}
             >
               Recruiters and ATS systems compare your CV against a specific job
-              description, not your whole career. A tailored CV speaks their
-              language and proves you are the right fit before anyone reads every line.
+              description, not your whole career. A tailored CV uses the employer's
+              language, keeps the facts honest, and brings the most relevant proof forward.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left max-w-2xl mx-auto">
               {WHY_BENEFITS.map((benefit, index) => (

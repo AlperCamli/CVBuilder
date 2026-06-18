@@ -167,17 +167,17 @@ export const ROUTES = [
     snapshot: "landing",
     title: "Tailor Your CV to Any Job Description in Minutes | jobspecificCV",
     description:
-      "Upload your CV, paste a job description, and create a tailored, ATS-friendly CV for your next application in minutes.",
+      "Upload your CV, paste a job description, and create a cleaner, ATS-friendly CV focused on the role in front of you.",
     canonical: absoluteUrl("/"),
     ogType: "website",
     ogTitle: "Tailor Your CV to Any Job Description in Minutes",
     ogDescription:
-      "Upload your CV, paste a job description, and export an ATS-friendly version tuned to the role.",
+      "Upload your CV, paste a job description, and export an ATS-friendly version focused on the role.",
     ogImage: OG_IMAGE,
     twitterTitle: "Tailor Your CV to Any Job Description in Minutes",
-    twitterDescription: "Create an ATS-friendly CV tailored to a specific job description in minutes.",
+    twitterDescription: "Create an ATS-friendly CV tailored to a specific job description.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-06-17",
+    lastmod: "2026-06-18",
     includeInSitemap: true,
     jsonLd: [
       faqPageJsonLd([
@@ -262,7 +262,7 @@ export const ROUTES = [
     twitterDescription:
       "Practical CV guides for ATS, job descriptions, NHS applications, and stronger interview-focused resumes.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-06-17",
+    lastmod: "2026-06-18",
     includeInSitemap: true,
     jsonLd: [
       {
