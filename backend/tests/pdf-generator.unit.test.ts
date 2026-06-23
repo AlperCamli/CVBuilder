@@ -99,7 +99,7 @@ describe("pdf generator", () => {
     expect(squareBytes.byteLength).toBeGreaterThan(1000);
   });
 
-  it("generates a PDF with the Noto Serif font asset for LaTeX-inspired templates", async () => {
+  it("generates a PDF with the selected catalog font asset for LaTeX-inspired templates", async () => {
     const widePngDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";
     const model: ExportDocumentModel = {
@@ -114,7 +114,7 @@ describe("pdf generator", () => {
       theme: {
         layout: "academic-classic",
         mode: "classic-single-column",
-        font_asset_key: "noto-serif",
+        font_asset_key: "latin-modern-roman",
         header_alignment: "center",
         header_photo_size: 76,
         section_heading_style: "ruled",
@@ -126,7 +126,7 @@ describe("pdf generator", () => {
         body_text_size: 11,
         section_spacing: 12,
         block_spacing: 8,
-        font_family: '"Noto Serif", "Times New Roman", Georgia, serif'
+        font_family: '"Latin Modern Roman", serif'
       },
       sections: [
         {

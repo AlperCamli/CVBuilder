@@ -269,6 +269,9 @@ describe("rendering presentation mapper", () => {
         name: "Academic Serif",
         layout: "academic-classic",
         mode: "classic-single-column",
+        fontKey: "latin-modern-roman",
+        fontFamily: "Latin Modern Roman",
+        photoSize: 76,
         headerAlignment: "center",
         bodyTextSize: 11
       },
@@ -277,6 +280,9 @@ describe("rendering presentation mapper", () => {
         name: "Research CV",
         layout: "academic-classic",
         mode: "classic-single-column",
+        fontKey: "new-computer-modern",
+        fontFamily: "New Computer Modern",
+        photoSize: 76,
         headerAlignment: "center",
         bodyTextSize: 10.8
       },
@@ -285,6 +291,9 @@ describe("rendering presentation mapper", () => {
         name: "LaTeX Scholar",
         layout: "academic-classic",
         mode: "classic-single-column",
+        fontKey: "latin-modern-roman",
+        fontFamily: "Latin Modern Roman",
+        photoSize: 76,
         headerAlignment: "center",
         bodyTextSize: 10.8
       },
@@ -293,8 +302,78 @@ describe("rendering presentation mapper", () => {
         name: "LaTeX Two Column",
         layout: "two-column-modern",
         mode: "portfolio-two-column",
+        fontKey: "libertinus-serif",
+        fontFamily: "Libertinus Serif",
+        photoSize: 76,
         headerAlignment: undefined,
         bodyTextSize: 10.8
+      },
+      {
+        slug: "latex-modern-brief",
+        name: "LaTeX Modern Brief",
+        layout: "minimal-professional",
+        mode: "compact-single-column",
+        fontKey: "latin-modern-roman",
+        fontFamily: "Latin Modern Roman",
+        photoSize: 76,
+        headerAlignment: undefined,
+        bodyTextSize: 10.6
+      },
+      {
+        slug: "latex-editorial-sidebar",
+        name: "LaTeX Editorial Sidebar",
+        layout: "creative-portfolio",
+        mode: "portfolio-two-column",
+        fontKey: "libertinus-serif",
+        fontFamily: "Libertinus Serif",
+        photoSize: 84,
+        headerAlignment: undefined,
+        bodyTextSize: 10.9
+      },
+      {
+        slug: "latex-photo-statement",
+        name: "LaTeX Photo Statement",
+        layout: "creative-portfolio",
+        mode: "portfolio-two-column",
+        fontKey: "new-computer-modern",
+        fontFamily: "New Computer Modern",
+        photoSize: 108,
+        headerAlignment: "center",
+        templatePhotoPosition: "center",
+        bodyTextSize: 11
+      },
+      {
+        slug: "latex-grant-timeline",
+        name: "LaTeX Grant Timeline",
+        layout: "executive-timeline",
+        mode: "timeline-split",
+        fontKey: "source-serif-4",
+        fontFamily: "Source Serif 4",
+        photoSize: 76,
+        headerAlignment: undefined,
+        bodyTextSize: 10.8
+      },
+      {
+        slug: "latex-technical-grid",
+        name: "LaTeX Technical Grid",
+        layout: "two-column-modern",
+        mode: "portfolio-two-column",
+        fontKey: "ibm-plex-sans",
+        fontFamily: "IBM Plex Sans",
+        photoSize: 80,
+        headerAlignment: undefined,
+        bodyTextSize: 10.6
+      },
+      {
+        slug: "latex-two-tone-creative",
+        name: "LaTeX Two Tone Creative",
+        layout: "creative-portfolio",
+        mode: "portfolio-two-column",
+        fontKey: "source-sans-3",
+        fontFamily: "Source Sans 3",
+        photoSize: 92,
+        headerAlignment: undefined,
+        bodyTextSize: 10.9
       }
     ];
 
@@ -317,12 +396,13 @@ describe("rendering presentation mapper", () => {
       expect(presentation.theme.template_slug).toBe(profile.slug);
       expect(presentation.theme.layout).toBe(profile.layout);
       expect(presentation.theme.mode).toBe(profile.mode);
-      expect(presentation.theme.tokens.font_asset_key).toBe("noto-serif");
+      expect(presentation.theme.tokens.font_asset_key).toBe(profile.fontKey);
       expect(presentation.theme.tokens.header_alignment).toBe(profile.headerAlignment);
-      expect(presentation.theme.tokens.header_photo_size).toBe(76);
+      expect(presentation.theme.tokens.header_photo_size).toBe(profile.photoSize);
+      expect(presentation.theme.tokens.header_photo_position).toBe(profile.templatePhotoPosition);
       expect(presentation.theme.tokens.section_heading_style).toBe("ruled");
       expect(presentation.theme.tokens.body_text_size).toBe(profile.bodyTextSize);
-      expect(presentation.theme.tokens.font_family).toContain("Noto Serif");
+      expect(presentation.theme.tokens.font_family).toContain(profile.fontFamily);
     }
   });
 
@@ -333,6 +413,8 @@ describe("rendering presentation mapper", () => {
         name: "Academic Serif Color",
         layout: "academic-classic",
         mode: "classic-single-column",
+        fontKey: "source-serif-4",
+        fontFamily: "Source Serif 4",
         photoSize: 72,
         accent: "#1d4ed8"
       },
@@ -341,6 +423,8 @@ describe("rendering presentation mapper", () => {
         name: "Academic Timeline",
         layout: "executive-timeline",
         mode: "timeline-split",
+        fontKey: "new-computer-modern",
+        fontFamily: "New Computer Modern",
         photoSize: 72,
         accent: "#2563eb"
       },
@@ -349,6 +433,8 @@ describe("rendering presentation mapper", () => {
         name: "Creative Color Block",
         layout: "creative-portfolio",
         mode: "portfolio-two-column",
+        fontKey: "ibm-plex-sans",
+        fontFamily: "IBM Plex Sans",
         photoSize: 80,
         accent: "#0f766e"
       },
@@ -357,6 +443,8 @@ describe("rendering presentation mapper", () => {
         name: "Creative Photo Hero",
         layout: "creative-portfolio",
         mode: "portfolio-two-column",
+        fontKey: "source-sans-3",
+        fontFamily: "Source Sans 3",
         photoSize: 104,
         accent: "#be123c"
       },
@@ -365,6 +453,8 @@ describe("rendering presentation mapper", () => {
         name: "Portfolio Modern",
         layout: "two-column-modern",
         mode: "portfolio-two-column",
+        fontKey: "ibm-plex-sans",
+        fontFamily: "IBM Plex Sans",
         photoSize: 80,
         accent: "#4f46e5"
       },
@@ -373,6 +463,8 @@ describe("rendering presentation mapper", () => {
         name: "Classic Monochrome",
         layout: "minimal-professional",
         mode: "compact-single-column",
+        fontKey: "latin-modern-roman",
+        fontFamily: "Latin Modern Roman",
         photoSize: 72,
         accent: "#3f3f46"
       }
@@ -397,9 +489,61 @@ describe("rendering presentation mapper", () => {
       expect(presentation.theme.template_slug).toBe(profile.slug);
       expect(presentation.theme.layout).toBe(profile.layout);
       expect(presentation.theme.mode).toBe(profile.mode);
+      expect(presentation.theme.tokens.font_asset_key).toBe(profile.fontKey);
+      expect(presentation.theme.tokens.font_family).toContain(profile.fontFamily);
       expect(presentation.theme.tokens.header_photo_size).toBe(profile.photoSize);
       expect(presentation.theme.tokens.accent_color_hex).toBe(profile.accent);
       expect(presentation.theme.tokens.compact_density).toBe(true);
+    }
+  });
+
+  it("resolves the approved font asset for every template profile", () => {
+    const expectedFontMap = [
+      ["latex-academic-serif", "latin-modern-roman", "Latin Modern Roman"],
+      ["latex-research-cv", "new-computer-modern", "New Computer Modern"],
+      ["latex-scholar", "latin-modern-roman", "Latin Modern Roman"],
+      ["latex-two-column", "libertinus-serif", "Libertinus Serif"],
+      ["academic-classic", "libertinus-serif", "Libertinus Serif"],
+      ["academic-serif-color", "source-serif-4", "Source Serif 4"],
+      ["academic-timeline", "new-computer-modern", "New Computer Modern"],
+      ["modern-clean", "source-serif-4", "Source Serif 4"],
+      ["executive-timeline", "new-computer-modern", "New Computer Modern"],
+      ["minimal-professional", "noto-sans", "Noto Sans"],
+      ["classic-monochrome", "latin-modern-roman", "Latin Modern Roman"],
+      ["creative-portfolio", "ibm-plex-sans", "IBM Plex Sans"],
+      ["creative-color-block", "ibm-plex-sans", "IBM Plex Sans"],
+      ["creative-photo-hero", "source-sans-3", "Source Sans 3"],
+      ["portfolio-modern", "ibm-plex-sans", "IBM Plex Sans"],
+      ["tech-compact", "source-sans-3", "Source Sans 3"],
+      ["two-column-modern", "noto-sans", "Noto Sans"],
+      ["medical-classic", "libertinus-serif", "Libertinus Serif"],
+      ["medical-professional", "noto-sans", "Noto Sans"],
+      ["latex-modern-brief", "latin-modern-roman", "Latin Modern Roman"],
+      ["latex-editorial-sidebar", "libertinus-serif", "Libertinus Serif"],
+      ["latex-photo-statement", "new-computer-modern", "New Computer Modern"],
+      ["latex-grant-timeline", "source-serif-4", "Source Serif 4"],
+      ["latex-technical-grid", "ibm-plex-sans", "IBM Plex Sans"],
+      ["latex-two-tone-creative", "source-sans-3", "Source Sans 3"]
+    ] as const;
+
+    for (const [slug, fontKey, fontFamily] of expectedFontMap) {
+      const payload = renderingPayload();
+      payload.template.template = {
+        id: `template-${slug}`,
+        name: slug,
+        slug,
+        status: "active",
+        module_type: slug.startsWith("medical-") ? "medical_uk" : "standard",
+        preview_config: null,
+        export_config: { pdf: { enabled: true }, docx: { enabled: true } },
+        created_at: "2026-06-23T00:00:00.000Z",
+        updated_at: "2026-06-23T00:00:00.000Z"
+      };
+
+      const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+
+      expect(presentation.theme.tokens.font_asset_key, slug).toBe(fontKey);
+      expect(presentation.theme.tokens.font_family, slug).toContain(fontFamily);
     }
   });
 

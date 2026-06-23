@@ -16,6 +16,7 @@ import {
   type PDFPage
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import { resolveCvFontDefinition } from "../../../shared/cv-fonts/cv-font-catalog";
 import type {
   ExportDocumentBlock,
   ExportDocumentModel,
@@ -1072,16 +1073,13 @@ export const generatePdfDocument = async (
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const fontAssets =
-    documentModel.theme.font_asset_key === "noto-serif"
-      ? { regular: "NotoSerif-Regular.ttf", bold: "NotoSerif-Bold.ttf" }
-      : { regular: "NotoSans-Regular.ttf", bold: "NotoSans-Bold.ttf" };
-  const regularFontBytes = tryReadFontBytes(fontAssets.regular);
-  const boldFontBytes = tryReadFontBytes(fontAssets.bold);
+  const theme = documentModel.theme;
+  const fontAsset = resolveCvFontDefinition(theme.font_asset_key);
+  const regularFontBytes = tryReadFontBytes(fontAsset.regularFile);
+  const boldFontBytes = tryReadFontBytes(fontAsset.boldFile);
   const regular = await pdf.embedFont(regularFontBytes, { subset: false });
   const bold = await pdf.embedFont(boldFontBytes, { subset: false });
 
-  const theme = documentModel.theme;
   const palette: PdfPalette = {
     heading: hexToRgb(theme.heading_color_hex),
     accent: hexToRgb(theme.accent_color_hex),

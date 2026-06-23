@@ -4,6 +4,7 @@ import type {
   RenderingPresentation,
   PresentationSocialLink
 } from "../../rendering/rendering-presentation";
+import type { CvFontAssetKey } from "../../../shared/cv-fonts/cv-font-catalog";
 
 export interface ExportDocumentTheme {
   layout:
@@ -15,7 +16,7 @@ export interface ExportDocumentTheme {
     | "tech-compact"
     | "two-column-modern";
   mode: "classic-single-column" | "compact-single-column" | "timeline-split" | "portfolio-two-column";
-  font_asset_key?: "noto-sans" | "noto-serif";
+  font_asset_key?: CvFontAssetKey;
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;

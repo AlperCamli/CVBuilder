@@ -333,7 +333,15 @@ export type PresentationLayoutMode =
 
 export interface PresentationStyleTokens {
   font_family: string;
-  font_asset_key?: "noto-sans" | "noto-serif";
+  font_asset_key?:
+    | "noto-sans"
+    | "noto-serif"
+    | "latin-modern-roman"
+    | "new-computer-modern"
+    | "libertinus-serif"
+    | "source-serif-4"
+    | "source-sans-3"
+    | "ibm-plex-sans";
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: "left" | "center" | "right";

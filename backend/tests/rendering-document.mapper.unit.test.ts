@@ -85,8 +85,8 @@ describe("presentation to export document mapper", () => {
     const presentation = basePresentation();
     presentation.theme.tokens = {
       ...presentation.theme.tokens,
-      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-      font_asset_key: "noto-serif",
+      font_family: '"Latin Modern Roman", serif',
+      font_asset_key: "latin-modern-roman",
       header_alignment: "center",
       header_photo_size: 76,
       header_photo_position: "right",
@@ -95,12 +95,12 @@ describe("presentation to export document mapper", () => {
 
     const mapped = mapPresentationToExportDocument(presentation);
 
-    expect(mapped.theme.font_asset_key).toBe("noto-serif");
+    expect(mapped.theme.font_asset_key).toBe("latin-modern-roman");
     expect(mapped.theme.header_alignment).toBe("center");
     expect(mapped.theme.header_photo_size).toBe(76);
     expect(mapped.theme.header_photo_position).toBe("right");
     expect(mapped.theme.section_heading_style).toBe("ruled");
-    expect(mapped.theme.font_family).toContain("Noto Serif");
+    expect(mapped.theme.font_family).toContain("Latin Modern Roman");
   });
 
   it("keeps inline sections without inventing blocks", () => {

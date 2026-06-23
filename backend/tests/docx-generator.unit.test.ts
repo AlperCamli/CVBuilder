@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import { generateDocxDocument } from "../src/modules/exports/generators/docx-generator";
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
 
 describe("docx generator", () => {
-  it("generates a DOCX with LaTeX-inspired serif style tokens", async () => {
+  it("generates a DOCX with embedded LaTeX-inspired catalog fonts", async () => {
     const widePngDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";
     const model: ExportDocumentModel = {
@@ -18,7 +19,7 @@ describe("docx generator", () => {
       theme: {
         layout: "academic-classic",
         mode: "classic-single-column",
-        font_asset_key: "noto-serif",
+        font_asset_key: "latin-modern-roman",
         header_alignment: "center",
         header_photo_size: 76,
         section_heading_style: "ruled",
@@ -30,7 +31,7 @@ describe("docx generator", () => {
         body_text_size: 11,
         section_spacing: 12,
         block_spacing: 8,
-        font_family: '"Noto Serif", "Times New Roman", Georgia, serif'
+        font_family: '"Latin Modern Roman", serif'
       },
       sections: [
         {
@@ -51,7 +52,15 @@ describe("docx generator", () => {
     };
 
     const bytes = await generateDocxDocument(model);
+    const zip = await JSZip.loadAsync(bytes);
+    const fontTable = await zip.file("word/fontTable.xml")?.async("string");
+    const embeddedFonts = Object.keys(zip.files).filter(
+      (fileName) => fileName.startsWith("word/fonts/") && fileName.endsWith(".odttf")
+    );
 
     expect(bytes.byteLength).toBeGreaterThan(1000);
+    expect(fontTable).toContain("Latin Modern Roman");
+    expect(fontTable).toContain("Latin Modern Roman Bold");
+    expect(embeddedFonts).toHaveLength(2);
   });
 });

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   AlignmentType,
   BorderStyle,
@@ -16,6 +18,7 @@ import {
   WidthType,
   type IParagraphOptions
 } from "docx";
+import { resolveCvFontDefinition } from "../../../shared/cv-fonts/cv-font-catalog";
 import type { ExportDocumentModel } from "./rendering-document.mapper";
 
 const rgbToHex = (value: string): string => value.replace(/^#/, "").toUpperCase();
@@ -123,6 +126,26 @@ const noTableBorder = {
   color: "FFFFFF"
 } as const;
 
+const readFontBytes = (fileName: string): Buffer => {
+  const candidates = [
+    resolve(process.cwd(), "assets", "fonts", fileName),
+    resolve(process.cwd(), "backend", "assets", "fonts", fileName)
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return readFileSync(candidate);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`Font file not found: ${fileName}`);
+};
+
 export const generateDocxDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
   const headingColor = rgbToHex(documentModel.theme.heading_color_hex);
   const accentColor = rgbToHex(documentModel.theme.accent_color_hex);
@@ -138,12 +161,11 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
   const textHeaderAlignment = documentModel.photo_position === "center" ? AlignmentType.CENTER : headerAlignment;
   const isRuledHeading = documentModel.theme.section_heading_style === "ruled";
   const photoSize = documentModel.theme.header_photo_size ?? 72;
-  const documentFont =
-    documentModel.theme.font_asset_key === "noto-serif"
-      ? "Cambria"
-      : documentModel.theme.layout === "minimal-professional"
-        ? "Calibri"
-        : "Cambria";
+  const fontAsset = resolveCvFontDefinition(documentModel.theme.font_asset_key);
+  const documentFont = fontAsset.family;
+  const boldDocumentFont = `${fontAsset.family} Bold`;
+  const regularFontBytes = readFontBytes(fontAsset.regularFile);
+  const boldFontBytes = readFontBytes(fontAsset.boldFile);
 
   const body: FileChild[] = [];
   const parsedPhoto = documentModel.photo_data_uri
@@ -184,6 +206,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           new TextRun({
             text: documentModel.title,
             color: headingColor,
+            font: boldDocumentFont,
             bold: true,
             size: bodySize + 16
           })
@@ -344,6 +367,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           new TextRun({
             text: isRuledHeading ? section.title.toUpperCase() : section.title,
             color: headingColor,
+            font: boldDocumentFont,
             bold: true,
             size: bodySize + 4
           })
@@ -400,6 +424,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             children: [
               new TextRun({
                 text: block.headline,
+                font: boldDocumentFont,
                 bold: true,
                 size: bodySize + 1
               })
@@ -482,6 +507,16 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
   }
 
   const doc = new Document({
+    fonts: [
+      {
+        name: documentFont,
+        data: regularFontBytes
+      },
+      {
+        name: boldDocumentFont,
+        data: boldFontBytes
+      }
+    ],
     sections: [
       {
         properties: {},

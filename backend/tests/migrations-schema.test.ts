@@ -231,4 +231,25 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
     expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker|\.tex/i);
   });
+
+  it("contains font-matched LaTeX template registrations with export support", () => {
+    const migration = readMigration("20260623210000_latex_font_matching_templates.sql");
+
+    for (const slug of [
+      "latex-modern-brief",
+      "latex-editorial-sidebar",
+      "latex-photo-statement",
+      "latex-grant-timeline",
+      "latex-technical-grid",
+      "latex-two-tone-creative"
+    ]) {
+      expect(migration).toMatch(new RegExp(slug, "i"));
+    }
+
+    expect(migration).toMatch(/'standard'/i);
+    expect(migration).toMatch(/"badges":\["LaTeX"\]/i);
+    expect(migration).toMatch(/"pdf":\{"enabled":true\}/i);
+    expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
+    expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker|\.tex/i);
+  });
 });

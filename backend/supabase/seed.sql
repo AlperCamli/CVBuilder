@@ -64,6 +64,48 @@ values
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
   ),
   (
+    'LaTeX Modern Brief',
+    'latex-modern-brief',
+    'active',
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Editorial Sidebar',
+    'latex-editorial-sidebar',
+    'active',
+    '{"preview": "v2", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Photo Statement',
+    'latex-photo-statement',
+    'active',
+    '{"preview": "v2", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Grant Timeline',
+    'latex-grant-timeline',
+    'active',
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Technical Grid',
+    'latex-technical-grid',
+    'active',
+    '{"preview": "v2", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Two Tone Creative',
+    'latex-two-tone-creative',
+    'active',
+    '{"preview": "v2", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
     'Academic Serif Color',
     'academic-serif-color',
     'active',

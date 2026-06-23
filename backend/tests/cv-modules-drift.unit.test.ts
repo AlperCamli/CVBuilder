@@ -86,4 +86,12 @@ describe("cv module registry drift guard", () => {
       sectionTypes(backendStandard.sectionCatalog)
     );
   });
+
+  it("keeps standard template slugs and default template in sync", () => {
+    expect(frontendStandard.id).toBe(backendStandard.id);
+    expect([...frontendStandard.templateSlugs].sort()).toEqual(
+      [...backendStandard.templateSlugs].sort()
+    );
+    expect(frontendStandard.defaultTemplateSlug).toBe(backendStandard.defaultTemplateSlug);
+  });
 });

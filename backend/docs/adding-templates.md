@@ -82,8 +82,8 @@ Common style tokens:
 
 ```ts
 {
-  font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-  font_asset_key: "noto-serif",
+  font_family: buildCvFontFamily("latin-modern-roman"),
+  font_asset_key: "latin-modern-roman",
   header_alignment: "center",
   header_photo_size: 76,
   section_heading_style: "ruled",
@@ -100,6 +100,51 @@ Common style tokens:
 ```
 
 `header_photo_position` can be used as a template fallback, but user metadata `photo_position` wins.
+
+## Font Matching
+
+Preview, PDF, and DOCX must use the same CV font catalog. Do not depend on browser-local fonts or Word defaults for CV templates.
+
+The backend catalog lives in:
+
+```text
+backend/src/shared/cv-fonts/cv-font-catalog.ts
+```
+
+The preview loads matching self-hosted files through:
+
+```text
+frontend/src/styles/fonts.css
+frontend/public/fonts/cv/
+```
+
+The exporters read the same font files from:
+
+```text
+backend/assets/fonts/
+```
+
+Current font asset keys:
+
+- `latin-modern-roman`
+- `new-computer-modern`
+- `libertinus-serif`
+- `source-serif-4`
+- `noto-serif`
+- `noto-sans`
+- `source-sans-3`
+- `ibm-plex-sans`
+
+When adding a font:
+
+- add regular and bold files to both frontend and backend font directories
+- add the key and file names to `CV_FONT_DEFINITIONS`
+- add matching `@font-face` rules in `frontend/src/styles/fonts.css`
+- use `buildCvFontFamily(fontKey)` in the template profile
+- update `frontend/src/app/integration/api-types.ts` with the new `font_asset_key`
+- document the source and license in `backend/assets/fonts/README.md`
+
+PDF embeds the selected catalog font in `pdf-generator.ts`. DOCX embeds the selected regular and bold font files through the `docx` package `fonts` option in `docx-generator.ts`.
 
 ## LaTeX Templates
 
@@ -120,6 +165,12 @@ Current LaTeX standard templates:
 - `latex-research-cv` / `Research CV`
 - `latex-scholar` / `LaTeX Scholar`
 - `latex-two-column` / `LaTeX Two Column`
+- `latex-modern-brief` / `LaTeX Modern Brief`
+- `latex-editorial-sidebar` / `LaTeX Editorial Sidebar`
+- `latex-photo-statement` / `LaTeX Photo Statement`
+- `latex-grant-timeline` / `LaTeX Grant Timeline`
+- `latex-technical-grid` / `LaTeX Technical Grid`
+- `latex-two-tone-creative` / `LaTeX Two Tone Creative`
 
 LaTeX profiles should usually use:
 
@@ -128,16 +179,19 @@ LaTeX profiles should usually use:
 - restrained colors
 - ruled section headings
 - academic header hierarchy
-- `font_asset_key: "noto-serif"` when Noto Serif should be embedded in PDF output
 
-Noto Serif font assets live in:
+Current LaTeX font assignments:
 
-```text
-backend/assets/fonts/NotoSerif-Regular.ttf
-backend/assets/fonts/NotoSerif-Bold.ttf
-```
-
-PDF font selection is handled in `backend/src/modules/exports/generators/pdf-generator.ts`. DOCX uses a serif document font when `font_asset_key` is `noto-serif`.
+- `latex-academic-serif`: `latin-modern-roman`
+- `latex-research-cv`: `new-computer-modern`
+- `latex-scholar`: `latin-modern-roman`
+- `latex-two-column`: `libertinus-serif`
+- `latex-modern-brief`: `latin-modern-roman`
+- `latex-editorial-sidebar`: `libertinus-serif`
+- `latex-photo-statement`: `new-computer-modern`
+- `latex-grant-timeline`: `source-serif-4`
+- `latex-technical-grid`: `ibm-plex-sans`
+- `latex-two-tone-creative`: `source-sans-3`
 
 ## Photo Behavior
 

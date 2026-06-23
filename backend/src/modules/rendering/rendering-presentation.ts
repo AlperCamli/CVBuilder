@@ -1,5 +1,6 @@
 import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
+import { buildCvFontFamily, type CvFontAssetKey } from "../../shared/cv-fonts/cv-font-catalog";
 import type { TemplateSummary } from "../templates/templates.types";
 import type { RenderingBlock, RenderingPayload, RenderingSection } from "./rendering.types";
 
@@ -20,7 +21,7 @@ export type PresentationLayoutMode =
 
 export interface PresentationStyleTokens {
   font_family: string;
-  font_asset_key?: "noto-sans" | "noto-serif";
+  font_asset_key?: CvFontAssetKey;
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
@@ -109,7 +110,8 @@ const DEFAULT_PROFILE: TemplateProfile = {
   layout: "modern-clean",
   mode: "classic-single-column",
   tokens: {
-    font_family: "Georgia, serif",
+    font_family: buildCvFontFamily("source-serif-4"),
+    font_asset_key: "source-serif-4",
     heading_color_hex: "#111827",
     accent_color_hex: "#0f5ea6",
     body_color_hex: "#1f2937",
@@ -128,7 +130,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     layout: "minimal-professional",
     mode: "compact-single-column",
     tokens: {
-      font_family: "Helvetica, Arial, sans-serif",
+      font_family: buildCvFontFamily("noto-sans"),
+      font_asset_key: "noto-sans",
       heading_color_hex: "#121212",
       accent_color_hex: "#4b5563",
       body_color_hex: "#1f1f1f",
@@ -145,7 +148,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "timeline-split",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Cambria, Georgia, serif",
+      font_family: buildCvFontFamily("new-computer-modern"),
+      font_asset_key: "new-computer-modern",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#1d4ed8",
       body_color_hex: "#1f2937",
@@ -161,7 +165,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     layout: "creative-portfolio",
     mode: "portfolio-two-column",
     tokens: {
-      font_family: "Trebuchet MS, Verdana, sans-serif",
+      font_family: buildCvFontFamily("ibm-plex-sans"),
+      font_asset_key: "ibm-plex-sans",
       heading_color_hex: "#111827",
       accent_color_hex: "#0f766e",
       body_color_hex: "#1f2937",
@@ -178,7 +183,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Times New Roman, Georgia, serif",
+      font_family: buildCvFontFamily("libertinus-serif"),
+      font_asset_key: "libertinus-serif",
       heading_color_hex: "#111827",
       accent_color_hex: "#334155",
       body_color_hex: "#1f2937",
@@ -194,8 +200,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     layout: "academic-classic",
     mode: "classic-single-column",
     tokens: {
-      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-      font_asset_key: "noto-serif",
+      font_family: buildCvFontFamily("latin-modern-roman"),
+      font_asset_key: "latin-modern-roman",
       header_alignment: "center",
       header_photo_size: 76,
       section_heading_style: "ruled",
@@ -215,8 +221,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-      font_asset_key: "noto-serif",
+      font_family: buildCvFontFamily("new-computer-modern"),
+      font_asset_key: "new-computer-modern",
       header_alignment: "center",
       header_photo_size: 76,
       section_heading_style: "ruled",
@@ -236,8 +242,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-      font_asset_key: "noto-serif",
+      font_family: buildCvFontFamily("latin-modern-roman"),
+      font_asset_key: "latin-modern-roman",
       header_alignment: "center",
       header_photo_size: 76,
       section_heading_style: "ruled",
@@ -257,8 +263,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "portfolio-two-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
-      font_asset_key: "noto-serif",
+      font_family: buildCvFontFamily("libertinus-serif"),
+      font_asset_key: "libertinus-serif",
       header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
@@ -272,12 +278,135 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       compact_density: true
     }
   },
+  "latex-modern-brief": {
+    layout: "minimal-professional",
+    mode: "compact-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("latin-modern-roman"),
+      font_asset_key: "latin-modern-roman",
+      header_photo_size: 76,
+      section_heading_style: "ruled",
+      heading_color_hex: "#111111",
+      accent_color_hex: "#334155",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 10,
+      block_spacing: 7,
+      body_text_size: 10.6,
+      compact_density: true
+    }
+  },
+  "latex-editorial-sidebar": {
+    layout: "creative-portfolio",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("libertinus-serif"),
+      font_asset_key: "libertinus-serif",
+      header_photo_size: 84,
+      section_heading_style: "ruled",
+      heading_color_hex: "#1c1917",
+      accent_color_hex: "#7c2d12",
+      body_color_hex: "#292524",
+      muted_color_hex: "#57534e",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 10.9,
+      compact_density: true
+    }
+  },
+  "latex-photo-statement": {
+    layout: "creative-portfolio",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("new-computer-modern"),
+      font_asset_key: "new-computer-modern",
+      header_alignment: "center",
+      header_photo_size: 108,
+      header_photo_position: "center",
+      section_heading_style: "ruled",
+      heading_color_hex: "#111827",
+      accent_color_hex: "#4338ca",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 14,
+      block_spacing: 10,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "latex-grant-timeline": {
+    layout: "executive-timeline",
+    mode: "timeline-split",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("source-serif-4"),
+      font_asset_key: "source-serif-4",
+      header_photo_size: 76,
+      section_heading_style: "ruled",
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#0e7490",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 10.8,
+      compact_density: true
+    }
+  },
+  "latex-technical-grid": {
+    layout: "two-column-modern",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("ibm-plex-sans"),
+      font_asset_key: "ibm-plex-sans",
+      header_photo_size: 80,
+      section_heading_style: "ruled",
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#2563eb",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 12,
+      block_spacing: 8,
+      body_text_size: 10.6,
+      compact_density: true
+    }
+  },
+  "latex-two-tone-creative": {
+    layout: "creative-portfolio",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: buildCvFontFamily("source-sans-3"),
+      font_asset_key: "source-sans-3",
+      header_photo_size: 92,
+      section_heading_style: "ruled",
+      heading_color_hex: "#111827",
+      accent_color_hex: "#a21caf",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#52525b",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 10.9,
+      compact_density: true
+    }
+  },
   "academic-serif-color": {
     layout: "academic-classic",
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Georgia, Times New Roman, serif",
+      font_family: buildCvFontFamily("source-serif-4"),
+      font_asset_key: "source-serif-4",
       header_photo_size: 72,
       section_heading_style: "ruled",
       heading_color_hex: "#102a43",
@@ -296,7 +425,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "timeline-split",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Cambria, Georgia, serif",
+      font_family: buildCvFontFamily("new-computer-modern"),
+      font_asset_key: "new-computer-modern",
       header_photo_size: 72,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#2563eb",
@@ -314,7 +444,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "portfolio-two-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Trebuchet MS, Verdana, sans-serif",
+      font_family: buildCvFontFamily("ibm-plex-sans"),
+      font_asset_key: "ibm-plex-sans",
       header_photo_size: 80,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0f766e",
@@ -332,7 +463,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "portfolio-two-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Trebuchet MS, Verdana, sans-serif",
+      font_family: buildCvFontFamily("source-sans-3"),
+      font_asset_key: "source-sans-3",
       header_photo_size: 104,
       heading_color_hex: "#111827",
       accent_color_hex: "#be123c",
@@ -350,7 +482,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "portfolio-two-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Helvetica, Arial, sans-serif",
+      font_family: buildCvFontFamily("ibm-plex-sans"),
+      font_asset_key: "ibm-plex-sans",
       header_photo_size: 80,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#4f46e5",
@@ -368,7 +501,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "compact-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Helvetica, Arial, sans-serif",
+      font_family: buildCvFontFamily("latin-modern-roman"),
+      font_asset_key: "latin-modern-roman",
       header_photo_size: 72,
       heading_color_hex: "#111111",
       accent_color_hex: "#3f3f46",
@@ -385,7 +519,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     layout: "tech-compact",
     mode: "compact-single-column",
     tokens: {
-      font_family: "Verdana, Tahoma, sans-serif",
+      font_family: buildCvFontFamily("source-sans-3"),
+      font_asset_key: "source-sans-3",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0d9488",
       body_color_hex: "#1f2937",
@@ -402,7 +537,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "portfolio-two-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Helvetica, Arial, sans-serif",
+      font_family: buildCvFontFamily("noto-sans"),
+      font_asset_key: "noto-sans",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0f766e",
       body_color_hex: "#1f2937",
@@ -422,7 +558,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Georgia, Times New Roman, serif",
+      font_family: buildCvFontFamily("libertinus-serif"),
+      font_asset_key: "libertinus-serif",
       heading_color_hex: "#111111",
       accent_color_hex: "#1f2937",
       body_color_hex: "#1f2937",
@@ -439,7 +576,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     mode: "classic-single-column",
     skills_display: "bulleted",
     tokens: {
-      font_family: "Helvetica, Arial, sans-serif",
+      font_family: buildCvFontFamily("noto-sans"),
+      font_asset_key: "noto-sans",
       heading_color_hex: "#1e3a5f",
       accent_color_hex: "#1e3a5f",
       body_color_hex: "#1f2937",
