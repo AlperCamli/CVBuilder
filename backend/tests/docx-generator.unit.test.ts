@@ -4,19 +4,22 @@ import type { ExportDocumentModel } from "../src/modules/exports/generators/rend
 
 describe("docx generator", () => {
   it("generates a DOCX with LaTeX-inspired serif style tokens", async () => {
+    const widePngDataUri =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";
     const model: ExportDocumentModel = {
       title: "Ada Lovelace",
       subtitle: "Research Scientist",
       contact_line: "ada@example.com • London, UK",
       contact_items: ["ada@example.com", "London, UK"],
       social_links: [],
-      photo_data_uri: null,
+      photo_data_uri: widePngDataUri,
       photo_shape: "circle",
       theme: {
         layout: "academic-classic",
         mode: "classic-single-column",
         font_asset_key: "noto-serif",
         header_alignment: "center",
+        header_photo_size: 76,
         section_heading_style: "ruled",
         heading_color_hex: "#111111",
         accent_color_hex: "#111111",

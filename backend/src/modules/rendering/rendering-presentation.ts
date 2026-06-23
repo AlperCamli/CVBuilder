@@ -22,6 +22,7 @@ export interface PresentationStyleTokens {
   font_family: string;
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
+  header_photo_size?: number;
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
@@ -193,6 +194,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
       font_asset_key: "noto-serif",
       header_alignment: "center",
+      header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
       accent_color_hex: "#111111",
@@ -213,6 +215,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
       font_asset_key: "noto-serif",
       header_alignment: "center",
+      header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#1f2937",

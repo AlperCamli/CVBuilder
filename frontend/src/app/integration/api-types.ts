@@ -335,6 +335,7 @@ export interface PresentationStyleTokens {
   font_family: string;
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
+  header_photo_size?: number;
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;

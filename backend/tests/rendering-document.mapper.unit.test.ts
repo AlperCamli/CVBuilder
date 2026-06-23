@@ -86,6 +86,7 @@ describe("presentation to export document mapper", () => {
       font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
       font_asset_key: "noto-serif",
       header_alignment: "center",
+      header_photo_size: 76,
       section_heading_style: "ruled"
     };
 
@@ -93,6 +94,7 @@ describe("presentation to export document mapper", () => {
 
     expect(mapped.theme.font_asset_key).toBe("noto-serif");
     expect(mapped.theme.header_alignment).toBe("center");
+    expect(mapped.theme.header_photo_size).toBe(76);
     expect(mapped.theme.section_heading_style).toBe("ruled");
     expect(mapped.theme.font_family).toContain("Noto Serif");
   });

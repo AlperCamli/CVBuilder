@@ -39,14 +39,14 @@ values
     'Academic Serif',
     'latex-academic-serif',
     'active',
-    '{"preview": "v1", "theme": "latex-inspired", "badges": ["LaTeX-inspired"]}'::jsonb,
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
   ),
   (
     'Research CV',
     'latex-research-cv',
     'active',
-    '{"preview": "v1", "theme": "latex-inspired", "badges": ["LaTeX-inspired"]}'::jsonb,
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
   ),
   (

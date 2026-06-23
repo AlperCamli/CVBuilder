@@ -259,7 +259,7 @@ describe("rendering presentation mapper", () => {
         slug: profile.slug,
         status: "active",
         module_type: "standard",
-        preview_config: { badges: ["LaTeX-inspired"] },
+        preview_config: { badges: ["LaTeX"] },
         export_config: { pdf: { enabled: true }, docx: { enabled: true } },
         created_at: "2026-06-23T00:00:00.000Z",
         updated_at: "2026-06-23T00:00:00.000Z"
@@ -271,6 +271,7 @@ describe("rendering presentation mapper", () => {
       expect(presentation.theme.layout).toBe("academic-classic");
       expect(presentation.theme.tokens.font_asset_key).toBe("noto-serif");
       expect(presentation.theme.tokens.header_alignment).toBe("center");
+      expect(presentation.theme.tokens.header_photo_size).toBe(76);
       expect(presentation.theme.tokens.section_heading_style).toBe("ruled");
       expect(presentation.theme.tokens.body_text_size).toBe(profile.bodyTextSize);
       expect(presentation.theme.tokens.font_family).toContain("Noto Serif");

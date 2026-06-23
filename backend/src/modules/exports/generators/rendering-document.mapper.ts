@@ -16,6 +16,7 @@ export interface ExportDocumentTheme {
   mode: "classic-single-column" | "compact-single-column" | "timeline-split" | "portfolio-two-column";
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
+  header_photo_size?: number;
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
@@ -103,6 +104,7 @@ const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
     font_family: presentation.theme.tokens.font_family,
     font_asset_key: presentation.theme.tokens.font_asset_key,
     header_alignment: presentation.theme.tokens.header_alignment,
+    header_photo_size: presentation.theme.tokens.header_photo_size,
     section_heading_style: presentation.theme.tokens.section_heading_style
   };
 };

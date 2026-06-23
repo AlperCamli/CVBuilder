@@ -6,6 +6,7 @@ import {
   clip,
   closePath,
   endPath,
+  lineTo,
   moveTo,
   popGraphicsState,
   pushGraphicsState,
@@ -302,13 +303,14 @@ const buildHeaderBlock = (
   const lines: PlacedLine[] = [];
   const images: PlacedImage[] = [];
 
-  const textX = photo ? style.photoSize + HEADER_PHOTO_GAP : 0;
+  const centerHeader = style.headerAlignment === "center";
+  const stackedPhoto = centerHeader && Boolean(photo);
+  const textX = photo && !stackedPhoto ? style.photoSize + HEADER_PHOTO_GAP : 0;
   const textMaxWidth = style.innerWidth - textX;
-  const centerHeader = style.headerAlignment === "center" && !photo;
 
   if (photo) {
     images.push({
-      xOffset: 0,
+      xOffset: stackedPhoto ? (style.innerWidth - style.photoSize) / 2 : 0,
       yFromTop: 0,
       width: style.photoSize,
       height: style.photoSize,
@@ -321,7 +323,7 @@ const buildHeaderBlock = (
   const titleLH = style.headerTitleSize * 1.4;
   const contactLH = style.headerContactSize * 1.55;
 
-  let textY = 0;
+  let textY = stackedPhoto ? style.photoSize + 8 * style.fontScale : 0;
   textY += appendTextLines(lines, model.title, {
     font: style.fonts.bold,
     fontWeight: "bold",
@@ -383,7 +385,7 @@ const buildHeaderBlock = (
     });
   }
 
-  const height = photo ? Math.max(textY, style.photoSize) : textY;
+  const height = photo && !stackedPhoto ? Math.max(textY, style.photoSize) : textY;
   return { lines, shapes: [], images, height };
 };
 
@@ -874,17 +876,38 @@ const resolveColor = (palette: PdfPalette, key: ColorKey): RgbColor => {
 // Bezier control-point ratio for approximating a circle with four curves.
 const CIRCLE_KAPPA = 0.5522847498307936;
 
-// Draw an image clipped to a circle (matches the rounded preview thumbnail). pdf-lib has no
-// high-level circle clip, so we set a circular clipping path via graphics-state operators,
-// draw the image inside it, then restore the previous state.
-const drawCircleClippedImage = (
-  page: PDFPage,
+const getCoverImagePlacement = (
   image: PDFImage,
   x: number,
   y: number,
   width: number,
   height: number
-): void => {
+): { x: number; y: number; width: number; height: number } => {
+  const sourceRatio = image.width / image.height;
+  const targetRatio = width / height;
+
+  if (sourceRatio > targetRatio) {
+    const drawHeight = height;
+    const drawWidth = height * sourceRatio;
+    return {
+      x: x - (drawWidth - width) / 2,
+      y,
+      width: drawWidth,
+      height: drawHeight
+    };
+  }
+
+  const drawWidth = width;
+  const drawHeight = width / sourceRatio;
+  return {
+    x,
+    y: y - (drawHeight - height) / 2,
+    width: drawWidth,
+    height: drawHeight
+  };
+};
+
+const pushCircleClipPath = (page: PDFPage, x: number, y: number, width: number, height: number): void => {
   const rx = width / 2;
   const ry = height / 2;
   const cx = x + rx;
@@ -893,7 +916,6 @@ const drawCircleClippedImage = (
   const oy = ry * CIRCLE_KAPPA;
 
   page.pushOperators(
-    pushGraphicsState(),
     moveTo(cx + rx, cy),
     appendBezierCurve(cx + rx, cy + oy, cx + ox, cy + ry, cx, cy + ry),
     appendBezierCurve(cx - ox, cy + ry, cx - rx, cy + oy, cx - rx, cy),
@@ -903,7 +925,39 @@ const drawCircleClippedImage = (
     clip(),
     endPath()
   );
-  page.drawImage(image, { x, y, width, height });
+};
+
+const pushRectangleClipPath = (page: PDFPage, x: number, y: number, width: number, height: number): void => {
+  page.pushOperators(
+    moveTo(x, y),
+    lineTo(x + width, y),
+    lineTo(x + width, y + height),
+    lineTo(x, y + height),
+    closePath(),
+    clip(),
+    endPath()
+  );
+};
+
+// Matches the preview's object-fit: cover behavior: preserve the upload's aspect ratio,
+// center-crop it into the header photo frame, then clip to the requested shape.
+const drawCoverClippedImage = (
+  page: PDFPage,
+  image: PDFImage,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  shape: "circle" | "square"
+): void => {
+  const placement = getCoverImagePlacement(image, x, y, width, height);
+  page.pushOperators(pushGraphicsState());
+  if (shape === "circle") {
+    pushCircleClipPath(page, x, y, width, height);
+  } else {
+    pushRectangleClipPath(page, x, y, width, height);
+  }
+  page.drawImage(image, placement);
   page.pushOperators(popGraphicsState());
 };
 
@@ -919,16 +973,7 @@ const drawBlock = (
   for (const image of block.shape.images) {
     const imageX = leftX + image.xOffset;
     const imageY = topY - image.yFromTop - image.height;
-    if (image.shape === "circle") {
-      drawCircleClippedImage(page, image.imageRef, imageX, imageY, image.width, image.height);
-    } else {
-      page.drawImage(image.imageRef, {
-        x: imageX,
-        y: imageY,
-        width: image.width,
-        height: image.height
-      });
-    }
+    drawCoverClippedImage(page, image.imageRef, imageX, imageY, image.width, image.height, image.shape);
   }
 
   for (const line of block.shape.lines) {
@@ -1077,7 +1122,7 @@ export const generatePdfDocument = async (
     itemBodySize: 12 * fontScale,
     bulletSize: 12 * fontScale,
     timelineDateSize: 11 * fontScale,
-    photoSize: 58 * fontScale,
+    photoSize: (theme.header_photo_size ?? 58) * fontScale,
     headerAlignment: theme.header_alignment ?? "left",
     sectionHeadingStyle: theme.section_heading_style ?? "plain",
     sidebarInnerWidth,

@@ -364,7 +364,8 @@ function buildHeaderBlocks(
   mode: PreviewMode
 ): BlockSpec[] {
   const blocks: BlockSpec[] = [];
-  const centerHeader = theme.tokens.header_alignment === "center" && !header.photo;
+  const centerHeader = theme.tokens.header_alignment === "center";
+  const headerPhotoSize = theme.tokens.header_photo_size ?? 58;
 
   blocks.push({
     key: "header-main",
@@ -372,15 +373,19 @@ function buildHeaderBlocks(
     node: (
       <div
         className="flex items-start gap-4"
-        style={{ justifyContent: centerHeader ? "center" : undefined }}
+        style={{
+          alignItems: centerHeader ? "center" : undefined,
+          flexDirection: centerHeader && header.photo ? "column" : undefined,
+          justifyContent: centerHeader ? "center" : undefined
+        }}
       >
         {header.photo ? (
           <img
             src={header.photo}
             alt="Profile"
             style={{
-              width: scaledPx(58),
-              height: scaledPx(58),
+              width: scaledPx(headerPhotoSize),
+              height: scaledPx(headerPhotoSize),
               borderRadius: header.photo_shape === "square" ? "0px" : "999px",
               objectFit: "cover",
               flexShrink: 0
@@ -388,7 +393,13 @@ function buildHeaderBlocks(
           />
         ) : null}
 
-        <div className="flex-1 min-w-0" style={{ textAlign: centerHeader ? "center" : undefined }}>
+        <div
+          className="flex-1 min-w-0"
+          style={{
+            textAlign: centerHeader ? "center" : undefined,
+            width: centerHeader ? "100%" : undefined
+          }}
+        >
           <h1
             style={{
               fontSize: theme.mode === "compact-single-column" ? scaledPx(21) : scaledPx(23),

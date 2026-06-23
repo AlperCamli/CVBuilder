@@ -8,7 +8,7 @@ values
     'latex-academic-serif',
     'active',
     'standard',
-    '{"preview":"v1","theme":"latex-inspired","badges":["LaTeX-inspired"]}'::jsonb,
+    '{"preview":"v1","theme":"latex","badges":["LaTeX"]}'::jsonb,
     '{"pdf":{"enabled":true},"docx":{"enabled":true}}'::jsonb
   ),
   (
@@ -16,7 +16,7 @@ values
     'latex-research-cv',
     'active',
     'standard',
-    '{"preview":"v1","theme":"latex-inspired","badges":["LaTeX-inspired"]}'::jsonb,
+    '{"preview":"v1","theme":"latex","badges":["LaTeX"]}'::jsonb,
     '{"pdf":{"enabled":true},"docx":{"enabled":true}}'::jsonb
   )
 on conflict (slug) do update

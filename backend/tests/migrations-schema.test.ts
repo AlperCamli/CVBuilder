@@ -203,7 +203,7 @@ describe("supabase migration schema assertions", () => {
 
     expect(migration).toMatch(/latex-academic-serif/i);
     expect(migration).toMatch(/latex-research-cv/i);
-    expect(migration).toMatch(/LaTeX-inspired/i);
+    expect(migration).toMatch(/"badges":\["LaTeX"\]/i);
     expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
     expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker/i);
   });
