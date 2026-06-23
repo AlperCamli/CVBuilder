@@ -23,6 +23,7 @@ export interface PresentationStyleTokens {
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
   header_photo_size?: number;
+  header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
@@ -58,11 +59,13 @@ export interface PresentationHeader {
   location: string | null;
   photo: string | null;
   photo_shape: PhotoShape;
+  photo_position: PhotoPosition;
   contact_items: string[];
   social_links: PresentationSocialLink[];
 }
 
 export type PhotoShape = "circle" | "square";
+export type PhotoPosition = "left" | "center" | "right";
 
 export interface PresentationItem {
   id: string;
@@ -228,6 +231,156 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       compact_density: true
     }
   },
+  "latex-scholar": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+      font_asset_key: "noto-serif",
+      header_alignment: "center",
+      header_photo_size: 76,
+      section_heading_style: "ruled",
+      heading_color_hex: "#111111",
+      accent_color_hex: "#111111",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#3f3f46",
+      page_background_hex: "#ffffff",
+      section_spacing: 11,
+      block_spacing: 7,
+      body_text_size: 10.8,
+      compact_density: true
+    }
+  },
+  "latex-two-column": {
+    layout: "two-column-modern",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+      font_asset_key: "noto-serif",
+      header_photo_size: 76,
+      section_heading_style: "ruled",
+      heading_color_hex: "#111111",
+      accent_color_hex: "#111111",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 12,
+      block_spacing: 8,
+      body_text_size: 10.8,
+      compact_density: true
+    }
+  },
+  "academic-serif-color": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Georgia, Times New Roman, serif",
+      header_photo_size: 72,
+      section_heading_style: "ruled",
+      heading_color_hex: "#102a43",
+      accent_color_hex: "#1d4ed8",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 11.2,
+      compact_density: true
+    }
+  },
+  "academic-timeline": {
+    layout: "executive-timeline",
+    mode: "timeline-split",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Cambria, Georgia, serif",
+      header_photo_size: 72,
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#2563eb",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 10.8,
+      compact_density: true
+    }
+  },
+  "creative-color-block": {
+    layout: "creative-portfolio",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Trebuchet MS, Verdana, sans-serif",
+      header_photo_size: 80,
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#0f766e",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "creative-photo-hero": {
+    layout: "creative-portfolio",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Trebuchet MS, Verdana, sans-serif",
+      header_photo_size: 104,
+      heading_color_hex: "#111827",
+      accent_color_hex: "#be123c",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#52525b",
+      page_background_hex: "#ffffff",
+      section_spacing: 14,
+      block_spacing: 10,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "portfolio-modern": {
+    layout: "two-column-modern",
+    mode: "portfolio-two-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Helvetica, Arial, sans-serif",
+      header_photo_size: 80,
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#4f46e5",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#475569",
+      page_background_hex: "#ffffff",
+      section_spacing: 13,
+      block_spacing: 9,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "classic-monochrome": {
+    layout: "minimal-professional",
+    mode: "compact-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: "Helvetica, Arial, sans-serif",
+      header_photo_size: 72,
+      heading_color_hex: "#111111",
+      accent_color_hex: "#3f3f46",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#52525b",
+      page_background_hex: "#ffffff",
+      section_spacing: 11,
+      block_spacing: 7,
+      body_text_size: 10.8,
+      compact_density: true
+    }
+  },
   "tech-compact": {
     layout: "tech-compact",
     mode: "compact-single-column",
@@ -357,6 +510,17 @@ const normalizeLine = (value: string | null | undefined): string | null => {
 
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+};
+
+const normalizePhotoPosition = (
+  value: string | null | undefined,
+  fallback: PhotoPosition = "left"
+): PhotoPosition => {
+  if (value === "center" || value === "right" || value === "left") {
+    return value;
+  }
+
+  return fallback;
 };
 
 const keyMatches = (key: string, accepted: string[]): boolean => {
@@ -1551,6 +1715,10 @@ export const mapRenderingPayloadToPresentation = (
     location: toMetadataString(metadata.location) ?? getHeaderFallbackField(headerSections, ["location", "city", "country"]),
     photo: toMetadataString(metadata.photo) ?? null,
     photo_shape: toMetadataString(metadata.photo_shape) === "square" ? "square" : "circle",
+    photo_position: normalizePhotoPosition(
+      toMetadataString(metadata.photo_position),
+      normalizePhotoPosition(theme.tokens.header_photo_position)
+    ),
     contact_items: [
       toMetadataString(metadata.email) ?? getHeaderFallbackField(headerSections, ["email"]),
       toMetadataString(metadata.phone) ?? getHeaderFallbackField(headerSections, ["phone"]),

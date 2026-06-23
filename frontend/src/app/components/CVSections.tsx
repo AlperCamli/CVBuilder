@@ -13,6 +13,9 @@ import {
   Camera,
   Circle,
   Square,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -53,6 +56,9 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   const socialLinks = data.socialLinks || [];
+  const photoShape = data.photoShape === "square" ? "square" : "circle";
+  const photoPosition =
+    data.photoPosition === "center" || data.photoPosition === "right" ? data.photoPosition : "left";
 
   // Resolve the stored photo (a managed files.id) to a signed URL for the thumbnail.
   // Legacy inline data URIs (and absolute URLs) are already displayable.
@@ -209,79 +215,125 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
       {!isHidden && (
         <div className="space-y-3">
           {/* Photo Upload */}
-          <div className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
-            {photoUrl ? (
-              <div className="relative">
-                <img
-                  src={photoUrl}
-                  alt="Profile"
-                  className="w-16 h-16 rounded-full object-cover"
-                />
-                <button
-                  onClick={handleRemovePhoto}
-                  className="absolute -top-1 -right-1 p-0.5 rounded-full"
-                  style={{ fontSize: "10px", background: "var(--color-danger)", color: "var(--color-danger-bg)" }}
-                >
-                  <XIcon size={12} />
-                </button>
-              </div>
-            ) : (
-              <label
-                className={`w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center transition-colors ${
-                  photoUploading ? "opacity-60 cursor-wait" : "cursor-pointer hover:bg-[var(--color-background-secondary)]"
-                }`}
-                style={{ borderColor: "var(--color-border-tertiary)" }}
-              >
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  onChange={handlePhotoUpload}
-                  disabled={photoUploading}
-                  className="hidden"
-                />
-                <Camera size={20} style={{ color: "var(--color-text-secondary)" }} />
-              </label>
-            )}
-            <div className="flex-1">
-              <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                Profile Photo
-              </p>
-              <p style={{ fontSize: "12px", color: photoError ? "var(--color-danger)" : "var(--color-text-secondary)" }}>
-                {photoError
-                  ? photoError
-                  : photoUploading
-                    ? "Uploading…"
-                    : photoUrl
-                      ? "Click X to remove"
-                      : "PNG or JPEG, up to 5 MB"}
-              </p>
-            </div>
-            {/* Photo shape selector */}
-            <div className="flex items-center gap-1 ml-auto">
-              {([
-                { shape: "circle", Icon: Circle, label: "Circle" },
-                { shape: "square", Icon: Square, label: "Square" }
-              ] as const).map(({ shape, Icon, label }) => {
-                const selected = (data.photoShape === "square" ? "square" : "circle") === shape;
-                return (
+          <div className="p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
+            <div className="flex items-center gap-3">
+              {photoUrl ? (
+                <div className="relative">
+                  <img
+                    src={photoUrl}
+                    alt="Profile"
+                    className="w-16 h-16 object-cover"
+                    style={{ borderRadius: photoShape === "square" ? "8px" : "999px" }}
+                  />
                   <button
-                    key={shape}
-                    type="button"
-                    title={label}
-                    aria-label={`${label} photo`}
-                    aria-pressed={selected}
-                    onClick={() => onChange({ ...data, photoShape: shape })}
-                    className="p-1.5 rounded-lg border transition-colors"
-                    style={{
-                      borderColor: selected ? "var(--color-teal-600)" : "var(--color-border-secondary)",
-                      background: selected ? "var(--color-teal-50)" : "transparent",
-                      color: selected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
-                    }}
+                    onClick={handleRemovePhoto}
+                    className="absolute -top-1 -right-1 p-0.5 rounded-full"
+                    style={{ fontSize: "10px", background: "var(--color-danger)", color: "var(--color-danger-bg)" }}
                   >
-                    <Icon size={16} />
+                    <XIcon size={12} />
                   </button>
-                );
-              })}
+                </div>
+              ) : (
+                <label
+                  className={`w-16 h-16 border-2 border-dashed flex items-center justify-center transition-colors ${
+                    photoUploading ? "opacity-60 cursor-wait" : "cursor-pointer hover:bg-[var(--color-background-secondary)]"
+                  }`}
+                  style={{
+                    borderColor: "var(--color-border-tertiary)",
+                    borderRadius: photoShape === "square" ? "8px" : "999px"
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handlePhotoUpload}
+                    disabled={photoUploading}
+                    className="hidden"
+                  />
+                  <Camera size={20} style={{ color: "var(--color-text-secondary)" }} />
+                </label>
+              )}
+              <div className="flex-1">
+                <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                  Profile Photo
+                </p>
+                <p style={{ fontSize: "12px", color: photoError ? "var(--color-danger)" : "var(--color-text-secondary)" }}>
+                  {photoError
+                    ? photoError
+                    : photoUploading
+                      ? "Uploading…"
+                      : photoUrl
+                        ? "Click X to remove"
+                        : "PNG or JPEG, up to 5 MB"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div>
+                <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
+                  Position
+                </p>
+                <div className="flex items-center gap-1">
+                  {([
+                    { position: "left", Icon: AlignLeft, label: "Left" },
+                    { position: "center", Icon: AlignCenter, label: "Middle top" },
+                    { position: "right", Icon: AlignRight, label: "Right" }
+                  ] as const).map(({ position, Icon, label }) => {
+                    const selected = photoPosition === position;
+                    return (
+                      <button
+                        key={position}
+                        type="button"
+                        title={label}
+                        aria-label={`${label} photo position`}
+                        aria-pressed={selected}
+                        onClick={() => onChange({ ...data, photoPosition: position })}
+                        className="p-1.5 rounded-lg border transition-colors"
+                        style={{
+                          borderColor: selected ? "var(--color-teal-600)" : "var(--color-border-secondary)",
+                          background: selected ? "var(--color-teal-50)" : "transparent",
+                          color: selected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
+                        }}
+                      >
+                        <Icon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
+                  Frame
+                </p>
+                <div className="flex items-center gap-1">
+                  {([
+                    { shape: "circle", Icon: Circle, label: "Circle" },
+                    { shape: "square", Icon: Square, label: "Square" }
+                  ] as const).map(({ shape, Icon, label }) => {
+                    const selected = photoShape === shape;
+                    return (
+                      <button
+                        key={shape}
+                        type="button"
+                        title={label}
+                        aria-label={`${label} photo`}
+                        aria-pressed={selected}
+                        onClick={() => onChange({ ...data, photoShape: shape })}
+                        className="p-1.5 rounded-lg border transition-colors"
+                        style={{
+                          borderColor: selected ? "var(--color-teal-600)" : "var(--color-border-secondary)",
+                          background: selected ? "var(--color-teal-50)" : "transparent",
+                          color: selected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
+                        }}
+                      >
+                        <Icon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 

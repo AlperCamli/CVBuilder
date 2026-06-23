@@ -3,6 +3,71 @@ import type { CvContent } from "./api-types";
 import { cvContentToEditorSections, editorSectionsToCvContent } from "./cv-mappers";
 
 describe("cv module mapper support", () => {
+  it("round-trips header photo position metadata", () => {
+    const content: CvContent = {
+      version: "v1",
+      language: "en",
+      metadata: {
+        full_name: "Ada Lovelace",
+        photo_shape: "square",
+        photo_position: "right"
+      },
+      sections: []
+    };
+
+    const editorSections = cvContentToEditorSections(content, "standard");
+    const header = editorSections.find((section) => section.type === "header");
+
+    expect(header?.data).toMatchObject({
+      name: "Ada Lovelace",
+      photoShape: "square",
+      photoPosition: "right"
+    });
+
+    const updatedSections = editorSections.map((section) =>
+      section.type === "header"
+        ? {
+            ...section,
+            data: {
+              ...(section.data as Record<string, unknown>),
+              photoPosition: "center"
+            }
+          }
+        : section
+    );
+
+    const roundTripped = editorSectionsToCvContent(updatedSections, "en", content, "standard");
+
+    expect(roundTripped.metadata.photo_position).toBe("center");
+    expect(roundTripped.metadata.photo_shape).toBe("square");
+  });
+
+  it("defaults invalid or missing photo position metadata to left", () => {
+    const invalidContent: CvContent = {
+      version: "v1",
+      language: "en",
+      metadata: {
+        photo_position: "bottom"
+      },
+      sections: []
+    };
+    const missingContent: CvContent = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: []
+    };
+
+    expect(
+      cvContentToEditorSections(invalidContent, "standard").find((section) => section.type === "header")
+        ?.data.photoPosition
+    ).toBe("left");
+    expect(
+      cvContentToEditorSections(missingContent, "standard").find((section) => section.type === "header")
+        ?.data.photoPosition
+    ).toBe("left");
+  });
+
   it("round-trips descriptor-driven medical module sections without losing fields or block types", () => {
     const content: CvContent = {
       version: "v1",

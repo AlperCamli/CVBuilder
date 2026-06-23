@@ -18,6 +18,7 @@ describe("pdf generator", () => {
       ],
       photo_data_uri: null,
       photo_shape: "circle",
+      photo_position: "left",
       theme: {
         layout: "modern-clean",
         mode: "classic-single-column",
@@ -70,6 +71,7 @@ describe("pdf generator", () => {
       social_links: [],
       photo_data_uri: pngDataUri,
       photo_shape: "circle",
+      photo_position: "left",
       theme: {
         layout: "modern-clean",
         mode: "classic-single-column",
@@ -87,7 +89,11 @@ describe("pdf generator", () => {
     };
 
     const circleBytes = await generatePdfDocument(baseModel);
-    const squareBytes = await generatePdfDocument({ ...baseModel, photo_shape: "square" });
+    const squareBytes = await generatePdfDocument({
+      ...baseModel,
+      photo_shape: "square",
+      photo_position: "right"
+    });
 
     expect(circleBytes.byteLength).toBeGreaterThan(1000);
     expect(squareBytes.byteLength).toBeGreaterThan(1000);
@@ -104,6 +110,7 @@ describe("pdf generator", () => {
       social_links: [],
       photo_data_uri: widePngDataUri,
       photo_shape: "circle",
+      photo_position: "center",
       theme: {
         layout: "academic-classic",
         mode: "classic-single-column",

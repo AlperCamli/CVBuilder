@@ -31,6 +31,7 @@ const basePresentation = (): RenderingPresentation => ({
     location: "Istanbul, Turkey",
     photo: null,
     photo_shape: "circle",
+    photo_position: "left",
     contact_items: ["alper@example.com", "+90 500 000 00 00", "Istanbul, Turkey"],
     social_links: [
       {
@@ -72,6 +73,7 @@ describe("presentation to export document mapper", () => {
     expect(mapped.title).toBe("Alper Çamlı");
     expect(mapped.subtitle).toBe("Computer Science Student");
     expect(mapped.contact_line).toBe("alper@example.com • +90 500 000 00 00 • Istanbul, Turkey");
+    expect(mapped.photo_position).toBe("left");
     expect(mapped.social_links).toHaveLength(1);
     expect(mapped.social_links[0]?.label).toBe("/in/alpercamli");
     expect(mapped.sections).toHaveLength(1);
@@ -87,6 +89,7 @@ describe("presentation to export document mapper", () => {
       font_asset_key: "noto-serif",
       header_alignment: "center",
       header_photo_size: 76,
+      header_photo_position: "right",
       section_heading_style: "ruled"
     };
 
@@ -95,6 +98,7 @@ describe("presentation to export document mapper", () => {
     expect(mapped.theme.font_asset_key).toBe("noto-serif");
     expect(mapped.theme.header_alignment).toBe("center");
     expect(mapped.theme.header_photo_size).toBe(76);
+    expect(mapped.theme.header_photo_position).toBe("right");
     expect(mapped.theme.section_heading_style).toBe("ruled");
     expect(mapped.theme.font_family).toContain("Noto Serif");
   });

@@ -15,6 +15,8 @@ export interface EditorHeaderData {
   phone: string;
   location: string;
   photo?: string | null;
+  photoShape?: string;
+  photoPosition?: "left" | "center" | "right";
   socialLinks: Array<{ id: string; type: string; url: string }>;
 }
 
@@ -54,6 +56,11 @@ const asString = (value: unknown): string => {
   }
 
   return "";
+};
+
+const normalizePhotoPosition = (value: unknown): "left" | "center" | "right" => {
+  const normalized = asString(value);
+  return normalized === "center" || normalized === "right" ? normalized : "left";
 };
 
 const asBoolean = (value: unknown): boolean => {
@@ -1301,6 +1308,7 @@ export const cvContentToEditorSections = (
     location: toJsonValue(firstNonEmpty(asString(metadata.location), getHeaderField("location"))),
     photo: toJsonValue(asString(metadata.photo)),
     photo_shape: toJsonValue(asString(metadata.photo_shape) || "circle"),
+    photo_position: toJsonValue(normalizePhotoPosition(metadata.photo_position)),
     urls: toJsonValue(
       dedupe([
         ...asStringArray(content.metadata.urls),
@@ -1325,6 +1333,7 @@ export const cvContentToEditorSections = (
         location: asString(normalizedMetadata.location),
         photo: asString(normalizedMetadata.photo),
         photoShape: asString(normalizedMetadata.photo_shape) || "circle",
+        photoPosition: normalizePhotoPosition(normalizedMetadata.photo_position),
         socialLinks: extractSocialLinks(metadataWithHeaderFallback)
       }
     }
@@ -2094,6 +2103,7 @@ export const editorSectionsToCvContent = (
     location: toJsonValue(asString(headerData.location)),
     photo: toJsonValue(asString(headerData.photo)),
     photo_shape: toJsonValue(asString(headerData.photoShape) || "circle"),
+    photo_position: toJsonValue(normalizePhotoPosition(headerData.photoPosition)),
     social_links: socialLinks,
     urls: urlList
   };
@@ -2210,7 +2220,7 @@ export const editorSectionsToCvContent = (
               fields: {
                 skills: toJsonValue(skillValues)
               },
-              meta: poolMetaPatch
+              meta: toJsonRecord(poolMetaPatch)
             }
           ]
         };

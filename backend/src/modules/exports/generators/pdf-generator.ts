@@ -303,14 +303,23 @@ const buildHeaderBlock = (
   const lines: PlacedLine[] = [];
   const images: PlacedImage[] = [];
 
-  const centerHeader = style.headerAlignment === "center";
-  const stackedPhoto = centerHeader && Boolean(photo);
-  const textX = photo && !stackedPhoto ? style.photoSize + HEADER_PHOTO_GAP : 0;
-  const textMaxWidth = style.innerWidth - textX;
+  const photoPosition = photo ? model.photo_position : "left";
+  const stackedPhoto = photoPosition === "center";
+  const rightPhoto = photoPosition === "right";
+  const sidePhoto = Boolean(photo) && !stackedPhoto;
+  const centerHeader = style.headerAlignment === "center" || stackedPhoto;
+  const textX = sidePhoto && !rightPhoto ? style.photoSize + HEADER_PHOTO_GAP : 0;
+  const textMaxWidth = sidePhoto
+    ? style.innerWidth - style.photoSize - HEADER_PHOTO_GAP
+    : style.innerWidth;
 
   if (photo) {
     images.push({
-      xOffset: stackedPhoto ? (style.innerWidth - style.photoSize) / 2 : 0,
+      xOffset: stackedPhoto
+        ? (style.innerWidth - style.photoSize) / 2
+        : rightPhoto
+          ? style.innerWidth - style.photoSize
+          : 0,
       yFromTop: 0,
       width: style.photoSize,
       height: style.photoSize,
@@ -1122,7 +1131,7 @@ export const generatePdfDocument = async (
     itemBodySize: 12 * fontScale,
     bulletSize: 12 * fontScale,
     timelineDateSize: 11 * fontScale,
-    photoSize: (theme.header_photo_size ?? 58) * fontScale,
+    photoSize: (theme.header_photo_size ?? 72) * fontScale,
     headerAlignment: theme.header_alignment ?? "left",
     sectionHeadingStyle: theme.section_heading_style ?? "plain",
     sidebarInnerWidth,

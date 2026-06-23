@@ -14,6 +14,7 @@ describe("docx generator", () => {
       social_links: [],
       photo_data_uri: widePngDataUri,
       photo_shape: "circle",
+      photo_position: "right",
       theme: {
         layout: "academic-classic",
         mode: "classic-single-column",

@@ -336,6 +336,7 @@ export interface PresentationStyleTokens {
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
   header_photo_size?: number;
+  header_photo_position?: "left" | "center" | "right";
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
@@ -371,6 +372,7 @@ export interface PresentationHeader {
   location: string | null;
   photo: string | null;
   photo_shape: "circle" | "square";
+  photo_position: "left" | "center" | "right";
   contact_items: string[];
   social_links: PresentationSocialLink[];
 }

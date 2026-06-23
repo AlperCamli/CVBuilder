@@ -7,6 +7,67 @@ import {
 const visible = "visible" as const;
 
 describe("cv-mappers experience compatibility", () => {
+  it("round-trips header photo position metadata", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {
+        full_name: "Ada Lovelace",
+        photo_shape: "square",
+        photo_position: "right"
+      },
+      sections: []
+    };
+
+    const sections = cvContentToEditorSections(content as any);
+    const header = sections.find((section) => section.type === "header");
+
+    expect((header?.data as any)?.name).toBe("Ada Lovelace");
+    expect((header?.data as any)?.photoShape).toBe("square");
+    expect((header?.data as any)?.photoPosition).toBe("right");
+
+    const updatedSections = sections.map((section) =>
+      section.type === "header"
+        ? {
+            ...section,
+            data: {
+              ...(section.data as Record<string, unknown>),
+              photoPosition: "center"
+            }
+          }
+        : section
+    );
+
+    const restored = editorSectionsToCvContent(updatedSections, "en", content as any);
+
+    expect(restored.metadata.photo_position).toBe("center");
+    expect(restored.metadata.photo_shape).toBe("square");
+  });
+
+  it("defaults invalid or missing photo position metadata to left", () => {
+    const invalidSections = cvContentToEditorSections({
+      version: "v1",
+      language: "en",
+      metadata: {
+        photo_position: "bottom"
+      },
+      sections: []
+    } as any);
+    const missingSections = cvContentToEditorSections({
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: []
+    } as any);
+
+    expect((invalidSections.find((section) => section.type === "header")?.data as any)?.photoPosition).toBe(
+      "left"
+    );
+    expect((missingSections.find((section) => section.type === "header")?.data as any)?.photoPosition).toBe(
+      "left"
+    );
+  });
+
   it("merges legacy experience_items into the previous real experience entry", () => {
     const content = {
       version: "v1",

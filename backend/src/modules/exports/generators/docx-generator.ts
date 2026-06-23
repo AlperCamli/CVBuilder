@@ -2,11 +2,18 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  type FileChild,
   HeadingLevel,
   ImageRun,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableLayoutType,
+  TableRow,
   TextRun,
+  VerticalAlignTable,
+  WidthType,
   type IParagraphOptions
 } from "docx";
 import type { ExportDocumentModel } from "./rendering-document.mapper";
@@ -110,14 +117,27 @@ const getContainedPhotoSize = (
   };
 };
 
+const noTableBorder = {
+  style: BorderStyle.NONE,
+  size: 0,
+  color: "FFFFFF"
+} as const;
+
 export const generateDocxDocument = async (documentModel: ExportDocumentModel): Promise<Uint8Array> => {
   const headingColor = rgbToHex(documentModel.theme.heading_color_hex);
   const accentColor = rgbToHex(documentModel.theme.accent_color_hex);
   const bodySize = Math.max(20, Math.round(documentModel.theme.body_text_size * 2));
   const headerAlignment =
     documentModel.theme.header_alignment === "center" ? AlignmentType.CENTER : AlignmentType.LEFT;
+  const photoAlignment =
+    documentModel.photo_position === "center"
+      ? AlignmentType.CENTER
+      : documentModel.photo_position === "right"
+        ? AlignmentType.RIGHT
+        : AlignmentType.LEFT;
+  const textHeaderAlignment = documentModel.photo_position === "center" ? AlignmentType.CENTER : headerAlignment;
   const isRuledHeading = documentModel.theme.section_heading_style === "ruled";
-  const photoSize = documentModel.theme.header_photo_size ?? 64;
+  const photoSize = documentModel.theme.header_photo_size ?? 72;
   const documentFont =
     documentModel.theme.font_asset_key === "noto-serif"
       ? "Cambria"
@@ -125,107 +145,186 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         ? "Calibri"
         : "Cambria";
 
-  const body: Paragraph[] = [];
+  const body: FileChild[] = [];
+  const parsedPhoto = documentModel.photo_data_uri
+    ? parseDataUriImage(documentModel.photo_data_uri)
+    : null;
+  const containedPhotoSize = parsedPhoto
+    ? getContainedPhotoSize(parsedPhoto.data, parsedPhoto.extension, photoSize)
+    : null;
 
-  if (documentModel.photo_data_uri) {
-    const parsedPhoto = parseDataUriImage(documentModel.photo_data_uri);
-    if (parsedPhoto) {
-      const containedPhotoSize = getContainedPhotoSize(
-        parsedPhoto.data,
-        parsedPhoto.extension,
-        photoSize
-      );
-      body.push(
+  const photoParagraph = (): Paragraph | null => {
+    if (!parsedPhoto || !containedPhotoSize) {
+      return null;
+    }
+
+    return new Paragraph({
+      children: [
+        new ImageRun({
+          data: parsedPhoto.data,
+          type: parsedPhoto.extension,
+          transformation: {
+            width: containedPhotoSize.width,
+            height: containedPhotoSize.height
+          }
+        })
+      ],
+      alignment: photoAlignment,
+      spacing: {
+        after: 140
+      }
+    });
+  };
+
+  const headerTextParagraphs = (alignment: (typeof AlignmentType)[keyof typeof AlignmentType]): Paragraph[] => {
+    const paragraphs = [
+      new Paragraph({
+        heading: HeadingLevel.TITLE,
+        children: [
+          new TextRun({
+            text: documentModel.title,
+            color: headingColor,
+            bold: true,
+            size: bodySize + 16
+          })
+        ],
+        alignment,
+        spacing: {
+          after: 120
+        }
+      })
+    ];
+
+    if (documentModel.subtitle) {
+      paragraphs.push(
         new Paragraph({
           children: [
-            new ImageRun({
-              data: parsedPhoto.data,
-              type: parsedPhoto.extension,
-              transformation: {
-                width: containedPhotoSize.width,
-                height: containedPhotoSize.height
-              }
+            new TextRun({
+              text: documentModel.subtitle,
+              color: accentColor,
+              italics: true,
+              size: bodySize + 2
             })
           ],
-          alignment: headerAlignment,
+          alignment,
           spacing: {
-            after: 140
+            after: 100
           }
         })
       );
     }
-  }
 
-  body.push(
-    new Paragraph({
-      heading: HeadingLevel.TITLE,
-      children: [
-        new TextRun({
-          text: documentModel.title,
-          color: headingColor,
-          bold: true,
-          size: bodySize + 16
+    if (documentModel.contact_line) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: documentModel.contact_line,
+              size: bodySize
+            })
+          ],
+          alignment,
+          spacing: {
+            after: 120
+          }
         })
-      ],
-      alignment: headerAlignment,
-      spacing: {
-        after: 120
-      }
-    })
-  );
+      );
+    }
 
-  if (documentModel.subtitle) {
+    if (documentModel.social_links.length > 0) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: documentModel.social_links.map((link) => link.label).join(" • "),
+              color: "5A5A5A",
+              size: Math.max(18, bodySize - 2)
+            })
+          ],
+          alignment,
+          spacing: {
+            after: 260
+          }
+        })
+      );
+    }
+
+    return paragraphs;
+  };
+
+  const photo = photoParagraph();
+  if (photo && documentModel.photo_position !== "center") {
+    const fullWidthTwips = 9360;
+    const photoCellWidthTwips = Math.round((photoSize + 24) * 20);
+    const textCellWidthTwips = fullWidthTwips - photoCellWidthTwips;
+    const photoCell = new TableCell({
+      children: [photo],
+      verticalAlign: VerticalAlignTable.CENTER,
+      width: {
+        size: photoCellWidthTwips,
+        type: WidthType.DXA
+      },
+      margins: {
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 180
+      }
+    });
+    const textCell = new TableCell({
+      children: headerTextParagraphs(headerAlignment),
+      verticalAlign: VerticalAlignTable.CENTER,
+      width: {
+        size: textCellWidthTwips,
+        type: WidthType.DXA
+      },
+      margins: {
+        top: 0,
+        bottom: 0,
+        left: 120,
+        right: 0
+      }
+    });
+    const cells = documentModel.photo_position === "right"
+      ? [textCell, photoCell]
+      : [photoCell, textCell];
     body.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: documentModel.subtitle,
-            color: accentColor,
-            italics: true,
-            size: bodySize + 2
+      new Table({
+        rows: [
+          new TableRow({
+            children: cells
           })
         ],
-        alignment: headerAlignment,
-        spacing: {
-          after: 100
+        width: {
+          size: fullWidthTwips,
+          type: WidthType.DXA
+        },
+        columnWidths: documentModel.photo_position === "right"
+          ? [textCellWidthTwips, photoCellWidthTwips]
+          : [photoCellWidthTwips, textCellWidthTwips],
+        layout: TableLayoutType.FIXED,
+        borders: {
+          top: noTableBorder,
+          bottom: noTableBorder,
+          left: noTableBorder,
+          right: noTableBorder,
+          insideHorizontal: noTableBorder,
+          insideVertical: noTableBorder
         }
       })
     );
-  }
-
-  if (documentModel.contact_line) {
     body.push(
       new Paragraph({
-        children: [
-          new TextRun({
-            text: documentModel.contact_line,
-            size: bodySize
-          })
-        ],
-        alignment: headerAlignment,
         spacing: {
           after: 120
         }
       })
     );
-  }
-
-  if (documentModel.social_links.length > 0) {
-    body.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: documentModel.social_links.map((link) => link.label).join(" • "),
-            color: "5A5A5A",
-            size: Math.max(18, bodySize - 2)
-          })
-        ],
-        alignment: headerAlignment,
-        spacing: {
-          after: 260
-        }
-      })
-    );
+  } else {
+    if (photo) {
+      body.push(photo);
+    }
+    body.push(...headerTextParagraphs(textHeaderAlignment));
   }
 
   const sideTypes = new Set(["skills", "languages", "references", "certifications", "courses"]);

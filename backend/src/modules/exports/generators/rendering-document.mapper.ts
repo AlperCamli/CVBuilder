@@ -1,5 +1,6 @@
 import type {
   PresentationItem,
+  PhotoPosition,
   RenderingPresentation,
   PresentationSocialLink
 } from "../../rendering/rendering-presentation";
@@ -17,6 +18,7 @@ export interface ExportDocumentTheme {
   font_asset_key?: "noto-sans" | "noto-serif";
   header_alignment?: "left" | "center";
   header_photo_size?: number;
+  header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
@@ -58,6 +60,7 @@ export interface ExportDocumentModel {
   social_links: ExportDocumentSocialLink[];
   photo_data_uri: string | null;
   photo_shape: "circle" | "square";
+  photo_position: PhotoPosition;
   sections: ExportDocumentSection[];
   theme: ExportDocumentTheme;
 }
@@ -105,6 +108,7 @@ const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
     font_asset_key: presentation.theme.tokens.font_asset_key,
     header_alignment: presentation.theme.tokens.header_alignment,
     header_photo_size: presentation.theme.tokens.header_photo_size,
+    header_photo_position: presentation.theme.tokens.header_photo_position,
     section_heading_style: presentation.theme.tokens.section_heading_style
   };
 };
@@ -154,6 +158,7 @@ export const mapPresentationToExportDocument = (
     social_links: mapSocialLinks(header.social_links),
     photo_data_uri: isDataUriImage(header.photo) ? header.photo : null,
     photo_shape: header.photo_shape === "square" ? "square" : "circle",
+    photo_position: header.photo_position,
     sections,
     theme: toTheme(presentation)
   };

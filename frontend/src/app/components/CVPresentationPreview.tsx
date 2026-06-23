@@ -364,8 +364,12 @@ function buildHeaderBlocks(
   mode: PreviewMode
 ): BlockSpec[] {
   const blocks: BlockSpec[] = [];
-  const centerHeader = theme.tokens.header_alignment === "center";
-  const headerPhotoSize = theme.tokens.header_photo_size ?? 58;
+  const photoPosition = header.photo
+    ? header.photo_position ?? theme.tokens.header_photo_position ?? "left"
+    : "left";
+  const stackedPhoto = photoPosition === "center";
+  const centerHeader = theme.tokens.header_alignment === "center" || stackedPhoto;
+  const headerPhotoSize = theme.tokens.header_photo_size ?? 72;
 
   blocks.push({
     key: "header-main",
@@ -374,9 +378,9 @@ function buildHeaderBlocks(
       <div
         className="flex items-start gap-4"
         style={{
-          alignItems: centerHeader ? "center" : undefined,
-          flexDirection: centerHeader && header.photo ? "column" : undefined,
-          justifyContent: centerHeader ? "center" : undefined
+          alignItems: stackedPhoto ? "center" : undefined,
+          flexDirection: stackedPhoto ? "column" : photoPosition === "right" ? "row-reverse" : undefined,
+          justifyContent: stackedPhoto ? "center" : undefined
         }}
       >
         {header.photo ? (
@@ -397,7 +401,7 @@ function buildHeaderBlocks(
           className="flex-1 min-w-0"
           style={{
             textAlign: centerHeader ? "center" : undefined,
-            width: centerHeader ? "100%" : undefined
+            width: stackedPhoto ? "100%" : undefined
           }}
         >
           <h1

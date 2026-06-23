@@ -50,6 +50,62 @@ values
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
   ),
   (
+    'LaTeX Scholar',
+    'latex-scholar',
+    'active',
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'LaTeX Two Column',
+    'latex-two-column',
+    'active',
+    '{"preview": "v1", "theme": "latex", "badges": ["LaTeX"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Academic Serif Color',
+    'academic-serif-color',
+    'active',
+    '{"preview": "v1", "theme": "academic"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Academic Timeline',
+    'academic-timeline',
+    'active',
+    '{"preview": "v1", "theme": "academic"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Creative Color Block',
+    'creative-color-block',
+    'active',
+    '{"preview": "v2", "theme": "creative"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Creative Photo Hero',
+    'creative-photo-hero',
+    'active',
+    '{"preview": "v2", "theme": "creative", "badges": ["Photo"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Portfolio Modern',
+    'portfolio-modern',
+    'active',
+    '{"preview": "v2", "theme": "portfolio"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Classic Monochrome',
+    'classic-monochrome',
+    'active',
+    '{"preview": "v1", "theme": "monochrome"}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
     'Tech Compact',
     'tech-compact',
     'active',

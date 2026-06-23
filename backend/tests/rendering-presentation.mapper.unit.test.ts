@@ -223,6 +223,7 @@ describe("rendering presentation mapper", () => {
     expect(presentation.header.name).toBe("Alper Çamlı");
     expect(presentation.document_title).toBe("My CV");
     expect(presentation.header.photo).toBe("data:image/png;base64,AAA");
+    expect(presentation.header.photo_position).toBe("left");
     expect(presentation.header.social_links).toHaveLength(2);
 
     expect(presentation.sections[0]?.title).toBe("Professional Summary");
@@ -245,10 +246,56 @@ describe("rendering presentation mapper", () => {
     expect(educationItem?.body).toBe("Board Member of the Game Developers Club");
   });
 
-  it("applies LaTeX-inspired academic profile tokens", () => {
+  it("resolves photo position from metadata and defaults invalid values to left", () => {
+    const rightPresentation = mapRenderingPayloadToPresentation(
+      renderingPayload(),
+      { photo_position: "right" },
+      null
+    );
+    expect(rightPresentation.header.photo_position).toBe("right");
+
+    const fallbackPresentation = mapRenderingPayloadToPresentation(
+      renderingPayload(),
+      { photo_position: "bottom" },
+      null
+    );
+    expect(fallbackPresentation.header.photo_position).toBe("left");
+  });
+
+  it("applies LaTeX template profile tokens", () => {
     const expectedProfiles = [
-      { slug: "latex-academic-serif", name: "Academic Serif", bodyTextSize: 11 },
-      { slug: "latex-research-cv", name: "Research CV", bodyTextSize: 10.8 }
+      {
+        slug: "latex-academic-serif",
+        name: "Academic Serif",
+        layout: "academic-classic",
+        mode: "classic-single-column",
+        headerAlignment: "center",
+        bodyTextSize: 11
+      },
+      {
+        slug: "latex-research-cv",
+        name: "Research CV",
+        layout: "academic-classic",
+        mode: "classic-single-column",
+        headerAlignment: "center",
+        bodyTextSize: 10.8
+      },
+      {
+        slug: "latex-scholar",
+        name: "LaTeX Scholar",
+        layout: "academic-classic",
+        mode: "classic-single-column",
+        headerAlignment: "center",
+        bodyTextSize: 10.8
+      },
+      {
+        slug: "latex-two-column",
+        name: "LaTeX Two Column",
+        layout: "two-column-modern",
+        mode: "portfolio-two-column",
+        headerAlignment: undefined,
+        bodyTextSize: 10.8
+      }
     ];
 
     for (const profile of expectedProfiles) {
@@ -268,13 +315,91 @@ describe("rendering presentation mapper", () => {
       const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
 
       expect(presentation.theme.template_slug).toBe(profile.slug);
-      expect(presentation.theme.layout).toBe("academic-classic");
+      expect(presentation.theme.layout).toBe(profile.layout);
+      expect(presentation.theme.mode).toBe(profile.mode);
       expect(presentation.theme.tokens.font_asset_key).toBe("noto-serif");
-      expect(presentation.theme.tokens.header_alignment).toBe("center");
+      expect(presentation.theme.tokens.header_alignment).toBe(profile.headerAlignment);
       expect(presentation.theme.tokens.header_photo_size).toBe(76);
       expect(presentation.theme.tokens.section_heading_style).toBe("ruled");
       expect(presentation.theme.tokens.body_text_size).toBe(profile.bodyTextSize);
       expect(presentation.theme.tokens.font_family).toContain("Noto Serif");
+    }
+  });
+
+  it("applies expanded gallery template profile tokens", () => {
+    const expectedProfiles = [
+      {
+        slug: "academic-serif-color",
+        name: "Academic Serif Color",
+        layout: "academic-classic",
+        mode: "classic-single-column",
+        photoSize: 72,
+        accent: "#1d4ed8"
+      },
+      {
+        slug: "academic-timeline",
+        name: "Academic Timeline",
+        layout: "executive-timeline",
+        mode: "timeline-split",
+        photoSize: 72,
+        accent: "#2563eb"
+      },
+      {
+        slug: "creative-color-block",
+        name: "Creative Color Block",
+        layout: "creative-portfolio",
+        mode: "portfolio-two-column",
+        photoSize: 80,
+        accent: "#0f766e"
+      },
+      {
+        slug: "creative-photo-hero",
+        name: "Creative Photo Hero",
+        layout: "creative-portfolio",
+        mode: "portfolio-two-column",
+        photoSize: 104,
+        accent: "#be123c"
+      },
+      {
+        slug: "portfolio-modern",
+        name: "Portfolio Modern",
+        layout: "two-column-modern",
+        mode: "portfolio-two-column",
+        photoSize: 80,
+        accent: "#4f46e5"
+      },
+      {
+        slug: "classic-monochrome",
+        name: "Classic Monochrome",
+        layout: "minimal-professional",
+        mode: "compact-single-column",
+        photoSize: 72,
+        accent: "#3f3f46"
+      }
+    ];
+
+    for (const profile of expectedProfiles) {
+      const payload = renderingPayload();
+      payload.template.template = {
+        id: `template-${profile.slug}`,
+        name: profile.name,
+        slug: profile.slug,
+        status: "active",
+        module_type: "standard",
+        preview_config: { preview: "v1" },
+        export_config: { pdf: { enabled: true }, docx: { enabled: true } },
+        created_at: "2026-06-23T00:00:00.000Z",
+        updated_at: "2026-06-23T00:00:00.000Z"
+      };
+
+      const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+
+      expect(presentation.theme.template_slug).toBe(profile.slug);
+      expect(presentation.theme.layout).toBe(profile.layout);
+      expect(presentation.theme.mode).toBe(profile.mode);
+      expect(presentation.theme.tokens.header_photo_size).toBe(profile.photoSize);
+      expect(presentation.theme.tokens.accent_color_hex).toBe(profile.accent);
+      expect(presentation.theme.tokens.compact_density).toBe(true);
     }
   });
 

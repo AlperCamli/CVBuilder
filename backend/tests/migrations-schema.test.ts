@@ -207,4 +207,28 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
     expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker/i);
   });
+
+  it("contains expanded standard template registrations with gallery badges", () => {
+    const migration = readMigration("20260623170000_expand_template_gallery_photo_positions.sql");
+
+    for (const slug of [
+      "latex-scholar",
+      "latex-two-column",
+      "academic-serif-color",
+      "academic-timeline",
+      "creative-color-block",
+      "creative-photo-hero",
+      "portfolio-modern",
+      "classic-monochrome"
+    ]) {
+      expect(migration).toMatch(new RegExp(slug, "i"));
+    }
+
+    expect(migration).toMatch(/'standard'/i);
+    expect(migration).toMatch(/"badges":\["LaTeX"\]/i);
+    expect(migration).toMatch(/"badges":\["Photo"\]/i);
+    expect(migration).toMatch(/"pdf":\{"enabled":true\}/i);
+    expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
+    expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker|\.tex/i);
+  });
 });
