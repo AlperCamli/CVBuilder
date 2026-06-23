@@ -197,4 +197,14 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/flow_type in \('tailored_draft', 'import_improve'\)/i);
     expect(migration).toMatch(/degree and field_of_study/i);
   });
+
+  it("contains LaTeX-inspired template registrations without adding a TeX pipeline", () => {
+    const migration = readMigration("20260623163000_latex_inspired_templates.sql");
+
+    expect(migration).toMatch(/latex-academic-serif/i);
+    expect(migration).toMatch(/latex-research-cv/i);
+    expect(migration).toMatch(/LaTeX-inspired/i);
+    expect(migration).toMatch(/"docx":\{"enabled":true\}/i);
+    expect(migration).not.toMatch(/tectonic|xelatex|tex live|docker/i);
+  });
 });

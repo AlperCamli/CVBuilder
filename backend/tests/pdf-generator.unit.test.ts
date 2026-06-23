@@ -92,4 +92,53 @@ describe("pdf generator", () => {
     expect(circleBytes.byteLength).toBeGreaterThan(1000);
     expect(squareBytes.byteLength).toBeGreaterThan(1000);
   });
+
+  it("generates a PDF with the Noto Serif font asset for LaTeX-inspired templates", async () => {
+    const model: ExportDocumentModel = {
+      title: "Dr. Ada Lovelace",
+      subtitle: "Research Scientist",
+      contact_line: "ada@example.com • London, UK",
+      contact_items: ["ada@example.com", "London, UK"],
+      social_links: [],
+      photo_data_uri: null,
+      photo_shape: "circle",
+      theme: {
+        layout: "academic-classic",
+        mode: "classic-single-column",
+        font_asset_key: "noto-serif",
+        header_alignment: "center",
+        section_heading_style: "ruled",
+        heading_color_hex: "#111111",
+        accent_color_hex: "#111111",
+        body_color_hex: "#1f2937",
+        muted_color_hex: "#4b5563",
+        page_background_hex: "#ffffff",
+        body_text_size: 11,
+        section_spacing: 12,
+        block_spacing: 8,
+        font_family: '"Noto Serif", "Times New Roman", Georgia, serif'
+      },
+      sections: [
+        {
+          type: "publications",
+          title: "Publications",
+          inline_text: null,
+          blocks: [
+            {
+              headline: "A compact notation for analytical engines",
+              subheadline: "Journal of Computing History",
+              metadata_line: "1843",
+              bullets: [],
+              body: "Peer-reviewed research summary with international characters: Çamlı, İstanbul."
+            }
+          ]
+        }
+      ]
+    };
+
+    const bytes = await generatePdfDocument(model);
+
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+    expect(normalizePdfText("Çamlı İstanbul")).toBe("Çamlı İstanbul");
+  });
 });

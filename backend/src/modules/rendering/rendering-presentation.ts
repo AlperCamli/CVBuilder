@@ -20,6 +20,9 @@ export type PresentationLayoutMode =
 
 export interface PresentationStyleTokens {
   font_family: string;
+  font_asset_key?: "noto-sans" | "noto-serif";
+  header_alignment?: "left" | "center";
+  section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
   body_color_hex: string;
@@ -180,6 +183,45 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       section_spacing: 16,
       block_spacing: 12,
       body_text_size: 12,
+      compact_density: true
+    }
+  },
+  "latex-academic-serif": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    tokens: {
+      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+      font_asset_key: "noto-serif",
+      header_alignment: "center",
+      section_heading_style: "ruled",
+      heading_color_hex: "#111111",
+      accent_color_hex: "#111111",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#4b5563",
+      page_background_hex: "#ffffff",
+      section_spacing: 12,
+      block_spacing: 8,
+      body_text_size: 11,
+      compact_density: true
+    }
+  },
+  "latex-research-cv": {
+    layout: "academic-classic",
+    mode: "classic-single-column",
+    skills_display: "bulleted",
+    tokens: {
+      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+      font_asset_key: "noto-serif",
+      header_alignment: "center",
+      section_heading_style: "ruled",
+      heading_color_hex: "#0f172a",
+      accent_color_hex: "#1f2937",
+      body_color_hex: "#1f2937",
+      muted_color_hex: "#3f3f46",
+      page_background_hex: "#ffffff",
+      section_spacing: 11,
+      block_spacing: 7,
+      body_text_size: 10.8,
       compact_density: true
     }
   },

@@ -245,6 +245,38 @@ describe("rendering presentation mapper", () => {
     expect(educationItem?.body).toBe("Board Member of the Game Developers Club");
   });
 
+  it("applies LaTeX-inspired academic profile tokens", () => {
+    const expectedProfiles = [
+      { slug: "latex-academic-serif", name: "Academic Serif", bodyTextSize: 11 },
+      { slug: "latex-research-cv", name: "Research CV", bodyTextSize: 10.8 }
+    ];
+
+    for (const profile of expectedProfiles) {
+      const payload = renderingPayload();
+      payload.template.template = {
+        id: `template-${profile.slug}`,
+        name: profile.name,
+        slug: profile.slug,
+        status: "active",
+        module_type: "standard",
+        preview_config: { badges: ["LaTeX-inspired"] },
+        export_config: { pdf: { enabled: true }, docx: { enabled: true } },
+        created_at: "2026-06-23T00:00:00.000Z",
+        updated_at: "2026-06-23T00:00:00.000Z"
+      };
+
+      const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+
+      expect(presentation.theme.template_slug).toBe(profile.slug);
+      expect(presentation.theme.layout).toBe("academic-classic");
+      expect(presentation.theme.tokens.font_asset_key).toBe("noto-serif");
+      expect(presentation.theme.tokens.header_alignment).toBe("center");
+      expect(presentation.theme.tokens.section_heading_style).toBe("ruled");
+      expect(presentation.theme.tokens.body_text_size).toBe(profile.bodyTextSize);
+      expect(presentation.theme.tokens.font_family).toContain("Noto Serif");
+    }
+  });
+
   it("does not use legacy free-text fallback for education body", () => {
     const payload = renderingPayload();
     const educationSection = payload.sections.find((section) => section.type === "education");

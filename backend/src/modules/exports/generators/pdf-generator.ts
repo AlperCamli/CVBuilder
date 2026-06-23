@@ -70,6 +70,7 @@ interface PlacedLine {
   yFromTop: number;
   lineHeight: number;
   alignRight?: boolean;
+  alignCenter?: boolean;
   alignBoxWidth?: number;
 }
 
@@ -131,6 +132,8 @@ interface Style {
   bulletSize: number;
   timelineDateSize: number;
   photoSize: number;
+  headerAlignment: "left" | "center";
+  sectionHeadingStyle: "plain" | "ruled";
   sidebarInnerWidth: number;
   mainColumnWidth: number;
   fonts: PdfFonts;
@@ -264,6 +267,7 @@ const appendTextLines = (
     yFromTop: number;
     lineHeight: number;
     alignRight?: boolean;
+    alignCenter?: boolean;
     alignBoxWidth?: number;
   }
 ): number => {
@@ -278,6 +282,7 @@ const appendTextLines = (
       yFromTop: options.yFromTop + i * options.lineHeight,
       lineHeight: options.lineHeight,
       alignRight: options.alignRight,
+      alignCenter: options.alignCenter,
       alignBoxWidth: options.alignBoxWidth
     });
   }
@@ -299,6 +304,7 @@ const buildHeaderBlock = (
 
   const textX = photo ? style.photoSize + HEADER_PHOTO_GAP : 0;
   const textMaxWidth = style.innerWidth - textX;
+  const centerHeader = style.headerAlignment === "center" && !photo;
 
   if (photo) {
     images.push({
@@ -324,7 +330,9 @@ const buildHeaderBlock = (
     maxWidth: textMaxWidth,
     xOffset: textX,
     yFromTop: textY,
-    lineHeight: nameLH
+    lineHeight: nameLH,
+    alignCenter: centerHeader,
+    alignBoxWidth: textMaxWidth
   });
 
   if (model.subtitle) {
@@ -337,7 +345,9 @@ const buildHeaderBlock = (
       maxWidth: textMaxWidth,
       xOffset: textX,
       yFromTop: textY,
-      lineHeight: titleLH
+      lineHeight: titleLH,
+      alignCenter: centerHeader,
+      alignBoxWidth: textMaxWidth
     });
   }
 
@@ -351,7 +361,9 @@ const buildHeaderBlock = (
       maxWidth: textMaxWidth,
       xOffset: textX,
       yFromTop: textY,
-      lineHeight: contactLH
+      lineHeight: contactLH,
+      alignCenter: centerHeader,
+      alignBoxWidth: textMaxWidth
     });
   }
 
@@ -365,7 +377,9 @@ const buildHeaderBlock = (
       maxWidth: textMaxWidth,
       xOffset: textX,
       yFromTop: textY,
-      lineHeight: contactLH
+      lineHeight: contactLH,
+      alignCenter: centerHeader,
+      alignBoxWidth: textMaxWidth
     });
   }
 
@@ -401,10 +415,16 @@ const buildSectionTitleBlock = (
   isSidebar: boolean
 ): BlockShape => {
   const lines: PlacedLine[] = [];
+  const shapes: PlacedShape[] = [];
+  const isRuled = style.sectionHeadingStyle === "ruled" && !isSidebar;
   const titleLH = style.sectionTitleSize * 1.3;
   const marginBottom = 8 * style.fontScale;
+  const ruleGap = isRuled ? 3 * style.fontScale : 0;
+  const ruleThickness = 0.7;
 
-  const totalLines = appendTextLines(lines, title, {
+  const displayTitle = isRuled ? title.toUpperCase() : title;
+
+  const totalLines = appendTextLines(lines, displayTitle, {
     font: style.fonts.bold,
     fontWeight: "bold",
     size: style.sectionTitleSize,
@@ -415,7 +435,24 @@ const buildSectionTitleBlock = (
     lineHeight: titleLH
   });
 
-  return { lines, shapes: [], images: [], height: totalLines + marginBottom };
+  if (isRuled) {
+    shapes.push({
+      kind: "horizontal-line",
+      xOffset: 0,
+      yFromTop: totalLines + ruleGap,
+      width,
+      colorKey: "heading",
+      opacity: 1,
+      thickness: ruleThickness
+    });
+  }
+
+  return {
+    lines,
+    shapes,
+    images: [],
+    height: totalLines + (isRuled ? ruleGap + ruleThickness : 0) + marginBottom
+  };
 };
 
 const buildInlineParagraphBlock = (
@@ -685,9 +722,13 @@ const buildSectionBlocks = (
   if (section.blocks.length === 0) {
     // Title + optional inline text bundled as one indivisible block.
     const lines: PlacedLine[] = [];
+    const shapes: PlacedShape[] = [];
+    const isRuled = style.sectionHeadingStyle === "ruled" && !isSidebar;
     const titleLH = style.sectionTitleSize * 1.3;
+    const ruleGap = isRuled ? 3 * style.fontScale : 0;
+    const ruleThickness = 0.7;
     let y = 0;
-    y += appendTextLines(lines, section.title, {
+    y += appendTextLines(lines, isRuled ? section.title.toUpperCase() : section.title, {
       font: style.fonts.bold,
       fontWeight: "bold",
       size: style.sectionTitleSize,
@@ -697,6 +738,18 @@ const buildSectionBlocks = (
       yFromTop: y,
       lineHeight: titleLH
     });
+    if (isRuled) {
+      shapes.push({
+        kind: "horizontal-line",
+        xOffset: 0,
+        yFromTop: y + ruleGap,
+        width,
+        colorKey: "heading",
+        opacity: 1,
+        thickness: ruleThickness
+      });
+      y += ruleGap + ruleThickness;
+    }
     if (section.inline_text) {
       y += 8 * style.fontScale;
       const bodyLH = style.itemBodySize * 1.6;
@@ -714,7 +767,7 @@ const buildSectionBlocks = (
     blocks.push({
       key: `${sectionId}-bundled`,
       column,
-      shape: { lines, shapes: [], images: [], height: y + sectionSpacing }
+      shape: { lines, shapes, images: [], height: y + sectionSpacing }
     });
     return blocks;
   }
@@ -885,6 +938,9 @@ const drawBlock = (
     if (line.alignRight && line.alignBoxWidth) {
       const lineWidth = font.widthOfTextAtSize(line.text, line.size);
       drawX = leftX + line.xOffset + Math.max(0, line.alignBoxWidth - lineWidth);
+    } else if (line.alignCenter && line.alignBoxWidth) {
+      const lineWidth = font.widthOfTextAtSize(line.text, line.size);
+      drawX = leftX + line.xOffset + Math.max(0, (line.alignBoxWidth - lineWidth) / 2);
     }
     page.drawText(line.text, {
       x: drawX,
@@ -962,8 +1018,12 @@ export const generatePdfDocument = async (
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const regularFontBytes = tryReadFontBytes("NotoSans-Regular.ttf");
-  const boldFontBytes = tryReadFontBytes("NotoSans-Bold.ttf");
+  const fontAssets =
+    documentModel.theme.font_asset_key === "noto-serif"
+      ? { regular: "NotoSerif-Regular.ttf", bold: "NotoSerif-Bold.ttf" }
+      : { regular: "NotoSans-Regular.ttf", bold: "NotoSans-Bold.ttf" };
+  const regularFontBytes = tryReadFontBytes(fontAssets.regular);
+  const boldFontBytes = tryReadFontBytes(fontAssets.bold);
   const regular = await pdf.embedFont(regularFontBytes, { subset: false });
   const bold = await pdf.embedFont(boldFontBytes, { subset: false });
 
@@ -1018,6 +1078,8 @@ export const generatePdfDocument = async (
     bulletSize: 12 * fontScale,
     timelineDateSize: 11 * fontScale,
     photoSize: 58 * fontScale,
+    headerAlignment: theme.header_alignment ?? "left",
+    sectionHeadingStyle: theme.section_heading_style ?? "plain",
     sidebarInnerWidth,
     mainColumnWidth,
     fonts: { regular, bold },

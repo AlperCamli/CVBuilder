@@ -180,9 +180,29 @@ const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode =>
   );
 };
 
-function SectionTitle({ title, color }: { title: string; color: string }) {
+function SectionTitle({
+  title,
+  color,
+  headingStyle = "plain"
+}: {
+  title: string;
+  color: string;
+  headingStyle?: PresentationTheme["tokens"]["section_heading_style"];
+}) {
+  const isRuled = headingStyle === "ruled";
+
   return (
-    <h2 style={{ fontSize: scaledPx(14), fontWeight: 600, color, marginBottom: scaledPx(8) }}>
+    <h2
+      style={{
+        fontSize: scaledPx(14),
+        fontWeight: 600,
+        color,
+        marginBottom: scaledPx(8),
+        paddingBottom: isRuled ? scaledPx(3) : undefined,
+        borderBottom: isRuled ? `1px solid ${color}` : undefined,
+        textTransform: isRuled ? "uppercase" : undefined
+      }}
+    >
       {title}
     </h2>
   );
@@ -260,13 +280,14 @@ function buildSectionBlocks(
   options: {
     colors: PreviewColors;
     style: "default" | "timeline";
+    sectionHeadingStyle?: PresentationTheme["tokens"]["section_heading_style"];
     blockSpacing: number;
     sectionSpacing: number;
     column: BlockColumn;
     keyPrefix: string;
   }
 ): BlockSpec[] {
-  const { colors, style, blockSpacing, sectionSpacing, column, keyPrefix } = options;
+  const { colors, style, sectionHeadingStyle, blockSpacing, sectionSpacing, column, keyPrefix } = options;
   const blocks: BlockSpec[] = [];
 
   // Section with no items: bundle title + inline text (if any) as a single, indivisible block.
@@ -276,7 +297,7 @@ function buildSectionBlocks(
       column,
       node: (
         <div style={{ marginBottom: scaledPx(sectionSpacing) }}>
-          <SectionTitle title={section.title} color={colors.heading} />
+          <SectionTitle title={section.title} color={colors.heading} headingStyle={sectionHeadingStyle} />
           {section.inline_text ? (
             <p style={{ fontSize: scaledPx(12), lineHeight: 1.6, color: colors.body }}>
               {renderPreviewText(section.inline_text)}
@@ -292,7 +313,7 @@ function buildSectionBlocks(
     key: `${keyPrefix}sec-${section.id}-title`,
     column,
     keepWithNext: true,
-    node: <SectionTitle title={section.title} color={colors.heading} />
+    node: <SectionTitle title={section.title} color={colors.heading} headingStyle={sectionHeadingStyle} />
   });
 
   if (section.inline_text) {
@@ -343,12 +364,16 @@ function buildHeaderBlocks(
   mode: PreviewMode
 ): BlockSpec[] {
   const blocks: BlockSpec[] = [];
+  const centerHeader = theme.tokens.header_alignment === "center" && !header.photo;
 
   blocks.push({
     key: "header-main",
     column: "full",
     node: (
-      <div className="flex items-start gap-4">
+      <div
+        className="flex items-start gap-4"
+        style={{ justifyContent: centerHeader ? "center" : undefined }}
+      >
         {header.photo ? (
           <img
             src={header.photo}
@@ -363,7 +388,7 @@ function buildHeaderBlocks(
           />
         ) : null}
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" style={{ textAlign: centerHeader ? "center" : undefined }}>
           <h1
             style={{
               fontSize: theme.mode === "compact-single-column" ? scaledPx(21) : scaledPx(23),
@@ -384,7 +409,10 @@ function buildHeaderBlocks(
             </p>
           ) : null}
           {header.social_links.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            <div
+              className="mt-2 flex flex-wrap gap-x-3 gap-y-1"
+              style={{ justifyContent: centerHeader ? "center" : undefined }}
+            >
               {header.social_links.map((link) => {
                 const Icon = getSocialIcon(link.type);
                 return (
@@ -552,6 +580,7 @@ export function CVPresentationPreview({
         buildSectionBlocks(section, {
           colors: sidebarColors,
           style: "default",
+          sectionHeadingStyle: theme.tokens.section_heading_style,
           blockSpacing: Math.max(6, scaledBlockSpacing - 3),
           sectionSpacing: Math.max(10, scaledSectionSpacing - 3),
           column: "sidebar",
@@ -563,6 +592,7 @@ export function CVPresentationPreview({
         buildSectionBlocks(section, {
           colors,
           style: "default",
+          sectionHeadingStyle: theme.tokens.section_heading_style,
           blockSpacing: scaledBlockSpacing,
           sectionSpacing: scaledSectionSpacing,
           column: "main",
@@ -574,6 +604,7 @@ export function CVPresentationPreview({
         buildSectionBlocks(section, {
           colors,
           style: isTimeline ? "timeline" : "default",
+          sectionHeadingStyle: theme.tokens.section_heading_style,
           blockSpacing: scaledBlockSpacing,
           sectionSpacing: scaledSectionSpacing,
           column: "full",

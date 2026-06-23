@@ -36,6 +36,20 @@ values
     '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
   ),
   (
+    'Academic Serif',
+    'latex-academic-serif',
+    'active',
+    '{"preview": "v1", "theme": "latex-inspired", "badges": ["LaTeX-inspired"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
+    'Research CV',
+    'latex-research-cv',
+    'active',
+    '{"preview": "v1", "theme": "latex-inspired", "badges": ["LaTeX-inspired"]}'::jsonb,
+    '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
+  ),
+  (
     'Tech Compact',
     'tech-compact',
     'active',

@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   HeadingLevel,
   ImageRun,
@@ -35,6 +36,15 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
   const headingColor = rgbToHex(documentModel.theme.heading_color_hex);
   const accentColor = rgbToHex(documentModel.theme.accent_color_hex);
   const bodySize = Math.max(20, Math.round(documentModel.theme.body_text_size * 2));
+  const headerAlignment =
+    documentModel.theme.header_alignment === "center" ? AlignmentType.CENTER : AlignmentType.LEFT;
+  const isRuledHeading = documentModel.theme.section_heading_style === "ruled";
+  const documentFont =
+    documentModel.theme.font_asset_key === "noto-serif"
+      ? "Cambria"
+      : documentModel.theme.layout === "minimal-professional"
+        ? "Calibri"
+        : "Cambria";
 
   const body: Paragraph[] = [];
 
@@ -53,6 +63,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
               }
             })
           ],
+          alignment: headerAlignment,
           spacing: {
             after: 140
           }
@@ -72,6 +83,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           size: bodySize + 16
         })
       ],
+      alignment: headerAlignment,
       spacing: {
         after: 120
       }
@@ -89,6 +101,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             size: bodySize + 2
           })
         ],
+        alignment: headerAlignment,
         spacing: {
           after: 100
         }
@@ -105,6 +118,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             size: bodySize
           })
         ],
+        alignment: headerAlignment,
         spacing: {
           after: 120
         }
@@ -122,6 +136,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             size: Math.max(18, bodySize - 2)
           })
         ],
+        alignment: headerAlignment,
         spacing: {
           after: 260
         }
@@ -144,12 +159,22 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         heading: HeadingLevel.HEADING_2,
         children: [
           new TextRun({
-            text: section.title,
+            text: isRuledHeading ? section.title.toUpperCase() : section.title,
             color: headingColor,
             bold: true,
             size: bodySize + 4
           })
         ],
+        border: isRuledHeading
+          ? {
+              bottom: {
+                color: headingColor,
+                space: 1,
+                style: BorderStyle.SINGLE,
+                size: 4
+              }
+            }
+          : undefined,
         spacing: {
           before: 100,
           after: 80
@@ -284,7 +309,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
       default: {
         document: {
           run: {
-            font: documentModel.theme.layout === "minimal-professional" ? "Calibri" : "Cambria",
+            font: documentFont,
             size: bodySize
           },
           paragraph: {

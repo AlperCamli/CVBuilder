@@ -333,6 +333,9 @@ export type PresentationLayoutMode =
 
 export interface PresentationStyleTokens {
   font_family: string;
+  font_asset_key?: "noto-sans" | "noto-serif";
+  header_alignment?: "left" | "center";
+  section_heading_style?: "plain" | "ruled";
   heading_color_hex: string;
   accent_color_hex: string;
   body_color_hex: string;

@@ -13,6 +13,8 @@ export const standardModule: CvModuleDefinition = {
     "executive-timeline",
     "creative-portfolio",
     "academic-classic",
+    "latex-academic-serif",
+    "latex-research-cv",
     "tech-compact",
     "two-column-modern"
   ],

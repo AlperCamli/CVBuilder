@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "./ui/dialog";
+import { Badge } from "./ui/badge";
 import { CVPresentationPreview } from "./CVPresentationPreview";
 import type { RenderingPresentation, TemplateSummary } from "../integration/api-types";
 
@@ -23,6 +24,18 @@ interface TemplateGalleryDialogProps {
 }
 
 const PREVIEW_SCALE = 0.34;
+
+const getTemplateBadges = (template: TemplateSummary): string[] => {
+  const badges = template.preview_config?.badges;
+  if (!Array.isArray(badges)) {
+    return [];
+  }
+
+  return badges
+    .filter((badge): badge is string => typeof badge === "string")
+    .map((badge) => badge.trim())
+    .filter((badge) => badge.length > 0);
+};
 
 export function TemplateGalleryDialog({
   open,
@@ -42,18 +55,21 @@ export function TemplateGalleryDialog({
     templateId: string | null;
     name: string;
     slug: string;
+    badges: string[];
   }> = [
     {
       id: "__default__",
       templateId: null,
       name: "Default Template",
-      slug: "default"
+      slug: "default",
+      badges: []
     },
     ...templates.map((template) => ({
       id: template.id,
       templateId: template.id,
       name: template.name,
-      slug: template.slug
+      slug: template.slug,
+      badges: getTemplateBadges(template)
     }))
   ];
 
@@ -122,12 +138,29 @@ export function TemplateGalleryDialog({
 
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p
-                        className="truncate"
-                        style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-primary)" }}
-                      >
-                        {card.name}
-                      </p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span
+                          className="truncate"
+                          style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-primary)" }}
+                        >
+                          {card.name}
+                        </span>
+                        {card.badges.map((badge) => (
+                          <Badge
+                            key={`${card.id}-${badge}`}
+                            variant="outline"
+                            className="px-1.5 py-0"
+                            style={{
+                              fontSize: "10px",
+                              borderColor: "var(--color-teal-200)",
+                              color: "var(--color-teal-700)",
+                              background: "var(--color-teal-50)"
+                            }}
+                          >
+                            {badge}
+                          </Badge>
+                        ))}
+                      </div>
                       <p
                         className="truncate"
                         style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}

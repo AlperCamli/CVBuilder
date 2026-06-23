@@ -30,6 +30,7 @@ const basePresentation = (): RenderingPresentation => ({
     phone: "+90 500 000 00 00",
     location: "Istanbul, Turkey",
     photo: null,
+    photo_shape: "circle",
     contact_items: ["alper@example.com", "+90 500 000 00 00", "Istanbul, Turkey"],
     social_links: [
       {
@@ -76,6 +77,24 @@ describe("presentation to export document mapper", () => {
     expect(mapped.sections).toHaveLength(1);
     expect(mapped.sections[0]?.title).toBe("Professional Summary");
     expect(mapped.sections[0]?.blocks[0]?.body).toBe("Highly motivated student.");
+  });
+
+  it("passes LaTeX-inspired style tokens through to export document theme", () => {
+    const presentation = basePresentation();
+    presentation.theme.tokens = {
+      ...presentation.theme.tokens,
+      font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+      font_asset_key: "noto-serif",
+      header_alignment: "center",
+      section_heading_style: "ruled"
+    };
+
+    const mapped = mapPresentationToExportDocument(presentation);
+
+    expect(mapped.theme.font_asset_key).toBe("noto-serif");
+    expect(mapped.theme.header_alignment).toBe("center");
+    expect(mapped.theme.section_heading_style).toBe("ruled");
+    expect(mapped.theme.font_family).toContain("Noto Serif");
   });
 
   it("keeps inline sections without inventing blocks", () => {
