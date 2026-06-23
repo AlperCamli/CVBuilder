@@ -27,7 +27,7 @@ export const standardModule: CvModuleDefinition = {
     "tech-compact",
     "two-column-modern"
   ],
-  defaultTemplateSlug: "modern-clean",
+  defaultTemplateSlug: "latex-academic-serif",
   parserSectionHints: [],
   sectionCatalog: [
     {

@@ -39,7 +39,17 @@
       "Bash(sips -g pixelWidth -g pixelHeight logo.png)",
       "Bash(curl -sI \"https://jobspecificcv.com/images/logo.png\")",
       "Bash(ls /Users/alpercamli/Desktop/CV_Builder/.claude/SKİLLS/ 2>/dev/null; echo \"---\"; mkdir -p /Users/alpercamli/Desktop/CV_Builder/.claude/skills/kb-to-sql-query /Users/alpercamli/Desktop/CV_Builder/.claude/skills/db-kb-writer && echo \"created\")",
-      "Bash(awk 'NR>=16 && NR<=18 {printf \"%d: [%s]\\\\n\", NR, $0}' src/app/pages/Landing.tsx)"
+      "Bash(awk 'NR>=16 && NR<=18 {printf \"%d: [%s]\\\\n\", NR, $0}' src/app/pages/Landing.tsx)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(sed -n '588,600p' frontend/src/app/components/SpecializedSections.tsx)",
+      "Bash(sed -n '817,829p' frontend/src/app/components/SpecializedSections.tsx)",
+      "Bash(sed -n '1046,1058p' frontend/src/app/components/SpecializedSections.tsx)",
+      "Bash(sed -n '1895,1912p' backend/src/modules/imports/parsers/simple-cv-parser.ts)",
+      "Bash(sed -n '1789,1812p' backend/src/modules/imports/parsers/simple-cv-parser.ts)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"src errors: $\\(npx tsc --noEmit 2>&1)",
+      "Bash(tectonic --version)"
     ],
     "additionalDirectories": [
       "/Users/alpercamli/Desktop/CV_Builder/.claude/skills"

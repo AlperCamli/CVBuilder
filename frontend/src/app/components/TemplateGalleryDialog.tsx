@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ interface TemplateGalleryDialogProps {
   selectedTemplateId: string | null;
   previewsByTemplateId: Record<string, RenderingPresentation | null>;
   loadingTemplateIds: string[];
+  onVisibleTemplateIdsChange: (templateIds: Array<string | null>) => void;
   onSelectTemplate: (templateId: string | null) => void;
   fontScale: number;
   spacingScale: number;
@@ -24,6 +26,9 @@ interface TemplateGalleryDialogProps {
 }
 
 const PREVIEW_SCALE = 0.34;
+const TEMPLATE_BATCH_SIZE = 6;
+const LOAD_MORE_SCROLL_THRESHOLD_PX = 180;
+const DEFAULT_TEMPLATE_CARD_ID = "__default__";
 
 const getTemplateBadges = (template: TemplateSummary): string[] => {
   const badges = template.preview_config?.badges;
@@ -37,6 +42,14 @@ const getTemplateBadges = (template: TemplateSummary): string[] => {
     .filter((badge) => badge.length > 0);
 };
 
+const isLatexTemplate = (template: TemplateSummary): boolean => {
+  const badges = getTemplateBadges(template);
+  return (
+    template.slug.toLowerCase().startsWith("latex-") ||
+    badges.some((badge) => badge.toLowerCase() === "latex")
+  );
+};
+
 export function TemplateGalleryDialog({
   open,
   onOpenChange,
@@ -44,34 +57,90 @@ export function TemplateGalleryDialog({
   selectedTemplateId,
   previewsByTemplateId,
   loadingTemplateIds,
+  onVisibleTemplateIdsChange,
   onSelectTemplate,
   fontScale,
   spacingScale,
   layoutScale
 }: TemplateGalleryDialogProps) {
   const loadingIds = new Set(loadingTemplateIds);
-  const cards: Array<{
+  const [visibleCount, setVisibleCount] = useState(TEMPLATE_BATCH_SIZE);
+  const sortedTemplates = useMemo(
+    () =>
+      [...templates].sort((a, b) => {
+        const aLatex = isLatexTemplate(a);
+        const bLatex = isLatexTemplate(b);
+        if (aLatex !== bLatex) {
+          return aLatex ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      }),
+    [templates]
+  );
+  const cards = useMemo<Array<{
     id: string;
     templateId: string | null;
     name: string;
     slug: string;
     badges: string[];
-  }> = [
-    {
-      id: "__default__",
-      templateId: null,
-      name: "Default Template",
-      slug: "default",
-      badges: []
+  }>>(
+    () => [
+      ...sortedTemplates.map((template) => ({
+        id: template.id,
+        templateId: template.id,
+        name: template.name,
+        slug: template.slug,
+        badges: getTemplateBadges(template)
+      })),
+      {
+        id: DEFAULT_TEMPLATE_CARD_ID,
+        templateId: null,
+        name: "Default Template",
+        slug: "default",
+        badges: []
+      }
+    ],
+    [sortedTemplates]
+  );
+  const visibleCards = useMemo(() => cards.slice(0, visibleCount), [cards, visibleCount]);
+  const visibleTemplateIds = useMemo(
+    () => visibleCards.map((card) => card.templateId),
+    [visibleCards]
+  );
+  const hasMoreTemplates = visibleCount < cards.length;
+
+  const loadNextBatch = useCallback(() => {
+    setVisibleCount((current) => Math.min(cards.length, current + TEMPLATE_BATCH_SIZE));
+  }, [cards.length]);
+
+  const handleTemplateScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      if (!hasMoreTemplates) {
+        return;
+      }
+
+      const target = event.currentTarget;
+      const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight;
+      if (remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX) {
+        loadNextBatch();
+      }
     },
-    ...templates.map((template) => ({
-      id: template.id,
-      templateId: template.id,
-      name: template.name,
-      slug: template.slug,
-      badges: getTemplateBadges(template)
-    }))
-  ];
+    [hasMoreTemplates, loadNextBatch]
+  );
+
+  useEffect(() => {
+    if (open) {
+      setVisibleCount(Math.min(TEMPLATE_BATCH_SIZE, cards.length));
+    }
+  }, [cards.length, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    onVisibleTemplateIdsChange(visibleTemplateIds);
+  }, [onVisibleTemplateIdsChange, open, visibleTemplateIds]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,9 +154,13 @@ export function TemplateGalleryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-auto pr-1" style={{ maxHeight: "74vh" }}>
+        <div
+          className="overflow-auto pr-1"
+          style={{ maxHeight: "74vh" }}
+          onScroll={handleTemplateScroll}
+        >
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {cards.map((card) => {
+            {visibleCards.map((card) => {
               const isSelected = selectedTemplateId === card.templateId;
               const isLoading = loadingIds.has(card.id);
               const preview = previewsByTemplateId[card.id] ?? null;
@@ -184,6 +257,23 @@ export function TemplateGalleryDialog({
                 </div>
               );
             })}
+            {hasMoreTemplates ? (
+              <div className="md:col-span-2 xl:col-span-3 flex justify-center py-2">
+                <button
+                  type="button"
+                  onClick={loadNextBatch}
+                  className="px-3 py-1.5 rounded-lg border"
+                  style={{
+                    fontSize: "12px",
+                    borderColor: "var(--color-border-secondary)",
+                    background: "var(--color-background-primary)",
+                    color: "var(--color-text-primary)"
+                  }}
+                >
+                  Load more templates
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </DialogContent>

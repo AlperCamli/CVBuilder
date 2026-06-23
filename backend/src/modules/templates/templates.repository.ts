@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type { CvTemplateRecord } from "../../shared/types/domain";
 
+const DEFAULT_STANDARD_TEMPLATE_SLUG = "latex-academic-serif";
+
 export interface TemplatesRepository {
   listActive(moduleType?: string): Promise<CvTemplateRecord[]>;
   findById(templateId: string): Promise<CvTemplateRecord | null>;
@@ -63,10 +65,29 @@ export class SupabaseTemplatesRepository implements TemplatesRepository {
   }
 
   async findDefaultActive(): Promise<CvTemplateRecord | null> {
+    const preferred = await this.supabaseClient
+      .from("cv_templates")
+      .select("*")
+      .eq("status", "active")
+      .eq("module_type", "standard")
+      .eq("slug", DEFAULT_STANDARD_TEMPLATE_SLUG)
+      .maybeSingle();
+
+    if (preferred.error) {
+      throw new InternalServerError("Failed to resolve default template", {
+        reason: preferred.error.message
+      });
+    }
+
+    if (preferred.data) {
+      return toTemplateRecord(preferred.data as Record<string, unknown>);
+    }
+
     const { data, error } = await this.supabaseClient
       .from("cv_templates")
       .select("*")
       .eq("status", "active")
+      .eq("module_type", "standard")
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();

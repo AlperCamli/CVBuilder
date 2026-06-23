@@ -567,7 +567,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
   const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
-  const templateGalleryLoadedRef = useRef(false);
+  const templatePreviewsRef = useRef<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
+  const templatePreviewLoadingIdsRef = useRef<Set<string>>(new Set());
+  const templatePreviewGenerationRef = useRef(0);
 
   useEffect(() => {
     setSidebarVisible(false);
@@ -1231,67 +1233,80 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   useEffect(() => {
-    if (!showTemplateGallery || templates.length === 0) {
-      if (!showTemplateGallery) {
-        templateGalleryLoadedRef.current = false;
-        setTemplatePreviewsByTemplateId({});
-        setTemplatePreviewLoadingIds([]);
-      }
+    templatePreviewsRef.current = templatePreviewsByTemplateId;
+  }, [templatePreviewsByTemplateId]);
+
+  useEffect(() => {
+    if (showTemplateGallery) {
       return;
     }
 
-    if (templateGalleryLoadedRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-    templateGalleryLoadedRef.current = true;
-    const templateIds = ["__default__", ...templates.map((template) => template.id)];
-    setTemplatePreviewLoadingIds(templateIds);
+    templatePreviewGenerationRef.current += 1;
+    templatePreviewsRef.current = {};
+    templatePreviewLoadingIdsRef.current = new Set();
     setTemplatePreviewsByTemplateId({});
+    setTemplatePreviewLoadingIds([]);
+  }, [showTemplateGallery]);
 
-    void Promise.all(
-      [
-        (async () => {
-          try {
-            const preview = await api.postRenderingPreview({
-              cv_kind: cvKind,
-              current_content: injectPreviewPlaceholders(buildCurrentContent(), moduleType),
-              template_id: null,
-              language
-            });
-            return ["__default__", preview.presentation] as const;
-          } catch {
-            return ["__default__", null] as const;
-          }
-        })(),
-        ...templates.map(async (template) => {
-          try {
-            const preview = await api.postRenderingPreview({
-              cv_kind: cvKind,
-              current_content: injectPreviewPlaceholders(buildCurrentContent(), moduleType),
-              template_id: template.id,
-              language
-            });
-            return [template.id, preview.presentation] as const;
-          } catch {
-            return [template.id, null] as const;
-          }
-        })
-      ]
-    ).then((entries) => {
-      if (cancelled) {
+  const ensureTemplatePreviews = useCallback(
+    (visibleTemplateIds: Array<string | null>) => {
+      if (!showTemplateGallery || visibleTemplateIds.length === 0) {
         return;
       }
 
-      setTemplatePreviewsByTemplateId(Object.fromEntries(entries));
-      setTemplatePreviewLoadingIds([]);
-    });
+      const cardIds = Array.from(
+        new Set(visibleTemplateIds.map((templateId) => templateId ?? "__default__"))
+      );
+      const idsToLoad = cardIds.filter(
+        (cardId) =>
+          !Object.prototype.hasOwnProperty.call(templatePreviewsRef.current, cardId) &&
+          !templatePreviewLoadingIdsRef.current.has(cardId)
+      );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [api, buildCurrentContent, cvKind, language, moduleType, showTemplateGallery, templates]);
+      if (idsToLoad.length === 0) {
+        return;
+      }
+
+      const generation = templatePreviewGenerationRef.current;
+      const previewContent = injectPreviewPlaceholders(buildCurrentContent(), moduleType);
+
+      idsToLoad.forEach((cardId) => templatePreviewLoadingIdsRef.current.add(cardId));
+      setTemplatePreviewLoadingIds([...templatePreviewLoadingIdsRef.current]);
+
+      void Promise.all(
+        idsToLoad.map(async (cardId) => {
+          try {
+            const preview = await api.postRenderingPreview({
+              cv_kind: cvKind,
+              current_content: previewContent,
+              template_id: cardId === "__default__" ? null : cardId,
+              language
+            });
+            return [cardId, preview.presentation] as const;
+          } catch {
+            return [cardId, null] as const;
+          }
+        })
+      ).then((entries) => {
+        if (generation !== templatePreviewGenerationRef.current) {
+          return;
+        }
+
+        setTemplatePreviewsByTemplateId((current) => {
+          const next = { ...current };
+          for (const [cardId, preview] of entries) {
+            next[cardId] = preview;
+          }
+          templatePreviewsRef.current = next;
+          return next;
+        });
+
+        idsToLoad.forEach((cardId) => templatePreviewLoadingIdsRef.current.delete(cardId));
+        setTemplatePreviewLoadingIds([...templatePreviewLoadingIdsRef.current]);
+      });
+    },
+    [api, buildCurrentContent, cvKind, language, moduleType, showTemplateGallery]
+  );
 
   const maybeShowExportUpsell = async (): Promise<void> => {
     if (typeof window === "undefined") return;
@@ -2668,6 +2683,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           selectedTemplateId={templateId}
           previewsByTemplateId={templatePreviewsByTemplateId}
           loadingTemplateIds={templatePreviewLoadingIds}
+          onVisibleTemplateIdsChange={ensureTemplatePreviews}
           onSelectTemplate={(nextTemplateId) => {
             void assignTemplate(nextTemplateId);
             setShowTemplateGallery(false);

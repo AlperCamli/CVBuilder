@@ -1,51 +1,230 @@
 # Adding New Templates to CV Builder
 
-This guide explains how to add new CV templates to the CV Builder platform. Templates dictate the final visual layout of the CV when rendering or exporting.
+This guide explains how to add CV templates to the current CV Builder rendering system.
 
-## 1. Database Schema Overview
+Templates are visual profiles. The app does not use a separate React component per template and does not run a TeX/LaTeX compiler. A template row resolves to a slug, and that slug selects a profile in the shared rendering pipeline used by:
 
-Templates are tracked in the database using the `cv_templates` table. This allows the backend to validate whether an assigned template is valid or `active` before rendering.
+- live HTML preview
+- PDF generation through the existing `pdf-lib` exporter
+- DOCX generation through the existing `docx` exporter
 
-The schema for the `cv_templates` table includes:
-- `id` (uuid): Unique identifier.
-- `name` (text): Human-readable name of the template (e.g., "Modern Clean").
-- `slug` (text): A unique slug used as the identifier (e.g., "modern-clean").
-- `status` (text): Can be `active` or `inactive`. Only `active` templates can be selected by users.
-- `preview_config` (jsonb): Frontend configurations for live preview generation.
-- `export_config` (jsonb): Configurations for external export services (like PDF/DOCX exporters).
+## Database Rows
 
-## 2. Process for Adding a Template
+Templates live in `public.cv_templates`.
 
-### Step A: Database Insertion
-To add a new template, insert a new record into the `cv_templates` table. You can do this by creating a new database migration or adding to `seed.sql`.
+Important columns:
 
-Example SQL to add a template:
+- `name`: user-facing template name.
+- `slug`: stable code identifier used by rendering profiles.
+- `status`: `active` templates are selectable; `inactive` rows are hidden from users.
+- `module_type`: usually `standard`; module-specific galleries use values such as `medical_uk`.
+- `preview_config`: JSON used by the frontend gallery, including chips/badges.
+- `export_config`: JSON export availability, for example PDF and DOCX enablement.
+
+Add template rows in both places:
+
+- a new Supabase migration under `backend/supabase/migrations`
+- `backend/supabase/seed.sql`
+
+Example:
+
 ```sql
-INSERT INTO public.cv_templates (name, slug, status, preview_config, export_config)
-VALUES (
-  'Executive Timeline',
-  'executive-timeline',
+insert into public.cv_templates (name, slug, status, module_type, preview_config, export_config)
+values (
+  'LaTeX Scholar',
+  'latex-scholar',
   'active',
-  '{"preview": "v1"}'::jsonb,
-  '{"pdf": {"enabled": true}, "docx": {"enabled": true}}'::jsonb
-);
+  'standard',
+  '{"preview":"v1","theme":"latex","badges":["LaTeX"]}'::jsonb,
+  '{"pdf":{"enabled":true},"docx":{"enabled":true}}'::jsonb
+)
+on conflict (slug) do update
+set
+  name = excluded.name,
+  status = excluded.status,
+  module_type = excluded.module_type,
+  preview_config = excluded.preview_config,
+  export_config = excluded.export_config,
+  updated_at = now();
 ```
 
-### Step B: Frontend Implementation
-The frontend receives the selected template as part of the `RenderingPreviewResponse` payload from the backend.
+## Registry Updates
 
-1. **Create the Template Component**: 
-   Develop a React component (e.g. `ExecutiveTimelineTemplate.tsx`) that accepts a `document`, `sections`, and `plain_text` from the `RenderingPayload`.
-2. **Handle Block Iteration**: 
-   Use the `RenderingBlockDerived` object which contains pre-extracted `headline`, `subheadline`, `bullets`, `date_range`, and `location` to construct the layout seamlessly, regardless of the core data structure of the block.
-3. **Register the Component**:
-   Map the template's database `slug` to the corresponding React component in your template registry so the Live Preview correctly selects the new template.
+For standard templates, add the slug to both mirrored module registries:
 
-### Step C: Exporter Implementation (Optional)
-If your PDF or DOCX generation microservice is isolated from the React frontend, you will need to add a matching HTML/CSS template to the exporter logic. The exporter will rely on the `slug` identifier to apply the correct layout.
+- `backend/src/shared/cv-modules/standard.module.ts`
+- `frontend/src/app/modules/standard.module.ts`
 
-## 3. Creating Test Templates
-During development, you may want to test the template infrastructure without impacting production. To do this, simply add a template with the `status` set to `inactive` or use a test slug (e.g., `test-template-v1`).
+The current standard default is:
 
-Current example in `supabase/seed.sql`:
-- `template-playground` (`status='inactive'`) to validate registry/listing behavior without exposing it to end users.
+```ts
+defaultTemplateSlug: "latex-academic-serif"
+```
+
+Backend null-template rendering also prefers `latex-academic-serif` through `DEFAULT_STANDARD_TEMPLATE_SLUG` in `backend/src/modules/templates/templates.repository.ts`. Keep those values aligned if the default changes.
+
+## Rendering Profile
+
+Add a slug entry in `TEMPLATE_PROFILES` in:
+
+```text
+backend/src/modules/rendering/rendering-presentation.ts
+```
+
+Use existing layout modes unless there is a strong reason to extend the renderer:
+
+- `classic-single-column`
+- `compact-single-column`
+- `timeline-split`
+- `portfolio-two-column`
+
+Common style tokens:
+
+```ts
+{
+  font_family: '"Noto Serif", "Times New Roman", Georgia, serif',
+  font_asset_key: "noto-serif",
+  header_alignment: "center",
+  header_photo_size: 76,
+  section_heading_style: "ruled",
+  heading_color_hex: "#111111",
+  accent_color_hex: "#111111",
+  body_color_hex: "#1f2937",
+  muted_color_hex: "#4b5563",
+  page_background_hex: "#ffffff",
+  section_spacing: 11,
+  block_spacing: 7,
+  body_text_size: 10.8,
+  compact_density: true
+}
+```
+
+`header_photo_position` can be used as a template fallback, but user metadata `photo_position` wins.
+
+## LaTeX Templates
+
+LaTeX templates in this app are LaTeX-inspired visual profiles only. Do not add:
+
+- TeX Live
+- XeLaTeX
+- Tectonic
+- Docker compiler services
+- `.tex` generation
+- claims that exports are generated by LaTeX
+
+Use customer-facing labels such as `LaTeX`, `Academic Serif`, `Classic Academic`, or `Research CV`. The current gallery chip copy is `LaTeX`.
+
+Current LaTeX standard templates:
+
+- `latex-academic-serif` / `Academic Serif` / default standard template
+- `latex-research-cv` / `Research CV`
+- `latex-scholar` / `LaTeX Scholar`
+- `latex-two-column` / `LaTeX Two Column`
+
+LaTeX profiles should usually use:
+
+- serif typography
+- compact spacing
+- restrained colors
+- ruled section headings
+- academic header hierarchy
+- `font_asset_key: "noto-serif"` when Noto Serif should be embedded in PDF output
+
+Noto Serif font assets live in:
+
+```text
+backend/assets/fonts/NotoSerif-Regular.ttf
+backend/assets/fonts/NotoSerif-Bold.ttf
+```
+
+PDF font selection is handled in `backend/src/modules/exports/generators/pdf-generator.ts`. DOCX uses a serif document font when `font_asset_key` is `noto-serif`.
+
+## Photo Behavior
+
+Header photo behavior is shared across templates and exports.
+
+Supported metadata:
+
+- `photo_shape`: `"circle"` or `"square"`
+- `photo_position`: `"left"`, `"center"`, or `"right"`
+
+Defaults:
+
+- `photo_shape`: `"circle"`
+- `photo_position`: `"left"`
+- default header photo size: `72`
+- current LaTeX header photo size: `76`
+- big-photo templates can use a larger token, for example `104`
+
+Rendering expectations:
+
+- preview and PDF crop with cover-style behavior
+- DOCX scales proportionally
+- `left`: photo left, text beside it
+- `center`: photo above centered header text
+- `right`: photo right, text beside it
+
+When adding template tokens, keep photo handling in these files aligned:
+
+- `backend/src/modules/rendering/rendering-presentation.ts`
+- `backend/src/modules/exports/generators/rendering-document.mapper.ts`
+- `backend/src/modules/exports/generators/pdf-generator.ts`
+- `backend/src/modules/exports/generators/docx-generator.ts`
+- `frontend/src/app/components/CVPresentationPreview.tsx`
+- `frontend/src/app/integration/api-types.ts`
+- `frontend/src/app/integration/cv-mappers.ts`
+
+## Template Gallery
+
+The gallery reads badges from `preview_config.badges` and renders them next to the template name.
+
+LaTeX templates are sorted first in:
+
+```text
+frontend/src/app/components/TemplateGalleryDialog.tsx
+```
+
+The gallery currently reveals templates in batches of 6. Do not pre-render every template preview on open. `CVEditor` requests previews only for the currently visible batch and asks for the next batch as the user scrolls.
+
+If you add a badge-driven category, keep the sorting logic explicit and cheap. Do not make every template preview load before the dialog is usable.
+
+## Export Support
+
+All templates should continue through the existing exporters unless the product requirement explicitly says otherwise.
+
+For standard templates, set export config like this:
+
+```json
+{
+  "pdf": { "enabled": true },
+  "docx": { "enabled": true }
+}
+```
+
+Do not add alternate export pipelines for LaTeX templates.
+
+## Tests
+
+When adding or changing templates, update or add tests in these areas:
+
+- `backend/tests/rendering-presentation.mapper.unit.test.ts`: profile tokens for the new slug.
+- `backend/tests/migrations-schema.test.ts`: migration row, badges, PDF/DOCX enablement, no TeX compiler strings.
+- `backend/tests/cv-modules-drift.unit.test.ts`: backend/frontend module slug drift.
+- `backend/tests/rendering-document.mapper.unit.test.ts`: token propagation to export model when adding new export tokens.
+- `backend/tests/pdf-generator.unit.test.ts`: PDF behavior for new font/photo token behavior.
+- `backend/tests/docx-generator.unit.test.ts`: DOCX behavior for new font/photo token behavior.
+- `frontend/src/app/integration/cv-mappers.test.ts`: metadata round trips such as `photo_position`.
+
+Run:
+
+```bash
+cd backend && npm test
+cd frontend && npm run build
+git diff --check
+```
+
+`backend npm run typecheck` is useful, but at the time of this document update it still reports unrelated AI test typing issues outside the template pipeline.
+
+## Development-Only Templates
+
+For local or test-only rows, use `status = 'inactive'`. The seed currently includes `template-playground` as an inactive example so registry and listing behavior can be tested without exposing it to users.

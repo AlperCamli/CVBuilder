@@ -26,7 +26,7 @@ export const standardModule: CvModuleDefinition = {
     "tech-compact",
     "two-column-modern"
   ],
-  defaultTemplateSlug: "modern-clean",
+  defaultTemplateSlug: "latex-academic-serif",
   sectionCatalog: [
     { type: "summary", title: "Professional Summary", essential: true, description: "Brief overview of your experience", defaultOrder: 1, blockType: "summary", fieldSchema: [], defaultBlockFields: {} },
     { type: "experience", title: "Work Experience", essential: true, description: "Your employment history", defaultOrder: 2, blockType: "experience", fieldSchema: [], defaultBlockFields: {} },
