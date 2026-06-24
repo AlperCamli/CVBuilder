@@ -193,14 +193,20 @@ export class RenderingService {
       return matched?.[1].text ?? null;
     };
 
+    // Narrative fields (description/notes/etc.) belong in the body, never in a heading slot.
+    // Excluding them from the fallback branches stops the body text from being duplicated as
+    // the title/subtitle when the real title/subtitle field is empty (preview hides this via
+    // placeholders; exports do not). The explicit pickByKeys matches above are left untouched.
+    const isNarrativeKey = (key: string): boolean => keyMatches(key, NARRATIVE_BULLET_KEYS);
+
     const headline =
       pickByKeys(["headline", "title", "position", "role", "name", "summary", "text"]) ??
-      nonEmpty[0]?.[1].text ??
+      nonEmpty.find(([key]) => !isNarrativeKey(key))?.[1].text ??
       null;
 
     const subheadline =
       pickByKeys(["company", "institution", "organization", "subtitle", "program", "degree"]) ??
-      nonEmpty.find(([, value]) => value.text !== headline)?.[1].text ??
+      nonEmpty.find(([key, value]) => value.text !== headline && !isNarrativeKey(key))?.[1].text ??
       null;
 
     // Pull explicit "• "-marked bullets out of narrative string fields (e.g. description)

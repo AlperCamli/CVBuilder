@@ -1268,13 +1268,25 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
   }
 
   const headline = normalizeLine(block.derived.headline);
-  const subheadline = normalizeLine(block.derived.subheadline);
+  let subheadline = normalizeLine(block.derived.subheadline);
   const dateRange = normalizeLine(block.derived.date_range);
   const location = normalizeLine(block.derived.location);
   const metadataLine = buildMetadataLine(dateRange, location);
   const bullets = dedupeText(block.derived.bullets);
 
   let body = pickBodyText(sectionType, block);
+
+  // Drop a subtitle that merely repeats the title or the body. The derived headline/subheadline
+  // fallbacks can resolve to the same field (e.g. a course with no title where both land on
+  // "institution"), or promote the description into the subtitle when the real subtitle field is
+  // empty — either way the text would otherwise be emitted twice in exports.
+  if (subheadline && headline && collapseForCompare(subheadline) === collapseForCompare(headline)) {
+    subheadline = null;
+  }
+  if (subheadline && body && collapseForCompare(subheadline) === collapseForCompare(body)) {
+    subheadline = null;
+  }
+
   const mergedHeading = [headline, subheadline].filter(Boolean).join(" ");
   const headingValues =
     sectionType === "experience"
@@ -1617,13 +1629,21 @@ const mapSection = (
           type === "awards"
             ? textByKey(block, ["name", "title", "award"]) || normalizeLine(block.derived.headline)
             : textByKey(block, ["title", "name"]) || normalizeLine(block.derived.headline);
-        const subtitle =
+        const rawSubtitle =
           type === "awards"
             ? textByKey(block, ["issuer", "organization", "institution"])
             : textByKey(block, ["publisher", "journal", "issuer", "organization", "institution"]);
         const dateRange =
           textByKey(block, ["date", "awarded_on", "published_on"]) || normalizeLine(block.derived.date_range);
         const description = textByKey(block, ["description", "details", "notes"]);
+
+        // Keep the subtitle/description out of the title slot. With no title, titleValue falls
+        // back to derived.headline, which can resolve to the publisher or the description and
+        // emit the same text twice. Mirrors the Education dedup above.
+        const isTitleDuplicate = (value: string | null): boolean =>
+          Boolean(value && titleValue && collapseForCompare(value) === collapseForCompare(titleValue));
+        const subtitle = isTitleDuplicate(rawSubtitle) ? null : rawSubtitle;
+        const body = isTitleDuplicate(description) ? null : description;
 
         const item: PresentationItem = {
           id: block.id,
@@ -1632,7 +1652,7 @@ const mapSection = (
           date_range: dateRange,
           location: null,
           metadata_line: dateRange,
-          body: description,
+          body,
           bullets: []
         };
 

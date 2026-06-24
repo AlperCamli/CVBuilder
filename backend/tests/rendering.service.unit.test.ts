@@ -72,4 +72,106 @@ describe("rendering service", () => {
     expect(educationItem?.title).toBe("Computer Science");
     expect(educationItem?.subtitle).toContain("Sabancı University");
   });
+
+  // Runs the full pipeline (deriveBlock -> presentation mapping) for a section that holds a
+  // single block, returning the resulting presentation item. The presentation item is what the
+  // export generators consume, so asserting on it proves exports no longer duplicate text.
+  const renderSingleBlockItem = async (
+    sectionType: string,
+    blockType: string,
+    fields: Record<string, string>
+  ) => {
+    const service = createRenderingService();
+    const result = await service.buildRendering({
+      cv_kind: "master",
+      current_content: {
+        version: "v1",
+        language: "en",
+        metadata: {},
+        sections: [
+          {
+            id: `${sectionType}-1`,
+            type: sectionType,
+            title: sectionType,
+            order: 0,
+            blocks: [
+              {
+                id: `${sectionType}-item-1`,
+                type: blockType,
+                order: 0,
+                visibility: "visible",
+                fields,
+                meta: {}
+              }
+            ],
+            meta: {}
+          }
+        ]
+      }
+    });
+
+    return result.presentation.sections.find((section) => section.type === sectionType)?.items[0];
+  };
+
+  it("does not duplicate a project description into the subtitle when the subtitle is empty", async () => {
+    const description = "Built a recommendation engine that increased engagement by 30%.";
+    const item = await renderSingleBlockItem("projects", "project_item", {
+      title: "Recommendation Engine",
+      subtitle: "",
+      description
+    });
+
+    expect(item?.title).toBe("Recommendation Engine");
+    expect(item?.subtitle).toBeNull();
+    expect(item?.body).toBe(description);
+  });
+
+  it("does not duplicate a course institution across title and subtitle when the title is missing", async () => {
+    const description = "Completed a six-week course on data structures and algorithms.";
+    const item = await renderSingleBlockItem("courses", "course_item", {
+      institution: "Coursera",
+      description
+    });
+
+    expect(item?.title).toBe("Coursera");
+    expect(item?.subtitle).toBeNull();
+    expect(item?.body).toBe(description);
+  });
+
+  it("does not duplicate a volunteer description into the subtitle when the organization is empty", async () => {
+    const description = "Mentored five first-year students through their capstone projects.";
+    const item = await renderSingleBlockItem("volunteer", "volunteer_item", {
+      role: "Student Mentor",
+      organization: "",
+      description
+    });
+
+    expect(item?.title).toBe("Student Mentor");
+    expect(item?.subtitle).toBeNull();
+    expect(item?.body).toBe(description);
+  });
+
+  it("does not duplicate a publication publisher into the subtitle when the title is missing", async () => {
+    const description = "A study on transformer attention sparsity across long-context inputs.";
+    const item = await renderSingleBlockItem("publications", "publication_item", {
+      publisher: "Nature",
+      description
+    });
+
+    expect(item?.title).toBe("Nature");
+    expect(item?.subtitle).toBeNull();
+    expect(item?.body).toBe(description);
+  });
+
+  it("renders a description-only publication as body text instead of a duplicated title", async () => {
+    const description =
+      "An extensive write-up of the methodology, the dataset, and the evaluation that the importer captured without a title.";
+    const item = await renderSingleBlockItem("publications", "publication_item", {
+      description
+    });
+
+    expect(item?.title).toBeNull();
+    expect(item?.subtitle).toBeNull();
+    expect(item?.body).toBe(description);
+  });
 });
