@@ -109,4 +109,75 @@ describe("tailored draft skills section post-processing", () => {
     expect(result.changed_block_ids).toEqual(["skills-block"]);
     expect(skills).toEqual(["SQL", "Tableau", "Python"]);
   });
+
+  const contentWithDuplicateSkills = (skills: string[]): CvContent => ({
+    ...contentWithoutSkills,
+    sections: [
+      ...contentWithoutSkills.sections,
+      {
+        id: "skills-section",
+        type: "skills",
+        title: "Skills",
+        order: 1,
+        meta: {},
+        blocks: [
+          {
+            id: "skills-block",
+            type: "skills",
+            order: 0,
+            visibility: "visible",
+            fields: { skills },
+            meta: {}
+          }
+        ]
+      }
+    ]
+  });
+
+  it("dedupes the existing skills block even when no skills are selected", () => {
+    const content = contentWithDuplicateSkills(["SQL", "sql", "Tableau", "Tableau"]);
+
+    const result = makeService().ensureTailoredSkillsSection(content, [], []);
+    const skillsBlock = result.content.sections.find((section) => section.type === "skills")
+      ?.blocks[0]?.fields;
+
+    expect(result.changed_block_ids).toEqual(["skills-block"]);
+    expect(skillsBlock?.skills).toEqual(["SQL", "Tableau"]);
+    // skills/items/text are kept in sync so every consumer sees the deduped list.
+    expect(skillsBlock?.items).toEqual(["SQL", "Tableau"]);
+    expect(skillsBlock?.text).toBe("SQL, Tableau");
+  });
+
+  it("dedupes existing skills even when the selected skill is already present", () => {
+    const content = contentWithDuplicateSkills(["Python", "Python", "Django"]);
+
+    const result = makeService().ensureTailoredSkillsSection(content, ["Python"], []);
+    const skills = result.content.sections.find((section) => section.type === "skills")?.blocks[0]
+      ?.fields.skills;
+
+    expect(result.changed_block_ids).toEqual(["skills-block"]);
+    expect(skills).toEqual(["Python", "Django"]);
+  });
+
+  it("treats whitespace-variant skills as duplicates", () => {
+    const content = contentWithDuplicateSkills(["Machine  Learning", " Machine Learning "]);
+
+    const result = makeService().ensureTailoredSkillsSection(content, [], []);
+    const skills = result.content.sections.find((section) => section.type === "skills")?.blocks[0]
+      ?.fields.skills;
+
+    expect(skills).toEqual(["Machine Learning"]);
+  });
+
+  it("leaves an already-deduped skills block unchanged", () => {
+    const content = contentWithDuplicateSkills(["SQL", "Tableau"]);
+    // Pre-sync items/text so the block is already in canonical form.
+    const block = content.sections.find((section) => section.type === "skills")!.blocks[0];
+    block.fields = { skills: ["SQL", "Tableau"], items: ["SQL", "Tableau"], text: "SQL, Tableau" };
+
+    const result = makeService().ensureTailoredSkillsSection(content, ["SQL"], []);
+
+    expect(result.changed_block_ids).toEqual([]);
+    expect(result.content).toBe(content);
+  });
 });

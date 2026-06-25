@@ -140,12 +140,20 @@ export const dedupeSkills = (values: string[]): string[] => {
   const output: string[] = [];
 
   for (const value of values) {
-    const normalized = value.toLowerCase();
-    if (seen.has(normalized)) {
+    // Collapse surrounding/internal whitespace before comparing so "Machine  Learning" and
+    // " Machine Learning" are treated as the same skill (case-insensitive), and store the
+    // cleaned value.
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (!normalized) {
       continue;
     }
-    seen.add(normalized);
-    output.push(value);
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(normalized);
     if (output.length >= SKILLS_POOL_MAX_SIZE) {
       break;
     }

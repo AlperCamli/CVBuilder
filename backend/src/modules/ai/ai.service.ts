@@ -2660,12 +2660,6 @@ export class AiService {
     selectedTopics: string[]
   ): SkillsSectionEnsureResult {
     const generatedSkills = this.buildGeneratedSkills(selectedKeywords, selectedTopics);
-    if (generatedSkills.length === 0) {
-      return {
-        content,
-        changed_block_ids: []
-      };
-    }
 
     const nextContent = cloneCvContent(content);
     const sections = [...nextContent.sections].sort((a, b) => a.order - b.order);
@@ -2691,8 +2685,18 @@ export class AiService {
           .map((item) => item.trim())
           .filter(Boolean)
       ]);
+      // Merge in any newly selected skills, then always rewrite the block to this deduped list.
+      // Comparing against the *raw* stored fields (not the already-deduped `existingSkills`) means
+      // duplicates the model emitted are stripped even when no new skill is added — the previous
+      // short-circuit returned the original block and left those duplicates in place.
       const mergedSkills = dedupeSkills([...existingSkills, ...generatedSkills]).slice(0, 24);
-      if (stableStringify(existingSkills) === stableStringify(mergedSkills)) {
+      const mergedText = mergedSkills.join(", ");
+
+      const alreadyNormalized =
+        stableStringify(fields.skills) === stableStringify(mergedSkills) &&
+        stableStringify(fields.items) === stableStringify(mergedSkills) &&
+        asString(fields.text) === mergedText;
+      if (alreadyNormalized) {
         return {
           content,
           changed_block_ids: []
@@ -2703,12 +2707,19 @@ export class AiService {
         ...fields,
         skills: mergedSkills,
         items: mergedSkills,
-        text: mergedSkills.join(", ")
+        text: mergedText
       };
 
       return {
         content: nextContent,
         changed_block_ids: [firstBlock.id]
+      };
+    }
+
+    if (generatedSkills.length === 0) {
+      return {
+        content,
+        changed_block_ids: []
       };
     }
 
