@@ -1259,4 +1259,16 @@ describe("rendering presentation mapper", () => {
     expect(section?.items).toHaveLength(1);
     expect(section?.items[0]?.title).toBe("Ran weekly bedside teaching for medical students");
   });
+
+  it("decodes non-ASCII characters in social link labels instead of percent-encoding them", () => {
+    const presentation = mapRenderingPayloadToPresentation(
+      renderingPayload(),
+      { urls: ["linkedin.com/in/yunusemregökbudak"] },
+      null
+    );
+
+    const link = presentation.header.social_links.find((entry) => entry.url.includes("yunusemreg"));
+    expect(link?.label).toBe("/in/yunusemregökbudak");
+    expect(link?.label).not.toContain("%");
+  });
 });

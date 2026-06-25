@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { PDFDocument, PDFDict, PDFName, PDFString } from "pdf-lib";
 import { generatePdfDocument, normalizePdfText } from "../src/modules/exports/generators/pdf-generator";
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
+
+const collectLinkUris = (pdf: PDFDocument): string[] => {
+  const uris: string[] = [];
+  for (const page of pdf.getPages()) {
+    const annots = page.node.Annots();
+    if (!annots) {
+      continue;
+    }
+    for (let i = 0; i < annots.size(); i++) {
+      const annot = annots.lookupMaybe(i, PDFDict);
+      const action = annot?.lookupMaybe(PDFName.of("A"), PDFDict);
+      const uri = action?.lookupMaybe(PDFName.of("URI"), PDFString);
+      if (uri) {
+        uris.push(uri.asString());
+      }
+    }
+  }
+  return uris;
+};
 
 describe("pdf generator", () => {
   it("preserves unicode characters and generates parseable PDF", async () => {
@@ -150,5 +170,49 @@ describe("pdf generator", () => {
 
     expect(bytes.byteLength).toBeGreaterThan(1000);
     expect(normalizePdfText("Çamlı İstanbul")).toBe("Çamlı İstanbul");
+  });
+
+  it("adds clickable link annotations for social links, emails, and phone numbers", async () => {
+    const model: ExportDocumentModel = {
+      title: "Yunus Emre Gökbudak",
+      subtitle: "Software Engineer",
+      contact_line: "yunus@example.com • +90 555 123 45 67 • İstanbul",
+      contact_items: ["yunus@example.com", "+90 555 123 45 67", "İstanbul"],
+      social_links: [
+        {
+          label: "/in/yunusemregökbudak",
+          type: "linkedin",
+          url: "https://www.linkedin.com/in/yunusemregökbudak"
+        }
+      ],
+      photo_data_uri: null,
+      photo_shape: "circle",
+      photo_position: "left",
+      theme: {
+        layout: "modern-clean",
+        mode: "classic-single-column",
+        heading_color_hex: "#111827",
+        accent_color_hex: "#0f5ea6",
+        body_color_hex: "#1f2937",
+        muted_color_hex: "#4b5563",
+        page_background_hex: "#ffffff",
+        body_text_size: 11,
+        section_spacing: 12,
+        block_spacing: 8,
+        font_family: "Georgia, serif"
+      },
+      sections: []
+    };
+
+    const bytes = await generatePdfDocument(model);
+    const pdf = await PDFDocument.load(bytes);
+    const uris = collectLinkUris(pdf);
+
+    // Non-ASCII URLs stay clickable: the link target is percent-encoded for the annotation...
+    expect(uris.some((uri) => uri.includes("/in/yunusemreg%C3%B6kbudak"))).toBe(true);
+    expect(uris.some((uri) => uri === "mailto:yunus@example.com")).toBe(true);
+    expect(uris.some((uri) => uri === "tel:+905551234567")).toBe(true);
+    // ...while a plain location is not turned into a link.
+    expect(uris.some((uri) => uri.includes("stanbul"))).toBe(false);
   });
 });

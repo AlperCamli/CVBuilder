@@ -891,6 +891,17 @@ const toPreviewLinkHref = (rawUrl: string): string => {
   return `https://${trimmed}`;
 };
 
+// Decodes percent-escapes (e.g. %C3%B6 -> ö) for display while leaving reserved characters and
+// malformed input untouched, so a handle like "/in/yunusemregökbudak" is shown readably instead
+// of "/in/yunusemreg%C3%B6kbudak" that the URL API produces for non-ASCII path segments.
+const decodeUriForDisplay = (value: string): string => {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+};
+
 const toPreviewSocialLabel = (rawUrl: string): string => {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
@@ -901,7 +912,7 @@ const toPreviewSocialLabel = (rawUrl: string): string => {
 
   try {
     const parsed = new URL(normalized);
-    const cleanedPath = parsed.pathname.replace(/\/+$/, "");
+    const cleanedPath = decodeUriForDisplay(parsed.pathname).replace(/\/+$/, "");
 
     if (cleanedPath && cleanedPath !== "/") {
       return cleanedPath;

@@ -11,6 +11,7 @@ import {
   popGraphicsState,
   pushGraphicsState,
   rgb,
+  PDFString,
   type PDFFont,
   type PDFImage,
   type PDFPage
@@ -74,6 +75,8 @@ interface PlacedLine {
   alignRight?: boolean;
   alignCenter?: boolean;
   alignBoxWidth?: number;
+  // When set, a clickable URI link annotation is drawn over this line's text box.
+  link?: string;
 }
 
 interface PlacedShape {
@@ -291,6 +294,143 @@ const appendTextLines = (
   return wrapped.length * options.lineHeight;
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Normalizes a link target into a valid URI for a PDF link annotation. Decoding before encoding
+// keeps already-encoded URLs from being double-encoded (the operation is idempotent for
+// well-formed input) and leaves raw non-ASCII URLs (e.g. ".../in/yunusemregökbudak") clickable.
+const toLinkUri = (rawUrl: string): string => {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    return encodeURI(decodeURI(trimmed));
+  } catch {
+    try {
+      return encodeURI(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+};
+
+// Turns a contact string into a display segment, making emails (mailto:) and phone numbers
+// (tel:) clickable while leaving everything else (e.g. a location) as plain text.
+const toContactSegment = (item: string): { text: string; link?: string } => {
+  const text = normalizePdfText(item);
+  if (EMAIL_PATTERN.test(text)) {
+    return { text, link: `mailto:${text}` };
+  }
+  const dial = text.replace(/[\s().\-]/g, "");
+  if (/^\+?\d{6,}$/.test(dial)) {
+    return { text, link: `tel:${dial}` };
+  }
+  return { text };
+};
+
+// Lays out a row of inline segments (some clickable), wrapping to new lines at segment
+// boundaries and giving every piece an explicit x so each clickable segment can carry its own
+// link annotation. Mirrors appendTextLines' return contract (height consumed in points).
+const appendLinkedSegments = (
+  target: PlacedLine[],
+  segments: Array<{ text: string; link?: string }>,
+  separator: string,
+  options: {
+    font: PDFFont;
+    fontWeight: "regular" | "bold";
+    size: number;
+    color: ColorKey;
+    maxWidth: number;
+    xOffset: number;
+    yFromTop: number;
+    lineHeight: number;
+    alignCenter?: boolean;
+    alignBoxWidth?: number;
+  }
+): number => {
+  const usable = segments
+    .map((segment) => ({ text: normalizePdfText(segment.text), link: segment.link }))
+    .filter((segment) => segment.text.length > 0);
+  if (usable.length === 0) {
+    return 0;
+  }
+
+  const { font, size, maxWidth } = options;
+  const sepWidth = font.widthOfTextAtSize(separator, size);
+
+  type Piece = { text: string; link?: string; width: number };
+  const visualLines: Piece[][] = [];
+  let current: Piece[] = [];
+  let currentWidth = 0;
+
+  for (const segment of usable) {
+    const segWidth = font.widthOfTextAtSize(segment.text, size);
+    const needed = (current.length > 0 ? sepWidth : 0) + segWidth;
+    if (current.length > 0 && currentWidth + needed > maxWidth) {
+      visualLines.push(current);
+      current = [];
+      currentWidth = 0;
+    }
+    if (current.length > 0) {
+      current.push({ text: separator, width: sepWidth });
+      currentWidth += sepWidth;
+    }
+    current.push({ text: segment.text, link: segment.link, width: segWidth });
+    currentWidth += segWidth;
+  }
+  if (current.length > 0) {
+    visualLines.push(current);
+  }
+
+  visualLines.forEach((pieces, lineIndex) => {
+    const totalWidth = pieces.reduce((sum, piece) => sum + piece.width, 0);
+    let cursorX = options.xOffset;
+    if (options.alignCenter && options.alignBoxWidth) {
+      cursorX += Math.max(0, (options.alignBoxWidth - totalWidth) / 2);
+    }
+    for (const piece of pieces) {
+      target.push({
+        text: piece.text,
+        fontWeight: options.fontWeight,
+        size: options.size,
+        colorKey: options.color,
+        xOffset: cursorX,
+        yFromTop: options.yFromTop + lineIndex * options.lineHeight,
+        lineHeight: options.lineHeight,
+        link: piece.link
+      });
+      cursorX += piece.width;
+    }
+  });
+
+  return visualLines.length * options.lineHeight;
+};
+
+// Registers a clickable URI link annotation covering the given page-space rectangle.
+const addLinkAnnotation = (
+  page: PDFPage,
+  rect: [number, number, number, number],
+  uri: string
+): void => {
+  if (!uri) {
+    return;
+  }
+  const context = page.doc.context;
+  const annotation = context.obj({
+    Type: "Annot",
+    Subtype: "Link",
+    Rect: rect,
+    Border: [0, 0, 0],
+    A: {
+      Type: "Action",
+      S: "URI",
+      URI: PDFString.of(uri)
+    }
+  });
+  page.node.addAnnot(context.register(annotation));
+};
+
 // ---------------------------------------------------------------------------
 // Block builders — each returns a BlockShape with absolute heights/positions
 // relative to the block's own (left=0, top=0) origin.
@@ -363,36 +503,46 @@ const buildHeaderBlock = (
     });
   }
 
-  if (model.contact_line) {
+  if (model.contact_items.length > 0) {
     textY += 6 * style.fontScale;
-    textY += appendTextLines(lines, model.contact_line, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
-      size: style.headerContactSize,
-      color: "muted",
-      maxWidth: textMaxWidth,
-      xOffset: textX,
-      yFromTop: textY,
-      lineHeight: contactLH,
-      alignCenter: centerHeader,
-      alignBoxWidth: textMaxWidth
-    });
+    textY += appendLinkedSegments(
+      lines,
+      model.contact_items.map((item) => toContactSegment(item)),
+      " • ",
+      {
+        font: style.fonts.regular,
+        fontWeight: "regular",
+        size: style.headerContactSize,
+        color: "muted",
+        maxWidth: textMaxWidth,
+        xOffset: textX,
+        yFromTop: textY,
+        lineHeight: contactLH,
+        alignCenter: centerHeader,
+        alignBoxWidth: textMaxWidth
+      }
+    );
   }
 
   if (model.social_links.length > 0) {
     textY += 8 * style.fontScale;
-    textY += appendTextLines(lines, model.social_links.map((link) => link.label).join(" • "), {
-      font: style.fonts.regular,
-      fontWeight: "regular",
-      size: style.headerContactSize,
-      color: "muted",
-      maxWidth: textMaxWidth,
-      xOffset: textX,
-      yFromTop: textY,
-      lineHeight: contactLH,
-      alignCenter: centerHeader,
-      alignBoxWidth: textMaxWidth
-    });
+    textY += appendLinkedSegments(
+      lines,
+      model.social_links.map((link) => ({ text: link.label, link: link.url })),
+      " • ",
+      {
+        font: style.fonts.regular,
+        fontWeight: "regular",
+        size: style.headerContactSize,
+        color: "muted",
+        maxWidth: textMaxWidth,
+        xOffset: textX,
+        yFromTop: textY,
+        lineHeight: contactLH,
+        alignCenter: centerHeader,
+        alignBoxWidth: textMaxWidth
+      }
+    );
   }
 
   const height = photo && !stackedPhoto ? Math.max(textY, style.photoSize) : textY;
@@ -1004,6 +1154,15 @@ const drawBlock = (
       font,
       color: resolveColor(palette, line.colorKey)
     });
+
+    if (line.link) {
+      const linkWidth = font.widthOfTextAtSize(line.text, line.size);
+      addLinkAnnotation(
+        page,
+        [drawX, baselineY - line.size * 0.25, drawX + linkWidth, baselineY + line.size * 0.9],
+        toLinkUri(line.link)
+      );
+    }
   }
 
   for (const shape of block.shape.shapes) {
