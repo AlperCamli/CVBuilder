@@ -912,13 +912,12 @@ const toPreviewSocialLabel = (rawUrl: string): string => {
 
   try {
     const parsed = new URL(normalized);
+    // Self-describing "host + path" label (e.g. "github.com/alpercamli") so the platform is clear
+    // without an icon — exports are icon-free for ATS and the preview is rendered iconless to match.
+    const host = parsed.hostname.replace(/^www\./i, "");
     const cleanedPath = decodeUriForDisplay(parsed.pathname).replace(/\/+$/, "");
 
-    if (cleanedPath && cleanedPath !== "/") {
-      return cleanedPath;
-    }
-
-    return parsed.hostname.replace(/^www\./i, "");
+    return cleanedPath && cleanedPath !== "/" ? `${host}${cleanedPath}` : host;
   } catch {
     return trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
   }

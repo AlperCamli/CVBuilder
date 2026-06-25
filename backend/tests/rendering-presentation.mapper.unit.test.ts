@@ -1260,15 +1260,18 @@ describe("rendering presentation mapper", () => {
     expect(section?.items[0]?.title).toBe("Ran weekly bedside teaching for medical students");
   });
 
-  it("decodes non-ASCII characters in social link labels instead of percent-encoding them", () => {
+  it("labels social links as host + path and decodes non-ASCII characters", () => {
     const presentation = mapRenderingPayloadToPresentation(
       renderingPayload(),
-      { urls: ["linkedin.com/in/yunusemregökbudak"] },
+      { urls: ["https://www.linkedin.com/in/yunusemregökbudak", "github.com/alpercamli"] },
       null
     );
 
-    const link = presentation.header.social_links.find((entry) => entry.url.includes("yunusemreg"));
-    expect(link?.label).toBe("/in/yunusemregökbudak");
-    expect(link?.label).not.toContain("%");
+    const linkedin = presentation.header.social_links.find((entry) => entry.url.includes("yunusemreg"));
+    expect(linkedin?.label).toBe("linkedin.com/in/yunusemregökbudak");
+    expect(linkedin?.label).not.toContain("%");
+
+    const github = presentation.header.social_links.find((entry) => entry.url.includes("github.com"));
+    expect(github?.label).toBe("github.com/alpercamli");
   });
 });

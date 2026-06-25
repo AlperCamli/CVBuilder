@@ -7,7 +7,6 @@ import {
   type CSSProperties,
   type ReactNode
 } from "react";
-import { Globe, Github, Linkedin } from "lucide-react";
 import type {
   PresentationHeader,
   PresentationItem,
@@ -101,17 +100,6 @@ interface TwoColumnPageSpec {
 }
 
 type PageSpec = SinglePage | TwoColumnPageSpec;
-
-const getSocialIcon = (type: string) => {
-  switch (type.trim().toLowerCase()) {
-    case "github":
-      return Github;
-    case "linkedin":
-      return Linkedin;
-    default:
-      return Globe;
-  }
-};
 
 // Placeholder segments (wrapped in ⟪…⟫ by preview-placeholders.ts before the preview
 // request) render with lower contrast so users see where each field lands on the template
@@ -429,14 +417,13 @@ function buildHeaderBlocks(
               style={{ justifyContent: centerHeader ? "center" : undefined }}
             >
               {header.social_links.map((link) => {
-                const Icon = getSocialIcon(link.type);
                 return (
                   <a
                     key={link.id}
                     href={link.url}
                     target={mode === "thumbnail" ? undefined : "_blank"}
                     rel={mode === "thumbnail" ? undefined : "noreferrer"}
-                    className="inline-flex items-center gap-1"
+                    className="inline-flex items-center"
                     style={{
                       fontSize: scaledPx(11),
                       color: colors.muted,
@@ -444,7 +431,6 @@ function buildHeaderBlocks(
                       pointerEvents: mode === "thumbnail" ? "none" : "auto"
                     }}
                   >
-                    <Icon size={11} />
                     <span>{link.label}</span>
                   </a>
                 );
