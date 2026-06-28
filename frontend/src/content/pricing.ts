@@ -2,11 +2,11 @@ export type CheckoutTarget = "weekly" | "monthly" | "annual";
 export type VisiblePlanCode = "free" | CheckoutTarget;
 export type LegacyPaidPlanCode = "pro" | "lifetime";
 
-export const WEEKLY_PRICE = "$5";
-export const MONTHLY_TOTAL_PRICE = "$15";
+export const WEEKLY_PRICE = "$4.99";
+export const MONTHLY_TOTAL_PRICE = "$14.99";
 export const MONTHLY_WEEKLY_EQUIVALENT = "$3.46";
-export const ANNUAL_TOTAL_PRICE = "$99";
-export const ANNUAL_WEEKLY_EQUIVALENT = "$1.90";
+export const ANNUAL_TOTAL_PRICE = "$99.90";
+export const ANNUAL_WEEKLY_EQUIVALENT = "$1.92";
 
 export interface PlanCard {
   code: VisiblePlanCode;
@@ -41,7 +41,7 @@ export const PLAN_CARDS: PlanCard[] = [
     code: "weekly",
     name: "Weekly",
     weeklyPrice: WEEKLY_PRICE,
-    totalPrice: "$5 billed weekly",
+    totalPrice: `${WEEKLY_PRICE} billed weekly`,
     billingPeriod: "per week",
     description: "Start with the lowest commitment.",
     badge: "3-day free trial",
@@ -107,7 +107,7 @@ export const isPaidPlanCode = (value: unknown): value is CheckoutTarget | Legacy
   isCheckoutTarget(value) || isLegacyPaidPlanCode(value);
 
 export const PLAN_VALUE_USD: Record<CheckoutTarget, number> = {
-  weekly: 5,
-  monthly: 15,
-  annual: 99
+  weekly: 4.99,
+  monthly: 14.99,
+  annual: 99.9
 };

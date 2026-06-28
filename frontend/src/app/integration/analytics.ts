@@ -46,9 +46,9 @@ const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
   if (planCode === "lifetime") return 99;
   if (planCode === "pro") return trialApplied ? 0 : 10;
-  if (planCode === "weekly") return trialApplied ? 0 : 5;
-  if (planCode === "monthly") return 15;
-  if (planCode === "annual") return 99;
+  if (planCode === "weekly") return trialApplied ? 0 : 4.99;
+  if (planCode === "monthly") return 14.99;
+  if (planCode === "annual") return 99.9;
   return undefined;
 };
 

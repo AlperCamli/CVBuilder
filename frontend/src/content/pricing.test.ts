@@ -20,7 +20,7 @@ describe("pricing content", () => {
 
     expect(PLAN_CARDS.find((card) => card.code === "weekly")).toMatchObject({
       weeklyPrice: WEEKLY_PRICE,
-      totalPrice: "$5 billed weekly",
+      totalPrice: `${WEEKLY_PRICE} billed weekly`,
       trialEligible: true
     });
     expect(PLAN_CARDS.find((card) => card.code === "monthly")).toMatchObject({
@@ -44,6 +44,12 @@ describe("pricing content", () => {
       expect(isPaidPlanCode(code)).toBe(true);
       expect(PLAN_VALUE_USD[code]).toBeGreaterThan(0);
     }
+
+    expect(PLAN_VALUE_USD).toEqual({
+      weekly: 4.99,
+      monthly: 14.99,
+      annual: 99.9
+    });
 
     expect(isCheckoutTarget("pro")).toBe(false);
     expect(isCheckoutTarget("lifetime")).toBe(false);

@@ -46,6 +46,17 @@ const POST_EXPORT_CHECKLIST = [
   "Use AI rewrites and track applications"
 ];
 
+const postExportPlanBadge = (
+  card: (typeof PAID_PLAN_CARDS)[number],
+  trialEligible: boolean
+): string | null => {
+  if (card.code === "weekly") {
+    return trialEligible ? "3-day free trial" : "Flexible weekly access";
+  }
+
+  return card.savings ?? card.badge ?? null;
+};
+
 const featureLabel = (feature: string | undefined): string => {
   switch (feature) {
     case "export_pdf":
@@ -327,73 +338,86 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                   </ul>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-3">
                   {PAID_PLAN_CARDS.map((card) => {
                     const isBusy = busy === card.code;
-                    const badge = card.code === "weekly" && !trialEligible ? null : card.badge;
+                    const badge = postExportPlanBadge(card, trialEligible);
+                    const isEmphasized = card.code === "weekly" || card.highlighted;
 
                     return (
-                      <div
+                      <button
                         key={card.code}
-                        className="p-4 rounded-lg border-2 flex flex-col"
+                        type="button"
+                        onClick={() => void startCheckout(card.code)}
+                        disabled={busy !== null}
+                        className="w-full p-4 rounded-lg border-2 flex items-center justify-between gap-4 text-left transition-colors"
                         style={{
-                          borderColor: card.highlighted ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
-                          background: card.highlighted ? "var(--color-teal-50)" : "var(--color-background-primary)"
+                          borderColor: isEmphasized ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
+                          background:
+                            card.code === "weekly"
+                              ? "var(--color-teal-50)"
+                              : card.highlighted
+                                ? "var(--color-background-secondary)"
+                                : "var(--color-background-primary)",
+                          opacity: busy !== null && !isBusy ? 0.65 : 1,
+                          cursor: busy !== null ? "wait" : "pointer"
                         }}
                       >
-                        <div className="mb-3 min-h-6">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <h3
+                              className="font-semibold"
+                              style={{ fontSize: "15px", color: "var(--color-text-primary)" }}
+                            >
+                              {card.name}
+                            </h3>
+                            {isBusy ? (
+                              <Loader2 size={13} className="animate-spin" style={{ color: "var(--color-teal-700)" }} />
+                            ) : null}
+                          </div>
+                          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                            {card.totalPrice}
+                          </p>
                           {badge ? (
                             <span
-                              className="px-2 py-1 rounded-full font-medium"
+                              className="inline-flex mt-2 px-2.5 py-1 rounded-full font-medium"
                               style={{
-                                fontSize: "10px",
-                                background: card.highlighted ? "var(--color-teal-600)" : "var(--color-slate-800)",
-                                color: "white"
+                                fontSize: "11px",
+                                background:
+                                  card.code === "weekly" ? "var(--color-teal-600)" : "var(--color-teal-100)",
+                                color:
+                                  card.code === "weekly" ? "var(--color-teal-50)" : "var(--color-teal-800)"
                               }}
                             >
                               {badge}
                             </span>
                           ) : null}
                         </div>
-                        <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                          {card.name}
-                        </h3>
-                        <div className="mb-3">
-                          <span className="font-semibold" style={{ fontSize: "27px", color: "var(--color-text-primary)" }}>
-                            {card.weeklyPrice}
-                          </span>
-                          <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                            {" "}/{card.billingPeriod}
-                          </span>
-                          <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginTop: "2px" }}>
-                            {card.totalPrice}
+
+                        <div className="text-right shrink-0">
+                          <div>
+                            <span
+                              className="font-semibold"
+                              style={{ fontSize: "25px", color: "var(--color-text-primary)", lineHeight: "1" }}
+                            >
+                              {card.weeklyPrice}
+                            </span>
+                            <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                              /week
+                            </span>
+                          </div>
+                          <p
+                            className="font-medium"
+                            style={{
+                              fontSize: "11px",
+                              color: card.code === "weekly" ? "var(--color-teal-700)" : "var(--color-text-secondary)",
+                              marginTop: "5px"
+                            }}
+                          >
+                            {card.code === "weekly" && trialEligible ? "Start trial" : `Choose ${card.name}`}
                           </p>
-                          {card.savings ? (
-                            <p className="font-medium" style={{ fontSize: "11px", color: "var(--color-teal-700)", marginTop: "2px" }}>
-                              {card.savings}
-                            </p>
-                          ) : null}
                         </div>
-                        <p className="mb-4 flex-1" style={{ fontSize: "12px", lineHeight: "1.5", color: "var(--color-text-secondary)" }}>
-                          {card.description}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void startCheckout(card.code)}
-                          disabled={busy !== null}
-                          className="w-full px-3 py-2 rounded-lg font-medium inline-flex justify-center items-center gap-2"
-                          style={{
-                            fontSize: "12px",
-                            background: card.highlighted ? "var(--color-teal-600)" : "var(--color-slate-800)",
-                            color: "white",
-                            opacity: busy !== null ? 0.7 : 1,
-                            cursor: busy !== null ? "wait" : "pointer"
-                          }}
-                        >
-                          {isBusy ? <Loader2 size={13} className="animate-spin" /> : null}
-                          {card.code === "weekly" && trialEligible ? "Start trial" : `Choose ${card.name}`}
-                        </button>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
