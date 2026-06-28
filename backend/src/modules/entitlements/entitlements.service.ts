@@ -1,9 +1,5 @@
 import type { UsageCounterRecord } from "../../shared/types/domain";
-import {
-  DEFAULT_FREE_PLAN_CODE,
-  DEFAULT_LIFETIME_PLAN_CODE,
-  DEFAULT_PRO_PLAN_CODE
-} from "./plan-definitions";
+import { DEFAULT_FREE_PLAN_CODE } from "./plan-definitions";
 import type {
   EntitlementDecision,
   GatedAction,
@@ -39,13 +35,9 @@ export class EntitlementsService {
       return this.planCatalog[DEFAULT_FREE_PLAN_CODE];
     }
 
-    const normalized = planCode.toLowerCase();
-    if (normalized === DEFAULT_PRO_PLAN_CODE) {
-      return this.planCatalog.pro;
-    }
-
-    if (normalized === DEFAULT_LIFETIME_PLAN_CODE) {
-      return this.planCatalog.lifetime;
+    const normalized = planCode.toLowerCase() as PlanCode;
+    if (normalized in this.planCatalog) {
+      return this.planCatalog[normalized];
     }
 
     return this.planCatalog.free;

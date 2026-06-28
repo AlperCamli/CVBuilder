@@ -161,6 +161,9 @@ const headerOnlyContent = (): CvContent => ({
   ]
 });
 
+const asParsedContent = (content: CvContent): Record<string, unknown> =>
+  content as unknown as Record<string, unknown>;
+
 const resolvedPromptFor = (flowType: AiFlowType, actionType?: string | null): ResolvedAiPrompt => ({
   prompt_key:
     flowType === "block_suggest"
@@ -339,7 +342,7 @@ describe("AiService parallel import_improve flow", () => {
     });
 
     const result = await service.improveImportedContent(session, {
-      parsed_content: baseContent(),
+      parsed_content: asParsedContent(baseContent()),
       improvement_guidance: ["Use stronger action verbs"]
     });
 
@@ -420,7 +423,7 @@ describe("AiService parallel import_improve flow", () => {
     });
 
     const result = await service.improveImportedContent(session, {
-      parsed_content: baseContent()
+      parsed_content: asParsedContent(baseContent())
     });
 
     const experienceBlocks = result.improved_content.sections
@@ -475,10 +478,10 @@ describe("AiService parallel import_improve flow", () => {
     });
 
     const result = await service.improveImportedContent(session, {
-      parsed_content: {
+      parsed_content: asParsedContent({
         ...baseContent(),
         sections: baseContent().sections.filter((section) => section.type !== "education")
-      }
+      })
     });
 
     expect(result.generation_metadata.partial_success).toBe(true);
@@ -494,7 +497,7 @@ describe("AiService parallel import_improve flow", () => {
 
     await expect(
       service.improveImportedContent(session, {
-        parsed_content: baseContent()
+        parsed_content: asParsedContent(baseContent())
       })
     ).rejects.toThrow("Import improve sub-runs failed");
 
@@ -508,7 +511,7 @@ describe("AiService parallel import_improve flow", () => {
     });
 
     const result = await service.improveImportedContent(session, {
-      parsed_content: headerOnlyContent()
+      parsed_content: asParsedContent(headerOnlyContent())
     });
 
     expect(aiProvider.generate).not.toHaveBeenCalled();

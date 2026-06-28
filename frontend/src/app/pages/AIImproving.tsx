@@ -16,6 +16,7 @@ export function AIImproving() {
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
   const improvementGuidance = (location.state?.improvements as string[] | undefined) ?? [];
   const moduleType = location.state?.moduleType as string | undefined;
+  const source = location.state?.source as string | undefined;
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -90,6 +91,15 @@ export function AIImproving() {
 
               const converted = await api.createMasterCvFromImport(importId, {});
 
+              if (source === "onboarding_upload") {
+                navigate(`/app/tailor/${converted.master_cv.id}`, {
+                  state: {
+                    source: "onboarding_upload_ai_improved"
+                  }
+                });
+                return;
+              }
+
               navigate(`/app/cv/${converted.master_cv.id}`, {
                 state: {
                   cvKind: "master",
@@ -121,7 +131,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, improvementGuidance, importId, navigate, parsedContent, steps, showUpgradePrompt]);
+  }, [api, improvementGuidance, importId, navigate, parsedContent, source, steps, showUpgradePrompt]);
 
   const currentStepData = steps[currentStep];
 

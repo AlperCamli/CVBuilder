@@ -36,6 +36,9 @@ const envSchema = z
     CV_PHOTO_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+    STRIPE_WEEKLY_PRICE_ID: z.string().min(1).optional(),
+    STRIPE_MONTHLY_PRICE_ID: z.string().min(1).optional(),
+    STRIPE_ANNUAL_PRICE_ID: z.string().min(1).optional(),
     STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
     STRIPE_LIFETIME_PRICE_ID: z.string().min(1).optional(),
     BILLING_TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).max(90).default(3),
@@ -103,6 +106,9 @@ export interface AppConfig {
     provider: "stripe";
     stripeSecretKey: string | null;
     stripeWebhookSecret: string | null;
+    stripeWeeklyPriceId: string | null;
+    stripeMonthlyPriceId: string | null;
+    stripeAnnualPriceId: string | null;
     stripeProPriceId: string | null;
     stripeLifetimePriceId: string | null;
     trialPeriodDays: number;
@@ -208,6 +214,9 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       provider: "stripe",
       stripeSecretKey: parsed.data.STRIPE_SECRET_KEY ?? null,
       stripeWebhookSecret: parsed.data.STRIPE_WEBHOOK_SECRET ?? null,
+      stripeWeeklyPriceId: parsed.data.STRIPE_WEEKLY_PRICE_ID ?? null,
+      stripeMonthlyPriceId: parsed.data.STRIPE_MONTHLY_PRICE_ID ?? null,
+      stripeAnnualPriceId: parsed.data.STRIPE_ANNUAL_PRICE_ID ?? null,
       stripeProPriceId: parsed.data.STRIPE_PRO_PRICE_ID ?? null,
       stripeLifetimePriceId: parsed.data.STRIPE_LIFETIME_PRICE_ID ?? null,
       trialPeriodDays: parsed.data.BILLING_TRIAL_PERIOD_DAYS,

@@ -250,8 +250,6 @@ export class BillingService {
 
     const customerId = await this.ensureStripeCustomerId(user);
 
-    const isLifetime = plan.code === "lifetime";
-
     // Only grant a free trial when: the plan supports one, trials are enabled,
     // the caller did not explicitly opt out (`with_trial: false`), and the user
     // has never consumed a trial before. The last check closes the abuse vector
@@ -259,7 +257,11 @@ export class BillingService {
     // starts a brand-new trial once the previous one lapses.
     let trialPeriodDays: number | null = null;
 
-    if (!isLifetime && input.with_trial !== false && (await this.isUserTrialEligible(user.id))) {
+    if (
+      plan.trial_supported &&
+      input.with_trial !== false &&
+      (await this.isUserTrialEligible(user.id))
+    ) {
       trialPeriodDays = this.options.trialPeriodDays;
     }
 
@@ -269,7 +271,7 @@ export class BillingService {
       success_url: input.success_url ?? this.options.checkoutSuccessUrl,
       cancel_url: input.cancel_url ?? this.options.checkoutCancelUrl,
       client_reference_id: user.id,
-      mode: isLifetime ? "payment" : "subscription",
+      mode: "subscription",
       trial_period_days: trialPeriodDays,
       metadata: {
         app_user_id: user.id,
@@ -534,8 +536,8 @@ export class BillingService {
 
     const requestedPlan = catalog[normalized as PlanCode];
 
-    if (requestedPlan.code === "free") {
-      throw new BillingPlanValidationError("Free plan does not require checkout", {
+    if (!requestedPlan.checkout_allowed) {
+      throw new BillingPlanValidationError("Requested plan_code is not available for checkout", {
         plan_code: planCode
       });
     }

@@ -45,8 +45,8 @@ export interface CreateCheckoutInput {
   plan_code: string;
   success_url?: string;
   cancel_url?: string;
-  // When explicitly false, the Pro checkout skips the free trial and bills the
-  // user immediately. Defaults to true (trial granted if the user is eligible).
+  // When explicitly false, the Weekly checkout skips the free trial and bills
+  // the user immediately. Defaults to true (trial granted if the user is eligible).
   with_trial?: boolean;
 }
 

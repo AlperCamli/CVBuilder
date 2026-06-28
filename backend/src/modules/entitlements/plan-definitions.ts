@@ -1,6 +1,9 @@
 import type { PlanCatalog } from "./entitlements.types";
 
 interface CreatePlanCatalogOptions {
+  weeklyStripePriceId?: string | null;
+  monthlyStripePriceId?: string | null;
+  annualStripePriceId?: string | null;
   proStripePriceId?: string | null;
   lifetimeStripePriceId?: string | null;
 }
@@ -22,6 +25,11 @@ const UNLIMITED_FEATURES = {
 } as const;
 
 export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatalog => {
+  const paidPlanDefaults = {
+    limits: { ...UNLIMITED_LIMITS },
+    features: { ...UNLIMITED_FEATURES }
+  } as const;
+
   return {
     free: {
       code: "free",
@@ -38,25 +46,53 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
         can_export_pdf: true,
         can_export_docx: true,
         can_use_ai_actions: true
-      }
+      },
+      checkout_allowed: false,
+      trial_supported: false
+    },
+    weekly: {
+      code: "weekly",
+      name: "Weekly",
+      stripe_price_id: options?.weeklyStripePriceId ?? null,
+      ...paidPlanDefaults,
+      checkout_allowed: true,
+      trial_supported: true
+    },
+    monthly: {
+      code: "monthly",
+      name: "Monthly",
+      stripe_price_id: options?.monthlyStripePriceId ?? null,
+      ...paidPlanDefaults,
+      checkout_allowed: true,
+      trial_supported: false
+    },
+    annual: {
+      code: "annual",
+      name: "Annual",
+      stripe_price_id: options?.annualStripePriceId ?? null,
+      ...paidPlanDefaults,
+      checkout_allowed: true,
+      trial_supported: false
     },
     pro: {
       code: "pro",
-      name: "Pro",
+      name: "Legacy Pro",
       stripe_price_id: options?.proStripePriceId ?? null,
-      limits: { ...UNLIMITED_LIMITS },
-      features: { ...UNLIMITED_FEATURES }
+      ...paidPlanDefaults,
+      checkout_allowed: false,
+      trial_supported: false,
+      legacy: true
     },
     lifetime: {
       code: "lifetime",
-      name: "Lifetime Pro",
+      name: "Legacy Lifetime Pro",
       stripe_price_id: options?.lifetimeStripePriceId ?? null,
-      limits: { ...UNLIMITED_LIMITS },
-      features: { ...UNLIMITED_FEATURES }
+      ...paidPlanDefaults,
+      checkout_allowed: false,
+      trial_supported: false,
+      legacy: true
     }
   };
 };
 
 export const DEFAULT_FREE_PLAN_CODE = "free" as const;
-export const DEFAULT_PRO_PLAN_CODE = "pro" as const;
-export const DEFAULT_LIFETIME_PLAN_CODE = "lifetime" as const;

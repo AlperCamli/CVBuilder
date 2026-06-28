@@ -22,6 +22,9 @@ describe("environment config", () => {
       FRONTEND_APP_URL: "http://localhost:5173",
       EXPORTS_STORAGE_BUCKET: "exports",
       EXPORT_DOWNLOAD_URL_TTL_SECONDS: "900",
+      STRIPE_WEEKLY_PRICE_ID: "price_weekly",
+      STRIPE_MONTHLY_PRICE_ID: "price_monthly",
+      STRIPE_ANNUAL_PRICE_ID: "price_annual",
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_ANON_KEY: "anon",
       SUPABASE_SERVICE_ROLE_KEY: "service"
@@ -44,6 +47,9 @@ describe("environment config", () => {
     expect(config.billing.provider).toBe("stripe");
     expect(config.billing.stripeSecretKey).toBeNull();
     expect(config.billing.stripeWebhookSecret).toBeNull();
+    expect(config.billing.stripeWeeklyPriceId).toBe("price_weekly");
+    expect(config.billing.stripeMonthlyPriceId).toBe("price_monthly");
+    expect(config.billing.stripeAnnualPriceId).toBe("price_annual");
     expect(config.billing.stripeProPriceId).toBeNull();
     expect(config.supabase.url).toBe("https://example.supabase.co");
     expect(config.ai.geminiApiKey).toBeNull();

@@ -103,7 +103,7 @@ export function Profile() {
     try {
       const base = window.location.origin;
       const response = await api.createBillingCheckout({
-        plan_code: "pro",
+        plan_code: "weekly",
         success_url: `${base}/app/pricing?checkout=success`,
         cancel_url: `${base}/app/profile?checkout=cancel`
       });
@@ -306,7 +306,7 @@ export function Profile() {
                       opacity: billingBusy ? 0.7 : 1
                     }}
                   >
-                    {billingBusy ? "Redirecting..." : "Upgrade to Pro"}
+                    {billingBusy ? "Redirecting..." : "Start weekly plan"}
                   </button>
                 ) : (
                   <button

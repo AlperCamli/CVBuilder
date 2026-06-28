@@ -16,6 +16,13 @@ import type { MasterCvRecord } from "../src/shared/types/domain";
 
 const NOW = "2026-06-12T10:00:00.000Z";
 
+type ExecuteFlowHost = {
+  executeFlow: (input: Record<string, unknown>) => Promise<{
+    ai_run: { id: string };
+    output: Record<string, unknown>;
+  }>;
+};
+
 const session: SessionContext = {
   authUser: {
     auth_user_id: "auth-1",
@@ -170,7 +177,7 @@ const makeService = (masterCv: MasterCvRecord) => {
 
 const spyExecuteFlow = (service: AiService, output: Record<string, unknown>) => {
   return vi
-    .spyOn(service as unknown as { executeFlow: Function }, "executeFlow")
+    .spyOn(service as unknown as ExecuteFlowHost, "executeFlow")
     .mockResolvedValue({ ai_run: { id: "run-1" }, output });
 };
 
@@ -205,7 +212,7 @@ describe("AiService medical block suggestions", () => {
     });
 
     // The skills-pool branch would have demanded fields.skills; the module branch ran instead.
-    const flowInput = executeFlow.mock.calls[0][0] as Record<string, unknown>;
+    const flowInput = executeFlow.mock.calls[0]![0];
     expect(flowInput.flow_type).toBe("block_suggest");
     expect(flowInput.prompt_profile).toBe("medical_uk");
     const inputPayload = flowInput.input_payload as Record<string, unknown>;

@@ -155,7 +155,7 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
 
   async hasUsedTrial(userId: string): Promise<boolean> {
     return this.listByUser(userId).some(
-      (row) => row.plan_code === "pro" && row.provider_subscription_id !== null
+      (row) => ["pro", "weekly"].includes(row.plan_code) && row.provider_subscription_id !== null
     );
   }
 
@@ -459,6 +459,9 @@ export const createTestConfig = (): AppConfig => {
       provider: "stripe",
       stripeSecretKey: null,
       stripeWebhookSecret: null,
+      stripeWeeklyPriceId: "price_weekly",
+      stripeMonthlyPriceId: "price_monthly",
+      stripeAnnualPriceId: "price_annual",
       stripeProPriceId: "price_pro_monthly",
       stripeLifetimePriceId: "price_lifetime_once",
       trialPeriodDays: 3,

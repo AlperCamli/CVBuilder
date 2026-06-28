@@ -194,6 +194,9 @@ export const buildDefaultServices = (
     overrides?.entitlementsService ??
     new EntitlementsService(
       createPlanCatalog({
+        weeklyStripePriceId: config.billing.stripeWeeklyPriceId,
+        monthlyStripePriceId: config.billing.stripeMonthlyPriceId,
+        annualStripePriceId: config.billing.stripeAnnualPriceId,
         proStripePriceId: config.billing.stripeProPriceId,
         lifetimeStripePriceId: config.billing.stripeLifetimePriceId
       })

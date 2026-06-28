@@ -4,6 +4,7 @@ import { TrendingUp, AlertCircle, Sparkles, ArrowRight, Loader2 } from "lucide-r
 import type { CvContent, ParseSummary } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
+import { trackOnboardingStepCompleted, trackOnboardingStepView } from "../integration/analytics";
 
 const countBlocks = (content: CvContent): number =>
   content.sections.reduce((sum, section) => sum + section.blocks.length, 0);
@@ -150,7 +151,14 @@ export function CVScore() {
     return lowConfidence || unsafeFallback || nonPrimaryPdfStage;
   }, [parseSummary]);
 
-  const convertImportToMasterCv = async (contentToSave: CvContent) => {
+  useEffect(() => {
+    trackOnboardingStepView({
+      step: "cv_score",
+      source: "upload_processing"
+    });
+  }, []);
+
+  const convertImportToMasterCv = async (contentToSave: CvContent, destination: "tailor" | "editor") => {
     if (!importId) {
       return;
     }
@@ -183,6 +191,21 @@ export function CVScore() {
       await api.patchImportResult(importId, contentToSave);
       const converted = await api.createMasterCvFromImport(importId, {});
 
+      trackOnboardingStepCompleted({
+        step: "cv_score",
+        destination,
+        parse_needs_manual_review: parseNeedsManualReview
+      });
+
+      if (destination === "tailor") {
+        navigate(`/app/tailor/${converted.master_cv.id}`, {
+          state: {
+            source: "onboarding_upload"
+          }
+        });
+        return;
+      }
+
       navigate(`/app/cv/${converted.master_cv.id}`, {
         state: {
           cvKind: "master",
@@ -210,16 +233,24 @@ export function CVScore() {
         importId,
         parsedContent,
         improvements,
-        moduleType
+        moduleType,
+        source: "onboarding_upload"
       }
     });
   };
 
-  const handleContinueWithoutAI = () => {
+  const handleCustomizeForJob = () => {
+    if (!parsedContent || parseNeedsManualReview) {
+      return;
+    }
+    void convertImportToMasterCv(parsedContent, "tailor");
+  };
+
+  const handleReviewInEditor = () => {
     if (!parsedContent) {
       return;
     }
-    void convertImportToMasterCv(parsedContent);
+    void convertImportToMasterCv(parsedContent, "editor");
   };
 
   if (loading) {
@@ -294,7 +325,7 @@ export function CVScore() {
                 {score >= 80 ? "Great CV foundation" : score >= 60 ? "Good foundation" : "Needs improvement"}
               </h3>
               <p style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Parsed result review is complete. You can continue directly or apply AI-assisted improvements before converting to your main CV.
+                Parsed result review is complete. Customize it for a real job next, or review the parsed content manually first.
               </p>
             </div>
           </div>
@@ -357,35 +388,51 @@ export function CVScore() {
 
           <div className="space-y-3">
             <button
-              onClick={handleImproveWithAI}
-              disabled={converting || !parsedContent}
+              onClick={handleCustomizeForJob}
+              disabled={converting || !parsedContent || parseNeedsManualReview}
               className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all hover:shadow-md"
               style={{
                 background: "var(--color-teal-600)",
                 color: "white",
+                fontSize: "14px",
+                opacity: converting || parseNeedsManualReview ? 0.7 : 1
+              }}
+            >
+              {converting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              Customize for a job
+              <ArrowRight size={16} />
+            </button>
+
+            <button
+              onClick={handleImproveWithAI}
+              disabled={converting || !parsedContent}
+              className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--color-border-tertiary)",
+                color: "var(--color-text-primary)",
                 fontSize: "14px",
                 opacity: converting ? 0.7 : 1
               }}
             >
               <Sparkles size={16} />
               Improve with AI
-              <ArrowRight size={16} />
             </button>
 
             <button
-              onClick={handleContinueWithoutAI}
-              disabled={converting || !parsedContent || parseNeedsManualReview}
+              onClick={handleReviewInEditor}
+              disabled={converting || !parsedContent}
               className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
               style={{
                 background: "transparent",
                 border: "1px solid var(--color-border-tertiary)",
                 color: "var(--color-text-secondary)",
                 fontSize: "14px",
-                opacity: converting || parseNeedsManualReview ? 0.7 : 1
+                opacity: converting ? 0.7 : 1
               }}
             >
               {converting ? <Loader2 size={16} className="animate-spin" /> : null}
-              Continue with parsed result
+              Review parsed result in editor
             </button>
           </div>
         </div>

@@ -88,6 +88,7 @@ import {
 import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
 import { injectPreviewPlaceholders } from "../integration/preview-placeholders";
 import { trackCvExported } from "../integration/analytics";
+import { isPaidPlanCode } from "../../content/pricing";
 import {
   canUseAiForSectionBlock,
   matchesBlockReference,
@@ -564,6 +565,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     company: string;
     jobId?: string;
   } | null>(null);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
   const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
@@ -574,6 +576,27 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   useEffect(() => {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void api
+      .getSettings()
+      .then(({ settings }) => {
+        if (!cancelled) {
+          setOnboardingCompleted(settings.onboarding_completed);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOnboardingCompleted(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
 
   const addContentTypes = useMemo<ContentType[] | undefined>(() => {
     if (moduleType === DEFAULT_MODULE_ID) {
@@ -1310,11 +1333,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const maybeShowExportUpsell = async (): Promise<void> => {
     if (typeof window === "undefined") return;
+    if (onboardingCompleted !== true) return;
     if (window.sessionStorage.getItem(EXPORT_UPSELL_SESSION_KEY) === "true") return;
 
     try {
       const plan = await api.getBillingPlan();
-      if (plan.plan_code === "pro" || plan.plan_code === "lifetime") return;
+      if (isPaidPlanCode(plan.plan_code)) return;
       window.sessionStorage.setItem(EXPORT_UPSELL_SESSION_KEY, "true");
       showUpgradePrompt("export_first_in_session");
     } catch {
@@ -1324,10 +1348,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const armPostExportReturnPrompt = async (): Promise<void> => {
     if (typeof window === "undefined") return;
+    if (cvKind !== "tailored" && onboardingCompleted !== true) return;
 
     try {
       const plan = await api.getBillingPlan();
-      if (plan.plan_code === "pro" || plan.plan_code === "lifetime") return;
+      if (isPaidPlanCode(plan.plan_code)) return;
       postExportReturnRef.current = { kind: cvKind, away: false };
     } catch {
       // No return prompt if the billing plan can't be resolved.
@@ -1627,7 +1652,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
     const planCode = (me?.current_plan?.plan_code ?? "free").toLowerCase();
     if (planCode === "free") {
-      setSkillsPoolError("Refresh is available on the Pro plan.");
+      setSkillsPoolError("Refresh is available on a paid plan.");
       return;
     }
 
@@ -1965,18 +1990,26 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     const firePostExportReturnPrompt = (kind: "master" | "tailored") => {
       if (kind === "tailored") {
         const jobId = tailoredJobData?.jobId;
+        const firstOnboardingPaywall = onboardingCompleted !== true;
         showUpgradePrompt("post_export", {
           exportedCvKind: "tailored",
+          firstOnboardingPaywall,
+          onboardingCompletedBefore: onboardingCompleted === true,
           nextStep: {
             label: "Write my cover letter",
             onSelect: () => navigate(jobId ? `/app/cover-letter/${jobId}` : "/app/cover-letters")
           }
         });
+        if (firstOnboardingPaywall) {
+          setOnboardingCompleted(true);
+        }
         return;
       }
 
       showUpgradePrompt("post_export", {
         exportedCvKind: "master",
+        firstOnboardingPaywall: false,
+        onboardingCompletedBefore: onboardingCompleted === true,
         nextStep: {
           label: "Create a job-specific CV",
           onSelect: () => navigate(cvId ? `/app/tailor/${cvId}` : "/app")
@@ -2015,7 +2048,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       window.removeEventListener("focus", maybePrompt);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [cvId, tailoredJobData, navigate, showUpgradePrompt]);
+  }, [cvId, onboardingCompleted, tailoredJobData, navigate, showUpgradePrompt]);
 
   const handlePostExportNavigation = () => {
     if (cvKind === "tailored" && tailoredJobData) {

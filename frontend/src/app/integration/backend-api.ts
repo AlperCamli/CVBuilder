@@ -279,10 +279,10 @@ export interface UpdateCoverLetterContentInput {
 }
 
 export interface BillingCheckoutInput {
-  plan_code: "free" | "pro" | "lifetime";
+  plan_code: "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";
   success_url?: string;
   cancel_url?: string;
-  // When false, the Pro checkout skips the free trial and bills immediately.
+  // When false, the Weekly checkout skips the free trial and bills immediately.
   with_trial?: boolean;
 }
 

@@ -46,6 +46,9 @@ const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
   if (planCode === "lifetime") return 99;
   if (planCode === "pro") return trialApplied ? 0 : 10;
+  if (planCode === "weekly") return trialApplied ? 0 : 5;
+  if (planCode === "monthly") return 15;
+  if (planCode === "annual") return 99;
   return undefined;
 };
 
@@ -121,6 +124,30 @@ export function trackPaymentStarted(params: AnalyticsParams = {}): void {
 
 export function trackPaymentCompleted(params: AnalyticsParams = {}): void {
   trackEvent("payment_completed", params);
+}
+
+export function trackOnboardingStepView(params: AnalyticsParams = {}): void {
+  trackEvent("onboarding_step_view", params);
+}
+
+export function trackOnboardingStepCompleted(params: AnalyticsParams = {}): void {
+  trackEvent("onboarding_step_completed", params);
+}
+
+export function trackOnboardingPathSelected(params: AnalyticsParams = {}): void {
+  trackEvent("onboarding_path_selected", params);
+}
+
+export function trackPostExportPaywallView(params: AnalyticsParams = {}): void {
+  trackEvent("post_export_paywall_view", params);
+}
+
+export function trackPostExportPaywallPlanClick(params: AnalyticsParams = {}): void {
+  trackEvent("post_export_paywall_plan_click", params);
+}
+
+export function trackPostExportPaywallDismissed(params: AnalyticsParams = {}): void {
+  trackEvent("post_export_paywall_dismissed", params);
 }
 
 export function fileAnalyticsParams(file: Pick<File, "name" | "size" | "type">): AnalyticsParams {

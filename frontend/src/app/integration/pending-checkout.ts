@@ -1,4 +1,5 @@
 import type { CheckoutTarget } from "../../content/pricing";
+import { isCheckoutTarget } from "../../content/pricing";
 
 // Persists a checkout the user kicked off from the public pricing page before
 // signing up. It must survive the full sign-up round-trip (including the email
@@ -11,9 +12,6 @@ export interface PendingCheckoutIntent {
 }
 
 const STORAGE_KEY = "cv-builder:pending-checkout";
-
-const isCheckoutTarget = (value: unknown): value is CheckoutTarget =>
-  value === "pro" || value === "lifetime";
 
 export function setPendingCheckout(intent: PendingCheckoutIntent): void {
   try {

@@ -16,6 +16,8 @@ export interface UpgradePromptOptions {
   feature?: string;
   reason?: string | null;
   exportedCvKind?: "master" | "tailored";
+  firstOnboardingPaywall?: boolean;
+  onboardingCompletedBefore?: boolean;
   nextStep?: UpgradePromptNextStep;
 }
 

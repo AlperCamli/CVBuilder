@@ -102,18 +102,14 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
   }
 
   async hasUsedTrial(userId: string): Promise<boolean> {
-    // A real Stripe `pro` subscription row (trial, active, or later canceled) is
-    // only ever persisted after the user went through a Pro checkout, which is
-    // where the free trial is granted. Its `provider_subscription_id` stays set
-    // even after the trial is canceled and the subscription is deleted, so its
-    // presence is the durable signal that this user has already consumed a trial.
-    // Placeholder customer-link rows have a null `provider_subscription_id` and a
-    // `free` plan_code, so they are correctly excluded.
+    // Legacy Pro and the new Weekly plan are the only plans that have ever
+    // granted trials. A real Stripe subscription id is the durable signal that a
+    // user entered one of those trial-capable checkout flows.
     const { data, error } = await this.supabaseClient
       .from("subscriptions")
       .select("id")
       .eq("user_id", userId)
-      .eq("plan_code", "pro")
+      .in("plan_code", ["pro", "weekly"])
       .not("provider_subscription_id", "is", null)
       .limit(1);
 

@@ -24,7 +24,9 @@ import {
 class FakeStripeGateway implements StripeGateway {
   private readonly customers = new Map<string, StripeCustomerSummary>();
   private readonly subscriptions = new Map<string, StripeSubscriptionSummary>();
+  public lastCheckoutPriceId: string | null | undefined;
   public lastCheckoutTrialPeriodDays: number | null | undefined;
+  public lastCheckoutMode: "subscription" | "payment" | undefined;
 
   async createCustomer(input: {
     email: string;
@@ -50,9 +52,12 @@ class FakeStripeGateway implements StripeGateway {
     cancel_url: string;
     client_reference_id: string;
     metadata: Record<string, string>;
+    mode?: "subscription" | "payment";
     trial_period_days?: number | null;
   }): Promise<StripeCheckoutSessionSummary> {
+    this.lastCheckoutPriceId = input.price_id;
     this.lastCheckoutTrialPeriodDays = input.trial_period_days;
+    this.lastCheckoutMode = input.mode;
 
     const subscription: StripeSubscriptionSummary = {
       id: "sub_test_1",
@@ -120,7 +125,13 @@ const buildApp = () => {
   });
 
   const entitlementsService = new EntitlementsService(
-    createPlanCatalog({ proStripePriceId: config.billing.stripeProPriceId })
+    createPlanCatalog({
+      weeklyStripePriceId: config.billing.stripeWeeklyPriceId,
+      monthlyStripePriceId: config.billing.stripeMonthlyPriceId,
+      annualStripePriceId: config.billing.stripeAnnualPriceId,
+      proStripePriceId: config.billing.stripeProPriceId,
+      lifetimeStripePriceId: config.billing.stripeLifetimePriceId
+    })
   );
   const usageService = new UsageService(usageRepository);
   const stripeGateway = new FakeStripeGateway();
@@ -155,7 +166,7 @@ const buildApp = () => {
     }
   });
 
-  return { app, stripeGateway, subscriptionsRepository };
+  return { app, stripeGateway, subscriptionsRepository, usersRepository };
 };
 
 describe("billing endpoints", () => {
@@ -197,14 +208,14 @@ describe("billing endpoints", () => {
     expect(entitlementsResponse.body.data.can_use_ai_actions).toBe(true);
   });
 
-  it("supports checkout, portal, and webhook subscription sync", async () => {
+  it("supports weekly checkout, portal, and webhook subscription sync", async () => {
     const { app } = buildApp();
 
     const checkoutResponse = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
       .send({
-        plan_code: "pro"
+        plan_code: "weekly"
       });
 
     expect(checkoutResponse.status).toBe(200);
@@ -236,7 +247,7 @@ describe("billing endpoints", () => {
             data: [
               {
                 price: {
-                  id: "price_pro_monthly"
+                  id: "price_weekly"
                 }
               }
             ]
@@ -260,7 +271,7 @@ describe("billing endpoints", () => {
       .set("Authorization", "Bearer valid-token");
 
     expect(updatedPlan.status).toBe(200);
-    expect(updatedPlan.body.data.plan_code).toBe("pro");
+    expect(updatedPlan.body.data.plan_code).toBe("weekly");
     expect(updatedPlan.body.data.subscription_status).toBe("active");
 
     const updatedUsage = await request(app)
@@ -268,37 +279,39 @@ describe("billing endpoints", () => {
       .set("Authorization", "Bearer valid-token");
 
     expect(updatedUsage.status).toBe(200);
-    expect(updatedUsage.body.data.plan_code).toBe("pro");
+    expect(updatedUsage.body.data.plan_code).toBe("weekly");
     expect(updatedUsage.body.data.limits.tailored_cv_generations).toBeNull();
     expect(updatedUsage.body.data.remaining.tailored_cv_generations).toBeNull();
   });
 
-  it("grants a trial on the first Pro checkout", async () => {
+  it("grants a trial on the first Weekly checkout", async () => {
     const { app, stripeGateway } = buildApp();
 
     const response = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "pro" });
+      .send({ plan_code: "weekly" });
 
     expect(response.status).toBe(200);
     expect(response.body.data.trial_applied).toBe(true);
     expect(response.body.data.trial_period_days).toBe(3);
+    expect(stripeGateway.lastCheckoutPriceId).toBe("price_weekly");
+    expect(stripeGateway.lastCheckoutMode).toBe("subscription");
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBe(3);
   });
 
-  it("does not grant a second trial once the user has already had a Pro subscription", async () => {
+  it("does not grant a second trial once the user has already had a Weekly subscription", async () => {
     const { app, stripeGateway } = buildApp();
 
     // First trial checkout.
     const firstCheckout = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "pro" });
+      .send({ plan_code: "weekly" });
     expect(firstCheckout.body.data.trial_applied).toBe(true);
 
     // The trial runs and is later canceled; Stripe ultimately reports the
-    // subscription as canceled, which persists a real `pro` subscription row.
+    // subscription as canceled, which persists a real `weekly` subscription row.
     const canceledWebhook = {
       id: "evt_trial_canceled",
       type: "customer.subscription.deleted",
@@ -311,7 +324,7 @@ describe("billing endpoints", () => {
           current_period_start: 1711929600,
           current_period_end: 1712188800,
           metadata: {},
-          items: { data: [{ price: { id: "price_pro_monthly" } }] }
+          items: { data: [{ price: { id: "price_weekly" } }] }
         }
       }
     };
@@ -334,7 +347,7 @@ describe("billing endpoints", () => {
     const secondCheckout = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "pro" });
+      .send({ plan_code: "weekly" });
 
     expect(secondCheckout.status).toBe(200);
     expect(secondCheckout.body.data.trial_applied).toBe(false);
@@ -342,17 +355,167 @@ describe("billing endpoints", () => {
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
   });
 
-  it("lets a user buy Pro directly without a trial via with_trial=false", async () => {
+  it("lets a user buy Weekly directly without a trial via with_trial=false", async () => {
     const { app, stripeGateway } = buildApp();
 
     const response = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "pro", with_trial: false });
+      .send({ plan_code: "weekly", with_trial: false });
 
     expect(response.status).toBe(200);
     expect(response.body.data.trial_applied).toBe(false);
     expect(response.body.data.trial_period_days).toBeNull();
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
+  });
+
+  it("never applies a trial to Monthly or Annual checkout", async () => {
+    const { app, stripeGateway } = buildApp();
+
+    for (const [planCode, priceId] of [
+      ["monthly", "price_monthly"],
+      ["annual", "price_annual"]
+    ] as const) {
+      const response = await request(app)
+        .post("/api/v1/billing/checkout")
+        .set("Authorization", "Bearer valid-token")
+        .send({ plan_code: planCode });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.plan_code).toBe(planCode);
+      expect(response.body.data.trial_applied).toBe(false);
+      expect(response.body.data.trial_period_days).toBeNull();
+      expect(stripeGateway.lastCheckoutPriceId).toBe(priceId);
+      expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
+    }
+  });
+
+  it("does not grant a Weekly trial after prior legacy Pro trial usage", async () => {
+    const { app, subscriptionsRepository, usersRepository, stripeGateway } = buildApp();
+
+    await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+
+    const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+    expect(user).not.toBeNull();
+
+    subscriptionsRepository.seed({
+      id: "sub_record_legacy_trial",
+      user_id: user!.id,
+      provider: "stripe",
+      provider_customer_id: "cus_legacy",
+      provider_subscription_id: "sub_legacy_pro",
+      plan_code: "pro",
+      status: "canceled",
+      current_period_start: "2026-01-01T00:00:00.000Z",
+      current_period_end: "2026-01-04T00:00:00.000Z",
+      cancel_at_period_end: false,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-04T00:00:00.000Z"
+    });
+
+    const response = await request(app)
+      .post("/api/v1/billing/checkout")
+      .set("Authorization", "Bearer valid-token")
+      .send({ plan_code: "weekly" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.trial_applied).toBe(false);
+    expect(response.body.data.trial_period_days).toBeNull();
+    expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
+  });
+
+  it("rejects free and legacy plans from new checkout flows", async () => {
+    const { app } = buildApp();
+
+    for (const planCode of ["free", "pro", "lifetime"] as const) {
+      const response = await request(app)
+        .post("/api/v1/billing/checkout")
+        .set("Authorization", "Bearer valid-token")
+        .send({ plan_code: planCode });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.code).toBe("BILLING_PLAN_INVALID");
+    }
+  });
+
+  it("maps Stripe price IDs to Monthly and Annual subscription plans", async () => {
+    for (const [planCode, priceId] of [
+      ["monthly", "price_monthly"],
+      ["annual", "price_annual"]
+    ] as const) {
+      const { app, usersRepository } = buildApp();
+
+      await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+      const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+      expect(user).not.toBeNull();
+
+      const webhookPayload = {
+        id: `evt_${planCode}_sync`,
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: `sub_${planCode}`,
+            customer: `cus_${planCode}`,
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_start: 1711929600,
+            current_period_end: 1714521600,
+            metadata: { app_user_id: user!.id },
+            items: { data: [{ price: { id: priceId } }] }
+          }
+        }
+      };
+
+      const webhookResponse = await request(app)
+        .post("/api/v1/billing/webhooks")
+        .set("stripe-signature", "sig_test")
+        .set("Content-Type", "application/json")
+        .send(JSON.stringify(webhookPayload));
+
+      expect(webhookResponse.status).toBe(200);
+      expect(webhookResponse.body.data.processed).toBe(true);
+
+      const planResponse = await request(app)
+        .get("/api/v1/billing/plan")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(planResponse.status).toBe(200);
+      expect(planResponse.body.data.plan_code).toBe(planCode);
+    }
+  });
+
+  it("preserves unlimited entitlements for legacy Pro and Lifetime users", async () => {
+    for (const planCode of ["pro", "lifetime"] as const) {
+      const { app, subscriptionsRepository, usersRepository } = buildApp();
+
+      await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+      const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+      expect(user).not.toBeNull();
+
+      subscriptionsRepository.seed({
+        id: `sub_record_${planCode}`,
+        user_id: user!.id,
+        provider: "stripe",
+        provider_customer_id: `cus_${planCode}`,
+        provider_subscription_id: `sub_${planCode}`,
+        plan_code: planCode,
+        status: "active",
+        current_period_start: "2026-01-01T00:00:00.000Z",
+        current_period_end: planCode === "pro" ? "2026-02-01T00:00:00.000Z" : null,
+        cancel_at_period_end: false,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z"
+      });
+
+      const usageResponse = await request(app)
+        .get("/api/v1/billing/usage")
+        .set("Authorization", "Bearer valid-token");
+
+      expect(usageResponse.status).toBe(200);
+      expect(usageResponse.body.data.plan_code).toBe(planCode);
+      expect(usageResponse.body.data.limits.tailored_cv_generations).toBeNull();
+      expect(usageResponse.body.data.remaining.tailored_cv_generations).toBeNull();
+    }
   });
 });

@@ -48,7 +48,7 @@ export function PublicPricing() {
 
     setPendingCheckout({
       plan_code: target,
-      ...(target === "pro" && !withTrial ? { with_trial: false } : {})
+      ...(target === "weekly" && !withTrial ? { with_trial: false } : {})
     });
     navigate("/signup");
   };
@@ -61,13 +61,13 @@ export function PublicPricing() {
     if (card.code === "free") {
       return { label: "Get started free", onClick: goFree };
     }
-    if (card.code === "pro") {
+    if (card.code === "weekly") {
       return {
-        label: trialEligible ? "Start 3-day free trial" : "Start your subscription",
-        onClick: () => choosePlan("pro")
+        label: trialEligible ? "Start 3-day free trial" : "Start weekly plan",
+        onClick: () => choosePlan("weekly")
       };
     }
-    return { label: "Get Lifetime — $99", onClick: () => choosePlan("lifetime") };
+    return { label: `Choose ${card.name.toLowerCase()}`, onClick: () => choosePlan(card.code) };
   };
 
   return (
@@ -83,16 +83,14 @@ export function PublicPricing() {
             Simple pricing for a faster job search
           </h1>
           <p style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-            {trialEligible
-              ? "Start free, or go Pro with a 3-day free trial. Cancel anytime — no charge during the trial."
-              : "Start free, or subscribe to Pro for unlimited access. Cancel anytime."}
+            Compare plans by weekly price. Weekly starts with a 3-day trial, while monthly and annual reduce the weekly equivalent for active job searches.
           </p>
         </div>
 
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-5 items-stretch">
           {PLAN_CARDS.map((card) => {
             const cta = resolveCta(card);
-            const badge = card.code === "pro" && !trialEligible ? "Most popular" : card.badge;
+            const badge = card.code === "weekly" && !trialEligible ? null : card.badge;
             return (
               <div
                 key={card.code}
@@ -128,11 +126,19 @@ export function PublicPricing() {
                 </p>
                 <div className="mb-6">
                   <span className="font-medium" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
-                    {card.price}
+                    {card.weeklyPrice}
                   </span>
                   <span style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                    {" "}/{card.period}
+                    {" "}/{card.billingPeriod}
                   </span>
+                  <p className="mt-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                    {card.totalPrice}
+                  </p>
+                  {card.savings ? (
+                    <p className="mt-1 font-medium" style={{ fontSize: "12px", color: "var(--color-teal-700)" }}>
+                      {card.savings}
+                    </p>
+                  ) : null}
                 </div>
                 <ul className="space-y-3 mb-6 flex-1">
                   {card.features.map((feature) => (
@@ -153,15 +159,15 @@ export function PublicPricing() {
                     fontSize: "13px",
                     background: card.highlighted
                       ? "var(--color-teal-600)"
-                      : card.code === "lifetime"
+                      : card.code === "annual"
                         ? "var(--color-slate-800)"
                         : "var(--color-background-primary)",
                     color: card.highlighted
                       ? "var(--color-teal-50)"
-                      : card.code === "lifetime"
+                      : card.code === "annual"
                         ? "white"
                         : "var(--color-teal-600)",
-                    border: card.highlighted || card.code === "lifetime"
+                    border: card.highlighted || card.code === "annual"
                       ? "none"
                       : "2px solid var(--color-teal-200)",
                     cursor: "pointer"
@@ -169,21 +175,6 @@ export function PublicPricing() {
                 >
                   {cta.label}
                 </button>
-                {card.code === "pro" && trialEligible && (
-                  <button
-                    onClick={() => choosePlan("pro", false)}
-                    className="w-full mt-2 px-6 py-2 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2 bg-transparent"
-                    style={{
-                      fontSize: "12px",
-                      color: "var(--color-teal-700)",
-                      border: "none",
-                      textDecoration: "underline",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Subscribe now without trial
-                  </button>
-                )}
               </div>
             );
           })}

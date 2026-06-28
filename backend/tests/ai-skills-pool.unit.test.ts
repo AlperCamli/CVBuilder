@@ -16,9 +16,17 @@ import {
   dedupeSkills,
   extractPoolSkillsFromSuggestedBlock
 } from "../src/modules/ai/skills-pool";
+import type { CvJsonValue } from "../src/shared/cv-content/cv-content.types";
 import type { MasterCvRecord } from "../src/shared/types/domain";
 
 const NOW = "2026-05-14T10:00:00.000Z";
+
+type ExecuteFlowHost = {
+  executeFlow: (input: Record<string, unknown>) => Promise<{
+    ai_run: { id: string };
+    output: Record<string, unknown>;
+  }>;
+};
 
 const session: SessionContext = {
   authUser: {
@@ -40,12 +48,13 @@ const session: SessionContext = {
   }
 };
 
-const createMasterCvRecord = (skillsMeta: Record<string, unknown> = {}): MasterCvRecord => ({
+const createMasterCvRecord = (skillsMeta: Record<string, CvJsonValue> = {}): MasterCvRecord => ({
   id: "master-1",
   user_id: "user-1",
   title: "Master CV",
   language: "en",
   template_id: null,
+  module_type: "standard",
   summary_text: null,
   source_type: "scratch",
   is_deleted: false,
@@ -275,7 +284,7 @@ describe("AiService skills pool refresh rules", () => {
     });
     const { service, createSuggestions } = makeService(cv, "pro");
 
-    vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
+    vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
       ai_run: { id: "run-refresh" },
       output: {
         suggested_block: {
@@ -319,7 +328,7 @@ describe("AiService skills pool refresh rules", () => {
     const cv = createMasterCvRecord();
     const { service, createSuggestions, billingService } = makeService(cv, "pro");
 
-    vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
+    vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
       ai_run: { id: "run-1" },
       output: {
         suggested_block: {
@@ -362,7 +371,7 @@ describe("AiService skills pool refresh rules", () => {
     });
     const { service, createSuggestions } = makeService(cv, "pro");
 
-    vi.spyOn(service as unknown as { executeFlow: Function }, "executeFlow").mockResolvedValue({
+    vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
       ai_run: { id: "run-2" },
       output: {
         suggested_block: {

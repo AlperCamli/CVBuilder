@@ -13,6 +13,7 @@ import type {
 } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
+import { isPaidPlanCode } from "../../content/pricing";
 
 const formatDate = (value: string | null): string => {
   if (!value) {
@@ -225,6 +226,7 @@ export function Dashboard() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!dashboard?.onboarding_completed) return;
     if (window.localStorage.getItem(WELCOME_PROMPT_STORAGE_KEY) === "true") return;
 
     let cancelled = false;
@@ -232,7 +234,7 @@ export function Dashboard() {
       .getBillingPlan()
       .then((plan) => {
         if (cancelled) return;
-        if (plan.plan_code === "pro" || plan.plan_code === "lifetime") {
+        if (isPaidPlanCode(plan.plan_code)) {
           window.localStorage.setItem(WELCOME_PROMPT_STORAGE_KEY, "true");
           return;
         }
@@ -246,7 +248,7 @@ export function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [api, showUpgradePrompt]);
+  }, [api, dashboard?.onboarding_completed, showUpgradePrompt]);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,6 +1,6 @@
 import type { UsageCounterRecord } from "../../shared/types/domain";
 
-export type PlanCode = "free" | "pro" | "lifetime";
+export type PlanCode = "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";
 
 export interface UsageLimits {
   tailored_cv_generations: number | null;
@@ -29,6 +29,9 @@ export interface PlanDefinition {
   limits: UsageLimits;
   features: PlanFeatures;
   stripe_price_id: string | null;
+  checkout_allowed: boolean;
+  trial_supported: boolean;
+  legacy?: boolean;
 }
 
 export type PlanCatalog = Record<PlanCode, PlanDefinition>;

@@ -1,4 +1,5 @@
 import type { CheckoutTarget } from "../../content/pricing";
+import { PLAN_VALUE_USD } from "../../content/pricing";
 import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 
@@ -16,11 +17,13 @@ export async function startStripeCheckout(
     plan_code: plan,
     success_url: `${base}/app/pricing?checkout=success`,
     cancel_url: `${base}/app/pricing?checkout=cancel`,
-    ...(plan === "pro" && options?.withTrial === false ? { with_trial: false } : {})
+    ...(plan === "weekly" && options?.withTrial === false ? { with_trial: false } : {})
   });
 
   const value =
-    response.plan_code === "lifetime" ? 99 : response.plan_code === "pro" ? (response.trial_applied ? 0 : 10) : undefined;
+    response.plan_code === "weekly" && response.trial_applied
+      ? 0
+      : PLAN_VALUE_USD[response.plan_code as CheckoutTarget];
   const currency = value !== undefined ? "USD" : undefined;
 
   rememberCheckoutAttribution({

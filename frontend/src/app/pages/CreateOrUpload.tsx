@@ -1,8 +1,20 @@
 import { Link, useNavigate } from "react-router";
-import { FileText, Upload, CheckCircle } from "lucide-react";
+import { FileText, Upload, CheckCircle, Target, Download, Sparkles } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useEffect, useRef } from "react";
-import { fileAnalyticsParams, trackCvUploadStarted } from "../integration/analytics";
+import {
+  fileAnalyticsParams,
+  trackCvUploadStarted,
+  trackOnboardingPathSelected,
+  trackOnboardingStepView
+} from "../integration/analytics";
+
+const ONBOARDING_CHECKLIST = [
+  { icon: Upload, label: "Upload your existing CV" },
+  { icon: Target, label: "Customize it for a real job" },
+  { icon: Download, label: "Export a job-specific PDF or DOCX" },
+  { icon: Sparkles, label: "Use AI rewrites, cover letters, and job tracking" }
+];
 
 export function CreateOrUpload() {
   const navigate = useNavigate();
@@ -19,8 +31,26 @@ export function CreateOrUpload() {
     };
   }, [setSidebarVisible]);
 
+  useEffect(() => {
+    trackOnboardingStepView({
+      step: "create_or_upload",
+      source: "post_signup"
+    });
+  }, []);
+
   const handleUploadClick = () => {
+    trackOnboardingPathSelected({
+      step: "create_or_upload",
+      path_selected: "upload"
+    });
     fileInputRef.current?.click();
+  };
+
+  const handleCreateClick = () => {
+    trackOnboardingPathSelected({
+      step: "create_or_upload",
+      path_selected: "manual_create"
+    });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,78 +75,84 @@ export function CreateOrUpload() {
               className="font-medium mb-4"
               style={{ fontSize: "28px", lineHeight: "1.2", color: "var(--color-text-primary)" }}
             >
-              Let's build your CV
+              Start with your current CV
             </h1>
             <p className="mb-8" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-              Start by creating a comprehensive main CV or uploading an existing one.
-              You'll be able to customize it for specific jobs later.
+              Upload your CV first, then customize it for a real job and export the finished version.
+              This is the fastest path to seeing how jobspecificCV helps.
             </p>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               <h3
                 className="uppercase tracking-wider"
                 style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
               >
-                What happens next
+                First application checklist
               </h3>
 
-              {[
-                { step: "1", title: "Build or upload your base CV", desc: "Add your complete experience and skills" },
-                { step: "2", title: "Customize for a specific job", desc: "Customize content based on job requirements" },
-                { step: "3", title: "Export and apply", desc: "Download polished, ATS-friendly versions" },
-              ].map((item) => (
-                <div key={item.step} className="flex items-start gap-3">
+              {ONBOARDING_CHECKLIST.map((item) => {
+                const Icon = item.icon;
+                return (
+                <div key={item.label} className="flex items-start gap-3">
                   <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                     style={{ background: "var(--color-teal-50)", color: "var(--color-teal-600)" }}
                   >
-                    <span style={{ fontSize: "11px", fontWeight: 500 }}>{item.step}</span>
+                    <Icon size={15} />
                   </div>
                   <div>
                     <h4 className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                      {item.title}
+                      {item.label}
                     </h4>
                     <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                      {item.desc}
+                      {item.label.includes("Upload")
+                        ? "We parse your experience so you do not start from scratch."
+                        : item.label.includes("Customize")
+                          ? "Paste the role and job description so the CV matches the application."
+                          : item.label.includes("Export")
+                            ? "Review the tailored CV and download the finished file."
+                            : "Continue with the application workflow after the first export."}
                     </p>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
 
           {/* Right side - Action Cards */}
           <div className="flex flex-col gap-4">
-            <Link
-              to="/app/cv/master"
-              className="p-6 rounded-xl border group transition-all hover:shadow-lg"
+            <button
+              onClick={handleUploadClick}
+              className="p-6 rounded-xl border-2 group transition-all hover:shadow-lg text-left"
               style={{
-                background: "var(--color-background-primary)",
-                borderColor: "var(--color-border-tertiary)",
+                background: "var(--color-teal-50)",
+                borderColor: "var(--color-teal-400)",
               }}
             >
               <div
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
-                style={{ background: "var(--color-teal-50)" }}
+                style={{ background: "var(--color-background-primary)" }}
               >
-                <FileText size={24} style={{ color: "var(--color-teal-600)" }} />
+                <Upload size={24} style={{ color: "var(--color-teal-600)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Create a CV
+                Upload existing CV
               </h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Start building your main CV with our comprehensive editor. Add your experience, skills, and education with AI assistance.
+                Recommended for first-time users. Upload a PDF or DOCX, review the parsed content, then customize it for a job.
               </p>
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} style={{ color: "var(--color-teal-600)" }} />
                 <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  AI-assisted writing
+                  Fastest path to a tailored export
                 </span>
               </div>
-            </Link>
+            </button>
 
-            <button
-              onClick={handleUploadClick}
+            <Link
+              to="/app/cv/master"
+              onClick={handleCreateClick}
               className="p-6 rounded-xl border group transition-all hover:shadow-lg text-left"
               style={{
                 background: "var(--color-background-primary)",
@@ -127,21 +163,21 @@ export function CreateOrUpload() {
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-4"
                 style={{ background: "var(--color-slate-50)" }}
               >
-                <Upload size={24} style={{ color: "var(--color-text-secondary)" }} />
+                <FileText size={24} style={{ color: "var(--color-text-secondary)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Upload existing CV
+                Create CV manually
               </h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Already have a CV? Upload it and we'll parse the content, score it, and help you improve it with AI.
+                Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.
               </p>
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} style={{ color: "var(--color-text-secondary)" }} />
                 <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Supports PDF, DOCX
+                  Structured editor with live preview
                 </span>
               </div>
-            </button>
+            </Link>
             
             <input
               ref={fileInputRef}

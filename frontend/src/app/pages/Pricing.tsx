@@ -14,7 +14,7 @@ import {
   readCheckoutAttribution,
   trackPaymentCompleted
 } from "../integration/analytics";
-import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
+import { isLegacyPaidPlanCode, isPaidPlanCode, PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 const formatTrialEnd = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -102,7 +102,7 @@ export function Pricing() {
         err.code === "VALIDATION_ERROR" &&
         err.message.includes("Start checkout again")
       ) {
-        await startCheckout("pro");
+        await startCheckout("weekly");
         return;
       }
 
@@ -114,8 +114,10 @@ export function Pricing() {
   const currentPlanCode = plan?.plan_code ?? "free";
   const subscriptionStatus = plan?.subscription_status ?? "inactive";
   const isTrialing = subscriptionStatus === "trialing";
+  const isLegacyPaidPlan = isLegacyPaidPlanCode(currentPlanCode);
+  const hasPaidPlan = isPaidPlanCode(currentPlanCode);
   // Default to eligible only until the plan loads, to avoid flashing the wrong
-  // CTA; once loaded this reflects the backend's authoritative decision.
+  // Weekly CTA; once loaded this reflects the backend's authoritative decision.
   const trialEligible = plan?.trial_eligible ?? true;
   const trialEnd = useMemo(() => formatTrialEnd(plan?.current_period_end ?? null), [plan]);
   const checkoutState = new URLSearchParams(location.search).get("checkout");
@@ -151,37 +153,30 @@ export function Pricing() {
   const resolveCta = (card: PlanCard): { label: string; disabled: boolean; onClick?: () => void } => {
     if (card.code === "free") {
       return {
-        label: currentPlanCode === "free" ? "Current plan" : "Downgrade via portal",
+        label: currentPlanCode === "free" ? "Current plan" : "Included in paid plan",
         disabled: true
       };
     }
 
-    if (card.code === "pro") {
-      if (currentPlanCode === "lifetime") {
-        return { label: "Included in Lifetime", disabled: true };
-      }
-      if (currentPlanCode === "pro") {
-        return {
-          label: isTrialing ? "Manage trial" : "Manage billing",
-          disabled: false,
-          onClick: () => void openPortal()
-        };
-      }
+    if (currentPlanCode === card.code) {
       return {
-        label: trialEligible ? "Start 3-day free trial" : "Start your subscription",
+        label: isTrialing ? "Manage trial" : "Manage billing",
         disabled: false,
-        onClick: () => void startCheckout("pro")
+        onClick: () => void openPortal()
       };
     }
 
-    // lifetime
-    if (currentPlanCode === "lifetime") {
-      return { label: "Lifetime — thank you!", disabled: true };
+    if (isLegacyPaidPlan) {
+      return { label: "Included in your legacy plan", disabled: true };
     }
+
     return {
-      label: "Get Lifetime — $99",
+      label:
+        card.code === "weekly" && trialEligible
+          ? "Start 3-day free trial"
+          : `Choose ${card.name.toLowerCase()}`,
       disabled: false,
-      onClick: () => void startCheckout("lifetime")
+      onClick: () => void startCheckout(card.code)
     };
   };
 
@@ -192,9 +187,9 @@ export function Pricing() {
           Choose your plan
         </h1>
         <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-          {trialEligible
-            ? "Try Pro free for 3 days. Cancel anytime — no charge during the trial."
-            : "You've already used your free trial. Subscribe to Pro for unlimited access — cancel anytime."}
+          {hasPaidPlan
+            ? "You have unlimited access to job-specific CVs, exports, AI rewrites, cover letters, and job tracking."
+            : "Pick a plan by weekly price. Weekly starts with a 3-day trial; monthly and annual unlock the same workflow at a lower weekly equivalent."}
         </p>
       </div>
 
@@ -261,16 +256,15 @@ export function Pricing() {
 
       {!loading && (
         <>
-          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-stretch">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-5 mb-12 items-stretch">
             {PLAN_CARDS.map((card) => {
               const cta = resolveCta(card);
               const isBusy =
-                (card.code === "pro" && busyTarget === "pro") ||
-                (card.code === "lifetime" && busyTarget === "lifetime") ||
-                (card.code === "pro" && currentPlanCode === "pro" && busyTarget === "portal");
-              // The "3-day free trial" badge is misleading once the trial is used.
+                (card.code !== "free" && busyTarget === card.code) ||
+                (card.code !== "free" && currentPlanCode === card.code && busyTarget === "portal");
+              // The trial badge is misleading once the weekly trial is used.
               const badge =
-                card.code === "pro" && !trialEligible ? "Most popular" : card.badge;
+                card.code === "weekly" && !trialEligible ? null : card.badge;
               return (
                 <div
                   key={card.code}
@@ -306,11 +300,19 @@ export function Pricing() {
                   </p>
                   <div className="mb-6">
                     <span className="font-medium" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
-                      {card.price}
+                      {card.weeklyPrice}
                     </span>
                     <span style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                      {" "}/{card.period}
+                      {" "}/{card.billingPeriod}
                     </span>
+                    <p className="mt-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                      {card.totalPrice}
+                    </p>
+                    {card.savings ? (
+                      <p className="mt-1 font-medium" style={{ fontSize: "12px", color: "var(--color-teal-700)" }}>
+                        {card.savings}
+                      </p>
+                    ) : null}
                   </div>
                   <ul className="space-y-3 mb-6 flex-1">
                     {card.features.map((feature) => (
@@ -332,15 +334,15 @@ export function Pricing() {
                       fontSize: "13px",
                       background: card.highlighted
                         ? "var(--color-teal-600)"
-                        : card.code === "lifetime"
+                        : card.code === "annual"
                           ? "var(--color-slate-800)"
                           : "var(--color-background-primary)",
                       color: card.highlighted
                         ? "var(--color-teal-50)"
-                        : card.code === "lifetime"
+                        : card.code === "annual"
                           ? "white"
                           : "var(--color-teal-600)",
-                      border: card.highlighted || card.code === "lifetime"
+                      border: card.highlighted || card.code === "annual"
                         ? "none"
                         : "2px solid var(--color-teal-200)",
                       opacity: cta.disabled ? 0.6 : 1,
@@ -350,26 +352,6 @@ export function Pricing() {
                     {isBusy ? <Loader2 size={14} className="animate-spin" /> : null}
                     {cta.label}
                   </button>
-                  {card.code === "pro" &&
-                    trialEligible &&
-                    currentPlanCode !== "pro" &&
-                    currentPlanCode !== "lifetime" && (
-                      <button
-                        onClick={() => void startCheckout("pro", false)}
-                        disabled={isBusy}
-                        className="w-full mt-2 px-6 py-2 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2 bg-transparent"
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--color-teal-700)",
-                          border: "none",
-                          textDecoration: "underline",
-                          cursor: isBusy ? "not-allowed" : "pointer",
-                          opacity: isBusy ? 0.6 : 1
-                        }}
-                      >
-                        Subscribe now without trial
-                      </button>
-                    )}
                 </div>
               );
             })}
