@@ -94,6 +94,10 @@ export function CareerArticle() {
     );
   }
 
+  const heroImagePath =
+    article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png";
+  const heroWebpPath = heroImagePath.replace(/\.(png|jpe?g)$/i, ".webp");
+
   return (
     <div className="min-h-screen bg-white">
       <PublicHeader activeCategorySlug={category?.slug} />
@@ -155,11 +159,18 @@ export function CareerArticle() {
                 "linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-slate-50) 100%)",
             }}
           >
-            <img
-              src={article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png"}
-              alt=""
-              className="w-full h-full object-cover"
-            />
+            <picture className="w-full h-full">
+              <source srcSet={heroWebpPath} type="image/webp" />
+              <img
+                src={heroImagePath}
+                alt=""
+                width="1200"
+                height="675"
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover"
+              />
+            </picture>
           </div>
 
           <div>

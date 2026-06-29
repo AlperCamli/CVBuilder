@@ -10,12 +10,15 @@ const FRONTEND_DIR = resolve(__dirname, "..");
 const DIST_DIR = join(FRONTEND_DIR, "dist");
 const PRERENDERED_DIR = join(FRONTEND_DIR, "prerendered");
 
-function injectIntoHtml(html, innerHTML) {
+function injectIntoHtml(html, innerHTML, route) {
   const rootRe = /<div\s+id="root"[^>]*>[\s\S]*?<\/div>/;
   if (!rootRe.test(html)) {
     throw new Error('Could not find <div id="root">...</div> in index.html');
   }
-  return html.replace(rootRe, `<div id="root">${innerHTML}</div>`);
+  return html.replace(
+    rootRe,
+    `<div id="root" data-prerender-path="${route.path}">${innerHTML}</div>`
+  );
 }
 
 async function main() {
@@ -44,7 +47,7 @@ async function main() {
       );
     }
 
-    const patched = injectRouteMetadata(injectIntoHtml(baseHtml, innerHTML), route);
+    const patched = injectRouteMetadata(injectIntoHtml(baseHtml, innerHTML, route), route);
 
     const targetDir =
       route.path === "/" ? DIST_DIR : join(DIST_DIR, route.path);

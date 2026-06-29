@@ -3,6 +3,7 @@
 # Workspace dependencies/builds
 **/node_modules
 **/dist
+**/dist-ssr
 **/coverage
 
 # Local env files

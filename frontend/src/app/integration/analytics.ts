@@ -18,6 +18,8 @@ const GA_MEASUREMENT_ID = (import.meta.env.VITE_GA_MEASUREMENT_ID ?? "").trim();
 const GA_SCRIPT_ID = "ga4-google-tag";
 const CHECKOUT_ATTRIBUTION_KEY = "analytics:checkout-attribution";
 const PAYMENT_COMPLETED_PREFIX = "analytics:payment-completed";
+const CRAWLER_USER_AGENT_RE =
+  /Googlebot|Google-InspectionTool|AdsBot-Google|Mediapartners-Google|bingbot|DuckDuckBot|Slurp|YandexBot|Baiduspider/i;
 
 export const GA4_KEY_EVENT_RECOMMENDATIONS = [
   "tailored_cv_generated",
@@ -38,6 +40,9 @@ export type CheckoutAttribution = {
 
 const hasWindow = (): boolean => typeof window !== "undefined";
 
+const shouldSkipAnalytics = (): boolean =>
+  !hasWindow() || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent);
+
 const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
   Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined && value !== null)
@@ -53,7 +58,7 @@ const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number |
 };
 
 export function initializeAnalytics(): void {
-  if (!hasWindow() || !GA_MEASUREMENT_ID) return;
+  if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
 
   window.dataLayer = window.dataLayer ?? [];
   window.gtag =
@@ -74,8 +79,20 @@ export function initializeAnalytics(): void {
   window.gtag("config", GA_MEASUREMENT_ID);
 }
 
+export function scheduleAnalytics(): void {
+  if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
+
+  const start = () => initializeAnalytics();
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(start, { timeout: 3000 });
+    return;
+  }
+
+  window.setTimeout(start, 1500);
+}
+
 export function trackEvent(eventName: string, params: AnalyticsParams = {}): void {
-  if (!hasWindow() || !GA_MEASUREMENT_ID) return;
+  if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
 
   if (!window.gtag) {
     initializeAnalytics();

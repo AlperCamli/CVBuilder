@@ -1,60 +1,26 @@
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { PublicHeader } from "../components/PublicHeader";
-import { useAuth } from "../integration/auth-context";
 import { setPendingCheckout } from "../integration/pending-checkout";
 import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 export function PublicPricing() {
   const navigate = useNavigate();
-  const { isAuthenticated, api } = useAuth();
-  // Anonymous visitors are assumed eligible (most are, post-signup). For a
-  // signed-in visitor who already used their trial, reflect that here too so the
-  // marketing CTA matches what they'd see inside the app.
-  const [trialEligible, setTrialEligible] = useState(true);
+  const trialEligible = true;
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const plan = await api.getBillingPlan();
-        if (!cancelled) {
-          setTrialEligible(plan.trial_eligible);
-        }
-      } catch {
-        // Non-fatal: keep the default trial copy if eligibility can't be loaded.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, api]);
-
-  // From the public marketing page we never call Stripe directly. Authenticated
-  // visitors are sent to the full in-app billing page; anonymous visitors have
-  // their plan choice stashed and are routed to sign-up, where the
-  // CheckoutIntentResumer finishes the job once they land authenticated.
+  // From the public marketing page we never load auth or call Stripe directly.
+  // The plan choice is stashed and the authenticated app resumes checkout after
+  // sign-up, keeping the SEO bundle small.
   const choosePlan = (target: CheckoutTarget, withTrial = true) => {
-    if (isAuthenticated) {
-      navigate("/app/pricing");
-      return;
-    }
-
     setPendingCheckout({
       plan_code: target,
       ...(target === "weekly" && !withTrial ? { with_trial: false } : {})
     });
-    navigate("/signup");
+    navigate("/signup", { state: { from: "/app/create" } });
   };
 
   const goFree = () => {
-    navigate(isAuthenticated ? "/app/create" : "/signup");
+    navigate("/signup", { state: { from: "/app/create" } });
   };
 
   const resolveCta = (card: PlanCard): { label: string; onClick: () => void } => {
@@ -181,9 +147,7 @@ export function PublicPricing() {
         </div>
 
         <p className="text-center mt-8" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          {isAuthenticated
-            ? "You're signed in — choosing a plan takes you to your billing page."
-            : "You'll create your account first, then continue straight to secure checkout."}
+          You'll create your account first, then continue straight to secure checkout.
         </p>
       </section>
 
@@ -191,7 +155,14 @@ export function PublicPricing() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <img src="/images/logo.png" alt="" className="w-5 h-5 rounded-lg object-contain shrink-0" />
+              <img
+                src="/images/logo.png"
+                alt=""
+                width="20"
+                height="20"
+                decoding="async"
+                className="w-5 h-5 rounded-lg object-contain shrink-0"
+              />
               <span className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
                 jobspecificCV
               </span>

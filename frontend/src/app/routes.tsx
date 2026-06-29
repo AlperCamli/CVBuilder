@@ -1,129 +1,138 @@
-import { createBrowserRouter, Navigate } from "react-router";
-import { SidebarProvider } from "./contexts/SidebarContext";
-import { UpgradePromptProvider } from "./contexts/UpgradePromptContext";
-import { Layout } from "./components/Layout";
-import { CheckoutIntentResumer } from "./components/CheckoutIntentResumer";
-import { PostAuthRedirectResumer } from "./components/PostAuthRedirectResumer";
+import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { Landing } from "./pages/Landing";
 import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
 import { CareerArticle } from "./pages/CareerArticle";
-import { SignIn } from "./pages/SignIn";
-import { SignUp } from "./pages/SignUp";
-import { ForgotPassword } from "./pages/ForgotPassword";
-import { ResetPassword } from "./pages/ResetPassword";
-import { EmailSent } from "./pages/EmailSent";
-import { AuthCallback } from "./pages/AuthCallback";
-import { Dashboard } from "./pages/Dashboard";
-import { CreateOrUpload } from "./pages/CreateOrUpload";
-import { UploadProcessing } from "./pages/UploadProcessing";
-import { CVScore } from "./pages/CVScore";
-import { AIImproving } from "./pages/AIImproving";
-import { CVEditor } from "./pages/CVEditor";
-import { TailorCV } from "./pages/TailorCV";
-import { TailoringFlow } from "./pages/TailoringFlow";
-import { JobTracker } from "./pages/JobTracker";
-import { Resumes } from "./pages/Resumes";
-import { CoverLetters } from "./pages/CoverLetters";
-import { CoverLetterEditor } from "./pages/CoverLetterEditor";
-import { Pricing } from "./pages/Pricing";
 import { PublicPricing } from "./pages/PublicPricing";
-import { Profile } from "./pages/Profile";
-import { RedirectIfAuthenticated, RequireAuth } from "./integration/auth-route-guards";
 
-function LayoutWrapper() {
+type LazyRoute = LazyExoticComponent<ComponentType>;
+
+function lazyRoute(loader: () => Promise<{ default: ComponentType }>): LazyRoute {
+  return lazy(loader);
+}
+
+function lazyElement(RouteComponent: LazyRoute) {
   return (
-    <SidebarProvider>
-      <UpgradePromptProvider>
-        <CheckoutIntentResumer />
-        <PostAuthRedirectResumer />
-        <Layout />
-      </UpgradePromptProvider>
-    </SidebarProvider>
+    <Suspense fallback={null}>
+      <RouteComponent />
+    </Suspense>
   );
 }
 
-export const router = createBrowserRouter([
-  {
-    path: "/",
-    Component: Landing
-  },
-  {
-    path: "/pricing",
-    Component: PublicPricing
-  },
-  {
-    path: "/medical",
-    element: <Navigate to="/app/medical" replace />
-  },
-  {
-    path: "/career-advice",
-    Component: CareerAdvice
-  },
-  {
-    path: "/career-advice/:categorySlug",
-    Component: CareerCategory
-  },
-  {
-    path: "/career-advice/:categorySlug/:articleSlug",
-    Component: CareerArticle
-  },
-  {
-    path: "/signin",
-    element: (
-      <RedirectIfAuthenticated>
-        <SignIn />
-      </RedirectIfAuthenticated>
-    )
-  },
-  {
-    path: "/signup",
-    element: (
-      <RedirectIfAuthenticated>
-        <SignUp />
-      </RedirectIfAuthenticated>
-    )
-  },
-  {
-    path: "/forgot-password",
-    Component: ForgotPassword
-  },
-  {
-    path: "/reset-password",
-    Component: ResetPassword
-  },
-  {
-    path: "/email-sent",
-    Component: EmailSent
-  },
-  {
-    path: "/auth/callback",
-    Component: AuthCallback
-  },
-  {
-    path: "/app",
-    element: (
-      <RequireAuth>
-        <LayoutWrapper />
-      </RequireAuth>
-    ),
-    children: [
-      { index: true, Component: Dashboard },
-      { path: "create", Component: CreateOrUpload },
-      { path: "upload-processing", Component: UploadProcessing },
-      { path: "cv-score", Component: CVScore },
-      { path: "ai-improving", Component: AIImproving },
-      { path: "create-cv", element: <Navigate to="/app/cv/master" replace /> },
-      { path: "medical", element: <CVEditor forcedModuleType="medical_uk" forcedTitle="Medical CV" /> },
-      { path: "cv/:id", Component: CVEditor },
-      { path: "tailor/:id", Component: TailorCV },
-      { path: "tailoring-flow/:id", Component: TailoringFlow },
-      { path: "job-tracker", Component: JobTracker },
-      { path: "resumes", Component: Resumes },
-      { path: "cover-letters", Component: CoverLetters },
-      { path: "cover-letter/:jobId", Component: CoverLetterEditor },
-      { path: "pricing", Component: Pricing },
-      { path: "profile", Component: Profile }
-    ]
-  }
-]);
+const SignInRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ SignInRoute }) => ({ default: SignInRoute }))
+);
+const SignUpRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ SignUpRoute }) => ({ default: SignUpRoute }))
+);
+const ForgotPasswordRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ ForgotPasswordRoute }) => ({ default: ForgotPasswordRoute }))
+);
+const ResetPasswordRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ ResetPasswordRoute }) => ({ default: ResetPasswordRoute }))
+);
+const EmailSentRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ EmailSentRoute }) => ({ default: EmailSentRoute }))
+);
+const AuthCallbackRoute = lazyRoute(() =>
+  import("./routes/AuthRoutes").then(({ AuthCallbackRoute }) => ({ default: AuthCallbackRoute }))
+);
+
+const AppShellRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ AppShellRoute }) => ({ default: AppShellRoute }))
+);
+const DashboardRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ DashboardRoute }) => ({ default: DashboardRoute }))
+);
+const CreateOrUploadRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CreateOrUploadRoute }) => ({ default: CreateOrUploadRoute }))
+);
+const UploadProcessingRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ UploadProcessingRoute }) => ({ default: UploadProcessingRoute }))
+);
+const CVScoreRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CVScoreRoute }) => ({ default: CVScoreRoute }))
+);
+const AIImprovingRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ AIImprovingRoute }) => ({ default: AIImprovingRoute }))
+);
+const CreateCvRedirectRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CreateCvRedirectRoute }) => ({ default: CreateCvRedirectRoute }))
+);
+const MedicalCVRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ MedicalCVRoute }) => ({ default: MedicalCVRoute }))
+);
+const CVEditorRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CVEditorRoute }) => ({ default: CVEditorRoute }))
+);
+const TailorCVRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ TailorCVRoute }) => ({ default: TailorCVRoute }))
+);
+const TailoringFlowRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ TailoringFlowRoute }) => ({ default: TailoringFlowRoute }))
+);
+const JobTrackerRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ JobTrackerRoute }) => ({ default: JobTrackerRoute }))
+);
+const ResumesRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ ResumesRoute }) => ({ default: ResumesRoute }))
+);
+const CoverLettersRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CoverLettersRoute }) => ({ default: CoverLettersRoute }))
+);
+const CoverLetterEditorRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ CoverLetterEditorRoute }) => ({ default: CoverLetterEditorRoute }))
+);
+const PricingRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ PricingRoute }) => ({ default: PricingRoute }))
+);
+const ProfileRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ ProfileRoute }) => ({ default: ProfileRoute }))
+);
+
+export function AppRoutes() {
+  return (
+    <BrowserRouter>
+      <RouteElements />
+    </BrowserRouter>
+  );
+}
+
+export function RouteElements() {
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/pricing" element={<PublicPricing />} />
+      <Route path="/medical" element={<Navigate to="/app/medical" replace />} />
+      <Route path="/career-advice" element={<CareerAdvice />} />
+      <Route path="/career-advice/:categorySlug" element={<CareerCategory />} />
+      <Route path="/career-advice/:categorySlug/:articleSlug" element={<CareerArticle />} />
+      <Route path="/signin" element={lazyElement(SignInRoute)} />
+      <Route path="/signup" element={lazyElement(SignUpRoute)} />
+      <Route path="/forgot-password" element={lazyElement(ForgotPasswordRoute)} />
+      <Route path="/reset-password" element={lazyElement(ResetPasswordRoute)} />
+      <Route path="/email-sent" element={lazyElement(EmailSentRoute)} />
+      <Route path="/auth/callback" element={lazyElement(AuthCallbackRoute)} />
+
+      <Route path="/app" element={lazyElement(AppShellRoute)}>
+        <Route index element={lazyElement(DashboardRoute)} />
+        <Route path="create" element={lazyElement(CreateOrUploadRoute)} />
+        <Route path="upload-processing" element={lazyElement(UploadProcessingRoute)} />
+        <Route path="cv-score" element={lazyElement(CVScoreRoute)} />
+        <Route path="ai-improving" element={lazyElement(AIImprovingRoute)} />
+        <Route path="create-cv" element={lazyElement(CreateCvRedirectRoute)} />
+        <Route path="medical" element={lazyElement(MedicalCVRoute)} />
+        <Route path="cv/:id" element={lazyElement(CVEditorRoute)} />
+        <Route path="tailor/:id" element={lazyElement(TailorCVRoute)} />
+        <Route path="tailoring-flow/:id" element={lazyElement(TailoringFlowRoute)} />
+        <Route path="job-tracker" element={lazyElement(JobTrackerRoute)} />
+        <Route path="resumes" element={lazyElement(ResumesRoute)} />
+        <Route path="cover-letters" element={lazyElement(CoverLettersRoute)} />
+        <Route path="cover-letter/:jobId" element={lazyElement(CoverLetterEditorRoute)} />
+        <Route path="pricing" element={lazyElement(PricingRoute)} />
+        <Route path="profile" element={lazyElement(ProfileRoute)} />
+      </Route>
+    </Routes>
+  );
+}

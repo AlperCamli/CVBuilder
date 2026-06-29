@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { CAREER_ARTICLES, getCareerArticlePath } from "../../content/career-advice";
 import { PublicHeader } from "../components/PublicHeader";
-import { useAuth } from "../integration/auth-context";
 
 type Step = {
   number: string;
@@ -70,7 +69,9 @@ function VideoFrame({
   icon: LucideIcon;
   label: string;
 }) {
-  const [failed, setFailed] = useState(!src);
+  const [showVideo, setShowVideo] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const canPlayVideo = showVideo && src && !failed;
 
   return (
     <div
@@ -81,7 +82,7 @@ function VideoFrame({
           "linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-slate-50) 100%)",
       }}
     >
-      {!failed && src ? (
+      {canPlayVideo ? (
         <video
           src={src}
           autoPlay
@@ -94,7 +95,13 @@ function VideoFrame({
           className="w-full h-full object-cover"
         />
       ) : (
-        <div className="text-center px-6">
+        <button
+          type="button"
+          onClick={() => src && setShowVideo(true)}
+          className="w-full h-full text-center px-6 flex flex-col items-center justify-center"
+          aria-label={`Play ${label}`}
+          style={{ cursor: src ? "pointer" : "default" }}
+        >
           <Icon
             size={40}
             style={{ color: "var(--color-teal-600)", margin: "0 auto 8px" }}
@@ -102,7 +109,7 @@ function VideoFrame({
           <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
             {label}
           </p>
-        </div>
+        </button>
       )}
     </div>
   );
@@ -352,11 +359,10 @@ function FaqItem({ faq }: { faq: Faq }) {
 }
 
 export function Landing() {
-  const { isAuthenticated } = useAuth();
   // New visitors go straight to sign-up and resume at the CV creation flow after
   // authenticating, instead of bouncing through the sign-in page.
-  const createCvTarget = isAuthenticated ? "/app/create" : "/signup";
-  const createCvState = isAuthenticated ? undefined : { from: "/app/create" };
+  const createCvTarget = "/signup";
+  const createCvState = { from: "/app/create" };
 
   return (
     <div className="min-h-screen bg-white">
@@ -682,7 +688,14 @@ export function Landing() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <img src="/images/logo.png" alt="" className="w-5 h-5 rounded-lg object-contain shrink-0" />
+              <img
+                src="/images/logo.png"
+                alt=""
+                width="20"
+                height="20"
+                decoding="async"
+                className="w-5 h-5 rounded-lg object-contain shrink-0"
+              />
               <span className="font-medium" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
                 jobspecificCV
               </span>

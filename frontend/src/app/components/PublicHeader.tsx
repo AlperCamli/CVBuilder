@@ -3,20 +3,18 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Menu, X } from "lucide-react";
 import { CAREER_CATEGORIES, getCareerCategoryPath } from "../../content/career-advice";
-import { useAuth } from "../integration/auth-context";
 
 type PublicHeaderProps = {
   activeCategorySlug?: string;
 };
 
 export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
-  const { isAuthenticated } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Anonymous visitors go straight to sign-up (not a sign-in bounce) and resume
   // at the CV creation flow once authenticated.
-  const getStartedTarget = isAuthenticated ? "/app/create" : "/signup";
-  const getStartedState = isAuthenticated ? undefined : { from: "/app/create" };
+  const getStartedTarget = "/signup";
+  const getStartedState = { from: "/app/create" };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
   const mobileDrawer =
@@ -41,7 +39,14 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
             >
               <div className="flex items-center justify-between gap-4 mb-6">
                 <Link to="/" onClick={closeMobileMenu} className="flex items-center gap-2 min-w-0">
-                  <img src="/images/logo.png" alt="" className="w-7 h-7 rounded-lg object-contain shrink-0" />
+                  <img
+                    src="/images/logo.png"
+                    alt=""
+                    width="28"
+                    height="28"
+                    decoding="async"
+                    className="w-7 h-7 rounded-lg object-contain shrink-0"
+                  />
                   <span
                     className="font-medium truncate"
                     style={{ fontSize: "15px", color: "var(--color-text-primary)" }}
@@ -116,33 +121,18 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
                 className="mt-5 pt-5 border-t grid grid-cols-1 gap-3"
                 style={{ borderColor: "var(--color-border-tertiary)" }}
               >
-                {isAuthenticated ? (
-                  <Link
-                    to="/app"
-                    onClick={closeMobileMenu}
-                    className="interactive-button px-4 py-3 rounded-lg font-medium text-center transition-colors"
-                    style={{
-                      fontSize: "13px",
-                      background: "#E1F5EF",
-                      color: "var(--color-teal-600)",
-                    }}
-                  >
-                    Dashboard
-                  </Link>
-                ) : (
-                  <Link
-                    to="/signin"
-                    onClick={closeMobileMenu}
-                    className="interactive-button px-4 py-3 rounded-lg font-medium text-center transition-colors"
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--color-teal-600)",
-                      border: "1px solid var(--color-border-tertiary)",
-                    }}
-                  >
-                    Sign in
-                  </Link>
-                )}
+                <Link
+                  to="/signin"
+                  onClick={closeMobileMenu}
+                  className="interactive-button px-4 py-3 rounded-lg font-medium text-center transition-colors"
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--color-teal-600)",
+                    border: "1px solid var(--color-border-tertiary)",
+                  }}
+                >
+                  Sign in
+                </Link>
                 <Link
                   to={getStartedTarget}
                   state={getStartedState}
@@ -171,7 +161,14 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
       >
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-2 shrink-0">
-            <img src="/images/logo.png" alt="" className="w-7 h-7 rounded-lg object-contain shrink-0" />
+            <img
+              src="/images/logo.png"
+              alt=""
+              width="28"
+              height="28"
+              decoding="async"
+              className="w-7 h-7 rounded-lg object-contain shrink-0"
+            />
             <span className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
               jobspecificCV
             </span>
@@ -217,27 +214,13 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
         </nav>
 
         <div className="hidden sm:flex items-center gap-3 shrink-0">
-          {isAuthenticated ? (
-            <Link
-              to="/app"
-              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-              style={{
-                fontSize: "13px",
-                background: "#E1F5EF",
-                color: "var(--color-teal-600)",
-              }}
-            >
-              Dashboard
-            </Link>
-          ) : (
-            <Link
-              to="/signin"
-              className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
-              style={{ fontSize: "13px", color: "var(--color-teal-600)" }}
-            >
-              Sign in
-            </Link>
-          )}
+          <Link
+            to="/signin"
+            className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
+            style={{ fontSize: "13px", color: "var(--color-teal-600)" }}
+          >
+            Sign in
+          </Link>
           <Link
             to={getStartedTarget}
             state={getStartedState}

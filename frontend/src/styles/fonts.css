@@ -1,6 +1,3 @@
-/* Import Inter font for UI */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
 @font-face {
   font-family: "Noto Sans";
   src: url("/fonts/cv/NotoSans-Regular.ttf") format("truetype");
@@ -130,5 +127,5 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }

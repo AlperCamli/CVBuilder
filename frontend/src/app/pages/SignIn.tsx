@@ -65,7 +65,14 @@ export function SignIn() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-12">
-            <img src="/images/logo.png" alt="" className="w-8 h-8 rounded-lg object-contain shrink-0" />
+            <img
+              src="/images/logo.png"
+              alt=""
+              width="32"
+              height="32"
+              decoding="async"
+              className="w-8 h-8 rounded-lg object-contain shrink-0"
+            />
             <span className="font-semibold" style={{ fontSize: "20px", color: "var(--color-text-primary)" }}>
               jobspecificCV
             </span>

@@ -59,7 +59,14 @@ export function Layout() {
       >
         <div style={{ width: "220px", height: "100%", display: "flex", flexDirection: "column" }}>
           <Link to="/" className="flex items-center gap-2 p-6">
-            <img src="/images/logo.png" alt="" className="w-6 h-6 rounded-lg object-contain shrink-0" />
+            <img
+              src="/images/logo.png"
+              alt=""
+              width="24"
+              height="24"
+              decoding="async"
+              className="w-6 h-6 rounded-lg object-contain shrink-0"
+            />
             <span className="font-medium" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
               jobspecificCV
             </span>
