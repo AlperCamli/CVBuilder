@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   ArrowRight,
@@ -69,12 +69,66 @@ function VideoFrame({
   icon: LucideIcon;
   label: string;
 }) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const [showVideo, setShowVideo] = useState(false);
   const [failed, setFailed] = useState(false);
   const canPlayVideo = showVideo && src && !failed;
 
+  useEffect(() => {
+    if (!src || failed) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let cancelIdleLoad = () => {};
+    const loadVideo = () => {
+      if (!cancelled) {
+        setShowVideo(true);
+      }
+    };
+    const scheduleLoad = () => {
+      if ("requestIdleCallback" in window) {
+        const idleId = window.requestIdleCallback(loadVideo, { timeout: 1200 });
+        cancelIdleLoad = () => window.cancelIdleCallback(idleId);
+        return;
+      }
+
+      const timeoutId = window.setTimeout(loadVideo, 300);
+      cancelIdleLoad = () => window.clearTimeout(timeoutId);
+    };
+
+    const frame = frameRef.current;
+    if ("IntersectionObserver" in window && frame) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            observer.disconnect();
+            scheduleLoad();
+          }
+        },
+        { rootMargin: "240px 0px", threshold: 0.1 }
+      );
+
+      observer.observe(frame);
+
+      return () => {
+        cancelled = true;
+        observer.disconnect();
+        cancelIdleLoad();
+      };
+    }
+
+    scheduleLoad();
+
+    return () => {
+      cancelled = true;
+      cancelIdleLoad();
+    };
+  }, [failed, src]);
+
   return (
     <div
+      ref={frameRef}
       className="aspect-video rounded-xl border overflow-hidden shadow-sm flex items-center justify-center"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -95,21 +149,18 @@ function VideoFrame({
           className="w-full h-full object-cover"
         />
       ) : (
-        <button
-          type="button"
-          onClick={() => src && setShowVideo(true)}
+        <div
           className="w-full h-full text-center px-6 flex flex-col items-center justify-center"
-          aria-label={`Play ${label}`}
-          style={{ cursor: src ? "pointer" : "default" }}
+          aria-label={label}
         >
           <Icon
             size={40}
             style={{ color: "var(--color-teal-600)", margin: "0 auto 8px" }}
           />
-          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+          <span style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
             {label}
-          </p>
-        </button>
+          </span>
+        </div>
       )}
     </div>
   );
