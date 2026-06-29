@@ -88,6 +88,7 @@ import {
 import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
 import { injectPreviewPlaceholders } from "../integration/preview-placeholders";
 import { trackCvExported } from "../integration/analytics";
+import { buildCvExportFilename, triggerBlobDownload } from "../integration/export-filenames";
 import { isPaidPlanCode } from "../../content/pricing";
 import {
   canUseAiForSectionBlock,
@@ -186,31 +187,6 @@ const withDisplayMetadata = (
     ...content,
     metadata
   };
-};
-
-const sanitizeFilenameSegment = (value: string): string => {
-  const cleaned = value
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .replace(/[<>:"/\\|?*]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return cleaned || "cv";
-};
-
-const buildExportFilename = (title: string, format: "pdf" | "docx"): string => {
-  const safeTitle = sanitizeFilenameSegment(title).replace(/\.(pdf|docx)$/i, "");
-  return `${safeTitle}.${format}`;
-};
-
-const triggerDownload = (url: string, filename: string) => {
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.rel = "noopener noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 };
 
 const sectionDefaultData = (type: string): Record<string, unknown> => {
@@ -1402,7 +1378,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
 
     try {
-      const filename = buildExportFilename(title, format);
+      const filename = buildCvExportFilename(title, format);
       const exportPayload = {
         template_id: templateId,
         font_scale: fontScale,
@@ -1420,10 +1396,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
       const directUrl = detail.download?.download_url;
       if (directUrl) {
-        triggerDownload(directUrl, filename);
+        await triggerBlobDownload(directUrl, filename);
       } else {
         const fallback = await api.getExportDownload(detail.export.id);
-        triggerDownload(fallback.download_url, filename);
+        await triggerBlobDownload(fallback.download_url, filename);
       }
 
       trackCvExported({
@@ -1474,7 +1450,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const downloadExistingExport = async (exportId: string, format: "pdf" | "docx") => {
     try {
       const download = await api.getExportDownload(exportId);
-      triggerDownload(download.download_url, buildExportFilename(title, format));
+      await triggerBlobDownload(download.download_url, buildCvExportFilename(title, format));
       trackCvExported({
         source: "history_download",
         format,

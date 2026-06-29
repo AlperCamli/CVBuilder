@@ -20,6 +20,7 @@ import type {
   FileRecord,
   JobRecord
 } from "../../shared/types/domain";
+import { sanitizeFilenameSegment, stripKnownExportExtension } from "../../shared/filename.utils";
 import type { BillingService } from "../billing/billing.service";
 import type { FilesService } from "../files/files.service";
 import type { JobWithTailoredRecord, JobsRepository } from "../jobs/jobs.repository";
@@ -250,7 +251,43 @@ const generateCoverLetterDocx = async (title: string, content: string): Promise<
 };
 
 const createInitialContent = (job: JobRecord | JobWithTailoredRecord): string => {
-  return `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${job.job_title} position at ${job.company_name}. With my background and experience, I am confident I would be a valuable addition to your team.\n\nThroughout my career, I have developed expertise that directly aligns with the requirements for this role. My experience has equipped me with the skills necessary to contribute effectively to ${job.company_name}'s goals and objectives.\n\nI am particularly drawn to this opportunity because it represents an ideal match between my capabilities and the position requirements. I am excited about the prospect of bringing my unique blend of skills and experience to your organization.\n\nThank you for considering my application. I look forward to the opportunity to discuss how I can contribute to ${job.company_name}'s continued success.\n\nSincerely,\n[Your Name]`;
+  const companyName = job.company_name.trim();
+  const positionPhrase = companyName
+    ? `${job.job_title} position at ${companyName}`
+    : `${job.job_title} position`;
+  const contributionTarget = companyName
+    ? `${companyName}'s goals and objectives`
+    : "your team's goals and objectives";
+  const successTarget = companyName
+    ? `${companyName}'s continued success`
+    : "your team's continued success";
+
+  return `Dear Hiring Manager,\n\nI am writing to express my strong interest in the ${positionPhrase}. With my background and experience, I am confident I would be a valuable addition to your team.\n\nThroughout my career, I have developed expertise that directly aligns with the requirements for this role. My experience has equipped me with the skills necessary to contribute effectively to ${contributionTarget}.\n\nI am particularly drawn to this opportunity because it represents an ideal match between my capabilities and the position requirements. I am excited about the prospect of bringing my unique blend of skills and experience to your organization.\n\nThank you for considering my application. I look forward to the opportunity to discuss how I can contribute to ${successTarget}.\n\nSincerely,\n[Your Name]`;
+};
+
+const createInitialTitle = (job: JobRecord | JobWithTailoredRecord): string => {
+  const companyName = job.company_name.trim();
+  return companyName ? `Cover Letter - ${companyName}` : `Cover Letter - ${job.job_title}`;
+};
+
+const fileExtensionByFormat: Record<ExportFormat, string> = {
+  pdf: "pdf",
+  docx: "docx"
+};
+
+const buildCoverLetterDownloadFilename = (
+  title: string | null | undefined,
+  job: JobRecord | JobWithTailoredRecord | null,
+  originalFilename: string | null | undefined,
+  format: ExportFormat
+): string => {
+  const normalizedTitle = stripKnownExportExtension(title?.trim() ?? "");
+  const hasUsefulTitle = normalizedTitle.replace(/cover letter\s*-\s*$/i, "").trim().length > 0;
+  const baseTitle = hasUsefulTitle
+    ? normalizedTitle
+    : (job ? createInitialTitle(job) : originalFilename) || "cover-letter";
+  const safeTitle = sanitizeFilenameSegment(stripKnownExportExtension(baseTitle), "cover-letter", 120);
+  return `${safeTitle}.${fileExtensionByFormat[format]}`;
 };
 
 const hasTailoredTitle = (
@@ -308,7 +345,7 @@ export class CoverLettersService {
       user_id: userId,
       job_id: job.id,
       tailored_cv_id: job.tailored_cv_id,
-      title: `Cover Letter - ${job.company_name}`,
+      title: createInitialTitle(job),
       content: createInitialContent(job),
       status: "draft",
       last_exported_at: null
@@ -403,7 +440,14 @@ export class CoverLettersService {
 
     let download = null;
     if (exportRow.status === "completed" && file) {
-      download = await this.filesService.createSignedDownloadAccess(file);
+      download = await this.filesService.createSignedDownloadAccess(file, {
+        forcedDownloadFilename: buildCoverLetterDownloadFilename(
+          coverLetter?.title,
+          job,
+          file.original_filename,
+          exportRow.format
+        )
+      });
     }
 
     return this.toExportDetailResponse(exportRow, coverLetter, job, file, download);
@@ -431,7 +475,22 @@ export class CoverLettersService {
       });
     }
 
-    const download = await this.filesService.createSignedDownloadAccess(file);
+    const coverLetter = await this.coverLettersRepository.findById(
+      session.appUser.id,
+      exportRow.cover_letter_id
+    );
+    const job = coverLetter
+      ? await this.jobsRepository.findDetailById(session.appUser.id, coverLetter.job_id)
+      : null;
+
+    const download = await this.filesService.createSignedDownloadAccess(file, {
+      forcedDownloadFilename: buildCoverLetterDownloadFilename(
+        coverLetter?.title,
+        job,
+        file.original_filename,
+        exportRow.format
+      )
+    });
 
     return {
       cover_letter_export_id: exportRow.id,
@@ -516,7 +575,14 @@ export class CoverLettersService {
 
       let download = null;
       try {
-        download = await this.filesService.createSignedDownloadAccess(fileRecord);
+        download = await this.filesService.createSignedDownloadAccess(fileRecord, {
+          forcedDownloadFilename: buildCoverLetterDownloadFilename(
+            coverLetter.title,
+            job,
+            fileRecord.original_filename,
+            format
+          )
+        });
       } catch {
         download = null;
       }

@@ -464,7 +464,8 @@ const generateCvParse = (input: Record<string, unknown>): Record<string, unknown
 
 const generateCoverLetter = (input: Record<string, unknown>): Record<string, unknown> => {
   const jobTitle = asString(input.job_title).trim() || "the role";
-  const companyName = asString(input.company_name).trim() || "the company";
+  const companyName = asString(input.company_name).trim();
+  const positionPhrase = companyName ? `${jobTitle} position at ${companyName}` : `${jobTitle} position`;
   const tone = asString(input.tone).trim() || "professional";
   const keywords = tokenizeKeywords(asString(input.job_description), 6)
     .map((keyword) => capitalize(keyword))
@@ -473,7 +474,7 @@ const generateCoverLetter = (input: Record<string, unknown>): Record<string, unk
   const body = [
     `Dear Hiring Team,`,
     ``,
-    `I am excited to apply for the ${jobTitle} position at ${companyName}.`,
+    `I am excited to apply for the ${positionPhrase}.`,
     `My background aligns well with the role, and I can contribute quickly with a ${tone} approach focused on measurable outcomes.`,
     keywords
       ? `I would particularly bring value in areas such as ${keywords}.`
@@ -485,7 +486,7 @@ const generateCoverLetter = (input: Record<string, unknown>): Record<string, unk
   ].join("\n");
 
   return {
-    title: `${jobTitle} - ${companyName}`,
+    title: companyName ? `${jobTitle} - ${companyName}` : jobTitle,
     content: body
   };
 };

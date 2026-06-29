@@ -43,7 +43,7 @@ export interface UpdateJobInput {
 }
 
 export interface CreateJobInput {
-  company_name: string;
+  company_name?: string;
   job_title: string;
   job_description: string;
   job_posting_url?: string | null;

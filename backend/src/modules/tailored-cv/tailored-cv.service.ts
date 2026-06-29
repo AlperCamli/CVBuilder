@@ -66,6 +66,7 @@ export class TailoredCvService {
 
   async createTailoredCv(session: SessionContext, input: CreateTailoredCvInput): Promise<TailoredCvDetail> {
     const sourceMasterCv = await this.requireSourceMasterCv(session.appUser.id, input.master_cv_id);
+    const companyName = input.job.company_name?.trim() ?? "";
     const validatedTemplateId =
       input.template_id !== undefined
         ? await this.templatesService.validateAssignableTemplateId(input.template_id)
@@ -74,7 +75,7 @@ export class TailoredCvService {
     const createdJob = await this.jobsRepository.create({
       user_id: session.appUser.id,
       tailored_cv_id: null,
-      company_name: input.job.company_name,
+      company_name: companyName,
       job_title: input.job.job_title,
       job_description: input.job.job_description,
       job_posting_url: input.job.job_posting_url ?? null,
@@ -92,7 +93,7 @@ export class TailoredCvService {
       user_id: session.appUser.id,
       master_cv_id: sourceMasterCv.id,
       job_id: createdJob.id,
-      title: input.title?.trim() || `${sourceMasterCv.title} - ${createdJob.company_name}`,
+      title: input.title?.trim() || (companyName ? `${sourceMasterCv.title} - ${companyName}` : sourceMasterCv.title),
       language,
       template_id: validatedTemplateId,
       module_type: sourceMasterCv.module_type,

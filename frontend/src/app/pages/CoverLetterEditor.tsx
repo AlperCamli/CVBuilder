@@ -6,6 +6,7 @@ import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import { buildCoverLetterExportFilename, triggerBlobDownload } from "../integration/export-filenames";
 import type { CoverLetterDetail, CoverLetterExportSummaryItem } from "../integration/api-types";
 
 interface CoverLetterDraft {
@@ -252,6 +253,7 @@ export function CoverLetterEditor() {
     setExportingFormat(format);
 
     try {
+      const filename = buildCoverLetterExportFilename(title, coverLetter.job, format);
       const detail =
         format === "pdf"
           ? await api.createCoverLetterPdfExport(coverLetter.id)
@@ -259,17 +261,17 @@ export function CoverLetterEditor() {
 
       const directUrl = detail.download?.download_url;
       if (directUrl) {
-        window.open(directUrl, "_blank", "noopener,noreferrer");
+        await triggerBlobDownload(directUrl, filename);
       } else {
         const fallback = await api.getCoverLetterExportDownload(detail.export.id);
-        window.open(fallback.download_url, "_blank", "noopener,noreferrer");
+        await triggerBlobDownload(fallback.download_url, filename);
       }
 
       await loadExportHistory(coverLetter.id);
     } catch (err) {
       if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
-          feature: resolveEntitlementFeature(err, "export_pdf"),
+          feature: resolveEntitlementFeature(err, format === "pdf" ? "export_pdf" : "export_docx"),
           reason: err.message
         });
         setExportError(err.message);
@@ -283,10 +285,13 @@ export function CoverLetterEditor() {
     }
   };
 
-  const downloadExistingExport = async (coverLetterExportId: string) => {
+  const downloadExistingExport = async (coverLetterExportId: string, format: "pdf" | "docx") => {
     try {
       const download = await api.getCoverLetterExportDownload(coverLetterExportId);
-      window.open(download.download_url, "_blank", "noopener,noreferrer");
+      await triggerBlobDownload(
+        download.download_url,
+        buildCoverLetterExportFilename(title, coverLetter?.job, format)
+      );
     } catch (err) {
       if (err instanceof Error) {
         setExportError(err.message);
@@ -306,9 +311,10 @@ export function CoverLetterEditor() {
     setError(null);
 
     try {
+      const companyName = coverLetter.job.company_name.trim();
       const generated = await api.postGenerateCoverLetter({
         job_title: coverLetter.job.job_title,
-        company_name: coverLetter.job.company_name,
+        ...(companyName ? { company_name: companyName } : {}),
         job_description: coverLetter.job.job_description,
         tailored_cv_id: coverLetter.job.tailored_cv_id
       });
@@ -394,7 +400,7 @@ export function CoverLetterEditor() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Cover Letter - {coverLetter.job?.company_name ?? "Job"}
+                  Cover Letter - {coverLetter.job?.company_name?.trim() || coverLetter.job?.job_title || "Job"}
                 </h2>
                 <span
                   className="px-2 py-0.5 rounded-full"
@@ -594,7 +600,7 @@ export function CoverLetterEditor() {
                       </div>
                       {item.download_available ? (
                         <button
-                          onClick={() => void downloadExistingExport(item.id)}
+                          onClick={() => void downloadExistingExport(item.id, item.format)}
                           className="text-xs underline"
                           style={{ color: "var(--color-teal-700)" }}
                         >

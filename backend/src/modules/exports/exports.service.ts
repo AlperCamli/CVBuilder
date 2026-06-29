@@ -20,6 +20,7 @@ import type { TemplatesService } from "../templates/templates.service";
 import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository";
 import type { MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { BillingService } from "../billing/billing.service";
+import { sanitizeFilenameSegment, stripKnownExportExtension } from "../../shared/filename.utils";
 import type { ExportsRepository } from "./exports.repository";
 import type {
   CreateExportInput,
@@ -126,22 +127,8 @@ const parseScaleInRange = (value: unknown, min: number, max: number): number | n
   return null;
 };
 
-const sanitizeFilenameSegment = (value: string): string => {
-  const cleaned = value
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .replace(/[<>:"/\\|?*]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned) {
-    return "cv";
-  }
-
-  return cleaned.slice(0, 80);
-};
-
 const buildExportDownloadFilename = (title: string | null | undefined, format: ExportFormat): string => {
-  const safeTitle = sanitizeFilenameSegment(title ?? "").replace(/\.(pdf|docx)$/i, "");
+  const safeTitle = sanitizeFilenameSegment(stripKnownExportExtension(title ?? ""), "cv");
   return `${safeTitle}.${fileExtensionByFormat[format]}`;
 };
 

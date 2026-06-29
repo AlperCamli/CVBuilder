@@ -81,7 +81,7 @@ export interface ImportImproveInput {
 
 export interface CoverLetterGenerationInput {
   job_title: string;
-  company_name: string;
+  company_name?: string;
   job_description?: string;
   master_cv_id?: string;
   tailored_cv_id?: string;

@@ -1580,6 +1580,10 @@ export class AiService {
   ): Promise<import("./ai.types").CoverLetterGenerationResult> {
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
 
+    const jobTitle = input.job_title.trim();
+    const companyName = input.company_name?.trim() ?? "";
+    const rolePhrase = companyName ? `${jobTitle} at ${companyName}` : jobTitle;
+
     let cvContent;
     let actualMasterCvId = input.master_cv_id;
     let cvModuleType: string | null = null;
@@ -1604,8 +1608,8 @@ export class AiService {
     }
 
     const flowInput = {
-      job_title: input.job_title,
-      company_name: input.company_name,
+      job_title: jobTitle,
+      company_name: companyName,
       job_description: input.job_description ?? "",
       cv_content: cvContent,
       tone: input.tone ?? "professional",
@@ -1619,7 +1623,7 @@ export class AiService {
       tailored_cv_id: input.tailored_cv_id ?? null,
       prompt_profile: this.resolveModulePromptProfile(cvModuleType),
       input_payload: flowInput,
-      user_prompt: `Generate a cover letter for the role of ${input.job_title} at ${input.company_name}. Use real paragraph newlines and end with Sincerely, and the candidate name on separate lines.`
+      user_prompt: `Generate a cover letter for the role of ${rolePhrase}. Use real paragraph newlines and end with Sincerely, and the candidate name on separate lines.`
     });
 
     await this.billingService.recordAiActionUsage(session.appUser.id);
@@ -1627,7 +1631,7 @@ export class AiService {
     const output = asRecord(executed.output);
 
     return {
-      title: String(output.title ?? `Cover Letter - ${input.company_name}`),
+      title: String(output.title ?? (companyName ? `Cover Letter - ${companyName}` : `Cover Letter - ${jobTitle}`)),
       content: String(output.content ?? "")
     };
   }

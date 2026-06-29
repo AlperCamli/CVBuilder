@@ -5,6 +5,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { MasterCvSummary, TailoredCvSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
+import { buildTailoredExportFilename, triggerBlobDownload } from "../integration/export-filenames";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,59 +23,6 @@ const formatDate = (value: string): string =>
     day: "numeric",
     year: "numeric"
   });
-
-const sanitizeFilenameSegment = (value: string): string =>
-  value
-    .replace(/[\u0000-\u001f\u007f]/g, "")
-    .replace(/[<>:"/\\|?*]+/g, " ")
-    .trim()
-    .replace(/\s+/g, "-");
-
-const extractNameSurname = (value: string): { name: string; surname: string } => {
-  const normalized = value
-    .replace(/\.(pdf|docx)$/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim();
-
-  const tokens = normalized.split(/\s+/).filter(Boolean);
-  const name = sanitizeFilenameSegment(tokens[0] ?? "Name") || "Name";
-  const surname = sanitizeFilenameSegment(tokens[1] ?? "Surname") || "Surname";
-
-  return { name, surname };
-};
-
-const buildTailoredExportFilename = (
-  masterTitle: string | null | undefined,
-  tailoredTitle: string,
-  companyName: string | null | undefined
-): string => {
-  const sourceTitle = masterTitle?.trim() ? masterTitle : tailoredTitle;
-  const { name, surname } = extractNameSurname(sourceTitle);
-  const company = sanitizeFilenameSegment(companyName ?? "");
-
-  return company.length > 0
-    ? `001-${name}-${surname}-${company}.pdf`
-    : `001-${name}-${surname}.pdf`;
-};
-
-const triggerDownload = async (url: string, filename: string) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download export file (${response.status}).`);
-  }
-
-  const blob = await response.blob();
-  const objectUrl = window.URL.createObjectURL(blob);
-
-  const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
-  link.rel = "noopener noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(objectUrl);
-};
 
 export function Resumes() {
   const { setSidebarVisible } = useSidebar();
@@ -153,10 +101,10 @@ export function Resumes() {
       const downloadUrl = result.download?.download_url;
 
       if (downloadUrl) {
-        await triggerDownload(downloadUrl, filename);
+        await triggerBlobDownload(downloadUrl, filename);
       } else {
         const fallback = await api.getExportDownload(result.export.id);
-        await triggerDownload(fallback.download_url, filename);
+        await triggerBlobDownload(fallback.download_url, filename);
       }
       await load();
     } catch (err) {

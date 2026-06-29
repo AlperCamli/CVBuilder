@@ -153,7 +153,7 @@ export interface CreateTailoredCvInput {
   language?: string;
   template_id?: string | null;
   job: {
-    company_name: string;
+    company_name?: string;
     job_title: string;
     job_description: string;
     job_posting_url?: string | null;
@@ -257,7 +257,7 @@ export interface ImportImproveInput {
 
 export interface CoverLetterGenerationInput {
   job_title: string;
-  company_name: string;
+  company_name?: string;
   job_description?: string;
   master_cv_id?: string;
   tailored_cv_id?: string;

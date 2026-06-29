@@ -36,7 +36,7 @@ export class JobsService {
     return this.jobsRepository.create({
       user_id: userId,
       tailored_cv_id: tailoredCvId ?? null,
-      company_name: input.company_name,
+      company_name: input.company_name?.trim() ?? "",
       job_title: input.job_title,
       job_description: input.job_description,
       job_posting_url: input.job_posting_url ?? null,

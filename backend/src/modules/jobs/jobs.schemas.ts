@@ -47,7 +47,7 @@ export const jobsBoardQuerySchema = z
 
 export const updateJobSchema = z
   .object({
-    company_name: z.string().trim().min(1).max(160).optional(),
+    company_name: z.string().trim().max(160).optional(),
     job_title: z.string().trim().min(1).max(160).optional(),
     job_description: z.string().trim().min(1).max(40000).optional(),
     job_posting_url: z.string().trim().url().max(2000).nullable().optional(),
@@ -76,7 +76,7 @@ export const updateJobStatusSchema = z
 
 export const createJobSchema = z
   .object({
-    company_name: z.string().trim().min(1).max(160),
+    company_name: z.string().trim().max(160).optional(),
     job_title: z.string().trim().min(1).max(160),
     job_description: z.string().trim().min(1).max(40000),
     job_posting_url: z.string().trim().url().max(2000).nullable().optional(),

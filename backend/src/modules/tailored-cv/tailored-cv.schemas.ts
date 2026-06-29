@@ -33,7 +33,7 @@ export const createTailoredCvSchema = z
     template_id: uuidSchema.nullable().optional(),
     job: z
       .object({
-        company_name: z.string().trim().min(1).max(160),
+        company_name: z.string().trim().max(160).optional(),
         job_title: z.string().trim().min(1).max(160),
         job_description: z.string().trim().min(1).max(40000),
         job_posting_url: z.string().trim().url().max(2000).nullable().optional(),
