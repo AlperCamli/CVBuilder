@@ -177,7 +177,7 @@ export const ROUTES = [
     twitterTitle: "Tailor Your CV to Any Job Description in Minutes",
     twitterDescription: "Create an ATS-friendly CV tailored to a specific job description.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-06-18",
+    lastmod: "2026-06-30",
     includeInSitemap: true,
     jsonLd: [
       faqPageJsonLd([
@@ -262,7 +262,7 @@ export const ROUTES = [
     twitterDescription:
       "Practical CV guides for ATS, job descriptions, NHS applications, and stronger interview-focused resumes.",
     twitterImage: OG_IMAGE,
-    lastmod: "2026-06-18",
+    lastmod: "2026-06-30",
     includeInSitemap: true,
     jsonLd: [
       {

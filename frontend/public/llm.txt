@@ -1,0 +1,7 @@
+# jobspecificCV LLM Resource
+
+The canonical AI-readable site summary is available at:
+
+https://jobspecificcv.com/llms.txt
+
+This alias exists because some users refer to the convention as `llm.txt`, but the commonly used filename is `llms.txt`.
