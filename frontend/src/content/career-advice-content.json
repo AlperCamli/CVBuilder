@@ -29,7 +29,7 @@
     {
       "slug": "how-to-write-a-resume-that-gets-interviews",
       "title": "How to Write a Resume That Recruiters Can Read Quickly",
-      "description": "A practical guide to writing a clear resume: what to include, what to cut, and how to make each section useful before you tailor it.",
+      "description": "A plain-spoken guide to writing a resume that gets read: what to keep, what to cut, and how to make each section useful before you tailor it.",
       "categorySlug": "resume-cv-basics",
       "priorityRule": "Top 2 High Priority",
       "publishedDate": "2026-05-28",
@@ -39,22 +39,22 @@
       "body": [
         {
           "type": "paragraph",
-          "text": "A good resume is not a life history. It is a short piece of evidence that helps a recruiter answer one question: should we speak to this person? If the answer is hard to find, even strong experience can be missed."
+          "text": "A good resume does not need to tell your whole work story. It needs to help a tired recruiter understand, in a minute or two, what you do well and why it fits this role. When that answer is buried, good experience can look ordinary."
         },
         {
           "type": "paragraph",
-          "text": "Start with a clean base version. Settle the CV vs resume label only enough to match the employer's wording, then move on to the harder work: a job-description tailoring pass and a final resume checklist before you send it.",
+          "text": "Do the naming question quickly. If you are unsure whether to call it a CV or resume, use the employer's wording and move on. The real improvement comes from comparing the document with the job description, then giving the finished version one final checklist read before you send it.",
           "links": [
             {
-              "text": "CV vs resume label",
+              "text": "CV or resume",
               "href": "/career-advice/resume-cv-basics/cv-vs-resume-whats-the-difference"
             },
             {
-              "text": "job-description tailoring pass",
+              "text": "job description",
               "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             },
             {
-              "text": "final resume checklist",
+              "text": "final checklist read",
               "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
             }
           ]
@@ -68,11 +68,11 @@
         },
         {
           "type": "heading",
-          "text": "Use a simple order"
+          "text": "Put the easy decisions first"
         },
         {
           "type": "paragraph",
-          "text": "Most resumes work best in this order: contact details, short summary, skills, work experience, education, and certifications or projects if they matter. Recent graduates can move education higher. Career changers can add a small relevant projects section before older experience."
+          "text": "Most resumes do not need a clever structure. Start with contact details, a short summary, skills, work experience, education, and then certifications or projects if they matter. Recent graduates can move education higher. Career changers can add a small project section before older experience if it makes the fit easier to see."
         },
         {
           "type": "list",
@@ -89,7 +89,7 @@
         },
         {
           "type": "paragraph",
-          "text": "The summary should be two or three lines, not a paragraph of personality traits. Write it after you finish the experience section, because the best summary pulls from actual evidence."
+          "text": "Do not start by writing a grand summary. Finish the experience section first, then write two or three lines that pull from the strongest proof on the page. A summary feels more believable when it sounds like a conclusion, not a pitch."
         },
         {
           "type": "table",
@@ -114,7 +114,7 @@
         },
         {
           "type": "paragraph",
-          "text": "A useful bullet point usually has three parts: what you did, how you did it, and what changed. You do not need a number in every line, but you do need a clear result or scope."
+          "text": "A useful bullet point usually answers three small questions: what did you do, how did you do it, and what changed or mattered? You do not need a number in every line. You do need enough scope for the reader to picture the work."
         },
         {
           "type": "list",
@@ -130,7 +130,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Phrases like responsible for, assisted with, passionate about, and results-driven are usually weaker than a direct verb. If a sentence could appear on almost anyone's resume, rewrite it or remove it."
+          "text": "Phrases like responsible for, assisted with, passionate about, and results-driven often hide the real work. If a sentence could sit on almost anyone's resume, make it more specific or cut it."
         },
         {
           "type": "heading",
@@ -138,11 +138,11 @@
         },
         {
           "type": "paragraph",
-          "text": "Your base resume should be complete enough to trust, but not so packed that every application looks the same. Save the detailed version for your own records. For the version you send, choose the evidence that matches the job in front of you."
+          "text": "Keep one base resume that is complete enough to trust. It can be a little longer than the version you send, because it is your working copy. For each application, choose the evidence that belongs in front of that employer and leave the rest in your notes."
         },
         {
           "type": "paragraph",
-          "text": "The last pass is layout. A good ATS-friendly resume format should make the same evidence easy for software to parse and easy for a recruiter to skim.",
+          "text": "Only after the content works should you worry about layout. A calm ATS-friendly resume format keeps the same evidence easy for software to parse and easy for a recruiter to skim.",
           "links": [
             {
               "text": "ATS-friendly resume format",
@@ -165,18 +165,18 @@
       "body": [
         {
           "type": "paragraph",
-          "text": "People worry about the CV vs resume question because the words change by country and industry. In practice, the safest answer is simple: send the document the employer asks for, and make it relevant to the role."
+          "text": "The CV vs resume question feels bigger than it is because the words change by country, profession, and employer. The label matters, but it is not a quality signal. The stronger document is the one that gives the reader the right evidence quickly."
         },
         {
           "type": "paragraph",
-          "text": "If a job ad says CV, call it a CV. If it says resume, call it a resume. The content still needs to do the same job: show your most relevant experience quickly."
+          "text": "When a job ad says CV, call it a CV. When it says resume, call it a resume. After that, the job is the same: make the first page useful enough that the reader wants to keep going."
         },
         {
           "type": "paragraph",
-          "text": "For most applications, the naming question is less important than the evidence. A broad or unfinished document needs stronger resume writing before local terminology will make much difference.",
+          "text": "For most applications, the naming question is less important than the evidence. A broad, unfinished document needs clearer resume writing before local terminology will make much difference.",
           "links": [
             {
-              "text": "stronger resume writing",
+              "text": "clearer resume writing",
               "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
             }
           ]
@@ -216,7 +216,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Use a resume when applying to most private-sector roles in the US or Canada. It should be concise, job-specific, and easy to scan. Two strong pages are better than one crowded page, but every section should earn its place."
+          "text": "Use a resume for most private-sector roles in the US or Canada. Keep it concise, job-specific, and easy to scan. Two clear pages are better than one crowded page, but every section should earn its place."
         },
         {
           "type": "heading",
@@ -224,11 +224,11 @@
         },
         {
           "type": "paragraph",
-          "text": "Use a CV when the employer asks for one, especially in the UK, Europe, healthcare, education, academia, and research. For NHS and medical roles, a CV may need details such as registration, clinical experience, audits, teaching, publications, and courses."
+          "text": "Use a CV when the employer asks for one, especially in the UK, Europe, healthcare, education, academia, and research. In those settings, extra detail is not automatically padding. For NHS and medical roles, the reader may expect registration, clinical experience, audits, teaching, publications, and courses."
         },
         {
           "type": "paragraph",
-          "text": "For medical applications, the medical CV guide and NHS medical CV guide explain the extra sections that matter.",
+          "text": "Medical applications are the obvious exception to the short-resume instinct. The medical CV guide and NHS medical CV guide show which extra sections help the reader judge your fit.",
           "links": [
             {
               "text": "medical CV guide",
@@ -246,7 +246,7 @@
         },
         {
           "type": "paragraph",
-          "text": "Length is only a clue. A one-page resume can still be weak if it is vague, and a three-page CV can be useful if the role genuinely needs clinical rotations, publications, audits, or research detail. Let the employer, country, and profession decide how much detail belongs in the file."
+          "text": "Length is only a clue. A one-page resume can still be weak if it is vague, and a three-page CV can be useful if the role genuinely needs clinical rotations, publications, audits, or research detail. Let the employer, country, and profession decide how much detail belongs in the file, then edit for relevance inside that limit."
         },
         {
           "type": "list",
@@ -263,11 +263,11 @@
         },
         {
           "type": "paragraph",
-          "text": "If the application portal, recruiter, or job ad gives a name, use that name. If it does not, use the local convention: resume for most US private-sector roles, CV for UK and many international applications. Then spend your time on the part that matters more: whether the document proves the right things for the role."
+          "text": "Let the document name come from the closest source. If the application portal, recruiter, or job ad gives a name, use that name. If it does not, use the local convention: resume for most US private-sector roles, CV for UK and many international applications. Then move on."
         },
         {
           "type": "paragraph",
-          "text": "After that, the same CV becomes a stronger application when the summary, skills, and first bullets are matched to the job description instead of left as a general career summary.",
+          "text": "The useful work starts once the label is settled. The same CV becomes a stronger application when the summary, skills, and first bullets are matched to the job description instead of left as a general career summary.",
           "links": [
             {
               "text": "matched to the job description",
