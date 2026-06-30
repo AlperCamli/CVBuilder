@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { PublicHeader } from "../components/PublicHeader";
 import {
+  type ArticleBodyBlock,
   type ArticleTextLink,
   getCareerArticle,
   getCareerArticlePath,
@@ -61,6 +62,12 @@ function renderLinkedText(text: string, links: ArticleTextLink[] = []): ReactNod
   return parts.length > 0 ? parts : text;
 }
 
+function isCtaBlock(
+  block: ArticleBodyBlock
+): block is Extract<ArticleBodyBlock, { type: "cta" }> {
+  return block.type === "cta";
+}
+
 export function CareerArticle() {
   const { categorySlug, articleSlug } = useParams();
   const category = getCareerCategory(categorySlug);
@@ -97,6 +104,8 @@ export function CareerArticle() {
   const heroImagePath =
     article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png";
   const heroWebpPath = heroImagePath.replace(/\.(png|jpe?g)$/i, ".webp");
+  const articleCtas = article.body.filter(isCtaBlock);
+  const articleBodyWithoutCtas = article.body.filter((block) => !isCtaBlock(block));
 
   return (
     <div className="min-h-screen bg-white">
@@ -152,7 +161,7 @@ export function CareerArticle() {
           </p>
 
           <div
-            className="aspect-[16/9] rounded-lg border mb-10 overflow-hidden flex items-center justify-center"
+            className="aspect-[16/9] rounded-lg border mb-6 overflow-hidden flex items-center justify-center"
             style={{
               borderColor: "var(--color-border-tertiary)",
               background:
@@ -172,6 +181,55 @@ export function CareerArticle() {
               />
             </picture>
           </div>
+
+          {articleCtas.map((block, index) => {
+            const ctaIndex = index + 1;
+
+            return (
+              <div
+                key={`${block.type}-${index}`}
+                className="mt-0 mb-10 rounded-lg border p-6"
+                style={{
+                  borderColor: "var(--color-border-tertiary)",
+                  background: "var(--color-teal-50)",
+                }}
+              >
+                <h2
+                  className="font-medium mb-2"
+                  style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
+                >
+                  {block.heading}
+                </h2>
+                <p
+                  className="mb-4"
+                  style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}
+                >
+                  {block.text}
+                </p>
+                <Link
+                  to={block.href}
+                  onClick={() =>
+                    trackBlogCtaClick({
+                      article_slug: article.slug,
+                      category_slug: article.categorySlug,
+                      cta_index: ctaIndex,
+                      cta_text: block.buttonText,
+                      destination: block.href
+                    })
+                  }
+                  className="inline-flex items-center gap-2 rounded-md px-4 py-2"
+                  style={{
+                    fontSize: "14px",
+                    background: "var(--color-teal-700)",
+                    color: "white",
+                  }}
+                >
+                  {block.buttonText}
+                  <ArrowRight size={15} />
+                </Link>
+              </div>
+            );
+          })}
 
           <div>
             {article.body.length === 0 ? (
@@ -193,7 +251,7 @@ export function CareerArticle() {
                   article body will be added here when the content is provided.
                 </p>
               </div>
-            ) : article.body.map((block, index) => {
+            ) : articleBodyWithoutCtas.map((block, index) => {
               if (block.type === "heading") {
                 return (
                   <h2
@@ -203,56 +261,6 @@ export function CareerArticle() {
                   >
                     {renderLinkedText(block.text, block.links)}
                   </h2>
-                );
-              }
-
-              if (block.type === "cta") {
-                const ctaIndex =
-                  article.body.slice(0, index).filter((item) => item.type === "cta").length + 1;
-
-                return (
-                  <div
-                    key={`${block.type}-${index}`}
-                    className="my-8 rounded-lg border p-6"
-                    style={{
-                      borderColor: "var(--color-border-tertiary)",
-                      background: "var(--color-teal-50)",
-                    }}
-                  >
-                    <h2
-                      className="font-medium mb-2"
-                      style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
-                    >
-                      {block.heading}
-                    </h2>
-                    <p
-                      className="mb-4"
-                      style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}
-                    >
-                      {block.text}
-                    </p>
-                    <Link
-                      to={block.href}
-                      onClick={() =>
-                        trackBlogCtaClick({
-                          article_slug: article.slug,
-                          category_slug: article.categorySlug,
-                          cta_index: ctaIndex,
-                          cta_text: block.buttonText,
-                          destination: block.href
-                        })
-                      }
-                      className="inline-flex items-center gap-2 rounded-md px-4 py-2"
-                      style={{
-                        fontSize: "14px",
-                        background: "var(--color-teal-700)",
-                        color: "white",
-                      }}
-                    >
-                      {block.buttonText}
-                      <ArrowRight size={15} />
-                    </Link>
-                  </div>
                 );
               }
 
