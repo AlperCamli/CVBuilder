@@ -43,14 +43,18 @@
         },
         {
           "type": "paragraph",
-          "text": "Start with a clean base version. Then tailor it for each application using the job-description tailoring guide and run a final check with the resume checklist.",
+          "text": "Start with a clean base version. Settle the CV vs resume label only enough to match the employer's wording, then move on to the harder work: a job-description tailoring pass and a final resume checklist before you send it.",
           "links": [
             {
-              "text": "job-description tailoring guide",
+              "text": "CV vs resume label",
+              "href": "/career-advice/resume-cv-basics/cv-vs-resume-whats-the-difference"
+            },
+            {
+              "text": "job-description tailoring pass",
               "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
             },
             {
-              "text": "resume checklist",
+              "text": "final resume checklist",
               "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
             }
           ]
@@ -135,6 +139,16 @@
         {
           "type": "paragraph",
           "text": "Your base resume should be complete enough to trust, but not so packed that every application looks the same. Save the detailed version for your own records. For the version you send, choose the evidence that matches the job in front of you."
+        },
+        {
+          "type": "paragraph",
+          "text": "The last pass is layout. A good ATS-friendly resume format should make the same evidence easy for software to parse and easy for a recruiter to skim.",
+          "links": [
+            {
+              "text": "ATS-friendly resume format",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            }
+          ]
         }
       ]
     },
@@ -146,7 +160,7 @@
       "priorityRule": "Top 2 High Priority",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-cv-vs-resume.png",
       "body": [
         {
@@ -156,6 +170,16 @@
         {
           "type": "paragraph",
           "text": "If a job ad says CV, call it a CV. If it says resume, call it a resume. The content still needs to do the same job: show your most relevant experience quickly."
+        },
+        {
+          "type": "paragraph",
+          "text": "For most applications, the naming question is less important than the evidence. A broad or unfinished document needs stronger resume writing before local terminology will make much difference.",
+          "links": [
+            {
+              "text": "stronger resume writing",
+              "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -242,6 +266,16 @@
           "text": "If the application portal, recruiter, or job ad gives a name, use that name. If it does not, use the local convention: resume for most US private-sector roles, CV for UK and many international applications. Then spend your time on the part that matters more: whether the document proves the right things for the role."
         },
         {
+          "type": "paragraph",
+          "text": "After that, the same CV becomes a stronger application when the summary, skills, and first bullets are matched to the job description instead of left as a general career summary.",
+          "links": [
+            {
+              "text": "matched to the job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            }
+          ]
+        },
+        {
           "type": "cta",
           "heading": "Not sure which version to send?",
           "text": "Start with your full CV, then create a focused version for the job description.",
@@ -268,6 +302,20 @@
         {
           "type": "paragraph",
           "text": "The common mistake is copying job-ad language into the CV without evidence. That can sound optimized, but it does not feel trustworthy. A tailored CV should still sound like you."
+        },
+        {
+          "type": "paragraph",
+          "text": "A repeatable customization process keeps this from becoming a rewrite every time. The before-and-after resume examples make the difference easier to see: the facts stay true, but the emphasis gets sharper.",
+          "links": [
+            {
+              "text": "repeatable customization process",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-customize-your-cv-for-every-job-in-minutes"
+            },
+            {
+              "text": "before-and-after resume examples",
+              "href": "/career-advice/examples-templates-checklists/before-and-after-resume-examples-generic-cv-vs-tailored-cv"
+            }
+          ]
         },
         {
           "type": "cta",
@@ -374,6 +422,16 @@
           "text": "Do not change facts to match the advert. Dates, job titles, qualifications, registration status, and employer names should stay accurate. Tailoring is about selection and clarity. If the employer wants Kubernetes and you have only used Docker, say Docker. If they ask for ICU and your experience is acute medicine, show acute medicine honestly."
         },
         {
+          "type": "paragraph",
+          "text": "Resume keywords belong inside real evidence. A keyword in the skills section is weaker than the same idea shown inside a truthful work example.",
+          "links": [
+            {
+              "text": "Resume keywords",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
+        },
+        {
           "type": "heading",
           "text": "How to know the CV is tailored enough"
         },
@@ -391,7 +449,7 @@
       "priorityRule": "High",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-customize-cv.png",
       "body": [
         {
@@ -401,6 +459,20 @@
         {
           "type": "paragraph",
           "text": "A good customization pass usually takes less time than writing a cover letter, but it has to be deliberate. You are choosing evidence, not sprinkling keywords."
+        },
+        {
+          "type": "paragraph",
+          "text": "A vague base version slows everything down, so fix the resume writing first. Once the broad CV is solid, the generic CV vs tailored CV comparison shows what should change for a specific job description.",
+          "links": [
+            {
+              "text": "resume writing",
+              "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
+            },
+            {
+              "text": "generic CV vs tailored CV comparison",
+              "href": "/career-advice/job-specific-cv-tailoring/job-specific-resume-why-one-generic-cv-is-not-enough"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -478,7 +550,17 @@
         },
         {
           "type": "paragraph",
-          "text": "If you want the deeper process, read the job-description tailoring guide. For final checks, use the resume checklist.",
+          "text": "For roles screened through a portal, custom wording still needs a clean ATS-friendly resume format so the evidence is easy to parse.",
+          "links": [
+            {
+              "text": "ATS-friendly resume format",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "For a slower, more deliberate review, the job-description tailoring guide shows the full comparison. The resume checklist is better saved for the final pass, when the wording is already chosen.",
           "links": [
             {
               "text": "job-description tailoring guide",
@@ -507,7 +589,7 @@
       "priorityRule": "High",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-job-specific-resume.png",
       "body": [
         {
@@ -517,6 +599,20 @@
         {
           "type": "paragraph",
           "text": "A tailored CV does not invent experience. It changes the order, wording, and examples so the employer sees the relevant parts first."
+        },
+        {
+          "type": "paragraph",
+          "text": "The practical workflow is simple: tailor your CV to a job description, then use a faster customization pass once the target role is clear. That keeps the base CV intact while making the sent version feel intentional.",
+          "links": [
+            {
+              "text": "tailor your CV to a job description",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            },
+            {
+              "text": "faster customization pass",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-customize-your-cv-for-every-job-in-minutes"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -591,7 +687,17 @@
         },
         {
           "type": "paragraph",
-          "text": "For more examples, see the before-and-after resume examples page.",
+          "text": "Keywords still matter, but they should follow the evidence. When a role asks for reporting, clinical documentation, or stakeholder updates, show where you did that work instead of adding a loose keyword list.",
+          "links": [
+            {
+              "text": "Keywords still matter",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The before-and-after resume examples show the same idea in real bullets, with weak claims rewritten into specific evidence.",
           "links": [
             {
               "text": "before-and-after resume examples",
@@ -626,6 +732,20 @@
         {
           "type": "paragraph",
           "text": "The exact format changes between the UK and US, but the reader still wants the same thing: accurate credentials, relevant clinical experience, and a clear fit for the post."
+        },
+        {
+          "type": "paragraph",
+          "text": "The CV vs resume distinction matters most when you are crossing countries or systems. For nursing applications, the NHS nurse CV checklist gives a more role-specific version of the same principles.",
+          "links": [
+            {
+              "text": "CV vs resume distinction",
+              "href": "/career-advice/resume-cv-basics/cv-vs-resume-whats-the-difference"
+            },
+            {
+              "text": "NHS nurse CV checklist",
+              "href": "/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -708,7 +828,17 @@
         },
         {
           "type": "paragraph",
-          "text": "For NHS-specific structure, use the NHS medical CV guide. For doctors, the doctor CV formula gives a tighter section order.",
+          "text": "A medical CV can be detailed, but it still needs a final resume checklist for missing dates, unclear registration details, and formatting issues.",
+          "links": [
+            {
+              "text": "final resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "NHS-specific applications need the NHS medical CV guide's section order. Doctor roles can follow the doctor CV formula when clinical grade, audits, and teaching need to lead.",
           "links": [
             {
               "text": "NHS medical CV guide",
@@ -737,12 +867,26 @@
       "priorityRule": "Medium",
       "publishedDate": "2026-05-29",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-nhs-medical-cv-guide.png",
       "body": [
         {
           "type": "paragraph",
           "text": "An NHS medical CV should make eligibility and clinical fit obvious. Recruiters should not have to search for your GMC status, grade, recent posts, or evidence that you understand UK clinical practice."
+        },
+        {
+          "type": "paragraph",
+          "text": "Think of this as the NHS overview. A broader medical CV guide helps when you are moving between UK and US formats, while the NHS nurse CV checklist keeps nursing applications from being forced into doctor-focused sections.",
+          "links": [
+            {
+              "text": "medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+            },
+            {
+              "text": "NHS nurse CV checklist",
+              "href": "/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -829,6 +973,16 @@
         },
         {
           "type": "paragraph",
+          "text": "After the NHS evidence is in the right order, a final checklist pass for dates, registration details, links, and formatting can catch small errors that distract from strong clinical experience.",
+          "links": [
+            {
+              "text": "final checklist pass",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
           "text": "If you are writing for a doctor role, the NHS doctor CV example has a tighter structure.",
           "links": [
             {
@@ -854,12 +1008,22 @@
       "priorityRule": "Medium",
       "publishedDate": "2026-05-29",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-doctor-cv-formula.png",
       "body": [
         {
           "type": "paragraph",
           "text": "A doctor CV works best when it separates eligibility from evidence. Put registration, grade, and courses near the top, then use the rest of the CV to show clinical judgement, communication, teaching, and improvement work."
+        },
+        {
+          "type": "paragraph",
+          "text": "This structure is designed for NHS doctor applications. For roles outside the UK, compare it with the broader medical CV guide so the terminology, registration details, and section order match the employer.",
+          "links": [
+            {
+              "text": "medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -932,7 +1096,17 @@
         },
         {
           "type": "paragraph",
-          "text": "For broader NHS guidance, read the NHS medical CV guide.",
+          "text": "Before exporting, check the basics: dates are consistent, GMC status is accurate, courses are current, and each section supports the post. The resume checklist is not medical-specific, but it is useful for avoidable mistakes.",
+          "links": [
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The NHS medical CV guide covers the wider structure around registration, training, governance, and UK terminology.",
           "links": [
             {
               "text": "NHS medical CV guide",
@@ -957,12 +1131,26 @@
       "priorityRule": "Medium",
       "publishedDate": "2026-05-29",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-nurse-cv-checklist-nhs-jobs.png",
       "body": [
         {
           "type": "paragraph",
           "text": "An NHS nurse CV should make your registration, clinical setting, and patient safety experience clear within the first page. The reader needs to know where you have worked, what care you provided, and whether your experience matches the post."
+        },
+        {
+          "type": "paragraph",
+          "text": "This checklist is for nursing roles. A wider healthcare structure belongs in the medical CV guide, and the CV vs resume guide is useful when you are comparing UK terminology with US-style applications.",
+          "links": [
+            {
+              "text": "medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-create-a-medical-cv"
+            },
+            {
+              "text": "CV vs resume guide",
+              "href": "/career-advice/resume-cv-basics/cv-vs-resume-whats-the-difference"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1021,6 +1209,16 @@
           "text": "If the post emphasizes safeguarding, show safeguarding training and relevant experience. If it emphasizes acute assessment, move triage, escalation, and observation examples higher. If it asks for leadership, show coordination, mentoring, audits, or link nurse work."
         },
         {
+          "type": "paragraph",
+          "text": "The broader NHS medical CV guide is a useful cross-check against the person specification, especially for evidence around documentation, escalation, governance, and multidisciplinary working.",
+          "links": [
+            {
+              "text": "NHS medical CV guide",
+              "href": "/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide"
+            }
+          ]
+        },
+        {
           "type": "heading",
           "text": "Adjust emphasis by band"
         },
@@ -1031,6 +1229,16 @@
         {
           "type": "paragraph",
           "text": "The same experience can be framed differently. A medication round may show safe practice for one role, while coordinating medication safety checks across a team may support a more senior application."
+        },
+        {
+          "type": "paragraph",
+          "text": "A quick resume checklist pass can catch missing contact details, inconsistent dates, broken links, and formatting issues that weaken an otherwise strong NHS nurse CV.",
+          "links": [
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
         },
         {
           "type": "cta",
@@ -1049,7 +1257,7 @@
       "priorityRule": "Very High",
       "publishedDate": "2026-05-26",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-what-is-ats.png",
       "body": [
         {
@@ -1059,6 +1267,20 @@
         {
           "type": "paragraph",
           "text": "ATS software helps employers collect applications, store candidate information, and search or filter submissions. A recruiter may still read your CV, so the goal is not to write for software only. The goal is to avoid formatting and wording that hides your fit."
+        },
+        {
+          "type": "paragraph",
+          "text": "Once the basics are clear, the ATS resume template gives you a clean structure and the resume checklist helps catch problems while you are editing a real document.",
+          "links": [
+            {
+              "text": "ATS resume template",
+              "href": "/career-advice/examples-templates-checklists/ats-resume-template-simple-structure"
+            },
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1106,6 +1328,10 @@
           "text": "Some tools sell a single ATS score, but employers use different systems and settings. A score can be a useful prompt, not a guarantee. The better test is whether the CV uses the employer's important terms naturally, keeps facts easy to parse, and remains readable to a person."
         },
         {
+          "type": "paragraph",
+          "text": "A stronger ATS resume usually improves two things at once: the layout is easy to parse, and the wording reflects the job description without sounding copied. That is why format and keywords should be checked together."
+        },
+        {
           "type": "table",
           "headers": [
             "Bad optimization",
@@ -1124,7 +1350,7 @@
         },
         {
           "type": "paragraph",
-          "text": "For formatting rules, read the ATS-friendly resume format guide. For wording, use the resume keywords guide.",
+          "text": "Formatting and wording usually fail together: the ATS-friendly resume format guide deals with layout, while the resume keywords guide keeps role terms tied to evidence.",
           "links": [
             {
               "text": "ATS-friendly resume format guide",
@@ -1153,12 +1379,22 @@
       "priorityRule": "Very High",
       "publishedDate": "2026-05-26",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-ats-friendly-format.png",
       "body": [
         {
           "type": "paragraph",
           "text": "An ATS-friendly format is mostly about restraint. Use a layout that keeps the text in a logical order, so both software and recruiters can follow the story without guessing."
+        },
+        {
+          "type": "paragraph",
+          "text": "For the basics, the plain-English ATS resume guide explains what the software is trying to read. This page is the layout pass: headings, dates, columns, and file type.",
+          "links": [
+            {
+              "text": "plain-English ATS resume guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1253,7 +1489,17 @@
         },
         {
           "type": "paragraph",
-          "text": "For a ready-made structure, use the ATS resume template. For wording, read the resume keywords guide.",
+          "text": "Small layout mistakes can make an ATS-friendly resume harder to scan. The resume checklist is a useful last pass for broken links, unclear dates, and inconsistent section labels.",
+          "links": [
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "A ready-made ATS resume template can hold the structure, but the resume keywords guide is where the wording gets matched to the role.",
           "links": [
             {
               "text": "ATS resume template",
@@ -1264,6 +1510,13 @@
               "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
             }
           ]
+        },
+        {
+          "type": "cta",
+          "heading": "Check format and wording together.",
+          "text": "A readable layout works best when the content is also matched to the job description.",
+          "buttonText": "Tailor my CV",
+          "href": "/signup"
         }
       ]
     },
@@ -1275,7 +1528,7 @@
       "priorityRule": "Very High",
       "publishedDate": "2026-05-26",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-resume-keywords.png",
       "body": [
         {
@@ -1285,6 +1538,20 @@
         {
           "type": "paragraph",
           "text": "The mistake is treating keywords like a shopping list. A keyword only helps if it is true and attached to evidence."
+        },
+        {
+          "type": "paragraph",
+          "text": "The ATS resume guide explains the screening basics. Strong wording still needs an ATS-friendly resume format so the keywords sit inside a clean, readable layout.",
+          "links": [
+            {
+              "text": "ATS resume guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
+            },
+            {
+              "text": "ATS-friendly resume format",
+              "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1366,6 +1633,16 @@
           "text": "A good final pass is to highlight every keyword you added. For each one, point to the bullet, project, role, course, or certification that proves it. If you cannot point to evidence, remove the keyword."
         },
         {
+          "type": "paragraph",
+          "text": "A job-description tailoring guide is useful when those keywords need to become a focused summary, skills section, and first-page evidence.",
+          "links": [
+            {
+              "text": "job-description tailoring guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-tailor-your-resume-to-a-job-description"
+            }
+          ]
+        },
+        {
           "type": "cta",
           "heading": "Find the keywords that match your real experience.",
           "text": "Compare your CV with a job description and choose the terms you can honestly support.",
@@ -1382,7 +1659,7 @@
       "priorityRule": "High",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-resume-checklist.png",
       "body": [
         {
@@ -1392,6 +1669,16 @@
         {
           "type": "paragraph",
           "text": "Work through it once for your base CV, then again for each job-specific version. The second pass should be faster because you are checking fit, not rebuilding the whole document."
+        },
+        {
+          "type": "paragraph",
+          "text": "A base version that still feels thin needs better resume writing first. A clean draft can come straight here for the final quality check before export.",
+          "links": [
+            {
+              "text": "resume writing",
+              "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1456,11 +1743,25 @@
         },
         {
           "type": "paragraph",
-          "text": "If the CV fails the format section, read the ATS-friendly resume format guide before applying.",
+          "text": "A CV that fails the format section needs an ATS-friendly resume format pass before it is ready to send.",
           "links": [
             {
-              "text": "ATS-friendly resume format guide",
+              "text": "ATS-friendly resume format",
               "href": "/career-advice/ats-friendly-resume-optimization/ats-friendly-resume-format"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Wording problems usually belong in the resume keywords guide. Structure problems are easier to spot against the ATS resume template.",
+          "links": [
+            {
+              "text": "resume keywords guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            },
+            {
+              "text": "ATS resume template",
+              "href": "/career-advice/examples-templates-checklists/ats-resume-template-simple-structure"
             }
           ]
         },
@@ -1489,12 +1790,26 @@
       "priorityRule": "High",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-ats-template.png",
       "body": [
         {
           "type": "paragraph",
           "text": "This template is intentionally simple. It is designed for applications where clarity matters more than decoration: ATS parsing, recruiter scanning, and easy tailoring."
+        },
+        {
+          "type": "paragraph",
+          "text": "The ATS resume guide explains the concept; this page gives you the structure. Copy the order into your own document, then use the resume checklist before you apply.",
+          "links": [
+            {
+              "text": "ATS resume guide",
+              "href": "/career-advice/ats-friendly-resume-optimization/what-is-an-ats-resume"
+            },
+            {
+              "text": "resume checklist",
+              "href": "/career-advice/examples-templates-checklists/resume-checklist-25-things-to-fix-before-you-apply"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1541,6 +1856,10 @@
           "text": "Template rules"
         },
         {
+          "type": "paragraph",
+          "text": "A good ATS resume template should feel plain in the right way. The value is not visual novelty; it is a section order that lets a recruiter find job titles, dates, skills, and evidence without effort."
+        },
+        {
           "type": "table",
           "headers": [
             "Rule",
@@ -1579,7 +1898,11 @@
         },
         {
           "type": "paragraph",
-          "text": "For format details, use the ATS-friendly resume format guide. For keyword placement, read the resume keywords guide.",
+          "text": "For job-specific applications, update the template after reading the job description. The same layout can support different versions as long as the summary, skills, and first bullets change with the role."
+        },
+        {
+          "type": "paragraph",
+          "text": "The ATS-friendly resume format guide covers the layout details. The resume keywords guide covers where role language belongs inside the template.",
           "links": [
             {
               "text": "ATS-friendly resume format guide",
@@ -1608,12 +1931,26 @@
       "priorityRule": "High",
       "publishedDate": "2026-05-28",
       "updatedDate": "2026-06-30",
-      "readingTime": "3 min read",
+      "readingTime": "4 min read",
       "heroImage": "https://jobspecificcv.com/images/cover-before-after.png",
       "body": [
         {
           "type": "paragraph",
           "text": "The biggest difference between a generic CV and a tailored CV is not length. It is specificity. The tailored version gives the reader a reason to believe the claim."
+        },
+        {
+          "type": "paragraph",
+          "text": "Weak bullets need better resume writing before they need optimization. Once the base is clear, the customization guide helps decide which examples should move higher for a specific job description.",
+          "links": [
+            {
+              "text": "resume writing",
+              "href": "/career-advice/resume-cv-basics/how-to-write-a-resume-that-gets-interviews"
+            },
+            {
+              "text": "customization guide",
+              "href": "/career-advice/job-specific-cv-tailoring/how-to-customize-your-cv-for-every-job-in-minutes"
+            }
+          ]
         },
         {
           "type": "heading",
@@ -1705,7 +2042,17 @@
         },
         {
           "type": "paragraph",
-          "text": "For a full process, use the generic CV vs tailored CV guide and the tailoring guide.",
+          "text": "When you add keywords, keep them inside the evidence. A bullet that says CRM reporting, stakeholder updates, and onboarding all in context is stronger than a keyword list with no proof.",
+          "links": [
+            {
+              "text": "add keywords",
+              "href": "/career-advice/ats-friendly-resume-optimization/resume-keywords-for-ats"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The generic CV vs tailored CV guide explains the strategic difference; the tailoring guide turns that difference into an application-by-application workflow.",
           "links": [
             {
               "text": "generic CV vs tailored CV guide",
