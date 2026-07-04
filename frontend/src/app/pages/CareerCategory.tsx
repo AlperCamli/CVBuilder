@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { PublicHeader } from "../components/PublicHeader";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import {
   getCareerArticlePath,
   getCareerArticlesByCategory,
@@ -43,13 +44,14 @@ export function CareerCategory() {
 
       <main>
         <section className="max-w-7xl mx-auto px-6 pt-12 pb-10">
-          <Link
-            to="/career-advice"
-            className="inline-flex items-center gap-2 mb-8"
-            style={{ fontSize: "13px", color: "var(--color-teal-700)" }}
-          >
-            <ArrowLeft size={15} /> Career advice
-          </Link>
+          <Breadcrumbs
+            className="mb-8"
+            items={[
+              { name: "Home", path: "/" },
+              { name: "Career advice", path: "/career-advice" },
+              { name: category.name },
+            ]}
+          />
           <div className="max-w-3xl">
             <p
               className="uppercase tracking-wider mb-3"

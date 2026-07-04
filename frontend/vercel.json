@@ -2,6 +2,15 @@
   "framework": "vite",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/medical",
+      "destination": "/app/medical",
+      "permanent": false
+    }
+  ],
   "headers": [
     {
       "source": "/assets/:path*",
@@ -110,7 +119,7 @@
     },
     {
       "source": "/((?!api/)(?!.*\\..*).*)",
-      "destination": "/index.html"
+      "destination": "/spa-fallback.html"
     }
   ]
 }

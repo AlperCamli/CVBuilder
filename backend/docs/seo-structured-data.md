@@ -23,6 +23,15 @@ This doc tracks the SEO improvements made to [frontend/index.html](../../fronten
 - Added `BlogPosting` schema for article pages and `BreadcrumbList` schema for the career-advice hierarchy
 - Added the career-advice hub and articles to `sitemap.xml`
 
+### 4. SEO hardening pass (July 2026)
+- **Single metadata source:** all per-route titles/descriptions/canonicals/OG/JSON-LD now live in [frontend/src/content/seo-meta.mjs](../../frontend/src/content/seo-meta.mjs), consumed by both the prerender scripts and the in-app head manager ([frontend/src/app/seo/route-seo.tsx](../../frontend/src/app/seo/route-seo.tsx)), which updates `<head>` (title, meta, canonical, JSON-LD) on client-side navigation
+- **Sitemap generated at build:** `dist/sitemap.xml` is produced by [frontend/scripts/generate-sitemap.mjs](../../frontend/scripts/generate-sitemap.mjs) from the route list — no hand-edited sitemap anymore
+- **404 / soft-404 fix:** unknown URLs now serve a `noindex` SPA shell (`dist/spa-fallback.html`, wired in `vercel.json`) instead of a 200 copy of the landing page, and the router has a catch-all `NotFound` page
+- **Visible breadcrumbs:** career-advice hub/category/article pages and pricing render a breadcrumb trail matching the `BreadcrumbList` JSON-LD
+- **Route-scoped schema:** `WebApplication`/`Organization` JSON-LD moved out of the global `index.html` head into the landing (and pricing for offers) routes only
+- **URL hygiene:** `cleanUrls` + `trailingSlash: false` in `vercel.json` collapse `.html` and trailing-slash duplicates; `/medical` is a server-side redirect
+- `og:image:width/height` now reflect each article's real hero-image dimensions
+
 ---
 
 ## 📝 What You Need to Provide
@@ -130,7 +139,7 @@ These don't require info from you but are worth tracking:
 |---|---|---|
 | Favicon | 🟡 You're handling | Confirm `.ico`, `.svg`, and `apple-touch-icon.png` all referenced |
 | `robots.txt` | ✅ Done | Configured at [frontend/public/robots.txt](../../frontend/public/robots.txt) |
-| `sitemap.xml` | ✅ Done | Configured + submitted to Search Console |
+| `sitemap.xml` | ✅ Done | Generated at build time from the route list into `dist/sitemap.xml`; submitted to Search Console |
 | Pre-rendering / SSR | ✅ Partial prerendering | Landing page and public career-advice pages are prerendered; authenticated app remains client-only and noindexed |
 | OG image file size | 🟡 1.6MB → could compress to ~400KB | Faster preview rendering on mobile |
 | Core Web Vitals audit | ⏳ TODO | Run [PageSpeed Insights](https://pagespeed.web.dev/) on production URL |
@@ -157,4 +166,4 @@ When you're ready to add the Organization schema (the highest-impact item that n
 
 For FAQ schema, the prerequisite is adding a visible FAQ section to the landing page — let me know when you're ready and I can draft the section and the schema together.
 
-For blog growth, add new article entries to `frontend/src/content/career-advice-content.json`, regenerate prerender snapshots with `npm run build`, and add the URL to `frontend/public/sitemap.xml` once the article body is no longer empty. Article prerender routes and route-level metadata are derived from the content JSON; empty draft articles are prerendered but marked `noindex, follow`.
+For blog growth, add new article entries to `frontend/src/content/career-advice-content.json` and regenerate with `npm run build` — prerender routes, route-level metadata, and `sitemap.xml` are all derived from the content JSON automatically. Empty draft articles are prerendered but marked `noindex, follow` and excluded from the sitemap until they have a body.

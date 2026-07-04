@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROUTES } from "./routes.mjs";
-import { injectRouteMetadata } from "./seo-html.mjs";
+import { injectRouteMetadata, buildSpaFallbackHtml } from "./seo-html.mjs";
+import { writeSitemap } from "./generate-sitemap.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = resolve(__dirname, "..");
@@ -56,6 +57,13 @@ async function main() {
     await writeFile(target, patched, "utf8");
     console.log(`✓ Injected ${route.snapshot}.html → ${target} (${size.toLocaleString()} bytes)`);
   }
+
+  const fallbackTarget = join(DIST_DIR, "spa-fallback.html");
+  await writeFile(fallbackTarget, buildSpaFallbackHtml(baseHtml), "utf8");
+  console.log(`✓ Wrote ${fallbackTarget}`);
+
+  const sitemapTarget = await writeSitemap(DIST_DIR);
+  console.log(`✓ Wrote ${sitemapTarget}`);
 }
 
 main().catch((err) => {

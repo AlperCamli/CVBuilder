@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router";
 import { PublicHeader } from "../components/PublicHeader";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { setPendingCheckout } from "../integration/pending-checkout";
 import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
@@ -41,6 +42,10 @@ export function PublicPricing() {
       <PublicHeader />
 
       <section className="max-w-7xl mx-auto px-6 pt-16 pb-10">
+        <Breadcrumbs
+          className="mb-8"
+          items={[{ name: "Home", path: "/" }, { name: "Pricing" }]}
+        />
         <div className="max-w-3xl mx-auto text-center mb-12">
           <h1
             className="font-medium mb-3"

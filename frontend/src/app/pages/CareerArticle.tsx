@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { PublicHeader } from "../components/PublicHeader";
+import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import {
   type ArticleBodyBlock,
   type ArticleTextLink,
@@ -113,13 +114,17 @@ export function CareerArticle() {
 
       <main>
         <article className="max-w-3xl mx-auto px-6 pt-12 pb-16">
-          <Link
-            to={category ? getCareerCategoryPath(category) : "/career-advice"}
-            className="inline-flex items-center gap-2 mb-8"
-            style={{ fontSize: "13px", color: "var(--color-teal-700)" }}
-          >
-            <ArrowLeft size={15} /> {category?.name ?? "Career advice"}
-          </Link>
+          <Breadcrumbs
+            className="mb-8"
+            items={[
+              { name: "Home", path: "/" },
+              { name: "Career advice", path: "/career-advice" },
+              ...(category
+                ? [{ name: category.name, path: getCareerCategoryPath(category) } satisfies BreadcrumbItem]
+                : []),
+              { name: article.title },
+            ]}
+          />
 
           <div className="flex items-center gap-2 mb-5">
             <span

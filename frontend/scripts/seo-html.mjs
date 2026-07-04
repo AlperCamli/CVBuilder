@@ -78,6 +78,18 @@ export function injectRouteMetadata(html, route) {
     /<meta\s+property="og:image"\s+content="[^"]*"\s*\/>/,
     `<meta property="og:image" content="${escapeAttribute(route.ogImage)}" />`
   );
+  if (route.ogImageWidth && route.ogImageHeight) {
+    next = replaceTag(
+      next,
+      /<meta\s+property="og:image:width"\s+content="[^"]*"\s*\/>/,
+      `<meta property="og:image:width" content="${escapeAttribute(route.ogImageWidth)}" />`
+    );
+    next = replaceTag(
+      next,
+      /<meta\s+property="og:image:height"\s+content="[^"]*"\s*\/>/,
+      `<meta property="og:image:height" content="${escapeAttribute(route.ogImageHeight)}" />`
+    );
+  }
   next = replaceTag(
     next,
     /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/>/,
@@ -108,6 +120,27 @@ export function injectRouteMetadata(html, route) {
   if (scripts) {
     next = next.replace("</head>", `    ${scripts}\n  </head>`);
   }
+
+  return next;
+}
+
+// The shell served for URLs with no prerendered file: private app/auth routes
+// (already noindexed via headers) and unknown URLs (client renders the 404
+// page). noindex + no canonical keeps these from registering as soft-404
+// duplicates of the landing page.
+export function buildSpaFallbackHtml(html) {
+  let next = html.replace(
+    /\s*<script type="application\/ld\+json" data-route-json-ld="true">[\s\S]*?<\/script>/g,
+    ""
+  );
+
+  next = replaceTag(next, /<title>[\s\S]*?<\/title>/, "<title>jobspecificCV</title>");
+  next = replaceTag(
+    next,
+    /<meta\s+name="robots"\s+content="[^"]*"\s*\/>/,
+    '<meta name="robots" content="noindex" />'
+  );
+  next = next.replace(/\s*<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/, "");
 
   return next;
 }

@@ -5,6 +5,8 @@ import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
 import { CareerArticle } from "./pages/CareerArticle";
 import { PublicPricing } from "./pages/PublicPricing";
+import { NotFound } from "./pages/NotFound";
+import { RouteSeo } from "./seo/route-seo";
 
 type LazyRoute = LazyExoticComponent<ComponentType>;
 
@@ -94,6 +96,7 @@ const ProfileRoute = lazyRoute(() =>
 export function AppRoutes() {
   return (
     <BrowserRouter>
+      <RouteSeo />
       <RouteElements />
     </BrowserRouter>
   );
@@ -133,6 +136,8 @@ export function RouteElements() {
         <Route path="pricing" element={lazyElement(PricingRoute)} />
         <Route path="profile" element={lazyElement(ProfileRoute)} />
       </Route>
+
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
