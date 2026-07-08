@@ -11,8 +11,7 @@ const HIDDEN_ROUTE_PREFIXES = [
   "/app/create",
   "/app/upload-processing",
   "/app/cv-score",
-  "/app/ai-improving",
-  "/app/tailoring-flow"
+  "/app/ai-improving"
 ];
 
 const MINIMIZED_STORAGE_KEY = "onboarding:checklist-minimized";
@@ -110,7 +109,12 @@ export function OnboardingChecklist() {
       return location.pathname.startsWith("/app/tailor");
     }
     if (stepId === "template" || stepId === "layout" || stepId === "export") {
-      return location.pathname.startsWith("/app/cv/");
+      // The tailoring flow already ends in the editor — offering a "go there"
+      // jump mid-flow would abandon the draft generation.
+      return (
+        location.pathname.startsWith("/app/cv/") ||
+        location.pathname.startsWith("/app/tailoring-flow")
+      );
     }
     return false;
   };
