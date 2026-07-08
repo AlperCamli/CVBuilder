@@ -29,6 +29,8 @@ import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
+import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import {
@@ -472,6 +474,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
   const { showUpgradePrompt } = useUpgradePrompt();
+  const { completeStep } = useOnboarding();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
   const isUploadedFlow = Boolean(location.state?.isUploaded);
@@ -1090,6 +1093,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       clearDraft(targetCvKind, targetCvId);
       setDirty(false);
       setRestoredDraftAt(null);
+      if (targetCvKind === "master") {
+        completeStep("create_cv");
+      }
       return true;
     } catch (err) {
       if (err instanceof Error) {
@@ -1224,6 +1230,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         const updated = await api.patchTailoredCvTemplate(cvId, nextTemplateId);
         setTemplateId(updated.template_id);
       }
+      completeStep("template");
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -1411,6 +1418,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         has_template: Boolean(templateId),
         page_count: pageCount
       });
+
+      // Exporting the tailored CV is the final onboarding step; master
+      // exports keep the checklist pointed at "Customize for a job".
+      if (cvKind === "tailored") {
+        completeStep("export");
+      }
 
       const history =
         cvKind === "tailored"
@@ -2381,6 +2394,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
               <button
                 onClick={() => setShowTemplateGallery(true)}
+                data-onboarding="template-btn"
                 className="px-3 py-1.5 rounded-lg border"
                 style={{
                   fontSize: "12px",
@@ -2397,6 +2411,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 <HoverCardTrigger asChild>
                   <button
                     type="button"
+                    data-onboarding="layout-btn"
                     className="px-3 py-1.5 rounded-lg border flex items-center gap-2"
                     style={{
                       borderColor: "var(--color-border-secondary)",
@@ -2440,6 +2455,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                           const next = clampFontScale(Number(event.target.value));
                           setFontScale(next);
                           markDirty();
+                          completeStep("layout");
                         }}
                         style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
                       />
@@ -2464,6 +2480,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                           const next = clampSpacingScale(Number(event.target.value));
                           setSpacingScale(next);
                           markDirty();
+                          completeStep("layout");
                         }}
                         style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
                       />
@@ -2491,6 +2508,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                           const next = clampLayoutScale(Number(event.target.value));
                           setLayoutScale(next);
                           markDirty();
+                          completeStep("layout");
                         }}
                         style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
                       />
@@ -2537,6 +2555,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               {cvKind === "master" && cvId && (
                 <button
                   onClick={() => navigate(`/app/tailor/${cvId}`)}
+                  data-onboarding="customize-btn"
                   className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2 border"
                   style={{
                     fontSize: "13px",
@@ -2585,6 +2604,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
               <button
                 onClick={() => void openExportDialog()}
+                data-onboarding="export-btn"
                 className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2"
                 style={{
                   fontSize: "13px",
@@ -2684,6 +2704,55 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             </div>
           </div>
         </div>
+
+        {(() => {
+          const coachMarksEnabled =
+            !loading &&
+            !showTemplateGallery &&
+            !showExportDialog &&
+            !showAIPopup &&
+            !showAddContentModal &&
+            !showTipsDrawer &&
+            !showRevisionDialog &&
+            !showSkillsPoolDialog;
+
+          return (
+            <>
+              {cvKind === "master" && (
+                <OnboardingCoachMark
+                  step="customize"
+                  targetSelector='[data-onboarding="customize-btn"]'
+                  message="Your CV is saved. Now customize it for a real job — paste the posting and we tailor the content to match."
+                  position="bottom"
+                  enabled={coachMarksEnabled && Boolean(cvId)}
+                />
+              )}
+              <OnboardingCoachMark
+                step="template"
+                targetSelector='[data-onboarding="template-btn"]'
+                message="Pick a template for your CV. You can switch designs any time without losing content."
+                position="bottom"
+                enabled={coachMarksEnabled}
+              />
+              <OnboardingCoachMark
+                step="layout"
+                targetSelector='[data-onboarding="layout-btn"]'
+                message="Hover here to adjust font size, spacing, and page density until the CV fits neatly."
+                position="bottom"
+                enabled={coachMarksEnabled}
+              />
+              {cvKind === "tailored" && (
+                <OnboardingCoachMark
+                  step="export"
+                  targetSelector='[data-onboarding="export-btn"]'
+                  message="Looks good? Export your tailored CV as a PDF or DOCX — that's the file you send with the application."
+                  position="bottom"
+                  enabled={coachMarksEnabled}
+                />
+              )}
+            </>
+          );
+        })()}
 
         <TemplateGalleryDialog
           open={showTemplateGallery}

@@ -35,6 +35,14 @@ describe("supabase migration schema assertions", () => {
     expect(migration).toMatch(/create policy usage_counters_select_own/i);
   });
 
+  it("adds the onboarding_state column", () => {
+    const migration = readMigration("20260708120000_onboarding_state.sql");
+
+    expect(migration).toMatch(
+      /add column if not exists onboarding_state jsonb not null default '\{\}'::jsonb/i
+    );
+  });
+
   it("includes shared updated_at trigger function", () => {
     const migration = readMigration("20260417120000_base_extensions.sql");
 

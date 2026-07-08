@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InternalServerError } from "../../shared/errors/app-error";
-import type { UserRecord } from "../../shared/types/domain";
+import type { OnboardingState, UserRecord } from "../../shared/types/domain";
 import { isUniqueViolation, type SupabaseLikeError } from "../../shared/utils/supabase-error";
 import type { AuthIdentity } from "../auth/auth.types";
 
@@ -11,7 +11,12 @@ export interface UsersRepository {
   updateProfile(userId: string, payload: { full_name?: string; default_cv_language?: string }): Promise<UserRecord>;
   updateSettings(
     userId: string,
-    payload: { locale?: "en" | "tr"; default_cv_language?: string; onboarding_completed?: boolean }
+    payload: {
+      locale?: "en" | "tr";
+      default_cv_language?: string;
+      onboarding_completed?: boolean;
+      onboarding_state?: OnboardingState;
+    }
   ): Promise<UserRecord>;
 }
 
@@ -113,7 +118,12 @@ export class SupabaseUsersRepository implements UsersRepository {
 
   async updateSettings(
     userId: string,
-    payload: { locale?: "en" | "tr"; default_cv_language?: string; onboarding_completed?: boolean }
+    payload: {
+      locale?: "en" | "tr";
+      default_cv_language?: string;
+      onboarding_completed?: boolean;
+      onboarding_state?: OnboardingState;
+    }
   ): Promise<UserRecord> {
     const { data, error } = await this.supabaseClient
       .from("users")

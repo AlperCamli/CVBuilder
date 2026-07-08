@@ -485,6 +485,7 @@ const buildSession = (userId: string): SessionContext => {
     locale: "en",
     default_cv_language: "en",
     onboarding_completed: true,
+    onboarding_state: {},
     created_at: nowIso(),
     updated_at: nowIso()
   };

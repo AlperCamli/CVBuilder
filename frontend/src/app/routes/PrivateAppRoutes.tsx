@@ -2,7 +2,9 @@ import { Navigate } from "react-router";
 import { Toaster } from "sonner";
 import { CheckoutIntentResumer } from "../components/CheckoutIntentResumer";
 import { Layout } from "../components/Layout";
+import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { PostAuthRedirectResumer } from "../components/PostAuthRedirectResumer";
+import { OnboardingProvider } from "../contexts/OnboardingContext";
 import { SidebarProvider } from "../contexts/SidebarContext";
 import { UpgradePromptProvider } from "../contexts/UpgradePromptContext";
 import { AuthProvider } from "../integration/auth-context";
@@ -28,10 +30,13 @@ export function AppShellRoute() {
       <RequireAuth>
         <SidebarProvider>
           <UpgradePromptProvider>
-            <CheckoutIntentResumer />
-            <PostAuthRedirectResumer />
-            <Layout />
-            <Toaster richColors position="top-right" />
+            <OnboardingProvider>
+              <CheckoutIntentResumer />
+              <PostAuthRedirectResumer />
+              <Layout />
+              <OnboardingChecklist />
+              <Toaster richColors position="top-right" />
+            </OnboardingProvider>
           </UpgradePromptProvider>
         </SidebarProvider>
       </RequireAuth>

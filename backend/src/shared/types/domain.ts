@@ -2,6 +2,20 @@ import type { CvContent } from "../cv-content/cv-content.types";
 
 export type LocaleCode = "en" | "tr";
 
+export type OnboardingStepId =
+  | "create_cv"
+  | "customize"
+  | "job_details"
+  | "template"
+  | "layout"
+  | "export";
+
+export interface OnboardingState {
+  steps?: Partial<Record<OnboardingStepId, string>>;
+  skipped_at?: string;
+  completed_at?: string;
+}
+
 export interface UserRecord {
   id: string;
   auth_user_id: string;
@@ -10,6 +24,7 @@ export interface UserRecord {
   locale: LocaleCode;
   default_cv_language: string | null;
   onboarding_completed: boolean;
+  onboarding_state: OnboardingState;
   created_at: string;
   updated_at: string;
 }

@@ -34,6 +34,7 @@ import type {
   MasterCvPreviewResponse,
   MasterCvSummary,
   MeResponseData,
+  OnboardingState,
   ParseImportResponse,
   RenderingPreviewResponse,
   ImportImproveResponse,
@@ -70,6 +71,7 @@ export interface UpdateSettingsInput {
   locale?: "en" | "tr";
   default_cv_language?: string;
   onboarding_completed?: boolean;
+  onboarding_state?: OnboardingState;
 }
 
 export interface CreateMasterCvInput {

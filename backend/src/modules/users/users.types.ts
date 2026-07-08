@@ -1,6 +1,7 @@
 import type {
   CurrentPlanSummary,
   EntitlementSummary,
+  OnboardingState,
   UsageSummary,
   UserRecord
 } from "../../shared/types/domain";
@@ -15,6 +16,7 @@ export interface UpdateSettingsInput {
   locale?: "en" | "tr";
   default_cv_language?: string;
   onboarding_completed?: boolean;
+  onboarding_state?: OnboardingState;
 }
 
 export interface MeResponseData {
@@ -28,6 +30,7 @@ export interface SettingsResponseData {
   locale: "en" | "tr";
   default_cv_language: string | null;
   onboarding_completed: boolean;
+  onboarding_state: OnboardingState;
 }
 
 export interface UsageResponseData extends UsageSummary {}

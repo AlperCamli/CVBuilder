@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
+import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 import type { JobAnalysisResult } from "../integration/api-types";
@@ -25,6 +27,7 @@ export function TailorCV() {
   const location = useLocation();
   const { api } = useAuth();
   const { showUpgradePrompt } = useUpgradePrompt();
+  const { completeStep } = useOnboarding();
   const state = (location.state ?? {}) as TailorCvLocationState;
   const prefillJob = state.prefillJob;
 
@@ -95,6 +98,14 @@ export function TailorCV() {
     };
   }, [api, id]);
 
+  // Reaching the job form counts as the "customize" step regardless of the
+  // entry point (editor button, dashboard link, or post-import redirect).
+  useEffect(() => {
+    if (masterCvId) {
+      completeStep("customize");
+    }
+  }, [masterCvId, completeStep]);
+
   useEffect(() => {
     if (!prefillJob) {
       return;
@@ -136,6 +147,8 @@ export function TailorCV() {
         ai_run_id: analysisRun.ai_run_id,
         ...(analysisRun.result as Omit<JobAnalysisResult, "ai_run_id">)
       };
+
+      completeStep("job_details");
 
       navigate(`/app/tailoring-flow/${masterCvId}`, {
         state: {
@@ -246,6 +259,7 @@ export function TailorCV() {
           <div>
             <div
               className="p-6 rounded-xl border"
+              data-onboarding="job-form"
               style={{
                 background: "var(--color-background-primary)",
                 borderColor: "var(--color-border-tertiary)"
@@ -360,6 +374,14 @@ export function TailorCV() {
           </div>
         </div>
       </div>
+
+      <OnboardingCoachMark
+        step="job_details"
+        targetSelector='[data-onboarding="job-form"]'
+        message="Add the role and paste the full job description — the more detail, the better the tailored CV."
+        position="left"
+        enabled={!submitting && !loadingMaster}
+      />
     </div>
   );
 }

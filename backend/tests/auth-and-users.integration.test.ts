@@ -160,6 +160,71 @@ describe("auth + users endpoints", () => {
     expect(settingsPatch.body.data.settings.onboarding_completed).toBe(true);
   });
 
+  it("merges onboarding_state patches without regressing steps", async () => {
+    const app = buildTestApp();
+    const firstTimestamp = "2026-07-08T10:00:00.000Z";
+
+    const firstPatch = await request(app)
+      .patch("/api/v1/me/settings")
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        onboarding_state: { steps: { create_cv: firstTimestamp } }
+      });
+
+    expect(firstPatch.status).toBe(200);
+    expect(firstPatch.body.data.settings.onboarding_state.steps.create_cv).toBe(firstTimestamp);
+
+    const secondPatch = await request(app)
+      .patch("/api/v1/me/settings")
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        onboarding_state: {
+          steps: { create_cv: "2026-07-08T11:00:00.000Z", export: "2026-07-08T11:00:00.000Z" },
+          completed_at: "2026-07-08T11:00:00.000Z"
+        },
+        onboarding_completed: true
+      });
+
+    expect(secondPatch.status).toBe(200);
+    const state = secondPatch.body.data.settings.onboarding_state;
+    // Existing timestamps win; new steps accumulate.
+    expect(state.steps.create_cv).toBe(firstTimestamp);
+    expect(state.steps.export).toBe("2026-07-08T11:00:00.000Z");
+    expect(state.completed_at).toBe("2026-07-08T11:00:00.000Z");
+    expect(secondPatch.body.data.settings.onboarding_completed).toBe(true);
+
+    const settingsGet = await request(app)
+      .get("/api/v1/me/settings")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(settingsGet.status).toBe(200);
+    expect(settingsGet.body.data.settings.onboarding_state.steps.create_cv).toBe(firstTimestamp);
+  });
+
+  it("rejects invalid onboarding_state payloads", async () => {
+    const app = buildTestApp();
+
+    const unknownStep = await request(app)
+      .patch("/api/v1/me/settings")
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        onboarding_state: { steps: { not_a_step: "2026-07-08T10:00:00.000Z" } }
+      });
+
+    expect(unknownStep.status).toBe(400);
+    expect(unknownStep.body.error.code).toBe("VALIDATION_ERROR");
+
+    const badTimestamp = await request(app)
+      .patch("/api/v1/me/settings")
+      .set("Authorization", "Bearer valid-token")
+      .send({
+        onboarding_state: { steps: { create_cv: "yesterday" } }
+      });
+
+    expect(badTimestamp.status).toBe(400);
+    expect(badTimestamp.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("returns usage summary for current month", async () => {
     const app = buildTestApp();
 

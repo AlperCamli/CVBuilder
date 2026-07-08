@@ -1,5 +1,5 @@
 import { NotFoundError } from "../../shared/errors/app-error";
-import type { UserRecord } from "../../shared/types/domain";
+import type { OnboardingState, UserRecord } from "../../shared/types/domain";
 import type { BillingService } from "../billing/billing.service";
 import type {
   MeResponseData,
@@ -48,7 +48,8 @@ export class UsersService {
       settings: {
         locale: user.locale,
         default_cv_language: user.default_cv_language,
-        onboarding_completed: user.onboarding_completed
+        onboarding_completed: user.onboarding_completed,
+        onboarding_state: user.onboarding_state ?? {}
       }
     };
   }
@@ -57,13 +58,24 @@ export class UsersService {
     session: SessionContext,
     input: UpdateSettingsInput
   ): Promise<{ settings: SettingsResponseData }> {
-    const updatedUser = await this.usersRepository.updateSettings(session.appUser.id, input);
+    let payload = input;
+
+    if (input.onboarding_state) {
+      const user = await this.requireUser(session.appUser.id);
+      payload = {
+        ...input,
+        onboarding_state: mergeOnboardingState(user.onboarding_state ?? {}, input.onboarding_state)
+      };
+    }
+
+    const updatedUser = await this.usersRepository.updateSettings(session.appUser.id, payload);
 
     return {
       settings: {
         locale: updatedUser.locale,
         default_cv_language: updatedUser.default_cv_language,
-        onboarding_completed: updatedUser.onboarding_completed
+        onboarding_completed: updatedUser.onboarding_completed,
+        onboarding_state: updatedUser.onboarding_state ?? {}
       }
     };
   }
@@ -81,4 +93,15 @@ export class UsersService {
 
     return user;
   }
+}
+
+// Onboarding progress never regresses: existing step timestamps and
+// skipped_at/completed_at markers win over incoming values, so concurrent
+// tabs can only add steps, not clear them.
+function mergeOnboardingState(existing: OnboardingState, incoming: OnboardingState): OnboardingState {
+  return {
+    steps: { ...incoming.steps, ...existing.steps },
+    skipped_at: existing.skipped_at ?? incoming.skipped_at,
+    completed_at: existing.completed_at ?? incoming.completed_at
+  };
 }

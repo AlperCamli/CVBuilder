@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { TrendingUp, AlertCircle, Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import type { CvContent, ParseSummary } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { ApiClientError } from "../integration/api-error";
 import { trackOnboardingStepCompleted, trackOnboardingStepView } from "../integration/analytics";
 
@@ -59,6 +60,7 @@ export function CVScore() {
   const navigate = useNavigate();
   const location = useLocation();
   const { api } = useAuth();
+  const { completeStep } = useOnboarding();
 
   const importId = location.state?.importId as string | undefined;
   const fileName = location.state?.fileName as string | undefined;
@@ -190,6 +192,8 @@ export function CVScore() {
     try {
       await api.patchImportResult(importId, contentToSave);
       const converted = await api.createMasterCvFromImport(importId, {});
+
+      completeStep("create_cv");
 
       trackOnboardingStepCompleted({
         step: "cv_score",

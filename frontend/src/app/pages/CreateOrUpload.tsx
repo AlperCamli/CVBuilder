@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "react-router";
-import { FileText, Upload, CheckCircle, Target, Download, Sparkles } from "lucide-react";
+import { FileText, Upload, CheckCircle, Check } from "lucide-react";
+import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useEffect, useRef } from "react";
 import {
@@ -8,17 +10,12 @@ import {
   trackOnboardingPathSelected,
   trackOnboardingStepView
 } from "../integration/analytics";
-
-const ONBOARDING_CHECKLIST = [
-  { icon: Upload, label: "Upload your existing CV" },
-  { icon: Target, label: "Customize it for a real job" },
-  { icon: Download, label: "Export a job-specific PDF or DOCX" },
-  { icon: Sparkles, label: "Use AI rewrites, cover letters, and job tracking" }
-];
+import { ONBOARDING_STEPS } from "../onboarding/onboarding-steps";
 
 export function CreateOrUpload() {
   const navigate = useNavigate();
   const { setSidebarVisible } = useSidebar();
+  const { active, currentStep, isStepComplete } = useOnboarding();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,28 +87,35 @@ export function CreateOrUpload() {
                 First application checklist
               </h3>
 
-              {ONBOARDING_CHECKLIST.map((item) => {
-                const Icon = item.icon;
+              {ONBOARDING_STEPS.map((step) => {
+                const Icon = step.icon;
+                const done = active && isStepComplete(step.id);
+                const isCurrent = active && step.id === currentStep;
                 return (
-                <div key={item.label} className="flex items-start gap-3">
+                <div key={step.id} className="flex items-start gap-3">
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--color-teal-50)", color: "var(--color-teal-600)" }}
+                    style={
+                      done
+                        ? { background: "var(--color-teal-600)", color: "white" }
+                        : { background: "var(--color-teal-50)", color: "var(--color-teal-600)" }
+                    }
                   >
-                    <Icon size={15} />
+                    {done ? <Check size={15} strokeWidth={3} /> : <Icon size={15} />}
                   </div>
                   <div>
-                    <h4 className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                      {item.label}
+                    <h4
+                      className="font-medium mb-0.5"
+                      style={{
+                        fontSize: "14px",
+                        color: done ? "var(--color-text-secondary)" : "var(--color-text-primary)",
+                        textDecoration: done ? "line-through" : undefined
+                      }}
+                    >
+                      {step.label}
                     </h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                      {item.label.includes("Upload")
-                        ? "We parse your experience so you do not start from scratch."
-                        : item.label.includes("Customize")
-                          ? "Paste the role and job description so the CV matches the application."
-                          : item.label.includes("Export")
-                            ? "Review the tailored CV and download the finished file."
-                            : "Continue with the application workflow after the first export."}
+                    <p style={{ fontSize: "13px", color: isCurrent ? "var(--color-teal-800)" : "var(--color-text-secondary)" }}>
+                      {step.description}
                     </p>
                   </div>
                 </div>
@@ -124,6 +128,7 @@ export function CreateOrUpload() {
           <div className="flex flex-col gap-4">
             <button
               onClick={handleUploadClick}
+              data-onboarding="upload-cv"
               className="p-6 rounded-xl border-2 group transition-all hover:shadow-lg text-left"
               style={{
                 background: "var(--color-teal-50)",
@@ -189,6 +194,13 @@ export function CreateOrUpload() {
           </div>
         </div>
       </div>
+
+      <OnboardingCoachMark
+        step="create_cv"
+        targetSelector='[data-onboarding="upload-cv"]'
+        message="Start here — upload your current CV and we parse it so you don't start from scratch."
+        position="left"
+      />
     </div>
   );
 }

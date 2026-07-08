@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { FileText, ExternalLink, Target, Plus, MoreVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
@@ -512,6 +513,7 @@ export function Dashboard() {
               </Link>
               <Link
                 to={`/app/tailor/${primaryMaster.id}`}
+                data-onboarding="customize-btn"
                 className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
                 style={{
                   fontSize: "13px",
@@ -524,6 +526,12 @@ export function Dashboard() {
                 Customize for a job
               </Link>
             </div>
+            <OnboardingCoachMark
+              step="customize"
+              targetSelector='[data-onboarding="customize-btn"]'
+              message="Next step: customize your CV for a real job. Paste the posting and we tailor the content to match."
+              position="bottom"
+            />
           </div>
         )}
       </div>

@@ -12,6 +12,7 @@ import type {
 } from "../../src/modules/usage/usage.repository";
 import type { UsersRepository } from "../../src/modules/users/users.repository";
 import type {
+  OnboardingState,
   SubscriptionRecord,
   UsageCounterRecord,
   UserRecord
@@ -52,6 +53,7 @@ export class InMemoryUsersRepository implements UsersRepository {
       locale: identity.locale ?? "en",
       default_cv_language: null,
       onboarding_completed: false,
+      onboarding_state: {},
       created_at: nowIso(),
       updated_at: nowIso()
     };
@@ -96,7 +98,12 @@ export class InMemoryUsersRepository implements UsersRepository {
 
   async updateSettings(
     userId: string,
-    payload: { locale?: "en" | "tr"; default_cv_language?: string; onboarding_completed?: boolean }
+    payload: {
+      locale?: "en" | "tr";
+      default_cv_language?: string;
+      onboarding_completed?: boolean;
+      onboarding_state?: OnboardingState;
+    }
   ): Promise<UserRecord> {
     const user = this.byId.get(userId);
     if (!user) {

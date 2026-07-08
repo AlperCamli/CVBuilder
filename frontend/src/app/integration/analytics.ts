@@ -155,6 +155,10 @@ export function trackOnboardingPathSelected(params: AnalyticsParams = {}): void 
   trackEvent("onboarding_path_selected", params);
 }
 
+export function trackOnboardingSkipped(params: AnalyticsParams = {}): void {
+  trackEvent("onboarding_skipped", params);
+}
+
 export function trackPostExportPaywallView(params: AnalyticsParams = {}): void {
   trackEvent("post_export_paywall_view", params);
 }

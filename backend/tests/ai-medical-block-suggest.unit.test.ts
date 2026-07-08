@@ -38,6 +38,7 @@ const session: SessionContext = {
     locale: "en",
     default_cv_language: "en",
     onboarding_completed: true,
+    onboarding_state: {},
     created_at: NOW,
     updated_at: NOW
   }

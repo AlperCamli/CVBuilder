@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { Sparkles, Zap, Target, TrendingUp, Loader2, RefreshCw, CheckCircle2 } from "lucide-react";
 import type { CvContent } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 
@@ -11,6 +12,7 @@ export function AIImproving() {
   const location = useLocation();
   const { api } = useAuth();
   const { showUpgradePrompt } = useUpgradePrompt();
+  const { completeStep } = useOnboarding();
 
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
@@ -91,6 +93,8 @@ export function AIImproving() {
 
               const converted = await api.createMasterCvFromImport(importId, {});
 
+              completeStep("create_cv");
+
               if (source === "onboarding_upload") {
                 navigate(`/app/tailor/${converted.master_cv.id}`, {
                   state: {
@@ -131,7 +135,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, improvementGuidance, importId, navigate, parsedContent, source, steps, showUpgradePrompt]);
+  }, [api, completeStep, improvementGuidance, importId, navigate, parsedContent, source, steps, showUpgradePrompt]);
 
   const currentStepData = steps[currentStep];
 
