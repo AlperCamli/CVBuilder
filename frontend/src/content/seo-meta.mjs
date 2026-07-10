@@ -172,21 +172,25 @@ function latestCategoryUpdatedDate(content, category) {
 
 function categoryRoute(content, category) {
   const path = categoryPath(category);
+  const displayName = category.h1 || category.name;
+  const categoryArticles = content.articles.filter(
+    (article) => article.categorySlug === category.slug
+  );
   return {
     path,
     snapshot: `career-advice-${category.slug}`,
-    title: `${category.name} | jobspecificCV Career Advice`,
+    title: category.seoTitle || `${category.name} | jobspecificCV Career Advice`,
     description: category.description,
     canonical: absoluteUrl(path),
     ogType: "website",
-    ogTitle: category.name,
+    ogTitle: displayName,
     ogDescription: category.description,
     ogImage: OG_IMAGE,
-    ogImageAlt: `${category.name} - jobspecificCV career advice`,
-    twitterTitle: category.name,
+    ogImageAlt: `${displayName} - jobspecificCV career advice`,
+    twitterTitle: displayName,
     twitterDescription: category.description,
     twitterImage: OG_IMAGE,
-    twitterImageAlt: `${category.name} - jobspecificCV career advice`,
+    twitterImageAlt: `${displayName} - jobspecificCV career advice`,
     lastmod: latestCategoryUpdatedDate(content, category),
     includeInSitemap: true,
     changefreq: "weekly",
@@ -195,9 +199,18 @@ function categoryRoute(content, category) {
       {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
-        name: category.name,
+        name: displayName,
         description: category.description,
         url: absoluteUrl(path),
+        mainEntity: {
+          "@type": "ItemList",
+          itemListElement: categoryArticles.map((article, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            name: article.title,
+            url: absoluteUrl(articlePath(article)),
+          })),
+        },
       },
       breadcrumbJsonLd([
         { name: "Home", path: "/" },
@@ -212,10 +225,13 @@ function articleRoute(content, article) {
   const category = categoryForArticle(content, article);
   const path = articlePath(article);
   const hasBody = Array.isArray(article.body) && article.body.length > 0;
+  const faqItems = (article.body || [])
+    .filter((block) => block.type === "faq")
+    .flatMap((block) => block.items);
   return {
     path,
     snapshot: `career-advice-${article.categorySlug}-${article.slug}`,
-    title: `${article.title} | jobspecificCV`,
+    title: article.seoTitle || `${article.title} | jobspecificCV`,
     description: article.description,
     canonical: absoluteUrl(path),
     robots: hasBody ? "index, follow" : "noindex, follow",
@@ -265,6 +281,7 @@ function articleRoute(content, article) {
         ...(category ? [{ name: category.name, path: categoryPath(category) }] : []),
         { name: article.title, path },
       ]),
+      ...(faqItems.length > 0 ? [faqPageJsonLd(faqItems)] : []),
     ],
   };
 }
@@ -356,6 +373,15 @@ export function buildSeoRoutes(content) {
           description:
             "Guides for tailoring CVs to job descriptions, improving ATS readability, and building stronger medical and NHS applications.",
           url: absoluteUrl("/career-advice"),
+          mainEntity: {
+            "@type": "ItemList",
+            itemListElement: content.categories.map((category, index) => ({
+              "@type": "ListItem",
+              position: index + 1,
+              name: category.name,
+              url: absoluteUrl(categoryPath(category)),
+            })),
+          },
         },
         breadcrumbJsonLd([
           { name: "Home", path: "/" },

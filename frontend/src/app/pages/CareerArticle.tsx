@@ -1,10 +1,9 @@
-import { Link, useParams } from "react-router";
-import { ArrowLeft, ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { Link, useLocation, useParams } from "react-router";
+import { ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
 import { PublicHeader } from "../components/PublicHeader";
 import { Breadcrumbs, type BreadcrumbItem } from "../components/Breadcrumbs";
 import {
-  type ArticleBodyBlock,
   type ArticleTextLink,
   getCareerArticle,
   getCareerArticlePath,
@@ -63,19 +62,26 @@ function renderLinkedText(text: string, links: ArticleTextLink[] = []): ReactNod
   return parts.length > 0 ? parts : text;
 }
 
-function isCtaBlock(
-  block: ArticleBodyBlock
-): block is Extract<ArticleBodyBlock, { type: "cta" }> {
-  return block.type === "cta";
-}
-
 export function CareerArticle() {
   const { categorySlug, articleSlug } = useParams();
+  const { hash } = useLocation();
   const category = getCareerCategory(categorySlug);
   const article = getCareerArticle(categorySlug, articleSlug);
   const relatedArticles = getCareerArticlesByCategory(categorySlug).filter(
     (item) => item.slug !== articleSlug
   );
+
+  // Cross-page links can target a section (e.g. .../ats-friendly-resume-format#ats-optimization).
+  // The browser only handles fragments on full page loads, so scroll on SPA navigation too.
+  useEffect(() => {
+    if (!hash) {
+      return;
+    }
+    const target = document.getElementById(hash.slice(1));
+    if (target) {
+      target.scrollIntoView();
+    }
+  }, [hash, articleSlug]);
 
   if (!article) {
     return (
@@ -105,8 +111,6 @@ export function CareerArticle() {
   const heroImagePath =
     article.heroImage.replace(/^https?:\/\/[^/]+/, "") || "/images/og-image.png";
   const heroWebpPath = heroImagePath.replace(/\.(png|jpe?g)$/i, ".webp");
-  const articleCtas = article.body.filter(isCtaBlock);
-  const articleBodyWithoutCtas = article.body.filter((block) => !isCtaBlock(block));
 
   return (
     <div className="min-h-screen bg-white">
@@ -177,7 +181,7 @@ export function CareerArticle() {
               <source srcSet={heroWebpPath} type="image/webp" />
               <img
                 src={heroImagePath}
-                alt=""
+                alt={`Cover illustration: ${article.title}`}
                 width="1200"
                 height="675"
                 loading="lazy"
@@ -186,55 +190,6 @@ export function CareerArticle() {
               />
             </picture>
           </div>
-
-          {articleCtas.map((block, index) => {
-            const ctaIndex = index + 1;
-
-            return (
-              <div
-                key={`${block.type}-${index}`}
-                className="mt-0 mb-10 rounded-lg border p-6"
-                style={{
-                  borderColor: "var(--color-border-tertiary)",
-                  background: "var(--color-teal-50)",
-                }}
-              >
-                <h2
-                  className="font-medium mb-2"
-                  style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
-                >
-                  {block.heading}
-                </h2>
-                <p
-                  className="mb-4"
-                  style={{ fontSize: "14px", lineHeight: "1.65", color: "var(--color-text-secondary)" }}
-                >
-                  {block.text}
-                </p>
-                <Link
-                  to={block.href}
-                  onClick={() =>
-                    trackBlogCtaClick({
-                      article_slug: article.slug,
-                      category_slug: article.categorySlug,
-                      cta_index: ctaIndex,
-                      cta_text: block.buttonText,
-                      destination: block.href
-                    })
-                  }
-                  className="inline-flex items-center gap-2 rounded-md px-4 py-2"
-                  style={{
-                    fontSize: "14px",
-                    background: "var(--color-teal-700)",
-                    color: "white",
-                  }}
-                >
-                  {block.buttonText}
-                  <ArrowRight size={15} />
-                </Link>
-              </div>
-            );
-          })}
 
           <div>
             {article.body.length === 0 ? (
@@ -256,16 +211,252 @@ export function CareerArticle() {
                   article body will be added here when the content is provided.
                 </p>
               </div>
-            ) : articleBodyWithoutCtas.map((block, index) => {
+            ) : article.body.map((block, index) => {
               if (block.type === "heading") {
                 return (
                   <h2
                     key={`${block.type}-${index}`}
+                    id={block.id}
                     className="font-medium mt-9 mb-3"
-                    style={{ fontSize: "22px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
+                    style={{
+                      fontSize: "22px",
+                      lineHeight: "1.3",
+                      color: "var(--color-text-primary)",
+                      scrollMarginTop: "88px",
+                    }}
                   >
                     {renderLinkedText(block.text, block.links)}
                   </h2>
+                );
+              }
+
+              if (block.type === "toc") {
+                return (
+                  <nav
+                    key={`${block.type}-${index}`}
+                    aria-label="Table of contents"
+                    className="rounded-lg border p-5 mb-8"
+                    style={{
+                      borderColor: "var(--color-border-tertiary)",
+                      background: "var(--color-slate-50)",
+                    }}
+                  >
+                    <p
+                      className="font-medium mb-3"
+                      style={{ fontSize: "14px", color: "var(--color-text-primary)" }}
+                    >
+                      {block.heading}
+                    </p>
+                    <ul className="space-y-1.5 columns-1 md:columns-2">
+                      {block.items.map((item) => (
+                        <li key={item.targetId}>
+                          <a
+                            href={`#${item.targetId}`}
+                            style={{ fontSize: "14px", color: "var(--color-teal-700)" }}
+                          >
+                            {item.text}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </nav>
+                );
+              }
+
+              if (block.type === "faq") {
+                return (
+                  <div key={`${block.type}-${index}`} className="space-y-5 my-5">
+                    {block.items.map((item) => (
+                      <div key={item.question}>
+                        <h3
+                          className="font-medium mb-2"
+                          style={{ fontSize: "17px", color: "var(--color-text-primary)" }}
+                        >
+                          {item.question}
+                        </h3>
+                        <p
+                          style={{
+                            fontSize: "15px",
+                            lineHeight: "1.75",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {item.answer}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
+              if (block.type === "image") {
+                const webpSrc = block.src.replace(/\.(png|jpe?g)$/i, ".webp");
+                return (
+                  <figure key={`${block.type}-${index}`} className="my-8">
+                    <div
+                      className="rounded-lg border overflow-hidden"
+                      style={{ borderColor: "var(--color-border-tertiary)" }}
+                    >
+                      <picture>
+                        {webpSrc !== block.src ? (
+                          <source srcSet={webpSrc} type="image/webp" />
+                        ) : null}
+                        <img
+                          src={block.src}
+                          alt={block.alt}
+                          width={block.width}
+                          height={block.height}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-auto"
+                        />
+                      </picture>
+                    </div>
+                    {block.caption ? (
+                      <figcaption
+                        className="mt-2"
+                        style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}
+                      >
+                        {block.caption}
+                      </figcaption>
+                    ) : null}
+                  </figure>
+                );
+              }
+
+              if (block.type === "humanInput") {
+                return (
+                  <div
+                    key={`${block.type}-${index}`}
+                    className="my-6 rounded-lg border-2 border-dashed p-5"
+                    style={{ borderColor: "#f59e0b", background: "#fffbeb" }}
+                  >
+                    <p
+                      style={{
+                        fontSize: "14px",
+                        lineHeight: "1.65",
+                        fontStyle: "italic",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      [HUMAN INPUT: {block.text}]
+                    </p>
+                  </div>
+                );
+              }
+
+              if (block.type === "download") {
+                const downloadIndex =
+                  article.body
+                    .slice(0, index)
+                    .filter((item) => item.type === "cta" || item.type === "download")
+                    .length + 1;
+
+                return (
+                  <div
+                    key={`${block.type}-${index}`}
+                    className="my-8 rounded-lg border p-6"
+                    style={{
+                      borderColor: "var(--color-border-tertiary)",
+                      background: "var(--color-slate-50)",
+                    }}
+                  >
+                    <p
+                      className="font-medium mb-2"
+                      style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
+                    >
+                      {block.heading}
+                    </p>
+                    <p
+                      className="mb-4"
+                      style={{
+                        fontSize: "14px",
+                        lineHeight: "1.65",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      {block.text}
+                    </p>
+                    <a
+                      href={block.href}
+                      download
+                      onClick={() =>
+                        trackBlogCtaClick({
+                          article_slug: article.slug,
+                          category_slug: article.categorySlug,
+                          cta_index: downloadIndex,
+                          cta_text: block.buttonText,
+                          destination: block.href
+                        })
+                      }
+                      className="inline-flex items-center gap-2 rounded-md px-4 py-2"
+                      style={{
+                        fontSize: "14px",
+                        background: "var(--color-teal-700)",
+                        color: "white",
+                      }}
+                    >
+                      <Download size={15} />
+                      {block.buttonText}
+                    </a>
+                  </div>
+                );
+              }
+
+              if (block.type === "cta") {
+                const ctaIndex =
+                  article.body
+                    .slice(0, index)
+                    .filter((item) => item.type === "cta" || item.type === "download")
+                    .length + 1;
+
+                return (
+                  <div
+                    key={`${block.type}-${index}`}
+                    className="my-8 rounded-lg border p-6"
+                    style={{
+                      borderColor: "var(--color-border-tertiary)",
+                      background: "var(--color-teal-50)",
+                    }}
+                  >
+                    <p
+                      className="font-medium mb-2"
+                      style={{ fontSize: "19px", color: "var(--color-text-primary)" }}
+                    >
+                      {block.heading}
+                    </p>
+                    <p
+                      className="mb-4"
+                      style={{
+                        fontSize: "14px",
+                        lineHeight: "1.65",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      {block.text}
+                    </p>
+                    <Link
+                      to={block.href}
+                      onClick={() =>
+                        trackBlogCtaClick({
+                          article_slug: article.slug,
+                          category_slug: article.categorySlug,
+                          cta_index: ctaIndex,
+                          cta_text: block.buttonText,
+                          destination: block.href
+                        })
+                      }
+                      className="inline-flex items-center gap-2 rounded-md px-4 py-2"
+                      style={{
+                        fontSize: "14px",
+                        background: "var(--color-teal-700)",
+                        color: "white",
+                      }}
+                    >
+                      {block.buttonText}
+                      <ArrowRight size={15} />
+                    </Link>
+                  </div>
                 );
               }
 

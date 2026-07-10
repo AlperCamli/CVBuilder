@@ -13,6 +13,7 @@ Use this file as an ethical backlink planning reference. It identifies pages tha
 | [Before and After Resume Examples](https://jobspecificcv.com/career-advice/examples-templates-checklists/before-and-after-resume-examples-generic-cv-vs-tailored-cv) | Shows concrete rewrites instead of abstract advice. | Share where users ask how to make resume bullets more specific. |
 | [NHS Nurse CV Checklist](https://jobspecificcv.com/career-advice/job-specific-cv-tailoring/nurse-cv-checklist-nhs-jobs) | Specific healthcare audience with clear checks for NMC, ward experience, and patient safety. | Share with nursing career groups and NHS application guidance pages where appropriate. |
 | [NHS Medical CV Guide](https://jobspecificcv.com/career-advice/job-specific-cv-tailoring/nhs-medical-cv-guide) | Specialist guidance for NHS applications, audit/QI, teaching, and UK clinical fit. | Share with international doctors, clinical fellows, and medical career support communities. |
+| [NHS CV Template](https://jobspecificcv.com/career-advice/examples-templates-checklists/nhs-cv-template) | Free downloadable .docx with the NHS section order (registration, clinical posts, audit, teaching). | Share with NHS career resources, IMG communities, and nursing/medical career pages as a fill-in template. |
 
 ## Outreach Guardrails
 

@@ -5,10 +5,21 @@ export type ArticleTextLink = {
   href: string;
 };
 
+export type TocItem = {
+  text: string;
+  targetId: string;
+};
+
+export type FaqItem = {
+  question: string;
+  answer: string;
+};
+
 export type ArticleBodyBlock =
   | {
       type: "paragraph" | "heading";
       text: string;
+      id?: string;
       links?: ArticleTextLink[];
     }
   | {
@@ -21,7 +32,35 @@ export type ArticleBodyBlock =
       rows: string[][];
     }
   | {
+      type: "toc";
+      heading: string;
+      items: TocItem[];
+    }
+  | {
+      type: "faq";
+      items: FaqItem[];
+    }
+  | {
+      type: "humanInput";
+      text: string;
+    }
+  | {
+      type: "image";
+      src: string;
+      alt: string;
+      width: number;
+      height: number;
+      caption?: string;
+    }
+  | {
       type: "cta";
+      heading: string;
+      text: string;
+      buttonText: string;
+      href: string;
+    }
+  | {
+      type: "download";
       heading: string;
       text: string;
       buttonText: string;
@@ -31,6 +70,7 @@ export type ArticleBodyBlock =
 export type CareerArticle = {
   slug: string;
   title: string;
+  seoTitle?: string;
   description: string;
   categorySlug: string;
   priorityRule: string;
@@ -46,6 +86,9 @@ export type CareerCategory = {
   name: string;
   navLabel: string;
   description: string;
+  seoTitle?: string;
+  h1?: string;
+  featured?: ArticleTextLink[];
 };
 
 type CareerAdviceContent = {

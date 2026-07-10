@@ -63,11 +63,46 @@ export function CareerCategory() {
               className="font-medium mb-4"
               style={{ fontSize: "34px", lineHeight: "1.18", color: "var(--color-text-primary)" }}
             >
-              {category.name}
+              {category.h1 ?? category.name}
             </h1>
             <p style={{ fontSize: "15px", lineHeight: "1.7", color: "var(--color-text-secondary)" }}>
               {category.description}
             </p>
+            {category.featured && category.featured.length > 0 ? (
+              <div
+                className="mt-6 rounded-lg border p-5"
+                style={{
+                  borderColor: "var(--color-border-tertiary)",
+                  background: "var(--color-teal-50)",
+                }}
+              >
+                <p
+                  className="font-medium mb-3"
+                  style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
+                >
+                  Start here
+                </p>
+                <ul className="space-y-2">
+                  {category.featured.map((link) => (
+                    <li key={link.href}>
+                      <Link
+                        to={link.href}
+                        className="inline-flex items-center gap-2"
+                        style={{
+                          fontSize: "14px",
+                          color: "var(--color-teal-700)",
+                          textDecoration: "underline",
+                          textUnderlineOffset: "3px",
+                        }}
+                      >
+                        {link.text}
+                        <ArrowRight size={14} style={{ flexShrink: 0 }} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </section>
 
