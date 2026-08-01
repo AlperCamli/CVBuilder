@@ -109,6 +109,7 @@ export type AiFlowType =
   | "follow_up_questions"
   | "tailored_draft"
   | "block_suggest"
+  | "skills_pool"
   | "import_improve"
   | "professional_summary"
   | "summary"

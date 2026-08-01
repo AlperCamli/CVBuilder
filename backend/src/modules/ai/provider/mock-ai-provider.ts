@@ -608,6 +608,7 @@ export class MockAiProvider implements AiProvider {
         outputPayload = generateTailoredDraft(request.input_payload);
         break;
       case "block_suggest":
+      case "skills_pool":
         outputPayload = generateBlockSuggestions(request.input_payload, 1);
         break;
       case "import_improve":

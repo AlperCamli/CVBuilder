@@ -19,7 +19,8 @@ const REQUIRED_PROMPT_TARGETS: PromptCoverageTarget[] = [
   { flow_type: "block_suggest", action_type: "improve" },
   { flow_type: "block_suggest", action_type: "summarize" },
   { flow_type: "block_suggest", action_type: "expand" },
-  { flow_type: "block_suggest", action_type: "ats_optimize" }
+  { flow_type: "block_suggest", action_type: "ats_optimize" },
+  { flow_type: "skills_pool", action_type: null }
 ];
 
 const toCoverageKey = (target: PromptCoverageTarget): string =>

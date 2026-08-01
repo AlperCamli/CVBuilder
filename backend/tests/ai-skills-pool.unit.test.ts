@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AiService } from "../src/modules/ai/ai.service";
-import { ConflictError } from "../src/shared/errors/app-error";
+import { AiFlowFailedError, ConflictError } from "../src/shared/errors/app-error";
 import type { SessionContext } from "../src/modules/ai/ai.types";
 import type { AiRepository } from "../src/modules/ai/ai.repository";
 import type { BillingService } from "../src/modules/billing/billing.service";
@@ -439,5 +439,89 @@ describe("AiService skills pool refresh rules", () => {
     expect(suggestedMeta.skill_pool_items).toEqual(["Redis", "Kafka", "Node.js"]);
     expect(suggestedMeta.skill_pool_refresh_count_day).toBe(today);
     expect(suggestedMeta.skill_pool_refresh_count_value).toBe(2);
+  });
+
+  it("retries with a banned list when the model only echoes known skills, then succeeds", async () => {
+    const cv = createMasterCvRecord({
+      skill_pool_items: ["Node.js"],
+      skill_pool_last_generated_at: NOW
+    });
+    const { service, createSuggestions } = makeService(cv, "pro");
+
+    const executeFlow = vi
+      .spyOn(service as unknown as ExecuteFlowHost, "executeFlow")
+      .mockResolvedValueOnce({
+        ai_run: { id: "run-echo" },
+        output: {
+          suggested_block: {
+            fields: {
+              // Everything here is already accepted or pooled — nothing new.
+              skills: ["TypeScript", "React", "Node.js"]
+            }
+          }
+        }
+      })
+      .mockResolvedValueOnce({
+        ai_run: { id: "run-retry" },
+        output: {
+          suggested_block: {
+            fields: {
+              skills: ["Redis", "Kafka"]
+            }
+          }
+        }
+      });
+
+    await service.suggestBlock(session, {
+      master_cv_id: "master-1",
+      block_id: "skills-block",
+      action_type: "improve"
+    });
+
+    expect(executeFlow).toHaveBeenCalledTimes(2);
+    const firstCall = executeFlow.mock.calls[0]?.[0] as Record<string, unknown>;
+    const retryCall = executeFlow.mock.calls[1]?.[0] as Record<string, unknown>;
+    // The pool rides on its own flow so DB prompt rows for it are independent of block_suggest.
+    expect(firstCall.flow_type).toBe("skills_pool");
+    expect(firstCall.force_user_prompt).toBe(false);
+    expect(retryCall.force_user_prompt).toBe(true);
+    const retryPayload = retryCall.input_payload as Record<string, unknown>;
+    expect(retryPayload.excluded_skills).toEqual(["TypeScript", "React", "Node.js"]);
+
+    const payload = createSuggestions.mock.calls[0]?.[0]?.[0] as Record<string, unknown>;
+    const suggestedMeta = (payload.suggested_content as Record<string, unknown>).meta as Record<string, unknown>;
+    expect(suggestedMeta.skill_pool_items).toEqual(["Redis", "Kafka", "Node.js"]);
+  });
+
+  it("fails with a clear error when even the retry produces nothing new", async () => {
+    const cv = createMasterCvRecord({
+      skill_pool_items: ["Node.js"],
+      skill_pool_last_generated_at: NOW
+    });
+    const { service, createSuggestions } = makeService(cv, "pro");
+
+    const executeFlow = vi
+      .spyOn(service as unknown as ExecuteFlowHost, "executeFlow")
+      .mockResolvedValue({
+        ai_run: { id: "run-echo-only" },
+        output: {
+          suggested_block: {
+            fields: {
+              skills: ["TypeScript", "Node.js"]
+            }
+          }
+        }
+      });
+
+    await expect(
+      service.suggestBlock(session, {
+        master_cv_id: "master-1",
+        block_id: "skills-block",
+        action_type: "improve"
+      })
+    ).rejects.toBeInstanceOf(AiFlowFailedError);
+
+    expect(executeFlow).toHaveBeenCalledTimes(2);
+    expect(createSuggestions).not.toHaveBeenCalled();
   });
 });

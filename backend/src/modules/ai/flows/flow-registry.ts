@@ -53,6 +53,14 @@ const definitions: AiFlowDefinition[] = [
     output_schema: blockSuggestOutputSchema
   },
   {
+    flow_type: "skills_pool",
+    prompt_key: "skills-pool",
+    prompt_version: "phase14-v1",
+    system_prompt:
+      "Generate a pool of NEW skill suggestions for one CV skills block. Every returned skill must be absent from existing_skills and current_pool in skills_pool_context (case-insensitive). Ground each suggestion in the work experience and education context: adjacent tools, frameworks, methodologies, certifications, languages, and soft skills the CV plausibly supports. Keep each skill atomic (max 6 words, no sentences, no explanations). Return strict JSON with one root key suggested_block only, whose fields.skills is a string array with at most 20 entries. Do not include rationale, labels, markdown, or prose.",
+    output_schema: blockSuggestOutputSchema
+  },
+  {
     flow_type: "import_improve",
     prompt_key: "import-improve",
     prompt_version: "phase7-v1",

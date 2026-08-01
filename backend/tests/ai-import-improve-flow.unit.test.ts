@@ -349,19 +349,18 @@ describe("AiService parallel import_improve flow", () => {
 
     expect(createdRuns[0]?.flow_type).toBe("import_improve");
     expect(createdRuns.filter((run) => run.flow_type === "professional_summary")).toHaveLength(1);
-    expect(createdRuns.filter((run) => run.flow_type === "block_suggest")).toHaveLength(4);
+    expect(createdRuns.filter((run) => run.flow_type === "block_suggest")).toHaveLength(3);
+    expect(createdRuns.filter((run) => run.flow_type === "skills_pool")).toHaveLength(1);
     expect(aiProvider.generate).toHaveBeenCalledTimes(5);
     expect(
       (aiProvider.generate as unknown as { mock: { calls: Array<[AiProviderRequest]> } }).mock.calls
         .filter(([request]) => request.flow_type === "block_suggest")
         .map(([request]) => request.input_payload.action_type)
     ).toEqual(expect.arrayContaining(["expand", "improve"]));
+    // Ordinary block_suggest runs never carry pool context — that now travels on skills_pool.
     expect(
       (aiProvider.generate as unknown as { mock: { calls: Array<[AiProviderRequest]> } }).mock.calls
-        .filter(
-          ([request]) =>
-            request.flow_type === "block_suggest" && !request.input_payload.skills_pool_context
-        )
+        .filter(([request]) => request.flow_type === "block_suggest")
         .every(([request]) => !("skills_pool_context" in request.input_payload))
     ).toBe(true);
     expect(result.generation_metadata.attempted_runs).toBe(5);

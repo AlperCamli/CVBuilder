@@ -104,6 +104,7 @@ import {
   extractPoolSkillsFromSuggestedBlock,
   extractSkillsPoolMetadata,
   filterNewSkills,
+  SKILLS_POOL_MAX_SIZE,
   SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT,
   TAILORED_SKILLS_MAX_SIZE,
   toUtcDateKey
@@ -626,6 +627,10 @@ interface ExecuteFlowOptions {
   tailored_cv_id?: string | null;
   job_id?: string | null;
   prompt_profile?: string | null;
+  // Use the code-supplied user_prompt even when a DB prompt template exists for the flow.
+  // Needed by calls that share a flow_type but have a stricter contract than the generic
+  // template (e.g. the skills-pool call rides on block_suggest).
+  force_user_prompt?: boolean;
 }
 
 interface ExecuteFlowResult<TOutput> {
@@ -1254,9 +1259,12 @@ export class AiService {
     if (options.task.kind === "skills") {
       const fallbackBlock = this.buildImportImproveSkillsFallbackBlock(options.task.target_block_id);
       const skillsPoolContext = collectSkillsPoolContext(options.content, fallbackBlock);
+      // The fallback block is empty, so existing_skills/current_pool are empty and the
+      // skills_pool prompt degenerates to "skills grounded in experience/education" — which is
+      // exactly what this sub-run needs (its output becomes the imported CV's skill list).
       const executed = await this.executeFlow<{ suggested_block: Record<string, unknown> }>({
-        flow_type: "block_suggest",
-        action_type: "improve",
+        flow_type: "skills_pool",
+        action_type: null,
         user_id: options.user_id,
         prompt_profile: options.prompt_profile ?? null,
         input_payload: {
@@ -1268,14 +1276,14 @@ export class AiService {
           skills_pool_context: skillsPoolContext
         },
         user_prompt:
-          "Generate a final non-duplicate skills pool from existing work experience descriptions and education context. Return only valid structured suggested_block with fields.skills as string array (max 20)."
+          "Generate a final non-duplicate skills list from existing work experience descriptions and education context. Return only valid structured suggested_block with fields.skills as string array (max 20)."
       });
 
       const suggestedBlockInput = asRecord(asRecord(executed.output).suggested_block);
       const skills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
       if (skills.length === 0) {
         throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
-          flow_type: "block_suggest",
+          flow_type: "skills_pool",
           reason: "skills_pool_parse_failed"
         });
       }
@@ -1683,53 +1691,83 @@ export class AiService {
         currentPoolMeta.skill_pool_items
       );
       const userInstruction = input.user_instruction ?? "";
+      const acceptedSkills = skillsPoolContext.existing_skills;
+      const knownSkills = dedupeSkills(
+        [...acceptedSkills, ...currentPoolMeta.skill_pool_items],
+        TAILORED_SKILLS_MAX_SIZE + SKILLS_POOL_MAX_SIZE
+      );
 
-      const executed = await this.executeFlow({
-        flow_type: "block_suggest",
-        action_type: input.action_type,
-        user_id: session.appUser.id,
-        master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
-        tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
-        job_id: target.linked_job?.id ?? null,
-        prompt_profile: this.resolveModulePromptProfile(target.module_type),
-        input_payload: {
-          action_type: input.action_type,
-          block: currentBlock.block,
-          user_instruction: userInstruction,
-          job_description: target.linked_job?.job_description ?? "",
-          skills_pool_mode: hasExistingPool ? "refresh" : "generate",
-          skills_pool_context: skillsPoolContext
-        },
-        user_prompt:
-          "Suggest new skills for this CV based on the work experience descriptions and education context. Do NOT repeat any skill already listed in existing_skills or current_pool — every returned skill must be new. Return only valid structured suggested_block with fields.skills as string array (max 20)."
-      });
+      const runPoolFlow = (
+        userPrompt: string,
+        options: { extraPayload?: Record<string, unknown>; forceUserPrompt?: boolean } = {}
+      ) =>
+        this.executeFlow({
+          flow_type: "skills_pool",
+          action_type: null,
+          user_id: session.appUser.id,
+          master_cv_id: target.cv_kind === "master" ? target.cv_id : null,
+          tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
+          job_id: target.linked_job?.id ?? null,
+          prompt_profile: this.resolveModulePromptProfile(target.module_type),
+          input_payload: {
+            action_type: input.action_type,
+            block: currentBlock.block,
+            user_instruction: userInstruction,
+            job_description: target.linked_job?.job_description ?? "",
+            skills_pool_mode: hasExistingPool ? "refresh" : "generate",
+            skills_pool_context: skillsPoolContext,
+            ...(options.extraPayload ?? {})
+          },
+          user_prompt: userPrompt,
+          force_user_prompt: options.forceUserPrompt ?? false
+        });
 
-      const output = asRecord(executed.output);
-      const suggestedBlockInput = asRecord(output.suggested_block);
+      // The base prompt is DB-managed (skills_pool rows in ai_prompt_configs); this string is
+      // only the fallback when no active row exists for the profile/provider.
+      let executed = await runPoolFlow(
+        "Suggest new skills for this CV based on the work experience descriptions and education context in skills_pool_context. Every returned skill must be NEW: never repeat anything listed in existing_skills or current_pool. Explore adjacent tools, frameworks, methodologies, certifications, languages, and soft skills the experience plausibly supports. Return only valid structured suggested_block with fields.skills as string array (max 20)."
+      );
+
+      // The pool holds only skills not yet accepted into the CV. Models sometimes echo known
+      // skills despite the prompt, so filter server-side. After the first refresh the obvious
+      // candidates are all known, and a model that echoes would make refresh a silent no-op —
+      // so retry once with an explicit banned list before giving up with a clear error.
+      let candidateSkills = filterNewSkills(
+        dedupeSkills(extractPoolSkillsFromSuggestedBlock(asRecord(asRecord(executed.output).suggested_block))),
+        knownSkills
+      );
+      if (candidateSkills.length === 0) {
+        // The escalation prompt is deliberately code-forced (not DB-templated): it only works
+        // when paired with the excluded_skills payload added on this exact call.
+        executed = await runPoolFlow(
+          "Every skill in the excluded_skills list of the payload is already known and is banned — do not return any of them. Propose different skills this CV's experience plausibly supports: adjacent tools, frameworks, methodologies, certifications, languages, or soft skills. Return only valid structured suggested_block with fields.skills as string array (max 20).",
+          { extraPayload: { excluded_skills: knownSkills }, forceUserPrompt: true }
+        );
+        candidateSkills = filterNewSkills(
+          dedupeSkills(extractPoolSkillsFromSuggestedBlock(asRecord(asRecord(executed.output).suggested_block))),
+          knownSkills
+        );
+      }
+
+      if (candidateSkills.length === 0) {
+        throw new AiFlowFailedError(
+          "The AI could not find new skills to suggest for this CV. Add more detail to your work experience descriptions and try again.",
+          {
+            flow_type: "skills_pool",
+            reason: "skills_pool_no_new_skills"
+          }
+        );
+      }
 
       const nowIso = new Date().toISOString();
       const utcDay = toUtcDateKey(new Date());
 
-      const parsedSkills = dedupeSkills(extractPoolSkillsFromSuggestedBlock(suggestedBlockInput));
-      if (parsedSkills.length === 0) {
-        throw new AiFlowFailedError("Skills pool response did not contain parsable skills", {
-          flow_type: "block_suggest",
-          reason: "skills_pool_parse_failed"
-        });
-      }
-
-      // The pool holds only skills not yet accepted into the CV. Models sometimes echo known
-      // skills despite the prompt, so filter server-side; on refresh, new skills go first and
-      // still-pending suggestions are kept (dropped from the tail only when over capacity).
-      const acceptedSkills = skillsPoolContext.existing_skills;
-      const newSkills = filterNewSkills(parsedSkills, [
-        ...acceptedSkills,
-        ...currentPoolMeta.skill_pool_items
-      ]);
+      // On refresh, new skills go first and still-pending suggestions are kept (dropped from
+      // the tail only when over capacity).
       const retainedPool = filterNewSkills(currentPoolMeta.skill_pool_items, acceptedSkills);
       const nextPoolItems = hasExistingPool
-        ? dedupeSkills([...newSkills, ...retainedPool])
-        : filterNewSkills(parsedSkills, acceptedSkills);
+        ? dedupeSkills([...candidateSkills, ...retainedPool])
+        : dedupeSkills(candidateSkills);
 
       const nextPoolMeta = hasExistingPool
         ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, nextPoolItems, nowIso, utcDay)
@@ -2176,6 +2214,9 @@ export class AiService {
       user_prompt: options.user_prompt,
       prompt_profile: options.prompt_profile ?? null
     });
+    if (options.force_user_prompt) {
+      prompt.user_prompt = options.user_prompt;
+    }
 
     const aiRun = await this.aiRepository.createRun({
       user_id: options.user_id,
