@@ -23,12 +23,26 @@ Provider boundary:
 - `AiProvider` interface in `src/modules/ai/provider/ai-provider.ts`
 
 Implemented providers:
-- `GeminiAiProvider` (real runtime)
+- `GeminiAiProvider` (real runtime, Google `@google/genai`)
+- `OpenAiAiProvider` (real runtime, OpenAI `openai` SDK, Chat Completions + `json_schema` response format)
+- `AnthropicAiProvider` (real runtime, `@anthropic-ai/sdk`, Messages API + structured outputs)
 - `MockAiProvider` (dev/tests)
 
 Runtime selection:
-- `AI_PROVIDER=gemini|mock`
+- `AI_PROVIDER=gemini|openai|anthropic|mock` — exactly one provider is active per deployment
 - `GEMINI_API_KEY` required when `AI_PROVIDER=gemini`
+- `OPENAI_API_KEY` required when `AI_PROVIDER=openai` (models: `AI_OPENAI_MODEL_LIGHT`/`AI_OPENAI_MODEL_HEAVY`, defaults `gpt-5.6-luna`/`gpt-5.6-terra`)
+- `ANTHROPIC_API_KEY` required when `AI_PROVIDER=anthropic` (models: `AI_ANTHROPIC_MODEL_LIGHT`/`AI_ANTHROPIC_MODEL_HEAVY`, defaults `claude-haiku-4-5`/`claude-sonnet-5`)
+- OpenAI/Anthropic retry/timeout/output caps come from the shared `AI_REQUEST_MAX_ATTEMPTS`, `AI_RETRY_BASE_DELAY_MS`, `AI_RETRY_MAX_DELAY_MS`, `AI_REQUEST_TIMEOUT_MS`, `AI_MAX_OUTPUT_TOKENS_LIGHT`, `AI_MAX_OUTPUT_TOKENS_HEAVY` env vars (see `docs/environment.md`)
+
+Shared provider behavior (`src/modules/ai/provider/provider-shared.ts`):
+- heavy/light model routing per flow type (`tailored_draft`, `cv_parse`, `professional_summary` -> heavy)
+- system/user prompt assembly with the prompt-injection guard around `input_payload`
+- one controlled JSON recovery pass (fenced-block extraction, balanced-brace scan, trailing-comma repair, schema-preferred candidate selection)
+
+Provider-specific notes:
+- OpenAI: non-strict `json_schema` response format guides output; Zod validation + recovery still gate the result. Model refusals surface as non-retryable `AiProviderError`s.
+- Anthropic: structured outputs (`output_config.format`) enforce the schema after sanitization (constraint keywords stripped, objects closed). Flows whose schemas contain record-style objects (e.g. `cv_parse`) fall back to a prompt-embedded schema plus the recovery pass, because Anthropic structured outputs require closed objects. `refusal`/`max_tokens` stop reasons surface as explicit errors; `529 overloaded` is retryable and triggers heavy->light fallback.
 
 Failure behavior:
 - no silent provider fallback
@@ -205,6 +219,9 @@ Flow orchestration and persistence:
 
 Provider runtime:
 - `src/modules/ai/provider/gemini-ai-provider.ts`
+- `src/modules/ai/provider/openai-ai-provider.ts`
+- `src/modules/ai/provider/anthropic-ai-provider.ts`
+- `src/modules/ai/provider/provider-shared.ts`
 - `src/modules/ai/provider/mock-ai-provider.ts`
 - `src/modules/ai/provider/create-ai-provider.ts`
 
@@ -233,6 +250,11 @@ order by flow_type, action_type nulls first;
 
 If this returns zero rows, runtime falls back to `flow-registry.ts` defaults.
 In production, missing required rows for the active profile/provider fails boot.
+Migration `20260731120000_ai_multi_provider_prompts.sql` clones the active
+`gemini` rows to `openai` and `anthropic` (with `model_name` null so each
+provider resolves its own env-configured model), so switching `AI_PROVIDER`
+does not require re-seeding prompts. Provider-specific prompt tuning can later
+override these rows per provider.
 
 Apply migrations and seed prompts to linked environment:
 

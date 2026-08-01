@@ -4,7 +4,7 @@ import { config as loadDotEnvFile } from "dotenv";
 import { z } from "zod";
 
 const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
-const aiProviderSchema = z.enum(["mock", "gemini"]);
+const aiProviderSchema = z.enum(["mock", "gemini", "openai", "anthropic"]);
 
 const envSchema = z
   .object({
@@ -27,6 +27,19 @@ const envSchema = z
     AI_GEMINI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
     AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
     AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    AI_OPENAI_MODEL_LIGHT: z.string().min(1).default("gpt-5.6-luna"),
+    AI_OPENAI_MODEL_HEAVY: z.string().min(1).default("gpt-5.6-terra"),
+    ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    AI_ANTHROPIC_MODEL_LIGHT: z.string().min(1).default("claude-haiku-4-5"),
+    AI_ANTHROPIC_MODEL_HEAVY: z.string().min(1).default("claude-sonnet-5"),
+    // Shared knobs for the non-Gemini providers (Gemini keeps its AI_GEMINI_* set).
+    AI_REQUEST_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(3),
+    AI_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
+    AI_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(200).max(120_000).default(16_000),
+    AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
+    AI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
+    AI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
     AI_RUN_STALE_AFTER_MS: z.coerce.number().int().min(60_000).max(1_800_000).default(300_000),
     AI_RUN_SWEEP_INTERVAL_MS: z.coerce.number().int().min(15_000).max(600_000).default(60_000),
     EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
@@ -58,11 +71,35 @@ const envSchema = z
       });
     }
 
+    if (value.AI_PROVIDER === "openai" && !value.OPENAI_API_KEY) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["OPENAI_API_KEY"],
+        message: "OPENAI_API_KEY is required when AI_PROVIDER=openai"
+      });
+    }
+
+    if (value.AI_PROVIDER === "anthropic" && !value.ANTHROPIC_API_KEY) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ANTHROPIC_API_KEY"],
+        message: "ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic"
+      });
+    }
+
     if (value.AI_GEMINI_RETRY_MAX_DELAY_MS < value.AI_GEMINI_RETRY_BASE_DELAY_MS) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["AI_GEMINI_RETRY_MAX_DELAY_MS"],
         message: "AI_GEMINI_RETRY_MAX_DELAY_MS must be >= AI_GEMINI_RETRY_BASE_DELAY_MS"
+      });
+    }
+
+    if (value.AI_RETRY_MAX_DELAY_MS < value.AI_RETRY_BASE_DELAY_MS) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AI_RETRY_MAX_DELAY_MS"],
+        message: "AI_RETRY_MAX_DELAY_MS must be >= AI_RETRY_BASE_DELAY_MS"
       });
     }
   });
@@ -90,6 +127,18 @@ export interface AppConfig {
     geminiRequestTimeoutMs: number;
     geminiMaxOutputTokensLight: number;
     geminiMaxOutputTokensHeavy: number;
+    openaiApiKey: string | null;
+    openaiModelLight: string;
+    openaiModelHeavy: string;
+    anthropicApiKey: string | null;
+    anthropicModelLight: string;
+    anthropicModelHeavy: string;
+    requestMaxAttempts: number;
+    retryBaseDelayMs: number;
+    retryMaxDelayMs: number;
+    requestTimeoutMs: number;
+    maxOutputTokensLight: number;
+    maxOutputTokensHeavy: number;
     runStaleAfterMs: number;
     runSweepIntervalMs: number;
   };
@@ -198,6 +247,18 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       geminiRequestTimeoutMs: parsed.data.AI_GEMINI_REQUEST_TIMEOUT_MS,
       geminiMaxOutputTokensLight: parsed.data.AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT,
       geminiMaxOutputTokensHeavy: parsed.data.AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY,
+      openaiApiKey: parsed.data.OPENAI_API_KEY ?? null,
+      openaiModelLight: parsed.data.AI_OPENAI_MODEL_LIGHT,
+      openaiModelHeavy: parsed.data.AI_OPENAI_MODEL_HEAVY,
+      anthropicApiKey: parsed.data.ANTHROPIC_API_KEY ?? null,
+      anthropicModelLight: parsed.data.AI_ANTHROPIC_MODEL_LIGHT,
+      anthropicModelHeavy: parsed.data.AI_ANTHROPIC_MODEL_HEAVY,
+      requestMaxAttempts: parsed.data.AI_REQUEST_MAX_ATTEMPTS,
+      retryBaseDelayMs: parsed.data.AI_RETRY_BASE_DELAY_MS,
+      retryMaxDelayMs: parsed.data.AI_RETRY_MAX_DELAY_MS,
+      requestTimeoutMs: parsed.data.AI_REQUEST_TIMEOUT_MS,
+      maxOutputTokensLight: parsed.data.AI_MAX_OUTPUT_TOKENS_LIGHT,
+      maxOutputTokensHeavy: parsed.data.AI_MAX_OUTPUT_TOKENS_HEAVY,
       runStaleAfterMs: parsed.data.AI_RUN_STALE_AFTER_MS,
       runSweepIntervalMs: parsed.data.AI_RUN_SWEEP_INTERVAL_MS
     },

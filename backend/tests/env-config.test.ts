@@ -139,6 +139,69 @@ describe("environment config", () => {
     expect(config.ai.geminiRetryMaxDelayMs).toBe(30000);
   });
 
+  it("requires OpenAI API key when provider is openai", () => {
+    expect(() =>
+      loadConfig({
+        APP_NAME: "cv-builder-backend",
+        APP_ENV: "test",
+        APP_VERSION: "1.0.0",
+        PORT: "4100",
+        LOG_LEVEL: "info",
+        FRONTEND_APP_URL: "http://localhost:5173",
+        AI_PROVIDER: "openai",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+        SUPABASE_SERVICE_ROLE_KEY: "service"
+      })
+    ).toThrow(/OPENAI_API_KEY/);
+  });
+
+  it("requires Anthropic API key when provider is anthropic", () => {
+    expect(() =>
+      loadConfig({
+        APP_NAME: "cv-builder-backend",
+        APP_ENV: "test",
+        APP_VERSION: "1.0.0",
+        PORT: "4100",
+        LOG_LEVEL: "info",
+        FRONTEND_APP_URL: "http://localhost:5173",
+        AI_PROVIDER: "anthropic",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_ANON_KEY: "anon",
+        SUPABASE_SERVICE_ROLE_KEY: "service"
+      })
+    ).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it("loads openai and anthropic config with model defaults", () => {
+    const config = loadConfig({
+      APP_NAME: "cv-builder-backend",
+      APP_ENV: "test",
+      APP_VERSION: "1.0.0",
+      PORT: "4100",
+      LOG_LEVEL: "info",
+      FRONTEND_APP_URL: "http://localhost:5173",
+      AI_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      OPENAI_API_KEY: "openai-key",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_ANON_KEY: "anon",
+      SUPABASE_SERVICE_ROLE_KEY: "service"
+    });
+
+    expect(config.ai.provider).toBe("anthropic");
+    expect(config.ai.anthropicApiKey).toBe("anthropic-key");
+    expect(config.ai.openaiApiKey).toBe("openai-key");
+    expect(config.ai.anthropicModelLight).toBe("claude-haiku-4-5");
+    expect(config.ai.anthropicModelHeavy).toBe("claude-sonnet-5");
+    expect(config.ai.openaiModelLight).toBe("gpt-5.6-luna");
+    expect(config.ai.openaiModelHeavy).toBe("gpt-5.6-terra");
+    expect(config.ai.requestMaxAttempts).toBe(3);
+    expect(config.ai.requestTimeoutMs).toBe(60000);
+    expect(config.ai.maxOutputTokensLight).toBe(4096);
+    expect(config.ai.maxOutputTokensHeavy).toBe(16384);
+  });
+
   it("validates Gemini retry delay bounds", () => {
     expect(() =>
       loadConfig({

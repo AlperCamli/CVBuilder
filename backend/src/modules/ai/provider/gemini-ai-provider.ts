@@ -3,6 +3,16 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
+import {
+  HEAVY_MODEL_FLOW_TYPES,
+  LARGE_OUTPUT_FLOW_TYPES,
+  asRecord,
+  clampNonNegativeInteger,
+  parseOutputWithSchemaPreference,
+  sleep,
+  stripJsonSchemaKeys,
+  toDebugExcerpt
+} from "./provider-shared";
 
 const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
@@ -13,20 +23,7 @@ const RETRYABLE_PROVIDER_STATUS_CODES = new Set([
 ]);
 const MODEL_FALLBACK_PROVIDER_STATUS_CODES = new Set(["UNAVAILABLE", "INTERNAL"]);
 const MAX_PROVIDER_RETRY_HINT_DELAY_MS = 120_000;
-const MAX_DEBUG_EXCERPT_LENGTH = 2_000;
 const REQUEST_TIMEOUT_ERROR_NAME = "GeminiRequestTimeout";
-const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
-  "tailored_draft",
-  "cv_parse",
-  "professional_summary"
-]);
-
-const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
-  "tailored_draft",
-  "import_improve",
-  "cv_parse",
-  "cover_letter_generation"
-]);
 
 const DEFAULT_SAFETY_SETTINGS: SafetySetting[] = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -52,296 +49,8 @@ const GEMINI_SCHEMA_DROPPED_KEYS = new Set([
   "maxProperties"
 ]);
 
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-};
-
-const toDebugExcerpt = (value: string): string => {
-  return value
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ")
-    .slice(0, MAX_DEBUG_EXCERPT_LENGTH)
-    .trim();
-};
-
-const collectFencedJsonCandidates = (source: string): string[] => {
-  const candidates: string[] = [];
-  const matches = source.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi);
-  for (const match of matches) {
-    if (match[1]) {
-      candidates.push(match[1].trim());
-    }
-  }
-  return candidates;
-};
-
-const extractBalancedJsonSegments = (
-  source: string,
-  openChar: "{" | "[",
-  closeChar: "}" | "]"
-): string[] => {
-  const segments: string[] = [];
-  let startIndex = source.indexOf(openChar);
-  while (startIndex >= 0) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    let matched = false;
-
-    for (let index = startIndex; index < source.length; index += 1) {
-      const character = source[index];
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (character === "\\") {
-          escaped = true;
-          continue;
-        }
-        if (character === "\"") {
-          inString = false;
-        }
-        continue;
-      }
-
-      if (character === "\"") {
-        inString = true;
-        continue;
-      }
-
-      if (character === openChar) {
-        depth += 1;
-        continue;
-      }
-
-      if (character === closeChar) {
-        depth -= 1;
-        if (depth === 0) {
-          const next = source.slice(startIndex, index + 1).trim();
-          if (next) {
-            segments.push(next);
-          }
-          startIndex = source.indexOf(openChar, index + 1);
-          matched = true;
-          break;
-        }
-        if (depth < 0) {
-          break;
-        }
-      }
-    }
-
-    if (!matched) {
-      startIndex = source.indexOf(openChar, startIndex + 1);
-    }
-  }
-
-  return segments;
-};
-
-const extractJsonCandidates = (source: string): string[] => {
-  const normalized = source.replace(/^\uFEFF/, "").trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const rawCandidates = [normalized, ...collectFencedJsonCandidates(normalized)];
-  const candidates: string[] = [];
-
-  for (const candidate of rawCandidates) {
-    candidates.push(candidate);
-
-    const balancedObjects = extractBalancedJsonSegments(candidate, "{", "}");
-    for (const balancedObject of balancedObjects) {
-      candidates.push(balancedObject);
-    }
-
-    const balancedArrays = extractBalancedJsonSegments(candidate, "[", "]");
-    for (const balancedArray of balancedArrays) {
-      candidates.push(balancedArray);
-    }
-  }
-
-  const objectStart = normalized.indexOf("{");
-  const objectEnd = normalized.lastIndexOf("}");
-  if (objectStart >= 0 && objectEnd > objectStart) {
-    candidates.push(normalized.slice(objectStart, objectEnd + 1).trim());
-  }
-
-  const arrayStart = normalized.indexOf("[");
-  const arrayEnd = normalized.lastIndexOf("]");
-  if (arrayStart >= 0 && arrayEnd > arrayStart) {
-    candidates.push(normalized.slice(arrayStart, arrayEnd + 1).trim());
-  }
-
-  const deduplicated = new Set(candidates.map((item) => item.trim()).filter(Boolean));
-  return [...deduplicated];
-};
-
-const removeTrailingCommasOutsideStrings = (source: string): string => {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
-    if (inString) {
-      result += character;
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (character === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (character === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (character === "\"") {
-      inString = true;
-      result += character;
-      continue;
-    }
-
-    if (character === ",") {
-      let lookaheadIndex = index + 1;
-      while (lookaheadIndex < source.length && /\s/.test(source[lookaheadIndex] ?? "")) {
-        lookaheadIndex += 1;
-      }
-      const nextCharacter = source[lookaheadIndex];
-      if (nextCharacter === "}" || nextCharacter === "]") {
-        continue;
-      }
-    }
-
-    result += character;
-  }
-
-  return result;
-};
-
-const tryParseRecoveredJson = (
-  source: string,
-  isPreferredCandidate?: (candidate: unknown) => boolean
-): {
-  parsed: unknown | null;
-  parse_error: string | null;
-  matched_preferred_candidate: boolean;
-} => {
-  const candidates = extractJsonCandidates(source);
-  if (candidates.length === 0) {
-    return {
-      parsed: null,
-      parse_error: "No JSON candidate found in model response.",
-      matched_preferred_candidate: false
-    };
-  }
-
-  let firstParsedCandidate: unknown | null = null;
-  let lastParseError: string | null = null;
-  for (const candidate of candidates) {
-    const parseAttempts = [candidate, removeTrailingCommasOutsideStrings(candidate)];
-    for (const attempt of parseAttempts) {
-      try {
-        const parsed = JSON.parse(attempt);
-        if (firstParsedCandidate === null) {
-          firstParsedCandidate = parsed;
-        }
-
-        if (!isPreferredCandidate || isPreferredCandidate(parsed)) {
-          return {
-            parsed,
-            parse_error: null,
-            matched_preferred_candidate: Boolean(isPreferredCandidate)
-          };
-        }
-
-        continue;
-      } catch (error) {
-        lastParseError = error instanceof Error ? error.message : "Unknown JSON parse error";
-      }
-    }
-  }
-
-  if (firstParsedCandidate !== null) {
-    return {
-      parsed: firstParsedCandidate,
-      parse_error: null,
-      matched_preferred_candidate: false
-    };
-  }
-
-  return {
-    parsed: null,
-    parse_error: lastParseError,
-    matched_preferred_candidate: false
-  };
-};
-
-const parseProviderResponseJson = (
-  responseText: string,
-  isPreferredCandidate: (candidate: unknown) => boolean
-): { parsed: unknown | null; parse_error: string | null } => {
-  try {
-    const directParsed = JSON.parse(responseText);
-    if (isPreferredCandidate(directParsed)) {
-      return { parsed: directParsed, parse_error: null };
-    }
-
-    const recovered = tryParseRecoveredJson(responseText, isPreferredCandidate);
-    if (recovered.parsed !== null && recovered.matched_preferred_candidate) {
-      return { parsed: recovered.parsed, parse_error: null };
-    }
-
-    return { parsed: directParsed, parse_error: null };
-  } catch (jsonParseError) {
-    const recovered = tryParseRecoveredJson(responseText, isPreferredCandidate);
-    if (recovered.parsed !== null) {
-      return { parsed: recovered.parsed, parse_error: null };
-    }
-
-    return {
-      parsed: null,
-      parse_error:
-        recovered.parse_error ??
-        (jsonParseError instanceof Error ? jsonParseError.message : "Unknown JSON parse error")
-    };
-  }
-};
-
-const parseOutputWithSchemaPreference = (
-  responseText: string,
-  outputSchema: {
-    safeParse: (value: unknown) => { success: true } | { success: false };
-  }
-): { parsed: unknown | null; parse_error: string | null } => {
-  return parseProviderResponseJson(responseText, (candidate) => outputSchema.safeParse(candidate).success);
-};
-
 export const sanitizeGeminiResponseJsonSchema = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeGeminiResponseJsonSchema(item));
-  }
-
-  if (value && typeof value === "object") {
-    const sanitized: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (GEMINI_SCHEMA_DROPPED_KEYS.has(key)) {
-        continue;
-      }
-      sanitized[key] = sanitizeGeminiResponseJsonSchema(item);
-    }
-
-    return sanitized;
-  }
-
-  return value;
+  return stripJsonSchemaKeys(value, GEMINI_SCHEMA_DROPPED_KEYS);
 };
 
 const toPromptText = (request: AiProviderRequest): string => {
@@ -362,20 +71,6 @@ const toPromptText = (request: AiProviderRequest): string => {
     JSON.stringify(request.input_payload),
     "</INPUT_PAYLOAD_JSON>"
   ].join("\n\n");
-};
-
-const sleep = async (ms: number): Promise<void> => {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-};
-
-const clampNonNegativeInteger = (value: number, fallback: number): number => {
-  if (!Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.max(0, Math.floor(value));
 };
 
 interface GeminiProviderErrorContext {
