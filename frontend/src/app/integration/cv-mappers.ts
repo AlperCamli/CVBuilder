@@ -1553,14 +1553,20 @@ export const cvContentToEditorSections = (
 
     if (sectionType === "skills") {
       const skillsPoolMeta = parseSkillsPoolMetadataFromBlockMeta(sortedBlocks[0]?.meta ?? {});
-      const skills = sortedBlocks
-        .flatMap((block) => {
-          const direct = [getField(block, "skill", "name", "text")].filter(Boolean);
-          const arrays = [...asStringArray(block.fields.skills), ...asStringArray(block.fields.items)];
-          return [...direct, ...arrays];
-        })
-        .flatMap((skill) => splitSkillCandidates(skill))
-        .filter((skill) => skill.length > 0);
+      // Older tailored drafts mirrored the same list into skills/items/text on one block, so
+      // string fields are only a fallback when the arrays are empty, and the result is deduped.
+      const skills = dedupe(
+        sortedBlocks
+          .flatMap((block) => {
+            const arrays = [...asStringArray(block.fields.skills), ...asStringArray(block.fields.items)];
+            if (arrays.length > 0) {
+              return arrays;
+            }
+            return [getField(block, "skill", "name", "text")].filter(Boolean);
+          })
+          .flatMap((skill) => splitSkillCandidates(skill))
+          .filter((skill) => skill.length > 0)
+      );
 
       sections.push({
         id: `skills-${section.id}`,

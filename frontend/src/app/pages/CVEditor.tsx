@@ -100,7 +100,8 @@ import {
 import {
   buildSkillsPoolDataPatch,
   parseSkillsPoolMetadata,
-  parseSkillsPoolMetadataFromBlockMeta
+  parseSkillsPoolMetadataFromBlockMeta,
+  SKILLS_POOL_REFRESH_DAILY_LIMIT
 } from "./cv-editor-skills-pool";
 import {
   DEFAULT_MODULE_ID,
@@ -1700,17 +1701,14 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
   };
 
-  const toggleSkillFromPool = (skillValue: string) => {
+  // Add-only on purpose: suggestions can never remove a skill. Removal stays in the main
+  // chip list, so a misclick while browsing the pool cannot silently delete CV content.
+  const addSkillsFromPool = (skillValues: string[]) => {
     if (!skillsPoolSectionId) {
       return;
     }
 
     updateSkillSectionData(skillsPoolSectionId, (currentData) => {
-      const nextSkill = skillValue.trim();
-      if (!nextSkill) {
-        return currentData;
-      }
-
       const existingSkills = Array.isArray(currentData.skills)
         ? (currentData.skills as unknown[])
             .map((value) => (typeof value === "string" ? value.trim() : ""))
@@ -1718,15 +1716,23 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         : [];
 
       const activeSet = new Set(existingSkills.map((item) => item.toLowerCase()));
-      const normalized = nextSkill.toLowerCase();
+      const additions: string[] = [];
+      for (const value of skillValues) {
+        const nextSkill = value.trim();
+        if (!nextSkill || activeSet.has(nextSkill.toLowerCase())) {
+          continue;
+        }
+        activeSet.add(nextSkill.toLowerCase());
+        additions.push(nextSkill);
+      }
 
-      const nextSkills = activeSet.has(normalized)
-        ? existingSkills.filter((item) => item.toLowerCase() !== normalized)
-        : [...existingSkills, nextSkill];
+      if (additions.length === 0) {
+        return currentData;
+      }
 
       return {
         ...currentData,
-        skills: nextSkills
+        skills: [...existingSkills, ...additions]
       };
     });
   };
@@ -2218,6 +2224,17 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
         .filter((value) => value.length > 0)
     );
+    // Only surface skills that are not in the section yet — the full pool stays in metadata,
+    // so removing a skill below makes its suggestion reappear here.
+    const suggestedSkills = sectionPool.items.filter(
+      (skill) => !sectionSkillValues.has(skill.trim().toLowerCase())
+    );
+    const isPaidPlan = (me?.current_plan?.plan_code ?? "free").toLowerCase() !== "free";
+    const refreshesUsedToday =
+      sectionPool.refreshCountDay === new Date().toISOString().slice(0, 10)
+        ? sectionPool.refreshCountValue
+        : 0;
+    const refreshesLeftToday = Math.max(0, SKILLS_POOL_REFRESH_DAILY_LIMIT - refreshesUsedToday);
 
     return (
       <div
@@ -2230,19 +2247,42 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         <div className="flex items-start justify-between gap-2">
           <div>
             <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              Skills Suggestion Pool
+              Suggested skills{suggestedSkills.length > 0 ? ` (${suggestedSkills.length})` : ""}
             </p>
             <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              Click a skill to toggle it in your Skills section.
+              Click a suggestion to add it to your Skills section.
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {suggestedSkills.length > 1 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addSkillsFromPool(suggestedSkills)}
+                className="h-7 px-2.5 gap-1"
+                style={{
+                  fontSize: "11px",
+                  borderColor: "var(--color-teal-500)",
+                  color: "var(--color-teal-800)",
+                  background: "var(--color-teal-50)"
+                }}
+              >
+                <Plus size={12} />
+                Add all
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => void refreshSkillsPool()}
-              disabled={skillsPoolLoading || skillsPoolRefreshing || sectionPool.items.length === 0}
+              disabled={
+                skillsPoolLoading ||
+                skillsPoolRefreshing ||
+                sectionPool.items.length === 0 ||
+                (isPaidPlan && refreshesLeftToday === 0)
+              }
               className="h-7 px-2.5 gap-1"
               style={{
                 fontSize: "11px",
@@ -2253,7 +2293,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               }}
             >
               <RefreshCw size={12} />
-              Refresh pool
+              {isPaidPlan ? `Refresh (${refreshesLeftToday} left today)` : "Refresh pool"}
             </Button>
             <Button
               type="button"
@@ -2299,37 +2339,33 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           </div>
         )}
 
-        <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-          {sectionPool.items.length} skills in pool
-        </p>
-
-        {sectionPool.items.length > 0 ? (
+        {suggestedSkills.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {sectionPool.items.map((skill) => {
-              const isActive = sectionSkillValues.has(skill.trim().toLowerCase());
-              return (
-                <Button
-                  key={skill}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleSkillFromPool(skill)}
-                  className="h-auto py-1.5 px-3 rounded-full transition-colors"
-                  style={{
-                    fontSize: "12px",
-                    borderColor: isActive ? "var(--color-teal-500)" : "var(--color-border-secondary)",
-                    background: isActive ? "var(--color-teal-50)" : "var(--color-background-primary)",
-                    color: isActive ? "var(--color-teal-800)" : "var(--color-text-primary)"
-                  }}
-                >
-                  {skill}
-                </Button>
-              );
-            })}
+            {suggestedSkills.map((skill) => (
+              <Button
+                key={skill}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addSkillsFromPool([skill])}
+                className="h-auto py-1.5 px-3 rounded-full gap-1.5 transition-colors"
+                style={{
+                  fontSize: "12px",
+                  borderColor: "var(--color-border-secondary)",
+                  background: "var(--color-background-primary)",
+                  color: "var(--color-text-primary)"
+                }}
+              >
+                <Plus size={12} style={{ color: "var(--color-teal-600)" }} />
+                {skill}
+              </Button>
+            ))}
           </div>
         ) : (
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            No skills in the pool yet.
+            {sectionPool.items.length > 0
+              ? "All suggestions are already in your list. Refresh the pool for more."
+              : "No skills in the pool yet."}
           </p>
         )}
       </div>

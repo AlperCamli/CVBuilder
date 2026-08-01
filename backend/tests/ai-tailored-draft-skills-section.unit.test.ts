@@ -73,6 +73,8 @@ describe("tailored draft skills section post-processing", () => {
       "Product Analytics",
       "Stakeholder Management"
     ]);
+    expect(skillsSection?.blocks[0]?.fields.items).toBeUndefined();
+    expect(skillsSection?.blocks[0]?.fields.text).toBeUndefined();
   });
 
   it("merges selected skills into an existing skills block without duplicates", () => {
@@ -143,9 +145,28 @@ describe("tailored draft skills section post-processing", () => {
 
     expect(result.changed_block_ids).toEqual(["skills-block"]);
     expect(skillsBlock?.skills).toEqual(["SQL", "Tableau"]);
-    // skills/items/text are kept in sync so every consumer sees the deduped list.
-    expect(skillsBlock?.items).toEqual(["SQL", "Tableau"]);
-    expect(skillsBlock?.text).toBe("SQL, Tableau");
+    // `skills` is the canonical field; the legacy items/text mirrors must not be written.
+    expect(skillsBlock?.items).toBeUndefined();
+    expect(skillsBlock?.text).toBeUndefined();
+  });
+
+  it("strips legacy items/text mirrors from a previously tailored skills block", () => {
+    const content = contentWithDuplicateSkills(["SQL", "Tableau"]);
+    const block = content.sections.find((section) => section.type === "skills")!.blocks[0];
+    block.fields = {
+      skills: ["SQL", "Tableau"],
+      items: ["SQL", "Tableau"],
+      text: "SQL, Tableau"
+    };
+
+    const result = makeService().ensureTailoredSkillsSection(content, [], []);
+    const skillsBlock = result.content.sections.find((section) => section.type === "skills")
+      ?.blocks[0]?.fields;
+
+    expect(result.changed_block_ids).toEqual(["skills-block"]);
+    expect(skillsBlock?.skills).toEqual(["SQL", "Tableau"]);
+    expect(skillsBlock?.items).toBeUndefined();
+    expect(skillsBlock?.text).toBeUndefined();
   });
 
   it("dedupes existing skills even when the selected skill is already present", () => {
@@ -171,9 +192,6 @@ describe("tailored draft skills section post-processing", () => {
 
   it("leaves an already-deduped skills block unchanged", () => {
     const content = contentWithDuplicateSkills(["SQL", "Tableau"]);
-    // Pre-sync items/text so the block is already in canonical form.
-    const block = content.sections.find((section) => section.type === "skills")!.blocks[0];
-    block.fields = { skills: ["SQL", "Tableau"], items: ["SQL", "Tableau"], text: "SQL, Tableau" };
 
     const result = makeService().ensureTailoredSkillsSection(content, ["SQL"], []);
 

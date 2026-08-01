@@ -1,6 +1,7 @@
 import type { CvBlock, CvContent } from "../../shared/cv-content/cv-content.types";
 
 export const SKILLS_POOL_MAX_SIZE = 20;
+export const TAILORED_SKILLS_MAX_SIZE = 24;
 export const SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT = 2;
 
 export interface SkillsPoolMetadata {
@@ -135,7 +136,7 @@ const asSkillArray = (value: unknown): string[] => {
     .filter(isAtomicSkill);
 };
 
-export const dedupeSkills = (values: string[]): string[] => {
+export const dedupeSkills = (values: string[], maxSize: number = SKILLS_POOL_MAX_SIZE): string[] => {
   const seen = new Set<string>();
   const output: string[] = [];
 
@@ -154,7 +155,7 @@ export const dedupeSkills = (values: string[]): string[] => {
     }
     seen.add(key);
     output.push(normalized);
-    if (output.length >= SKILLS_POOL_MAX_SIZE) {
+    if (output.length >= maxSize) {
       break;
     }
   }

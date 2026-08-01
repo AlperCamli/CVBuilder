@@ -1,5 +1,9 @@
 const SKILL_POOL_MAX_ITEMS = 20;
 
+// Mirrors the backend's SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT so the editor can show remaining
+// refreshes before the server rejects with a conflict.
+export const SKILLS_POOL_REFRESH_DAILY_LIMIT = 2;
+
 export interface SkillsPoolMetadata {
   items: string[];
   lastGeneratedAt: string | null;

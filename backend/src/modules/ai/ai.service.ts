@@ -104,6 +104,7 @@ import {
   extractPoolSkillsFromSuggestedBlock,
   extractSkillsPoolMetadata,
   SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT,
+  TAILORED_SKILLS_MAX_SIZE,
   toUtcDateKey
 } from "./skills-pool";
 
@@ -1428,16 +1429,23 @@ export class AiService {
     }
 
     const fallbackBlock = this.buildImportImproveSkillsFallbackBlock(task.target_block_id);
+    // `skills` is canonical; strip any `items`/`text` mirrors the model may have emitted so the
+    // same list is never stored twice on one block.
+    const {
+      items: _suggestedItems,
+      text: _suggestedText,
+      ...suggestedFields
+    } = {
+      ...asRecord(fallbackBlock.fields),
+      ...asRecord(asRecord(suggestedBlockInput).fields)
+    };
     const normalizedSuggested = normalizeCvBlock(
       {
         ...fallbackBlock,
         ...asRecord(suggestedBlockInput),
         fields: {
-          ...asRecord(fallbackBlock.fields),
-          ...asRecord(asRecord(suggestedBlockInput).fields),
-          skills: parsedSkills,
-          items: parsedSkills,
-          text: parsedSkills.join(", ")
+          ...suggestedFields,
+          skills: parsedSkills
         },
         meta: {
           ...asRecord(fallbackBlock.meta),
@@ -1499,9 +1507,7 @@ export class AiService {
       order: 0,
       visibility: "visible" as const,
       fields: {
-        skills: [],
-        items: [],
-        text: ""
+        skills: []
       },
       meta: {}
     };
@@ -2684,25 +2690,29 @@ export class AiService {
       }
 
       const fields = asRecord(firstBlock.fields);
-      const existingSkills = dedupeSkills([
-        ...asStringArray(fields.skills),
-        ...asStringArray(fields.items),
-        ...asString(fields.text)
-          .split(/[,;|]/)
-          .map((item) => item.trim())
-          .filter(Boolean)
-      ]);
+      const existingSkills = dedupeSkills(
+        [
+          ...asStringArray(fields.skills),
+          ...asStringArray(fields.items),
+          ...asString(fields.text)
+            .split(/[,;|]/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+        ],
+        TAILORED_SKILLS_MAX_SIZE
+      );
       // Merge in any newly selected skills, then always rewrite the block to this deduped list.
       // Comparing against the *raw* stored fields (not the already-deduped `existingSkills`) means
       // duplicates the model emitted are stripped even when no new skill is added — the previous
       // short-circuit returned the original block and left those duplicates in place.
-      const mergedSkills = dedupeSkills([...existingSkills, ...generatedSkills]).slice(0, 24);
-      const mergedText = mergedSkills.join(", ");
+      const mergedSkills = dedupeSkills([...existingSkills, ...generatedSkills], TAILORED_SKILLS_MAX_SIZE);
 
+      // `skills` is the canonical field. Legacy `items`/`text` mirrors of the same list are
+      // dropped — consumers that read all three tripled every skill in the editor.
       const alreadyNormalized =
         stableStringify(fields.skills) === stableStringify(mergedSkills) &&
-        stableStringify(fields.items) === stableStringify(mergedSkills) &&
-        asString(fields.text) === mergedText;
+        fields.items === undefined &&
+        fields.text === undefined;
       if (alreadyNormalized) {
         return {
           content,
@@ -2710,11 +2720,10 @@ export class AiService {
         };
       }
 
+      const { items: _legacyItems, text: _legacyText, ...restFields } = fields;
       firstBlock.fields = {
-        ...fields,
-        skills: mergedSkills,
-        items: mergedSkills,
-        text: mergedText
+        ...restFields,
+        skills: mergedSkills
       };
 
       return {
@@ -2744,9 +2753,7 @@ export class AiService {
           order: 0,
           visibility: "visible",
           fields: {
-            skills: generatedSkills,
-            items: generatedSkills,
-            text: generatedSkills.join(", ")
+            skills: generatedSkills
           },
           meta: {}
         }
@@ -2775,7 +2782,7 @@ export class AiService {
       return !/[.!?]/.test(trimmed);
     });
 
-    return dedupeSkills([...selectedKeywords, ...topicSkills]).slice(0, 24);
+    return dedupeSkills([...selectedKeywords, ...topicSkills], TAILORED_SKILLS_MAX_SIZE);
   }
 
   private assertTailoredDraftSemanticContent(content: TailoredCvRecord["current_content"]): void {
