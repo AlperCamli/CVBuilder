@@ -176,8 +176,17 @@ export const filterNewSkills = (candidates: string[], excluded: string[]): strin
 };
 
 export const extractPoolSkillsFromSuggestedBlock = (suggestedBlock: Record<string, unknown>): string[] => {
-  const fields = asRecord(asRecord(suggestedBlock).fields);
-  const values = [...asSkillArray(fields.skills), ...asSkillArray(fields.items)];
+  const root = asRecord(suggestedBlock);
+  const fields = asRecord(root.fields);
+  // The contract is suggested_block.fields.skills, but providers without strict
+  // structured-output enforcement for record-style fields sometimes flatten the shape and
+  // return the array directly on the suggested_block root — accept both.
+  const values = [
+    ...asSkillArray(fields.skills),
+    ...asSkillArray(fields.items),
+    ...asSkillArray(root.skills),
+    ...asSkillArray(root.items)
+  ];
   return dedupeSkills(values);
 };
 

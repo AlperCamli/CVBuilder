@@ -327,6 +327,16 @@ describe("skills-pool helpers", () => {
     expect(dedupeSkills(skills)).toEqual(["AWS", "Docker", "Kubernetes"]);
   });
 
+  it("extracts skills returned flat on the suggested_block root (no fields wrapper)", () => {
+    // Regression: OpenAI's structured-output fallback returned this exact shape and the
+    // parser dropped all 20 valid skills, surfacing a bogus "no new skills" error.
+    const skills = extractPoolSkillsFromSuggestedBlock({
+      skills: ["Figma", "Google Analytics", "SQL", "Prompt Engineering"]
+    });
+
+    expect(skills).toEqual(["Figma", "Google Analytics", "SQL", "Prompt Engineering"]);
+  });
+
   it("splits delimited skill strings into atomic skills", () => {
     const skills = extractPoolSkillsFromSuggestedBlock({
       fields: {
@@ -524,6 +534,30 @@ describe("AiService skills pool refresh rules", () => {
     expect(suggestedMeta.skill_pool_items).toEqual(["Redis", "Kafka", "Node.js"]);
     expect(suggestedMeta.skill_pool_refresh_count_day).toBe(today);
     expect(suggestedMeta.skill_pool_refresh_count_value).toBe(2);
+  });
+
+  it("accepts pool skills returned flat on the suggested_block root", async () => {
+    const cv = createMasterCvRecord();
+    const { service, createSuggestions } = makeService(cv, "pro");
+
+    vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
+      ai_run: { id: "run-flat" },
+      output: {
+        suggested_block: {
+          skills: ["Figma", "Google Analytics"]
+        }
+      }
+    });
+
+    await service.suggestBlock(session, {
+      master_cv_id: "master-1",
+      block_id: "skills-block",
+      action_type: "improve"
+    });
+
+    const payload = createSuggestions.mock.calls[0]?.[0]?.[0] as Record<string, unknown>;
+    const suggestedMeta = (payload.suggested_content as Record<string, unknown>).meta as Record<string, unknown>;
+    expect(suggestedMeta.skill_pool_items).toEqual(["Figma", "Google Analytics"]);
   });
 
   it("retries with a banned list when the model only echoes known skills, then succeeds", async () => {
