@@ -218,9 +218,94 @@ describe("skills-pool helpers", () => {
 
     expect(context.existing_skills).toEqual(["TypeScript", "React"]);
     expect(context.current_pool).toEqual([]);
+    expect(context.summary).toBe("");
     expect(context.work_experience).toHaveLength(2);
     expect(context.work_experience[0]?.label).toBe("work experience 1");
     expect(context.education[0]?.institution).toBe("Tech University");
+  });
+
+  it("collects variant section types, projects, and summary into the context", () => {
+    const content = {
+      version: "v1",
+      language: "en",
+      metadata: {},
+      sections: [
+        {
+          id: "summary-section",
+          type: "professional_summary",
+          title: "Summary",
+          order: 0,
+          meta: {},
+          blocks: [
+            {
+              id: "summary-block",
+              type: "summary",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { text: "Full-stack engineer focused on data platforms." },
+              meta: {}
+            }
+          ]
+        },
+        {
+          id: "exp-section",
+          type: "Work Experience",
+          title: "Experience",
+          order: 1,
+          meta: {},
+          blocks: [
+            {
+              id: "exp-1",
+              type: "experience_item",
+              order: 0,
+              visibility: "visible" as const,
+              fields: {
+                role: "Data Engineer",
+                company: "Acme",
+                text: "Built streaming pipelines.",
+                bullets: ["Cut latency by 40%"]
+              },
+              meta: {}
+            }
+          ]
+        },
+        {
+          id: "projects-section",
+          type: "projects",
+          title: "Projects",
+          order: 2,
+          meta: {},
+          blocks: [
+            {
+              id: "project-1",
+              type: "project_item",
+              order: 0,
+              visibility: "visible" as const,
+              fields: { description: "CV builder with AI tailoring." },
+              meta: {}
+            }
+          ]
+        }
+      ]
+    };
+    const skillsBlock = {
+      id: "skills-block",
+      type: "skills",
+      order: 0,
+      visibility: "visible" as const,
+      fields: { skills: ["SQL"] },
+      meta: {}
+    };
+
+    const context = collectSkillsPoolContext(content as never, skillsBlock as never);
+
+    expect(context.summary).toBe("Full-stack engineer focused on data platforms.");
+    expect(context.work_experience).toHaveLength(2);
+    expect(context.work_experience[0]?.description).toContain("Data Engineer at Acme");
+    expect(context.work_experience[0]?.description).toContain("Built streaming pipelines.");
+    expect(context.work_experience[0]?.description).toContain("Cut latency by 40%");
+    expect(context.work_experience[1]?.label).toBe("project 1");
+    expect(context.work_experience[1]?.description).toBe("CV builder with AI tailoring.");
   });
 
   it("includes the current pool in the context so providers can avoid repeating it", () => {

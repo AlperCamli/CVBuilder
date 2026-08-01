@@ -28,6 +28,7 @@ export interface SkillsPoolEducationEntry {
 export interface SkillsPoolContext {
   existing_skills: string[];
   current_pool: string[];
+  summary: string;
   work_experience: SkillsPoolWorkExperienceEntry[];
   education: SkillsPoolEducationEntry[];
 }
@@ -180,6 +181,103 @@ export const extractPoolSkillsFromSuggestedBlock = (suggestedBlock: Record<strin
   return dedupeSkills(values);
 };
 
+// Stored content is not guaranteed to use the editor's canonical type names — tailored drafts
+// and imports carry variants like "work_experience", so section matching must normalize.
+const EXPERIENCE_SECTION_TYPES = new Set([
+  "experience",
+  "work_experience",
+  "professional_experience",
+  "employment",
+  "employment_history",
+  "work_history",
+  "career_history"
+]);
+
+const PROJECT_SECTION_TYPES = new Set([
+  "projects",
+  "project",
+  "personal_projects",
+  "side_projects",
+  "key_projects"
+]);
+
+const EDUCATION_SECTION_TYPES = new Set([
+  "education",
+  "education_history",
+  "academic_background",
+  "academics"
+]);
+
+const SUMMARY_SECTION_TYPES = new Set([
+  "summary",
+  "professional_summary",
+  "profile",
+  "about",
+  "about_me",
+  "objective"
+]);
+
+const NARRATIVE_STRING_FIELD_KEYS = [
+  "description",
+  "text",
+  "details",
+  "summary",
+  "achievements",
+  "responsibilities",
+  "notes"
+];
+
+const NARRATIVE_ARRAY_FIELD_KEYS = ["items", "bullets", "duties", "outcomes", "highlights"];
+
+const ROLE_FIELD_KEYS = ["role", "title", "position", "degree"];
+const ORGANIZATION_FIELD_KEYS = ["company", "organization", "employer", "institution", "name"];
+
+const normalizeSectionTypeKey = (value: unknown): string =>
+  asTrimmedString(value).toLowerCase().replace(/[\s-]+/g, "_");
+
+const firstNonEmptyField = (fields: Record<string, unknown>, keys: string[]): string => {
+  for (const key of keys) {
+    const value = asTrimmedString(fields[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+};
+
+const collectBlockNarrative = (fieldsInput: unknown): string => {
+  const fields = asRecord(fieldsInput);
+  const parts: string[] = [];
+
+  const role = firstNonEmptyField(fields, ROLE_FIELD_KEYS);
+  const organization = firstNonEmptyField(fields, ORGANIZATION_FIELD_KEYS);
+  const headline = [role, organization].filter(Boolean).join(" at ");
+  if (headline) {
+    parts.push(headline);
+  }
+
+  for (const key of NARRATIVE_STRING_FIELD_KEYS) {
+    const value = asTrimmedString(fields[key]);
+    if (value) {
+      parts.push(value);
+    }
+  }
+  for (const key of NARRATIVE_ARRAY_FIELD_KEYS) {
+    const values = asStringArray(fields[key]);
+    if (values.length > 0) {
+      parts.push(values.join("\n"));
+    }
+  }
+
+  return parts.join("\n").trim();
+};
+
+const sortedBlocksOfSections = (content: CvContent, types: Set<string>): CvBlock[] =>
+  [...content.sections]
+    .filter((section) => types.has(normalizeSectionTypeKey(section.type)))
+    .sort((a, b) => a.order - b.order)
+    .flatMap((section) => [...section.blocks].sort((a, b) => a.order - b.order));
+
 export const collectSkillsPoolContext = (
   content: CvContent,
   currentBlock: CvBlock,
@@ -191,26 +289,34 @@ export const collectSkillsPoolContext = (
     ...asStringArray(currentFields.items)
   ]);
 
-  const workExperienceDescriptions = content.sections
-    .filter((section) => section.type === "experience")
-    .flatMap((section) => [...section.blocks].sort((a, b) => a.order - b.order))
-    .map((block) => asTrimmedString(asRecord(block.fields).description))
+  const experienceEntries = sortedBlocksOfSections(content, EXPERIENCE_SECTION_TYPES)
+    .map((block) => collectBlockNarrative(block.fields))
     .filter((item) => item.length > 0)
     .map((description, index) => ({
       label: `work experience ${index + 1}`,
       description
     }));
 
-  const educationEntries = content.sections
-    .filter((section) => section.type === "education")
-    .flatMap((section) => [...section.blocks].sort((a, b) => a.order - b.order))
+  const projectEntries = sortedBlocksOfSections(content, PROJECT_SECTION_TYPES)
+    .map((block) => collectBlockNarrative(block.fields))
+    .filter((item) => item.length > 0)
+    .map((description, index) => ({
+      label: `project ${index + 1}`,
+      description
+    }));
+
+  const summary = sortedBlocksOfSections(content, SUMMARY_SECTION_TYPES)
+    .map((block) => collectBlockNarrative(block.fields))
+    .find((item) => item.length > 0) ?? "";
+
+  const educationEntries = sortedBlocksOfSections(content, EDUCATION_SECTION_TYPES)
     .map((block) => {
       const fields = asRecord(block.fields);
       return {
         institution: asTrimmedString(fields.institution),
         degree: asTrimmedString(fields.degree),
         field_of_study: asTrimmedString(fields.field_of_study),
-        description: asTrimmedString(fields.description)
+        description: collectBlockNarrative(fields)
       };
     })
     .filter(
@@ -224,7 +330,8 @@ export const collectSkillsPoolContext = (
   return {
     existing_skills: existingSkills,
     current_pool: dedupeSkills(currentPool),
-    work_experience: workExperienceDescriptions,
+    summary,
+    work_experience: [...experienceEntries, ...projectEntries],
     education: educationEntries
   };
 };

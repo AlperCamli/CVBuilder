@@ -1709,9 +1709,11 @@ export class AiService {
           tailored_cv_id: target.cv_kind === "tailored" ? target.cv_id : null,
           job_id: target.linked_job?.id ?? null,
           prompt_profile: this.resolveModulePromptProfile(target.module_type),
+          // The skills block itself is deliberately NOT in the payload: it holds the accepted
+          // skill list, and models gravitate toward echoing it. Everything the model needs is
+          // in skills_pool_context.
           input_payload: {
             action_type: input.action_type,
-            block: currentBlock.block,
             user_instruction: userInstruction,
             job_description: target.linked_job?.job_description ?? "",
             skills_pool_mode: hasExistingPool ? "refresh" : "generate",
@@ -1751,7 +1753,7 @@ export class AiService {
 
       if (candidateSkills.length === 0) {
         throw new AiFlowFailedError(
-          "The AI could not find new skills to suggest for this CV. Add more detail to your work experience descriptions and try again.",
+          "The AI could not find new skills beyond your current list and pending suggestions. Add more detail to your experience or project descriptions and try again.",
           {
             flow_type: "skills_pool",
             reason: "skills_pool_no_new_skills"

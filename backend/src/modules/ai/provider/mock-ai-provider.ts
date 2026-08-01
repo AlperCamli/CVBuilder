@@ -550,7 +550,11 @@ const generateBlockSuggestions = (
       })
       .filter(Boolean)
       .join(" ");
-    const inferred = tokenizeKeywords(`${experienceDescriptions} ${educationDescriptions}`, 40).map((token) => capitalize(token));
+    const summaryText = asString(skillsPoolContext.summary);
+    const inferred = tokenizeKeywords(
+      `${summaryText} ${experienceDescriptions} ${educationDescriptions}`,
+      40
+    ).map((token) => capitalize(token));
     // Like the real providers are instructed to, return only skills the CV doesn't already
     // know about — never echo existing_skills or current_pool. The generic bank keeps dev
     // refreshes producing new suggestions after the CV-derived keywords run out.
