@@ -42,6 +42,35 @@ const STOP_WORDS = new Set([
   "position"
 ]);
 
+// Fallback candidates for skills-pool suggestions once CV-derived keywords are exhausted,
+// so repeated refreshes in dev keep surfacing skills the CV doesn't have yet.
+const MOCK_SKILL_BANK = [
+  "Communication",
+  "Problem Solving",
+  "Team Leadership",
+  "Project Management",
+  "Stakeholder Management",
+  "Data Analysis",
+  "Process Improvement",
+  "Agile Methodologies",
+  "Cross-functional Collaboration",
+  "Strategic Planning",
+  "Time Management",
+  "Presentation Skills",
+  "Mentoring",
+  "Quality Assurance",
+  "Documentation",
+  "Negotiation",
+  "Risk Management",
+  "Customer Focus",
+  "Critical Thinking",
+  "Adaptability",
+  "Budget Management",
+  "Vendor Management",
+  "Public Speaking",
+  "Conflict Resolution"
+];
+
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -507,6 +536,9 @@ const generateBlockSuggestions = (
     const existingSkills = asArray(skillsPoolContext.existing_skills)
       .map((item) => asString(item).trim())
       .filter(Boolean);
+    const currentPool = asArray(skillsPoolContext.current_pool)
+      .map((item) => asString(item).trim())
+      .filter(Boolean);
     const experienceDescriptions = asArray(skillsPoolContext.work_experience)
       .map((item) => asString(asRecord(item).description))
       .filter(Boolean)
@@ -518,13 +550,19 @@ const generateBlockSuggestions = (
       })
       .filter(Boolean)
       .join(" ");
-    const inferred = tokenizeKeywords(`${experienceDescriptions} ${educationDescriptions}`, 20).map((token) => capitalize(token));
-    const mergedSkills = [...new Set([...existingSkills, ...inferred])].slice(0, 20);
+    const inferred = tokenizeKeywords(`${experienceDescriptions} ${educationDescriptions}`, 40).map((token) => capitalize(token));
+    // Like the real providers are instructed to, return only skills the CV doesn't already
+    // know about — never echo existing_skills or current_pool. The generic bank keeps dev
+    // refreshes producing new suggestions after the CV-derived keywords run out.
+    const knownSkills = new Set([...existingSkills, ...currentPool].map((item) => item.toLowerCase()));
+    const freshSkills = [...new Set([...inferred, ...MOCK_SKILL_BANK])].filter(
+      (skill) => !knownSkills.has(skill.toLowerCase())
+    );
     const suggestedBlock = {
       ...block,
       fields: {
         ...asRecord(block.fields),
-        skills: mergedSkills
+        skills: freshSkills.slice(0, 20)
       }
     };
 

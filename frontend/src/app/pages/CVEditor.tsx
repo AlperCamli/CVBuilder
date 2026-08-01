@@ -98,7 +98,6 @@ import {
   resolveCanonicalAiBlockId
 } from "./cv-editor-ai-guard";
 import {
-  buildSkillsPoolDataPatch,
   parseSkillsPoolMetadata,
   parseSkillsPoolMetadataFromBlockMeta,
   SKILLS_POOL_REFRESH_DAILY_LIMIT
@@ -420,7 +419,6 @@ interface SkillPoolState {
   lastGeneratedAt: string | null;
   refreshCountDay: string;
   refreshCountValue: number;
-  shuffleUsed: boolean;
 }
 
 // String narrative fields edited as bullet lists, per block type. Array-shaped bullet
@@ -1640,12 +1638,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
-    const planCode = (me?.current_plan?.plan_code ?? "free").toLowerCase();
-    if (planCode === "free") {
-      setSkillsPoolError("Refresh is available on a paid plan.");
-      return;
-    }
-
     const resolvedBlockId = resolveCanonicalAiBlockId(section, getSectionFirstBlockId(section) ?? undefined);
     if (!resolvedBlockId) {
       setSkillsPoolError("No block is available for refresh.");
@@ -2229,7 +2221,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     const suggestedSkills = sectionPool.items.filter(
       (skill) => !sectionSkillValues.has(skill.trim().toLowerCase())
     );
-    const isPaidPlan = (me?.current_plan?.plan_code ?? "free").toLowerCase() !== "free";
     const refreshesUsedToday =
       sectionPool.refreshCountDay === new Date().toISOString().slice(0, 10)
         ? sectionPool.refreshCountValue
@@ -2281,7 +2272,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 skillsPoolLoading ||
                 skillsPoolRefreshing ||
                 sectionPool.items.length === 0 ||
-                (isPaidPlan && refreshesLeftToday === 0)
+                refreshesLeftToday === 0
               }
               className="h-7 px-2.5 gap-1"
               style={{
@@ -2293,7 +2284,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               }}
             >
               <RefreshCw size={12} />
-              {isPaidPlan ? `Refresh (${refreshesLeftToday} left today)` : "Refresh pool"}
+              {`Refresh (${refreshesLeftToday} left today)`}
             </Button>
             <Button
               type="button"

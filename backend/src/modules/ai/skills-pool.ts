@@ -2,14 +2,15 @@ import type { CvBlock, CvContent } from "../../shared/cv-content/cv-content.type
 
 export const SKILLS_POOL_MAX_SIZE = 20;
 export const TAILORED_SKILLS_MAX_SIZE = 24;
-export const SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT = 2;
+// Per-CV daily refresh cap for every plan; free plans are additionally gated by the monthly
+// AI-action quota.
+export const SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT = 5;
 
 export interface SkillsPoolMetadata {
   skill_pool_items: string[];
   skill_pool_last_generated_at: string | null;
   skill_pool_refresh_count_day: string;
   skill_pool_refresh_count_value: number;
-  skill_pool_shuffle_used: boolean;
 }
 
 export interface SkillsPoolWorkExperienceEntry {
@@ -26,6 +27,7 @@ export interface SkillsPoolEducationEntry {
 
 export interface SkillsPoolContext {
   existing_skills: string[];
+  current_pool: string[];
   work_experience: SkillsPoolWorkExperienceEntry[];
   education: SkillsPoolEducationEntry[];
 }
@@ -43,20 +45,6 @@ const asTrimmedString = (value: unknown): string => {
     return String(value).trim();
   }
   return "";
-};
-
-const asBoolean = (value: unknown): boolean => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return normalized === "true" || normalized === "1" || normalized === "yes";
-  }
-  if (typeof value === "number") {
-    return value === 1;
-  }
-  return false;
 };
 
 const asNonNegativeInt = (value: unknown): number => {
@@ -172,9 +160,18 @@ export const extractSkillsPoolMetadata = (metaInput: unknown): SkillsPoolMetadat
     skill_pool_items: dedupeSkills(asStringArray(meta.skill_pool_items)),
     skill_pool_last_generated_at: asTrimmedString(meta.skill_pool_last_generated_at) || null,
     skill_pool_refresh_count_day: asTrimmedString(meta.skill_pool_refresh_count_day),
-    skill_pool_refresh_count_value: asNonNegativeInt(meta.skill_pool_refresh_count_value),
-    skill_pool_shuffle_used: asBoolean(meta.skill_pool_shuffle_used)
+    skill_pool_refresh_count_value: asNonNegativeInt(meta.skill_pool_refresh_count_value)
   };
+};
+
+// Case- and whitespace-insensitive key used to compare skills across the pool, the CV list,
+// and freshly generated candidates.
+export const skillComparisonKey = (value: string): string =>
+  value.replace(/\s+/g, " ").trim().toLowerCase();
+
+export const filterNewSkills = (candidates: string[], excluded: string[]): string[] => {
+  const excludedKeys = new Set(excluded.map((item) => skillComparisonKey(item)));
+  return candidates.filter((candidate) => !excludedKeys.has(skillComparisonKey(candidate)));
 };
 
 export const extractPoolSkillsFromSuggestedBlock = (suggestedBlock: Record<string, unknown>): string[] => {
@@ -183,7 +180,11 @@ export const extractPoolSkillsFromSuggestedBlock = (suggestedBlock: Record<strin
   return dedupeSkills(values);
 };
 
-export const collectSkillsPoolContext = (content: CvContent, currentBlock: CvBlock): SkillsPoolContext => {
+export const collectSkillsPoolContext = (
+  content: CvContent,
+  currentBlock: CvBlock,
+  currentPool: string[] = []
+): SkillsPoolContext => {
   const currentFields = asRecord(currentBlock.fields);
   const existingSkills = dedupeSkills([
     ...asStringArray(currentFields.skills),
@@ -222,6 +223,7 @@ export const collectSkillsPoolContext = (content: CvContent, currentBlock: CvBlo
 
   return {
     existing_skills: existingSkills,
+    current_pool: dedupeSkills(currentPool),
     work_experience: workExperienceDescriptions,
     education: educationEntries
   };
@@ -234,8 +236,7 @@ export const buildSkillsPoolMetaForGeneration = (
   skill_pool_items: dedupeSkills(skills),
   skill_pool_last_generated_at: nowIso,
   skill_pool_refresh_count_day: "",
-  skill_pool_refresh_count_value: 0,
-  skill_pool_shuffle_used: false
+  skill_pool_refresh_count_value: 0
 });
 
 export const buildSkillsPoolMetaForRealRefresh = (
@@ -251,7 +252,6 @@ export const buildSkillsPoolMetaForRealRefresh = (
     skill_pool_items: dedupeSkills(skills),
     skill_pool_last_generated_at: nowIso,
     skill_pool_refresh_count_day: utcDayKey,
-    skill_pool_refresh_count_value: refreshedCount,
-    skill_pool_shuffle_used: true
+    skill_pool_refresh_count_value: refreshedCount
   };
 };

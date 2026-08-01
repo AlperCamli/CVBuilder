@@ -103,6 +103,7 @@ import {
   dedupeSkills,
   extractPoolSkillsFromSuggestedBlock,
   extractSkillsPoolMetadata,
+  filterNewSkills,
   SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT,
   TAILORED_SKILLS_MAX_SIZE,
   toUtcDateKey
@@ -1447,10 +1448,10 @@ export class AiService {
           ...suggestedFields,
           skills: parsedSkills
         },
-        meta: {
-          ...asRecord(fallbackBlock.meta),
-          ...buildSkillsPoolMetaForGeneration(parsedSkills, new Date().toISOString())
-        }
+        // No pool meta here: these skills go straight into the CV, and the suggestion pool
+        // only holds not-yet-accepted skills. Seeding it with the accepted list would make
+        // the Suggest Skills panel open with nothing to offer.
+        meta: asRecord(fallbackBlock.meta)
       },
       fallbackBlock
     );
@@ -1662,14 +1663,10 @@ export class AiService {
     if (isSkillsBlock) {
       const currentPoolMeta = extractSkillsPoolMetadata(currentBlock.block.meta);
       const hasExistingPool = currentPoolMeta.skill_pool_items.length > 0;
-      const plan = await this.billingService.getCurrentPlanSummary(session.appUser.id);
-      const planCode = asString(plan.plan_code).toLowerCase();
 
+      // Refresh is not plan-gated: every plan gets the same per-CV daily cap, and free users
+      // additionally spend their monthly AI-action quota (enforced by executeFlow).
       if (hasExistingPool) {
-        if (planCode === "free") {
-          throw new ConflictError("Skills pool refresh is available only for Pro users.");
-        }
-
         const dayKey = toUtcDateKey(new Date());
         const usedToday =
           currentPoolMeta.skill_pool_refresh_count_day === dayKey
@@ -1680,7 +1677,11 @@ export class AiService {
         }
       }
 
-      const skillsPoolContext = collectSkillsPoolContext(target.current_content, currentBlock.block);
+      const skillsPoolContext = collectSkillsPoolContext(
+        target.current_content,
+        currentBlock.block,
+        currentPoolMeta.skill_pool_items
+      );
       const userInstruction = input.user_instruction ?? "";
 
       const executed = await this.executeFlow({
@@ -1700,7 +1701,7 @@ export class AiService {
           skills_pool_context: skillsPoolContext
         },
         user_prompt:
-          "Generate a final non-duplicate skills pool from existing skills, work experience descriptions, and education context. Return only valid structured suggested_block with fields.skills as string array (max 20)."
+          "Suggest new skills for this CV based on the work experience descriptions and education context. Do NOT repeat any skill already listed in existing_skills or current_pool — every returned skill must be new. Return only valid structured suggested_block with fields.skills as string array (max 20)."
       });
 
       const output = asRecord(executed.output);
@@ -1717,17 +1718,28 @@ export class AiService {
         });
       }
 
-      const nextPoolMeta = hasExistingPool
-        ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, parsedSkills, nowIso, utcDay)
-        : buildSkillsPoolMetaForGeneration(parsedSkills, nowIso);
+      // The pool holds only skills not yet accepted into the CV. Models sometimes echo known
+      // skills despite the prompt, so filter server-side; on refresh, new skills go first and
+      // still-pending suggestions are kept (dropped from the tail only when over capacity).
+      const acceptedSkills = skillsPoolContext.existing_skills;
+      const newSkills = filterNewSkills(parsedSkills, [
+        ...acceptedSkills,
+        ...currentPoolMeta.skill_pool_items
+      ]);
+      const retainedPool = filterNewSkills(currentPoolMeta.skill_pool_items, acceptedSkills);
+      const nextPoolItems = hasExistingPool
+        ? dedupeSkills([...newSkills, ...retainedPool])
+        : filterNewSkills(parsedSkills, acceptedSkills);
 
+      const nextPoolMeta = hasExistingPool
+        ? buildSkillsPoolMetaForRealRefresh(currentPoolMeta, nextPoolItems, nowIso, utcDay)
+        : buildSkillsPoolMetaForGeneration(nextPoolItems, nowIso);
+
+      // Only the pool metadata changes — the block's skills field (the user's accepted skills)
+      // must never be rewritten by pool generation or refresh.
       const suggestedBlock = normalizeCvBlock(
         {
           ...currentBlock.block,
-          fields: {
-            ...asRecord(currentBlock.block.fields),
-            skills: parsedSkills
-          },
           meta: {
             ...asRecord(currentBlock.block.meta),
             ...nextPoolMeta

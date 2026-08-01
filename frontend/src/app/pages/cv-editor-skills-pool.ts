@@ -1,15 +1,15 @@
 const SKILL_POOL_MAX_ITEMS = 20;
 
 // Mirrors the backend's SKILLS_POOL_REAL_REFRESH_DAILY_LIMIT so the editor can show remaining
-// refreshes before the server rejects with a conflict.
-export const SKILLS_POOL_REFRESH_DAILY_LIMIT = 2;
+// refreshes before the server rejects with a conflict. Applies to every plan; free plans are
+// additionally limited by the monthly AI-action quota.
+export const SKILLS_POOL_REFRESH_DAILY_LIMIT = 5;
 
 export interface SkillsPoolMetadata {
   items: string[];
   lastGeneratedAt: string | null;
   refreshCountDay: string;
   refreshCountValue: number;
-  shuffleUsed: boolean;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -35,20 +35,6 @@ const asStringArray = (value: unknown): string[] => {
   return value
     .map((item) => asTrimmedString(item))
     .filter((item) => item.length > 0);
-};
-
-const asBoolean = (value: unknown): boolean => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return normalized === "true" || normalized === "1" || normalized === "yes";
-  }
-  if (typeof value === "number") {
-    return value === 1;
-  }
-  return false;
 };
 
 const asNonNegativeInt = (value: unknown): number => {
@@ -91,14 +77,12 @@ export const parseSkillsPoolMetadata = (value: unknown): SkillsPoolMetadata => {
   const lastGeneratedAt = asTrimmedString(data.skillPoolLastGeneratedAt) || null;
   const refreshCountDay = asTrimmedString(data.skillPoolRefreshCountDay);
   const refreshCountValue = asNonNegativeInt(data.skillPoolRefreshCountValue);
-  const shuffleUsed = asBoolean(data.skillPoolShuffleUsed);
 
   return {
     items,
     lastGeneratedAt,
     refreshCountDay,
-    refreshCountValue,
-    shuffleUsed
+    refreshCountValue
   };
 };
 
@@ -108,14 +92,12 @@ export const parseSkillsPoolMetadataFromBlockMeta = (value: unknown): SkillsPool
   const lastGeneratedAt = asTrimmedString(meta.skill_pool_last_generated_at) || null;
   const refreshCountDay = asTrimmedString(meta.skill_pool_refresh_count_day);
   const refreshCountValue = asNonNegativeInt(meta.skill_pool_refresh_count_value);
-  const shuffleUsed = asBoolean(meta.skill_pool_shuffle_used);
 
   return {
     items,
     lastGeneratedAt,
     refreshCountDay,
-    refreshCountValue,
-    shuffleUsed
+    refreshCountValue
   };
 };
 
@@ -123,16 +105,14 @@ export const buildSkillsPoolDataPatch = (meta: SkillsPoolMetadata): Record<strin
   skillPoolItems: clampSkillsPoolItems(meta.items),
   skillPoolLastGeneratedAt: meta.lastGeneratedAt,
   skillPoolRefreshCountDay: meta.refreshCountDay,
-  skillPoolRefreshCountValue: Math.max(0, Math.floor(meta.refreshCountValue)),
-  skillPoolShuffleUsed: Boolean(meta.shuffleUsed)
+  skillPoolRefreshCountValue: Math.max(0, Math.floor(meta.refreshCountValue))
 });
 
 export const buildSkillsPoolBlockMetaPatch = (meta: SkillsPoolMetadata): Record<string, unknown> => ({
   skill_pool_items: clampSkillsPoolItems(meta.items),
   skill_pool_last_generated_at: meta.lastGeneratedAt,
   skill_pool_refresh_count_day: meta.refreshCountDay,
-  skill_pool_refresh_count_value: Math.max(0, Math.floor(meta.refreshCountValue)),
-  skill_pool_shuffle_used: Boolean(meta.shuffleUsed)
+  skill_pool_refresh_count_value: Math.max(0, Math.floor(meta.refreshCountValue))
 });
 
 export const parseSkillsPoolItemsFromSuggestedContent = (content: Record<string, unknown>): string[] => {

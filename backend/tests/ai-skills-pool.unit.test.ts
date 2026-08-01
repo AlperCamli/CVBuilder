@@ -217,9 +217,18 @@ describe("skills-pool helpers", () => {
     const context = collectSkillsPoolContext(cv.current_content, skillsBlock);
 
     expect(context.existing_skills).toEqual(["TypeScript", "React"]);
+    expect(context.current_pool).toEqual([]);
     expect(context.work_experience).toHaveLength(2);
     expect(context.work_experience[0]?.label).toBe("work experience 1");
     expect(context.education[0]?.institution).toBe("Tech University");
+  });
+
+  it("includes the current pool in the context so providers can avoid repeating it", () => {
+    const cv = createMasterCvRecord();
+    const skillsBlock = cv.current_content.sections[0].blocks[0];
+    const context = collectSkillsPoolContext(cv.current_content, skillsBlock, ["Node.js", "node.js", "AWS"]);
+
+    expect(context.current_pool).toEqual(["Node.js", "AWS"]);
   });
 
   it("extracts and deduplicates suggested skills", () => {
@@ -261,36 +270,19 @@ describe("skills-pool helpers", () => {
 });
 
 describe("AiService skills pool refresh rules", () => {
-  it("blocks refresh for free users when pool already exists", async () => {
+  it("allows free users to refresh an existing pool via their monthly AI quota", async () => {
     const cv = createMasterCvRecord({
       skill_pool_items: ["Node.js"],
       skill_pool_last_generated_at: NOW
     });
-    const { service } = makeService(cv, "free");
-
-    await expect(
-      service.suggestBlock(session, {
-        master_cv_id: "master-1",
-        block_id: "skills-block",
-        action_type: "improve"
-      })
-    ).rejects.toBeInstanceOf(ConflictError);
-  });
-
-  it("allows real refresh without requiring prior shuffle", async () => {
-    const cv = createMasterCvRecord({
-      skill_pool_items: ["Node.js"],
-      skill_pool_last_generated_at: NOW,
-      skill_pool_shuffle_used: false
-    });
-    const { service, createSuggestions } = makeService(cv, "pro");
+    const { service, createSuggestions } = makeService(cv, "free");
 
     vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
-      ai_run: { id: "run-refresh" },
+      ai_run: { id: "run-free-refresh" },
       output: {
         suggested_block: {
           fields: {
-            skills: ["Node.js", "Redis", "Kafka"]
+            skills: ["Redis", "Kafka"]
           }
         }
       }
@@ -305,14 +297,32 @@ describe("AiService skills pool refresh rules", () => {
     expect(createSuggestions).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks real refresh when daily limit is reached", async () => {
+  it("applies the same daily cap of 5 to free users", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const cv = createMasterCvRecord({
       skill_pool_items: ["Node.js"],
       skill_pool_last_generated_at: NOW,
-      skill_pool_shuffle_used: true,
       skill_pool_refresh_count_day: today,
-      skill_pool_refresh_count_value: 2
+      skill_pool_refresh_count_value: 5
+    });
+    const { service } = makeService(cv, "free");
+
+    await expect(
+      service.suggestBlock(session, {
+        master_cv_id: "master-1",
+        block_id: "skills-block",
+        action_type: "improve"
+      })
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("blocks paid refresh when the daily limit of 5 is reached", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const cv = createMasterCvRecord({
+      skill_pool_items: ["Node.js"],
+      skill_pool_last_generated_at: NOW,
+      skill_pool_refresh_count_day: today,
+      skill_pool_refresh_count_value: 5
     });
     const { service } = makeService(cv, "pro");
 
@@ -325,7 +335,37 @@ describe("AiService skills pool refresh rules", () => {
     ).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it("generates valid pool suggestions and persists metadata", async () => {
+  it("allows paid refresh below the daily limit of 5", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const cv = createMasterCvRecord({
+      skill_pool_items: ["Node.js"],
+      skill_pool_last_generated_at: NOW,
+      skill_pool_refresh_count_day: today,
+      skill_pool_refresh_count_value: 4
+    });
+    const { service, createSuggestions } = makeService(cv, "pro");
+
+    vi.spyOn(service as unknown as ExecuteFlowHost, "executeFlow").mockResolvedValue({
+      ai_run: { id: "run-paid-refresh" },
+      output: {
+        suggested_block: {
+          fields: {
+            skills: ["Redis"]
+          }
+        }
+      }
+    });
+
+    await service.suggestBlock(session, {
+      master_cv_id: "master-1",
+      block_id: "skills-block",
+      action_type: "improve"
+    });
+
+    expect(createSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it("generates a pool of new skills without touching the CV skills field", async () => {
     const cv = createMasterCvRecord();
     const { service, createSuggestions, billingService } = makeService(cv, "pro");
 
@@ -355,18 +395,18 @@ describe("AiService skills pool refresh rules", () => {
     const suggestedContent = payload.suggested_content as Record<string, unknown>;
     const suggestedFields = (suggestedContent.fields as Record<string, unknown>).skills as string[];
     const suggestedMeta = suggestedContent.meta as Record<string, unknown>;
-    expect(suggestedFields).toEqual(["TypeScript", "Node.js", "AWS"]);
-    expect(Array.isArray(suggestedMeta.skill_pool_items)).toBe(true);
-    expect(suggestedMeta.skill_pool_shuffle_used).toBe(false);
+    // Accepted skills stay exactly as they were — pool generation must not rewrite the CV.
+    expect(suggestedFields).toEqual(["TypeScript", "React"]);
+    // The pool keeps only skills the CV doesn't already have (TypeScript is filtered out).
+    expect(suggestedMeta.skill_pool_items).toEqual(["Node.js", "AWS"]);
     expect((billingService.recordAiActionUsage as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
   });
 
-  it("increments daily refresh counters on real refresh", async () => {
+  it("prepends new skills, keeps pending suggestions, and increments counters on refresh", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const cv = createMasterCvRecord({
       skill_pool_items: ["Node.js"],
       skill_pool_last_generated_at: NOW,
-      skill_pool_shuffle_used: true,
       skill_pool_refresh_count_day: today,
       skill_pool_refresh_count_value: 1
     });
@@ -377,7 +417,9 @@ describe("AiService skills pool refresh rules", () => {
       output: {
         suggested_block: {
           fields: {
-            skills: ["Node.js", "Redis", "Kafka"]
+            // Node.js echoes the current pool and TypeScript echoes an accepted skill —
+            // only Redis and Kafka are genuinely new.
+            skills: ["Node.js", "TypeScript", "Redis", "Kafka"]
           }
         }
       }
@@ -390,8 +432,11 @@ describe("AiService skills pool refresh rules", () => {
     });
 
     const payload = createSuggestions.mock.calls[0]?.[0]?.[0] as Record<string, unknown>;
-    const suggestedMeta = (payload.suggested_content as Record<string, unknown>).meta as Record<string, unknown>;
-    expect(suggestedMeta.skill_pool_shuffle_used).toBe(true);
+    const suggestedContent = payload.suggested_content as Record<string, unknown>;
+    const suggestedFields = (suggestedContent.fields as Record<string, unknown>).skills as string[];
+    const suggestedMeta = suggestedContent.meta as Record<string, unknown>;
+    expect(suggestedFields).toEqual(["TypeScript", "React"]);
+    expect(suggestedMeta.skill_pool_items).toEqual(["Redis", "Kafka", "Node.js"]);
     expect(suggestedMeta.skill_pool_refresh_count_day).toBe(today);
     expect(suggestedMeta.skill_pool_refresh_count_value).toBe(2);
   });

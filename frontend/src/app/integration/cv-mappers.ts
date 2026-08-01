@@ -1580,8 +1580,7 @@ export const cvContentToEditorSections = (
           skillPoolItems: skillsPoolMeta.items,
           skillPoolLastGeneratedAt: skillsPoolMeta.lastGeneratedAt,
           skillPoolRefreshCountDay: skillsPoolMeta.refreshCountDay,
-          skillPoolRefreshCountValue: skillsPoolMeta.refreshCountValue,
-          skillPoolShuffleUsed: skillsPoolMeta.shuffleUsed
+          skillPoolRefreshCountValue: skillsPoolMeta.refreshCountValue
         }
       });
       continue;
@@ -2202,10 +2201,7 @@ export const editorSectionsToCvContent = (
           refreshCountValue:
             typeof asRecord(section.data).skillPoolRefreshCountValue === "number"
               ? Number(asRecord(section.data).skillPoolRefreshCountValue)
-              : Number.parseInt(asString(asRecord(section.data).skillPoolRefreshCountValue), 10) || 0,
-          shuffleUsed:
-            asString(asRecord(section.data).skillPoolShuffleUsed).toLowerCase() === "true" ||
-            asRecord(section.data).skillPoolShuffleUsed === true
+              : Number.parseInt(asString(asRecord(section.data).skillPoolRefreshCountValue), 10) || 0
         });
         const preferredBlockId = asString(asRecord(section.data).blockId);
         const sectionId = section.backendSectionId || deterministicSectionId("skills", sectionIndex);
