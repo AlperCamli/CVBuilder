@@ -1546,6 +1546,35 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     return cvKind === "tailored" ? { tailored_cv_id: cvId } : { master_cv_id: cvId };
   };
 
+  // Resolves the persisted skills block id for a section. Falls back to deriving the
+  // deterministic id from the same editor→content mapping persistCv uses, because a skills
+  // section added this session (or saved before its block id was tracked) has no id in state
+  // even though the persisted content always contains exactly one skills block.
+  const resolveSkillsPoolBlockId = (targetSection: EditorSection, blockId?: string): string | null => {
+    const canonical = resolveCanonicalAiBlockId(
+      targetSection,
+      blockId ?? getSectionFirstBlockId(targetSection) ?? undefined
+    );
+    if (canonical) {
+      return canonical;
+    }
+
+    const orderedBodySections = sections
+      .filter((section) => section.type !== "header")
+      .sort((a, b) => a.order - b.order);
+    const sectionIndex = orderedBodySections.findIndex((section) => section.id === targetSection.id);
+    if (sectionIndex < 0) {
+      return null;
+    }
+
+    const mappedSection = editorSectionsToCvContent(sections, language, undefined, moduleType)
+      .sections[sectionIndex];
+    const mappedBlockId = mappedSection?.blocks?.[0]?.id;
+    return typeof mappedBlockId === "string" && mappedBlockId.trim().length > 0
+      ? mappedBlockId
+      : null;
+  };
+
   const openSkillsPool = async (sectionId: string, blockId?: string) => {
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
@@ -1553,33 +1582,56 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
-    const resolvedBlockId = resolveCanonicalAiBlockId(
-      targetSection,
-      blockId ?? getSectionFirstBlockId(targetSection) ?? undefined
-    );
-
-    if (!resolvedBlockId) {
-      setError("No block is available for skills suggestions in this section. Save and try again.");
-      return;
-    }
-
     setSkillsPoolSectionId(sectionId);
     setSkillsPoolError(null);
+    // Open the panel immediately so loading and errors are visible from the first click.
+    setShowSkillsPoolDialog(true);
 
     const poolState = resolveSkillPoolState(targetSection);
     if (poolState.items.length > 0) {
-      setShowSkillsPoolDialog(true);
+      const acceptedSkills = new Set(
+        (Array.isArray((targetSection.data as Record<string, unknown>)?.skills)
+          ? ((targetSection.data as Record<string, unknown>).skills as unknown[])
+          : []
+        )
+          .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+          .filter((value) => value.length > 0)
+      );
+      const hasPendingSuggestions = poolState.items.some(
+        (skill) => !acceptedSkills.has(skill.trim().toLowerCase())
+      );
+      if (hasPendingSuggestions) {
+        return;
+      }
+
+      // Every pooled suggestion is already accepted — clicking "Suggest skills" should still
+      // deliver new recommendations, so refresh right away instead of showing an empty strip.
+      await refreshSkillsPool(sectionId);
       return;
     }
 
     setSkillsPoolLoading(true);
     try {
-      if (dirty) {
+      // A never-persisted skills section has no block to target yet — save first so the
+      // deterministic skills block exists server-side before the AI call references it.
+      const needsPersist =
+        dirty ||
+        !resolveCanonicalAiBlockId(
+          targetSection,
+          blockId ?? getSectionFirstBlockId(targetSection) ?? undefined
+        );
+      if (needsPersist) {
         const persisted = await persistCv("auto");
         if (!persisted) {
           setSkillsPoolError("Failed to save current edits before generating skills pool.");
           return;
         }
+      }
+
+      const resolvedBlockId = resolveSkillsPoolBlockId(targetSection, blockId);
+      if (!resolvedBlockId) {
+        setSkillsPoolError("Skills block could not be resolved. Reload the page and try again.");
+        return;
       }
 
       const targetPayload = buildAiTargetPayload();
@@ -1622,12 +1674,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
   };
 
-  const refreshSkillsPool = async () => {
-    if (!skillsPoolSectionId) {
+  const refreshSkillsPool = async (sectionIdOverride?: string) => {
+    const targetSectionId = sectionIdOverride ?? skillsPoolSectionId;
+    if (!targetSectionId) {
       return;
     }
 
-    const section = sections.find((item) => item.id === skillsPoolSectionId);
+    const section = sections.find((item) => item.id === targetSectionId);
     if (!section) {
       return;
     }
@@ -1638,7 +1691,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
-    const resolvedBlockId = resolveCanonicalAiBlockId(section, getSectionFirstBlockId(section) ?? undefined);
+    const resolvedBlockId = resolveSkillsPoolBlockId(section);
     if (!resolvedBlockId) {
       setSkillsPoolError("No block is available for refresh.");
       return;
