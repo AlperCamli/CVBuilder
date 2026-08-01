@@ -453,6 +453,7 @@ export const createTestConfig = (): AppConfig => {
       openaiApiKey: null,
       openaiModelLight: "gpt-5.6-luna",
       openaiModelHeavy: "gpt-5.6-terra",
+      openaiReasoningEffort: "low",
       anthropicApiKey: null,
       anthropicModelLight: "claude-haiku-4-5",
       anthropicModelHeavy: "claude-sonnet-5",

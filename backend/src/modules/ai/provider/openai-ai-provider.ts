@@ -24,9 +24,99 @@ const MAX_PROVIDER_RETRY_HINT_DELAY_MS = 120_000;
 // constraints are tolerated in non-strict mode, so only "$schema" is dropped.
 const OPENAI_SCHEMA_DROPPED_KEYS = new Set(["$schema"]);
 
+// Strict mode additionally rejects value constraints and demands closed,
+// all-required objects.
+const OPENAI_STRICT_SCHEMA_DROPPED_KEYS = new Set([
+  "$schema",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "format",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minItems",
+  "maxItems",
+  "minProperties",
+  "maxProperties"
+]);
+
 export const sanitizeOpenAiResponseJsonSchema = (value: unknown): unknown => {
   return stripJsonSchemaKeys(value, OPENAI_SCHEMA_DROPPED_KEYS);
 };
+
+// Strict mode requires every object to be closed with all properties required;
+// record-style objects (z.record) and optional properties cannot be expressed.
+const isStrictModeCompatible = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.every((item) => isStrictModeCompatible(item));
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const additionalProperties = record.additionalProperties;
+    if (
+      additionalProperties === true ||
+      (typeof additionalProperties === "object" && additionalProperties !== null)
+    ) {
+      return false;
+    }
+    if (record.patternProperties) {
+      return false;
+    }
+
+    const properties = record.properties;
+    if (properties && typeof properties === "object") {
+      const propertyKeys = Object.keys(properties as Record<string, unknown>);
+      const required = Array.isArray(record.required) ? (record.required as unknown[]) : [];
+      const requiredSet = new Set(required.filter((item) => typeof item === "string"));
+      if (propertyKeys.some((key) => !requiredSet.has(key))) {
+        return false;
+      }
+    }
+
+    return Object.values(record).every((item) => isStrictModeCompatible(item));
+  }
+
+  return true;
+};
+
+const closeObjectsForStrictMode = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => closeObjectsForStrictMode(item));
+  }
+
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      result[key] = closeObjectsForStrictMode(item);
+    }
+
+    if (result.type === "object" || result.properties) {
+      result.additionalProperties = false;
+    }
+
+    return result;
+  }
+
+  return value;
+};
+
+export const buildStrictOpenAiResponseJsonSchema = (
+  value: unknown
+): Record<string, unknown> | null => {
+  if (!isStrictModeCompatible(value)) {
+    return null;
+  }
+
+  return closeObjectsForStrictMode(
+    stripJsonSchemaKeys(value, OPENAI_STRICT_SCHEMA_DROPPED_KEYS)
+  ) as Record<string, unknown>;
+};
+
+export type OpenAiReasoningEffort = "none" | "minimal" | "low" | "medium" | "high";
 
 interface OpenAiProviderErrorContext {
   providerStatus: number | null;
@@ -99,6 +189,7 @@ export class OpenAiAiProvider implements AiProvider {
   private readonly heavyModelName: string | null;
   private readonly maxOutputTokensLight: number;
   private readonly maxOutputTokensHeavy: number;
+  private readonly reasoningEffort: OpenAiReasoningEffort;
   private readonly randomFn: () => number;
   private readonly sleepFn: (ms: number) => Promise<void>;
 
@@ -115,6 +206,7 @@ export class OpenAiAiProvider implements AiProvider {
       requestTimeoutMs?: number;
       maxOutputTokensLight?: number;
       maxOutputTokensHeavy?: number;
+      reasoningEffort?: OpenAiReasoningEffort;
       randomFn?: () => number;
       sleepFn?: (ms: number) => Promise<void>;
     }
@@ -134,6 +226,9 @@ export class OpenAiAiProvider implements AiProvider {
     this.heavyModelName = options?.heavyModelName?.trim() || null;
     this.maxOutputTokensLight = clampNonNegativeInteger(options?.maxOutputTokensLight ?? 4_096, 4_096);
     this.maxOutputTokensHeavy = clampNonNegativeInteger(options?.maxOutputTokensHeavy ?? 16_384, 16_384);
+    // These flows are structured extraction, not open-ended reasoning; low effort
+    // keeps reasoning tokens from eating the output cap.
+    this.reasoningEffort = options?.reasoningEffort ?? "low";
     this.randomFn = options?.randomFn ?? Math.random;
     this.sleepFn = options?.sleepFn ?? sleep;
   }
@@ -187,7 +282,11 @@ export class OpenAiAiProvider implements AiProvider {
       target: "jsonSchema7",
       $refStrategy: "none"
     }) as Record<string, unknown>;
-    const schema = sanitizeOpenAiResponseJsonSchema(rawSchema) as Record<string, unknown>;
+    // Prefer strict server-side schema enforcement; flows whose schemas cannot be
+    // expressed in strict mode (records, optional props) fall back to advisory mode
+    // with client-side Zod validation.
+    const strictSchema = buildStrictOpenAiResponseJsonSchema(rawSchema);
+    const schema = strictSchema ?? (sanitizeOpenAiResponseJsonSchema(rawSchema) as Record<string, unknown>);
 
     let lastErrorContext: OpenAiProviderErrorContext | null = null;
     let lastAttemptedModel = request.model_name;
@@ -207,12 +306,13 @@ export class OpenAiAiProvider implements AiProvider {
               { role: "user", content: buildUserMessageText(request) }
             ],
             max_completion_tokens: this.resolveMaxOutputTokens(request.flow_type),
+            reasoning_effort: this.reasoningEffort,
             response_format: {
               type: "json_schema",
               json_schema: {
                 name: "flow_output",
                 schema,
-                strict: false
+                strict: strictSchema !== null
               }
             }
           });
@@ -230,12 +330,19 @@ export class OpenAiAiProvider implements AiProvider {
           const responseText =
             typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
 
+          // A truncated response can still contain recoverable-looking partial JSON;
+          // failing here beats surfacing it as a schema-validation error downstream.
+          if (choice?.finish_reason === "length") {
+            throw new AiProviderError("OpenAI output was truncated by the output token limit", {
+              reason: "output_truncated_by_token_limit",
+              raw_output_excerpt: toDebugExcerpt(responseText),
+              attempted_models: attemptedModels
+            });
+          }
+
           if (!responseText) {
             throw new AiProviderError("OpenAI returned an empty response", {
-              reason:
-                choice?.finish_reason === "length"
-                  ? "output_truncated_by_token_limit"
-                  : "empty_response",
+              reason: "empty_response",
               raw_output_excerpt: "",
               attempted_models: attemptedModels
             });

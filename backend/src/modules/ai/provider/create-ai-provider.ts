@@ -41,7 +41,8 @@ export const createAiProvider = (config: AppConfig): AiProvider => {
       heavyModelName: config.ai.openaiModelHeavy,
       requestTimeoutMs: config.ai.requestTimeoutMs,
       maxOutputTokensLight: config.ai.maxOutputTokensLight,
-      maxOutputTokensHeavy: config.ai.maxOutputTokensHeavy
+      maxOutputTokensHeavy: config.ai.maxOutputTokensHeavy,
+      reasoningEffort: config.ai.openaiReasoningEffort
     });
   }
 

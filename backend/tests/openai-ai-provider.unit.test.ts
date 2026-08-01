@@ -66,9 +66,14 @@ describe("OpenAiAiProvider", () => {
     expect(call.messages[0].content).toContain("Generate follow-up questions");
     expect(call.messages[1].role).toBe("user");
     expect(call.messages[1].content).toContain("INPUT_PAYLOAD_JSON");
+    expect(call.reasoning_effort).toBe("low");
     expect(call.response_format.type).toBe("json_schema");
     expect(call.response_format.json_schema.schema.properties.questions).toBeDefined();
     expect(JSON.stringify(call.response_format.json_schema.schema)).not.toContain("$schema");
+    // follow_up_questions is all-required with closed objects -> strict enforcement
+    expect(call.response_format.json_schema.strict).toBe(true);
+    expect(JSON.stringify(call.response_format.json_schema.schema)).not.toContain("maxItems");
+    expect(call.response_format.json_schema.schema.additionalProperties).toBe(false);
   });
 
   it("routes heavy flows to the heavy model with the heavy output cap", async () => {
@@ -106,6 +111,10 @@ describe("OpenAiAiProvider", () => {
 
     expect(result.model_name).toBe("gpt-5.6-terra");
     expect(chatCompletionsCreateMock.mock.calls[0][0].max_completion_tokens).toBe(12000);
+    // cv_parse uses z.record fields, which strict mode cannot express
+    expect(chatCompletionsCreateMock.mock.calls[0][0].response_format.json_schema.strict).toBe(
+      false
+    );
   });
 
   it("recovers JSON payload from wrapper text", async () => {
@@ -217,6 +226,34 @@ describe("OpenAiAiProvider", () => {
     expect(thrown).toBeInstanceOf(AiProviderError);
     expect((thrown as AiProviderError).message).toBe("OpenAI refused the request");
     expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails fast on truncated partial JSON instead of passing it downstream", async () => {
+    const provider = new OpenAiAiProvider("gpt-5.6-terra", "openai-key");
+    chatCompletionsCreateMock.mockResolvedValue({
+      choices: [
+        {
+          // Parseable-looking fragment that would fail contract validation later
+          message: { content: "{\"topics\": [\"a\", \"b\"]", refusal: null },
+          finish_reason: "length"
+        }
+      ]
+    });
+
+    let thrown: unknown;
+    try {
+      await provider.generate(baseRequest);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AiProviderError);
+    expect((thrown as AiProviderError).message).toBe(
+      "OpenAI output was truncated by the output token limit"
+    );
+    expect((thrown as AiProviderError).details).toEqual(
+      expect.objectContaining({ reason: "output_truncated_by_token_limit" })
+    );
   });
 
   it("classifies truncated empty responses with a token-limit reason", async () => {

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
 const aiProviderSchema = z.enum(["mock", "gemini", "openai", "anthropic"]);
+const openaiReasoningEffortSchema = z.enum(["none", "minimal", "low", "medium", "high"]);
 
 const envSchema = z
   .object({
@@ -30,6 +31,7 @@ const envSchema = z
     OPENAI_API_KEY: z.string().min(1).optional(),
     AI_OPENAI_MODEL_LIGHT: z.string().min(1).default("gpt-5.6-luna"),
     AI_OPENAI_MODEL_HEAVY: z.string().min(1).default("gpt-5.6-terra"),
+    AI_OPENAI_REASONING_EFFORT: openaiReasoningEffortSchema.default("low"),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     AI_ANTHROPIC_MODEL_LIGHT: z.string().min(1).default("claude-haiku-4-5"),
     AI_ANTHROPIC_MODEL_HEAVY: z.string().min(1).default("claude-sonnet-5"),
@@ -130,6 +132,7 @@ export interface AppConfig {
     openaiApiKey: string | null;
     openaiModelLight: string;
     openaiModelHeavy: string;
+    openaiReasoningEffort: z.infer<typeof openaiReasoningEffortSchema>;
     anthropicApiKey: string | null;
     anthropicModelLight: string;
     anthropicModelHeavy: string;
@@ -250,6 +253,7 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       openaiApiKey: parsed.data.OPENAI_API_KEY ?? null,
       openaiModelLight: parsed.data.AI_OPENAI_MODEL_LIGHT,
       openaiModelHeavy: parsed.data.AI_OPENAI_MODEL_HEAVY,
+      openaiReasoningEffort: parsed.data.AI_OPENAI_REASONING_EFFORT,
       anthropicApiKey: parsed.data.ANTHROPIC_API_KEY ?? null,
       anthropicModelLight: parsed.data.AI_ANTHROPIC_MODEL_LIGHT,
       anthropicModelHeavy: parsed.data.AI_ANTHROPIC_MODEL_HEAVY,

@@ -50,6 +50,7 @@
 - `OPENAI_API_KEY` (required when `AI_PROVIDER=openai`)
 - `AI_OPENAI_MODEL_LIGHT` (default: `gpt-5.6-luna`) — light-tier OpenAI model for cheap flows
 - `AI_OPENAI_MODEL_HEAVY` (default: `gpt-5.6-terra`) — heavy-tier OpenAI model for `tailored_draft`, `cv_parse`, `professional_summary`
+- `AI_OPENAI_REASONING_EFFORT` (default: `low`, one of `none|minimal|low|medium|high`) — reasoning effort for GPT-5.x models; reasoning tokens count against the output caps, so low keeps structured JSON flows from truncating
 - `ANTHROPIC_API_KEY` (required when `AI_PROVIDER=anthropic`)
 - `AI_ANTHROPIC_MODEL_LIGHT` (default: `claude-haiku-4-5`) — light-tier Claude model for cheap flows
 - `AI_ANTHROPIC_MODEL_HEAVY` (default: `claude-sonnet-5`) — heavy-tier Claude model for `tailored_draft`, `cv_parse`, `professional_summary`
