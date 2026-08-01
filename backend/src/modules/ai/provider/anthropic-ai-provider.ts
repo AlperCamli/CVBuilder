@@ -255,15 +255,10 @@ export class AnthropicAiProvider implements AiProvider {
     const schema = useStructuredOutput
       ? (sanitizeAnthropicResponseJsonSchema(rawSchema) as Record<string, unknown>)
       : null;
+    // Structured outputs cannot carry maxItems/maxLength constraints, so the
+    // model always learns them from the prompt-embedded schema.
     const promptSchema = stripJsonSchemaKeys(rawSchema, new Set(["$schema"]));
-    const systemText = useStructuredOutput
-      ? buildSystemMessageText(request)
-      : [
-          buildSystemMessageText(request),
-          "<OUTPUT_JSON_SCHEMA>",
-          JSON.stringify(promptSchema),
-          "</OUTPUT_JSON_SCHEMA>"
-        ].join("\n\n");
+    const systemText = buildSystemMessageText(request, promptSchema);
 
     let lastErrorContext: AnthropicProviderErrorContext | null = null;
     let lastAttemptedModel = request.model_name;

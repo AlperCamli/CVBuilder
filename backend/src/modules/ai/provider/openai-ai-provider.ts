@@ -287,6 +287,10 @@ export class OpenAiAiProvider implements AiProvider {
     // with client-side Zod validation.
     const strictSchema = buildStrictOpenAiResponseJsonSchema(rawSchema);
     const schema = strictSchema ?? (sanitizeOpenAiResponseJsonSchema(rawSchema) as Record<string, unknown>);
+    // Strict mode cannot carry maxItems/maxLength constraints, so the model
+    // learns them from the prompt-embedded schema instead.
+    const promptSchema = sanitizeOpenAiResponseJsonSchema(rawSchema);
+    const systemText = buildSystemMessageText(request, promptSchema);
 
     let lastErrorContext: OpenAiProviderErrorContext | null = null;
     let lastAttemptedModel = request.model_name;
@@ -302,7 +306,7 @@ export class OpenAiAiProvider implements AiProvider {
           const response = await this.client.chat.completions.create({
             model: candidateModel,
             messages: [
-              { role: "system", content: buildSystemMessageText(request) },
+              { role: "system", content: systemText },
               { role: "user", content: buildUserMessageText(request) }
             ],
             max_completion_tokens: this.resolveMaxOutputTokens(request.flow_type),

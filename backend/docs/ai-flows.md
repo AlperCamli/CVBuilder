@@ -40,6 +40,10 @@ Shared provider behavior (`src/modules/ai/provider/provider-shared.ts`):
 - system/user prompt assembly with the prompt-injection guard around `input_payload`
 - one controlled JSON recovery pass (fenced-block extraction, balanced-brace scan, trailing-comma repair, schema-preferred candidate selection)
 
+Constraint handling:
+- No structured-output mode (OpenAI strict, Anthropic, Gemini) can enforce `maxItems`/`maxLength` constraints, so the OpenAI and Anthropic providers embed the full constraint-bearing JSON schema in the system prompt (`<OUTPUT_JSON_SCHEMA>`).
+- `job_analysis` output additionally passes through `coerceJobAnalysisOutputPayload` (`src/modules/ai/job-analysis-output-coercion.ts`), which clamps overflow topic/keyword lists and drops empty/over-length entries before contract validation, so a 31-keyword response degrades gracefully instead of failing the run.
+
 Provider-specific notes:
 - OpenAI: strict `json_schema` response format is enforced server-side whenever the flow schema is strict-compatible (closed objects, all properties required — e.g. `job_analysis`, `follow_up_questions`); other flows fall back to non-strict advisory schemas with Zod validation + recovery. `reasoning_effort` (default `low`, via `AI_OPENAI_REASONING_EFFORT`) limits GPT-5.x reasoning-token burn against the output cap, and `finish_reason=length` truncation fails fast with reason `output_truncated_by_token_limit` instead of surfacing as a contract-validation error. Model refusals surface as non-retryable `AiProviderError`s.
 - Anthropic: structured outputs (`output_config.format`) enforce the schema after sanitization (constraint keywords stripped, objects closed). Flows whose schemas contain record-style objects (e.g. `cv_parse`) fall back to a prompt-embedded schema plus the recovery pass, because Anthropic structured outputs require closed objects. `refusal`/`max_tokens` stop reasons surface as explicit errors; `529 overloaded` is retryable and triggers heavy->light fallback.

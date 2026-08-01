@@ -64,6 +64,9 @@ describe("OpenAiAiProvider", () => {
     expect(call.model).toBe("gpt-5.6-luna");
     expect(call.messages[0].role).toBe("system");
     expect(call.messages[0].content).toContain("Generate follow-up questions");
+    // Constraints stripped from the enforced schema must still reach the model
+    expect(call.messages[0].content).toContain("<OUTPUT_JSON_SCHEMA>");
+    expect(call.messages[0].content).toContain("maxItems");
     expect(call.messages[1].role).toBe("user");
     expect(call.messages[1].content).toContain("INPUT_PAYLOAD_JSON");
     expect(call.reasoning_effort).toBe("low");
