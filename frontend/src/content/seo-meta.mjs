@@ -80,33 +80,83 @@ export const WEB_APPLICATION_JSON_LD = {
       priceCurrency: "USD",
       availability: "https://schema.org/InStock",
     },
-    {
+    ...[
+      ["Weekly Pro", "4.99", "P1W"],
+      ["Monthly Pro", "14.99", "P1M"],
+      ["Annual Pro", "99.90", "P1Y"],
+    ].map(([name, price, billingDuration]) => ({
       "@type": "Offer",
-      name: "Pro",
-      price: "10",
+      name,
+      price,
       priceCurrency: "USD",
       availability: "https://schema.org/InStock",
       priceSpecification: {
         "@type": "UnitPriceSpecification",
-        price: "10",
+        price,
         priceCurrency: "USD",
-        billingDuration: "P1M",
-        referenceQuantity: {
-          "@type": "QuantitativeValue",
-          value: "1",
-          unitCode: "MON",
-        },
+        billingDuration,
       },
-    },
-    {
-      "@type": "Offer",
-      name: "Lifetime",
-      price: "99",
-      priceCurrency: "USD",
-      availability: "https://schema.org/InStock",
-    },
+    })),
   ],
 };
+
+// Shared with the visible guided page so its structured FAQ cannot drift.
+export const GUIDED_JOURNEY_FAQ_ITEMS = [
+  {
+    question: "Can I start without a card?",
+    answer: "Yes. The Free plan includes 3 tailored CVs, 5 exports, and 20 AI actions per month. Each allowance has its own limit. No credit card is required.",
+  },
+  {
+    question: "How is the Pro trial different?",
+    answer: "Eligible new subscribers can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at $4.99 per week unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
+  },
+  {
+    question: "Can I review the changes?",
+    answer: "Always. Select the keywords that fit, review suggestions, and edit your CV before exporting. Your experience stays the source of truth.",
+  },
+];
+
+function guidedJourneyRoute(pricing) {
+  const path = pricing ? "/guided-journey/pricing" : "/guided-journey";
+  const title = pricing
+    ? "Guided Journey Pricing | jobspecificCV"
+    : "Tailor Your CV in Minutes — Guided Journey | jobspecificCV";
+  const description = pricing
+    ? "Compare Weekly, Monthly, and Annual Pro by weekly equivalent. Monthly is $14.99 billed monthly. Start Free or explore the eligible 3-day Weekly trial."
+    : "Try the interactive CV demo with a friendly guide. Tailor your CV to a job description, review every change, and start free.";
+  return {
+    path,
+    snapshot: pricing ? "guided-journey-pricing" : "guided-journey",
+    clientEntry: "src/app/pages/GuidedJourneyPage.tsx",
+    title,
+    description,
+    canonical: absoluteUrl(path),
+    // The existing homepage and pricing remain the primary indexed pages.
+    robots: "noindex, follow",
+    ogType: "website",
+    ogTitle: title,
+    ogDescription: description,
+    ogImage: OG_IMAGE,
+    ogImageAlt: DEFAULT_IMAGE_ALT,
+    twitterTitle: title,
+    twitterDescription: description,
+    twitterImage: OG_IMAGE,
+    twitterImageAlt: DEFAULT_IMAGE_ALT,
+    lastmod: "2026-10-04",
+    includeInSitemap: false,
+    changefreq: "monthly",
+    priority: "0.7",
+    jsonLd: [
+      WEB_APPLICATION_JSON_LD,
+      faqPageJsonLd(GUIDED_JOURNEY_FAQ_ITEMS),
+      breadcrumbJsonLd([
+        { name: "Home", path: "/" },
+        { name: "Guided Journey", path: "/guided-journey" },
+        ...(pricing ? [{ name: "Pricing", path }] : []),
+      ]),
+    ],
+  };
+}
 
 // Must stay in sync with the visible FAQ section in src/app/pages/Landing.tsx
 // (see backend/docs/seo-structured-data.md).
@@ -286,7 +336,7 @@ function articleRoute(content, article) {
   };
 }
 
-// All indexable routes. `snapshot` is the filename (without .html) inside
+// All prerendered routes, including noindexed previews. `snapshot` is the filename inside
 // frontend/prerendered/. `content` is the parsed career-advice-content.json.
 export function buildSeoRoutes(content) {
   return [
@@ -305,7 +355,7 @@ export function buildSeoRoutes(content) {
       twitterTitle: "Tailor Your CV to Any Job Description in Minutes",
       twitterDescription: "Create an ATS-friendly CV tailored to a specific job description.",
       twitterImage: OG_IMAGE,
-      lastmod: "2026-06-30",
+      lastmod: "2026-10-04",
       includeInSitemap: true,
       changefreq: "weekly",
       priority: "1.0",
@@ -320,20 +370,20 @@ export function buildSeoRoutes(content) {
       snapshot: "pricing",
       title: "Pricing | jobspecificCV",
       description:
-        "Simple pricing for a faster job search. Start free, go Monthly Pro with a 3-day free trial, or pay once for Lifetime Pro. Cancel anytime.",
+        "Start free or choose Weekly, Monthly, or Annual Pro. Compare weekly equivalents with full billing totals. Eligible new subscribers can try Weekly Pro free for 3 days.",
       canonical: absoluteUrl("/pricing"),
       ogType: "website",
-      ogTitle: "jobspecificCV Pricing — Free, Monthly Pro, and Lifetime",
+      ogTitle: "jobspecificCV Pricing — Free, Weekly, Monthly, and Annual Pro",
       ogDescription:
-        "Start free, go Pro with a 3-day free trial, or buy Lifetime Pro once. No charge during the trial; cancel anytime.",
+        "Start free, or choose Pro at $4.99 weekly, $14.99 monthly, or $99.90 annually. Eligible new subscribers can try Weekly Pro free for 3 days.",
       ogImage: OG_IMAGE,
       ogImageAlt: DEFAULT_IMAGE_ALT,
       twitterTitle: "jobspecificCV Pricing",
       twitterDescription:
-        "Start free, go Pro with a 3-day free trial, or buy Lifetime Pro once. Cancel anytime.",
+        "Compare Free, Weekly, Monthly, and Annual Pro. The eligible 3-day trial applies to Weekly Pro.",
       twitterImage: OG_IMAGE,
       twitterImageAlt: DEFAULT_IMAGE_ALT,
-      lastmod: "2026-05-31",
+      lastmod: "2026-10-04",
       includeInSitemap: true,
       changefreq: "monthly",
       priority: "0.9",
@@ -345,6 +395,8 @@ export function buildSeoRoutes(content) {
         ]),
       ],
     },
+    guidedJourneyRoute(false),
+    guidedJourneyRoute(true),
     {
       path: "/career-advice",
       snapshot: "career-advice",

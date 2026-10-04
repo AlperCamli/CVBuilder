@@ -83,6 +83,20 @@ export function getHeadMetaForPath(pathname: string): HeadMeta | null {
     return { title: AUTH_PAGE_TITLES[path], robots: "noindex, nofollow" };
   }
 
+  if (path === "/designs/guided-journey/editor") {
+    return {title: "Companion Studio | JobSpecificCV", robots: "noindex, nofollow", description: "Configure the companion’s movement, dialogue, and reactions."};
+  }
+
+  if (path === "/designs" || /^\/designs\/(journey|studio|editorial|companion|canvas|momentum|guided-journey)(\/pricing)?$/.test(path)) {
+    const direction = path.split("/")[2];
+    const name = direction ? `${direction[0].toUpperCase()}${direction.slice(1)}` : "Design explorations";
+    return {
+      title: `${name}${path.endsWith("/pricing") ? " pricing" : ""} | JobSpecificCV design review`,
+      robots: "noindex, nofollow",
+      description: "Alternative landing and pricing designs for JobSpecificCV. Design exploration for review.",
+    };
+  }
+
   if (path === "/medical" || path.startsWith("/app") || path.startsWith("/auth")) {
     return { title: "jobspecificCV", robots: "noindex, nofollow" };
   }

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ROUTES } from "./routes.mjs";
 import { injectRouteMetadata, buildSpaFallbackHtml } from "./seo-html.mjs";
 import { writeSitemap } from "./generate-sitemap.mjs";
+import { injectRouteAssets } from "./route-assets.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = resolve(__dirname, "..");
@@ -41,10 +42,11 @@ async function main() {
 
   const distIndexPath = join(DIST_DIR, "index.html");
   const baseHtml = await readFile(distIndexPath, "utf8");
+  const manifest = JSON.parse(await readFile(join(DIST_DIR, ".vite", "manifest.json"), "utf8"));
 
   for (const route of ROUTES) {
     console.log(`▶ Prerendering ${route.path}`);
-    const innerHTML = renderRoute(route.path);
+    const innerHTML = await renderRoute(route.path);
     const size = Buffer.byteLength(innerHTML, "utf8");
     console.log(`  rendered ${size.toLocaleString()} bytes`);
 
@@ -64,7 +66,8 @@ async function main() {
       route.path === "/" ? DIST_DIR : join(DIST_DIR, route.path);
     await mkdir(distTargetDir, { recursive: true });
     const distTarget = join(distTargetDir, "index.html");
-    const patched = injectRouteMetadata(injectIntoHtml(baseHtml, innerHTML, route), route);
+    const styledHtml = injectRouteAssets(baseHtml, route, manifest);
+    const patched = injectRouteMetadata(injectIntoHtml(styledHtml, innerHTML, route), route);
     await writeFile(distTarget, patched, "utf8");
     console.log(`  patched ${distTarget}`);
 

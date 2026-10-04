@@ -1,0 +1,662 @@
+.mascot-studio {
+  --ms-ink: #193f37;
+  --ms-muted: #6a7a72;
+  --ms-line: #dde3dc;
+  --ms-accent: #1c7157;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f0;
+  color: var(--ms-ink);
+  font:
+    14px/1.45 "Source Sans 3",
+    Arial,
+    sans-serif;
+}
+.mascot-studio * {
+  box-sizing: border-box;
+}
+.mascot-studio h1,
+.mascot-studio h2,
+.mascot-studio h3,
+.mascot-studio p {
+  margin: 0;
+}
+.mascot-studio button,
+.mascot-studio input,
+.mascot-studio select,
+.mascot-studio textarea {
+  font: inherit;
+}
+.mascot-studio button,
+.mascot-studio select {
+  cursor: pointer;
+}
+.mascot-studio button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--ms-line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ms-ink);
+  padding: 8px 11px;
+  transition: background 0.15s;
+}
+.mascot-studio button:hover:not(:disabled) {
+  background: #eef4e9;
+  border-color: #b7c9b8;
+}
+.mascot-studio button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.mascot-studio :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid #38937a;
+  outline-offset: 3px;
+}
+.mascot-studio a {
+  color: inherit;
+  text-decoration: none;
+}
+.ms-header {
+  height: 84px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 26px;
+  border-bottom: 1px solid var(--ms-line);
+  background: #fffefa;
+}
+.ms-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ms-brand > a {
+  margin-right: 9px;
+  padding: 8px;
+  border-radius: 50%;
+}
+.ms-brand > img {
+  width: 39px;
+  height: 58px;
+  object-fit: contain;
+}
+.ms-brand h1 {
+  font-size: 22px;
+  letter-spacing: -0.6px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.ms-brand span {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.7px;
+  color: var(--ms-muted);
+}
+.ms-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ms-header-actions > button {
+  font-size: 12px;
+  padding: 9px 12px;
+}
+.mascot-studio .ms-primary {
+  background: var(--ms-accent);
+  color: #fff;
+  border-color: var(--ms-accent);
+}
+.mascot-studio .ms-primary:hover {
+  background: #155840;
+}
+.ms-save-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ms-muted);
+  margin-right: 9px;
+}
+.ms-save-state > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c4aa72;
+}
+.ms-save-state > span.is-saved {
+  background: #459172;
+}
+.ms-workspace {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.ms-inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--ms-line);
+  background: #fffefa;
+}
+.ms-intro {
+  padding: 23px 23px 19px;
+}
+.ms-eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  font-weight: 600;
+  color: var(--ms-muted);
+}
+.ms-intro h2 {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  margin: 7px 0 7px;
+}
+.ms-intro p {
+  font-size: 12px;
+  color: var(--ms-muted);
+  max-width: 280px;
+  line-height: 1.6;
+}
+.ms-stop-list {
+  display: flex;
+  padding: 0 22px 18px;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.ms-stop-list button {
+  font-size: 11px;
+  border-radius: 20px;
+  padding: 5px 9px;
+  background: transparent;
+}
+.ms-stop-list button span {
+  font-size: 9px;
+  opacity: 0.5;
+}
+.mascot-studio .ms-stop-list .is-active {
+  background: var(--ms-ink);
+  color: white;
+  border-color: var(--ms-ink);
+}
+.ms-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-block: 1px solid var(--ms-line);
+  padding: 0 12px;
+}
+.ms-tabs button {
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ms-muted);
+  font-size: 11px;
+}
+.mascot-studio .ms-tabs .is-active {
+  color: var(--ms-accent);
+  border-bottom-color: var(--ms-accent);
+  background: #eff4e9;
+}
+.ms-settings {
+  overflow: auto;
+  padding: 23px;
+  flex: 1;
+  min-height: 0;
+  scrollbar-width: thin;
+}
+.ms-settings h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+.ms-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ms-panel-title > button {
+  border: 0;
+  padding: 3px;
+  background: transparent;
+}
+.ms-help {
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ms-muted);
+  margin: 8px 0 16px !important;
+}
+.ms-number {
+  margin-top: 18px;
+}
+.ms-number > label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.ms-number > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ms-number input[type="range"] {
+  width: 100%;
+  min-width: 40px;
+  accent-color: var(--ms-accent);
+  height: 4px;
+}
+.ms-number input[type="number"] {
+  width: 66px;
+  flex-shrink: 0;
+  padding: 5px 4px 5px 8px;
+  border: 1px solid var(--ms-line);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--ms-ink);
+  background: white;
+}
+.ms-number > div > span {
+  width: 17px;
+  font-size: 10px;
+  color: var(--ms-muted);
+  flex-shrink: 0;
+}
+.ms-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ms-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ms-accent);
+}
+.ms-divider {
+  height: 1px;
+  background: var(--ms-line);
+  margin: 25px 0 21px;
+}
+.ms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 16px;
+  font-size: 12px;
+}
+.ms-field :is(input, textarea, select) {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--ms-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ms-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ms-field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.ms-field small {
+  font-size: 10px;
+  color: var(--ms-muted);
+}
+.ms-poses {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.ms-poses button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  padding: 7px 3px;
+  border-radius: 7px;
+}
+.ms-poses img {
+  width: 45px;
+  height: 65px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.ms-poses .is-active {
+  border-color: #55947a;
+  background: #edf4e5;
+  box-shadow: 0 0 0 1px #55947a;
+}
+.mascot-studio .ms-text-button {
+  border: 0;
+  padding: 8px 0;
+  background: none;
+  color: var(--ms-accent);
+  font-size: 12px;
+  margin-top: 12px;
+}
+.ms-presets {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.ms-presets button {
+  flex: 1;
+  font-size: 11px;
+  background: #f4f6ef;
+}
+.ms-inspector-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--ms-line);
+  font-size: 10px;
+  color: var(--ms-muted);
+}
+.ms-inspector-footer button {
+  font-size: 10px;
+  padding: 5px 7px;
+}
+.ms-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.ms-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 9px 24px;
+  border-bottom: 1px solid var(--ms-line);
+  background: #fafbf7;
+}
+.ms-preview-toolbar > div:first-child {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 1px;
+  font-weight: 600;
+  margin-right: auto;
+  white-space: nowrap;
+}
+.ms-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #3c9e7a;
+}
+.ms-preview-toolbar select {
+  background: #fff;
+  border: 1px solid var(--ms-line);
+  border-radius: 5px;
+  padding: 6px;
+  font-size: 11px;
+  color: var(--ms-ink);
+  max-width: 160px;
+}
+.ms-history {
+  display: flex;
+  gap: 3px;
+}
+.ms-history button {
+  padding: 6px;
+  border: 0;
+  background: transparent;
+}
+.ms-preview-toolbar > a {
+  padding: 5px;
+  display: flex;
+}
+.ms-canvas {
+  flex: 1;
+  min-height: 180px;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(#bfc9bf66 0.7px, transparent 0.7px) 0 0/12px 12px,
+    #e9ede6;
+}
+.ms-frame {
+  position: relative;
+  flex-shrink: 0;
+  background: #faf8f3;
+  box-shadow:
+    0 9px 34px #243d2319,
+    0 0 0 1px #d0d8ca;
+  border-radius: 7px;
+}
+.ms-frame iframe {
+  display: block;
+  border: 0;
+  transform-origin: top left;
+  border-radius: 7px;
+  max-width: none;
+}
+.ms-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #faf8f3;
+  font-size: 13px;
+  color: var(--ms-muted);
+}
+.ms-timeline {
+  padding: 19px 26px 15px;
+  border-top: 1px solid var(--ms-line);
+  background: #fffefa;
+}
+.ms-timeline-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 13px;
+}
+.ms-timeline-top strong {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+  margin-top: 3px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ms-timeline-top small {
+  font-size: 10px;
+  color: var(--ms-muted);
+  font-weight: 400;
+}
+.ms-playback {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.ms-playback button {
+  font-size: 11px;
+  padding: 7px 10px;
+}
+.ms-playback .ms-play {
+  background: var(--ms-ink);
+  color: #fff;
+  border-color: var(--ms-ink);
+  min-width: 106px;
+}
+.ms-timeline > input {
+  width: 100%;
+  display: block;
+  height: 4px;
+  accent-color: var(--ms-accent);
+}
+.ms-timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 9px;
+  color: var(--ms-muted);
+}
+.ms-preview-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 13px;
+  font-size: 10px;
+  color: var(--ms-muted);
+}
+.ms-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 38px;
+  padding: 8px 23px;
+  background: #edf2e5;
+  border-top: 1px solid #dce4d6;
+  font-size: 10px;
+}
+.ms-status > div {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.ms-status button {
+  border: 0;
+  padding: 0;
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 10px;
+}
+.ms-status.is-error {
+  background: #fff0e9;
+  color: #864b32;
+}
+.ms-sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+@media (max-width: 1150px) {
+  .ms-header {
+    padding-inline: 16px;
+  }
+  .ms-save-state {
+    display: none;
+  }
+  .ms-workspace {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .ms-preview-toolbar {
+    gap: 5px;
+    padding-inline: 12px;
+  }
+  .ms-preview-toolbar > div:first-child {
+    display: none;
+  }
+  .ms-intro,
+  .ms-settings {
+    padding: 18px;
+  }
+  .ms-preview-toolbar select {
+    max-width: 125px;
+  }
+}
+@media (max-width: 800px) {
+  .mascot-studio {
+    position: relative;
+    min-height: 100dvh;
+  }
+  .ms-header {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+  }
+  .ms-brand h1 {
+    font-size: 20px;
+  }
+  .ms-header-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+  .ms-header-actions > button {
+    flex: 1;
+    font-size: 10px;
+  }
+  .ms-workspace {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .ms-preview {
+    height: 610px;
+    flex: none;
+  }
+  .ms-inspector {
+    border-right: 0;
+    border-top: 1px solid var(--ms-line);
+  }
+  .ms-settings {
+    max-height: 650px;
+  }
+  .ms-status {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .ms-preview-toolbar {
+    flex-wrap: wrap;
+  }
+  .ms-preview-hint {
+    font-size: 9px;
+  }
+  .ms-preview-toolbar select {
+    font-size: 10px;
+  }
+  .ms-timeline {
+    padding: 15px;
+  }
+  .ms-intro {
+    display: none;
+  }
+  .ms-stop-list {
+    padding-top: 18px;
+  }
+  .ms-canvas {
+    padding: 18px;
+  }
+  .ms-inspector-footer {
+    padding: 14px 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot-studio * {
+    transition: none !important;
+  }
+}

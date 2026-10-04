@@ -16,6 +16,9 @@ import type {
 } from "../integration/api-types";
 import { PLACEHOLDER_OPEN, PLACEHOLDER_SEGMENT_RE } from "../integration/preview-placeholders";
 
+// Measurement still runs before paint in the browser; static previews need no DOM effect.
+const usePreviewLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 type PreviewMode = "full" | "thumbnail";
 
 interface CVPresentationPreviewProps {
@@ -657,7 +660,7 @@ export function CVPresentationPreview({
     return [...built.headerBlocks, ...built.singleBlocks, ...built.sidebarBlocks, ...built.mainBlocks];
   }, [built]);
 
-  useLayoutEffect(() => {
+  usePreviewLayoutEffect(() => {
     if (mode === "thumbnail" || !built) {
       return;
     }

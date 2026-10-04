@@ -13,6 +13,7 @@ export type FaqItem = {
 export type SeoRoute = {
   path: string;
   snapshot: string;
+  clientEntry?: string;
   title: string;
   description: string;
   canonical: string;
@@ -42,6 +43,7 @@ export declare const DEFAULT_IMAGE_ALT: string;
 export declare const ORGANIZATION_JSON_LD: Record<string, unknown>;
 export declare const WEB_APPLICATION_JSON_LD: Record<string, unknown>;
 export declare const LANDING_FAQ_ITEMS: FaqItem[];
+export declare const GUIDED_JOURNEY_FAQ_ITEMS: FaqItem[];
 
 export declare function absoluteUrl(path: string): string;
 export declare function breadcrumbJsonLd(items: BreadcrumbTrailItem[]): Record<string, unknown>;
