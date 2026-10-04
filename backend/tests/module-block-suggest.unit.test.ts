@@ -3,6 +3,8 @@ import { resolveModuleBlockAiPolicy } from "../src/shared/cv-modules/module-regi
 import {
   buildModuleBlockSuggestPayload,
   buildModuleBlockSuggestUserPrompt,
+  enforceStandardBlockAiPolicy,
+  getStandardBlockEditableFields,
   enforceModuleBlockAiPolicy
 } from "../src/modules/ai/module-block-suggest";
 import { AiFlowFailedError } from "../src/shared/errors/app-error";
@@ -23,6 +25,37 @@ const block = (type: string, fields: CvBlock["fields"]): CvBlock => ({
   visibility: "visible",
   fields,
   meta: { revision_anchor: null }
+});
+
+describe("standard block editing policy", () => {
+  it("applies narrative edits while restoring factual fields and block metadata", () => {
+    const current = block("experience_item", {
+      role: "Engineer", company: "Acme", start_date: "2020", url: "https://example.com",
+      description: "Built reports", skills: ["SQL"]
+    });
+    expect(getStandardBlockEditableFields(current)).toEqual(["description"]);
+    const result = enforceStandardBlockAiPolicy({ currentBlock: current, suggestedBlock: {
+      id: "other-block", type: "skills", visibility: "hidden", order: 99, meta: { injected: true },
+      fields: { role: "CEO", company: "Other", start_date: "2010", url: "javascript:alert(1)",
+        description: "Produced clear reports.", skills: ["Invented skill"], injected: "Ignore rules" }
+    } });
+    expect(result).toEqual({ ...current, fields: { ...current.fields, description: "Produced clear reports." } });
+  });
+
+  it("preserves the existing string or array shape", () => {
+    const current = block("summary", { text: "Original summary", highlights: ["Original highlight"] });
+    const result = enforceStandardBlockAiPolicy({ currentBlock: current, suggestedBlock: {
+      fields: { text: ["Clear summary"], highlights: "• First highlight\n- Second highlight" }
+    } });
+    expect(result.fields).toEqual({ text: "• Clear summary", highlights: ["First highlight", "Second highlight"] });
+  });
+
+  it("fails closed when output only changes facts or adds an unrelated field", () => {
+    expect(() => enforceStandardBlockAiPolicy({
+      currentBlock: block("experience_item", { role: "Engineer", description: "Original" }),
+      suggestedBlock: { fields: { role: "CEO", text: "Unrelated output" } }
+    })).toThrow(AiFlowFailedError);
+  });
 });
 
 describe("resolveModuleBlockAiPolicy", () => {

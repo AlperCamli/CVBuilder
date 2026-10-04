@@ -25,6 +25,7 @@ import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AddContentModal } from "../components/AddContentModal";
 import type { ContentType } from "../components/AddContentModal";
+import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble";
 import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
@@ -68,8 +69,6 @@ import type {
   AiBlockVersionChain,
   CvBlock,
   CvContent,
-  CvAiHistoryResponse,
-  AiSuggestionSummary,
   CvAiBlockVersionsResponse,
   CvBlockRevisionSummary,
   ExportSummaryItem,
@@ -509,10 +508,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [renderingPreview, setRenderingPreview] = useState<RenderingPreviewResponse | null>(null);
 
   const [showAIPopup, setShowAIPopup] = useState(false);
+  const [aiAnchor, setAiAnchor] = useState<HTMLElement | null>(null);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiRunningRef = useRef(false);
   const [aiTargetSectionId, setAiTargetSectionId] = useState<string | null>(null);
   const [aiTargetBlockId, setAiTargetBlockId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiHistory, setAiHistory] = useState<CvAiHistoryResponse | null>(null);
   const [aiBlockVersions, setAiBlockVersions] = useState<Record<string, AiBlockVersionChain>>({});
   const [highlightedAiBlockIds, setHighlightedAiBlockIds] = useState<string[]>([]);
   const [showSkillsPoolDialog, setShowSkillsPoolDialog] = useState(false);
@@ -666,21 +668,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const loadAiData = async (targetKind: "master" | "tailored", targetId: string) => {
     try {
-      const [history, versions] =
-        targetKind === "tailored"
-          ? await Promise.all([
-            api.getTailoredCvAiHistory(targetId),
-            api.getTailoredCvAiBlockVersions(targetId)
-          ])
-          : await Promise.all([
-            api.getMasterCvAiHistory(targetId),
-            api.getMasterCvAiBlockVersions(targetId)
-          ]);
-
-      setAiHistory(history);
+      const versions = targetKind === "tailored"
+        ? await api.getTailoredCvAiBlockVersions(targetId)
+        : await api.getMasterCvAiBlockVersions(targetId);
       setAiBlockVersions(mapAiBlockVersions(versions));
     } catch {
-      setAiHistory(null);
       setAiBlockVersions({});
     }
   };
@@ -1201,7 +1193,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   }, [autoFitting, cvId, cvKind, fontScale, layoutScale, pageCount, spacingScale]);
 
   useEffect(() => {
-    if (!cvId || !dirty || loading || saving || autoSaving || autoFitting) {
+    if (!cvId || !dirty || loading || saving || autoSaving || autoFitting || aiLoading) {
       return;
     }
 
@@ -1212,7 +1204,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autoFitting, autoSaving, cvId, cvKind, dirty, fontScale, language, layoutScale, loading, moduleType, saving, sections, spacingScale]);
+  }, [aiLoading, autoFitting, autoSaving, cvId, cvKind, dirty, fontScale, language, layoutScale, loading, moduleType, saving, sections, spacingScale]);
 
   const assignTemplate = async (nextTemplateId: string | null) => {
     if (!cvId) {
@@ -1782,7 +1774,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     });
   };
 
-  const openAiForSection = async (sectionId: string, blockId?: string) => {
+  const openAiForSection = async (sectionId: string, blockId?: string, anchor?: HTMLElement) => {
+    if (aiRunningRef.current) return;
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
       setError("Section could not be resolved for AI action.");
@@ -1808,13 +1801,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
+    if (!anchor) return;
+    setAiAnchor(anchor);
+    setAiInstruction("");
+    setAiError(null);
     setAiTargetSectionId(sectionId);
     setAiTargetBlockId(resolvedBlockId ?? null);
     setShowAIPopup(true);
-
-    if (cvId) {
-      await loadAiData(cvKind, cvId);
-    }
   };
 
   const resolveAiBlockId = (): string | null => {
@@ -1857,16 +1850,18 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const runAiAction = async (
-    action: "improve" | "summarize" | "ats_optimize" | "expand"
+    action: "improve" | "summarize" | "ats_optimize" | "expand",
+    instruction?: string
   ) => {
+    if (aiRunningRef.current) return;
     if (!cvId) {
-      setError("CV id is missing.");
+      setAiError("CV id is missing.");
       return;
     }
 
     const blockId = resolveAiBlockId();
     if (!blockId) {
-      setError("No block is available for AI action in this section. Save and try again.");
+      setAiError("No block is available for AI action in this section. Save and try again.");
       return;
     }
 
@@ -1876,13 +1871,15 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
+    aiRunningRef.current = true;
     setAiLoading(true);
+    setAiError(null);
 
     try {
       if (dirty) {
         const persisted = await persistCv("auto");
         if (!persisted) {
-          setError("Failed to save current edits before running AI action.");
+          setAiError("Failed to save current edits before running AI action.");
           return;
         }
       }
@@ -1893,11 +1890,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       const suggested = await api.postBlockSuggest({
         ...targetPayload,
         block_id: blockId,
-        action_type: action
+        action_type: action,
+        user_instruction: instruction?.trim() || undefined
       });
 
       if (!applyPersistedBlockUpdate(blockId, suggested.updated_block)) {
-        setError("AI updated the block, but the editor could not locate it locally.");
+        setAiError("AI updated the block, but the editor could not locate it locally.");
         return;
       }
 
@@ -1912,13 +1910,14 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message
         });
-        setError(err.message);
+        setAiError(err.message);
       } else if (err instanceof Error) {
-        setError(err.message);
+        setAiError(err.message);
       } else {
-        setError("AI action failed.");
+        setAiError("AI action failed.");
       }
     } finally {
+      aiRunningRef.current = false;
       setAiLoading(false);
     }
   };
@@ -2118,8 +2117,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       onToggleVisibility: () => toggleSectionVisibility(section.id),
       onRemove: () => removeSection(section.id),
       onChange: (data: Record<string, unknown>) => updateSection(section.id, data),
-      onAIAssist: (blockId?: string) => {
-        void openAiForSection(section.id, blockId);
+      onAIAssist: (blockId?: string, anchor?: HTMLElement) => {
+        void openAiForSection(section.id, blockId, anchor);
       }
     };
 
@@ -2427,7 +2426,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="h-screen flex flex-col">
+      {/* The bubble is portalled outside this element; lock CV controls during the
+          request so a late AI response cannot replace newer manual edits. */}
+      <div className="h-screen flex flex-col" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
         <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -2861,71 +2862,17 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
         <TipsDrawer isOpen={showTipsDrawer} onClose={() => setShowTipsDrawer(false)} sectionType={currentTipsSection} />
 
-        <Dialog
-          open={showAIPopup}
-          onOpenChange={(open) => {
-            setShowAIPopup(open);
-            if (!open) {
-              setAiTargetBlockId(null);
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                AI Block Assistant
-              </DialogTitle>
-              <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                Select an action. The updated block is applied automatically.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 mt-2">
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Improve writing", action: "improve" },
-                  { label: "Summarize", action: "summarize" },
-                  { label: "Expand", action: "expand" },
-                  { label: "ATS optimize", action: "ats_optimize" }
-                ].map((item) => (
-                  <button
-                    key={item.label}
-                    onClick={() => void runAiAction(item.action as "improve" | "summarize" | "expand" | "ats_optimize")}
-                    disabled={aiLoading}
-                    className="w-full p-2.5 rounded-lg border text-left"
-                    style={{
-                      fontSize: "12px",
-                      borderColor: "var(--color-border-tertiary)",
-                      background: "var(--color-background-primary)",
-                      color: "var(--color-text-primary)",
-                      opacity: aiLoading ? 0.7 : 1
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {aiLoading && (
-                <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  <Loader2 size={14} className="animate-spin" />
-                  Running AI action...
-                </div>
-              )}
-
-              {aiHistory && (
-                <div className="pt-2 border-t" style={{ borderColor: "var(--color-border-tertiary)" }}>
-                  <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
-                    Recent AI suggestions: {aiHistory.suggestions.length}
-                  </p>
-                  <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                    Pending: {aiHistory.suggestions.filter((item: AiSuggestionSummary) => item.status === "pending").length}
-                  </p>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        {showAIPopup && aiAnchor ? (
+          <AIBlockInstructionBubble
+            anchor={aiAnchor}
+            instruction={aiInstruction}
+            loading={aiLoading}
+            error={aiError}
+            onInstructionChange={(value) => { setAiInstruction(value); setAiError(null); }}
+            onRun={(action, instruction) => { void runAiAction(action, instruction); }}
+            onClose={() => { setShowAIPopup(false); setAiTargetBlockId(null); setAiAnchor(null); }}
+          />
+        ) : null}
 
         <Dialog
           open={showExportDialog}

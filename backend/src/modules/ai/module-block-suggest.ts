@@ -61,6 +61,41 @@ const toNarrativeString = (value: unknown): string | null => {
   return text.length > 0 ? text : null;
 };
 
+// Only existing narrative fields are editable in the standard CV. Identity,
+// dates, URLs, contact information, skills, and metadata stay server-owned.
+const STANDARD_NARRATIVE_FIELDS = new Set([
+  "description", "summary", "text", "content", "details", "highlights", "notes"
+]);
+
+export const getStandardBlockEditableFields = (block: CvBlock): string[] =>
+  Object.entries(block.fields)
+    .filter(([key, value]) => STANDARD_NARRATIVE_FIELDS.has(key) &&
+      (typeof value === "string" || (Array.isArray(value) && value.every((item) => typeof item === "string"))))
+    .map(([key]) => key);
+
+export const enforceStandardBlockAiPolicy = (options: {
+  currentBlock: CvBlock;
+  suggestedBlock: Record<string, unknown>;
+}): CvBlock => {
+  const { currentBlock, suggestedBlock } = options;
+  const candidateFields = isPlainRecord(suggestedBlock.fields) ? suggestedBlock.fields : suggestedBlock;
+  const overrides: Record<string, CvJsonValue> = {};
+  for (const key of getStandardBlockEditableFields(currentBlock)) {
+    if (!(key in candidateFields)) continue;
+    const coerced = Array.isArray(currentBlock.fields[key])
+      ? toBulletArray(candidateFields[key])
+      : toNarrativeString(candidateFields[key]);
+    if (coerced !== null) overrides[key] = coerced;
+  }
+  if (Object.keys(overrides).length === 0) {
+    throw new AiFlowFailedError("AI response did not contain any editable field", {
+      flow_type: "block_suggest",
+      reason: "standard_policy_editable_output_missing"
+    });
+  }
+  return { ...currentBlock, fields: normalizeCvJsonRecord({ ...currentBlock.fields, ...overrides }) };
+};
+
 export const buildModuleBlockSuggestPayload = (options: {
   actionType: AiSuggestionActionType;
   block: CvBlock;

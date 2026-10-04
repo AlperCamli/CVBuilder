@@ -555,7 +555,7 @@ interface SummarySectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist: (blockId?: string) => void;
+  onAIAssist: (blockId?: string, anchor?: HTMLElement) => void;
   aiVersionNavigator?: AiVersionNavigatorState;
 }
 
@@ -632,7 +632,7 @@ export function SummarySection({
         <div className="flex items-center gap-2">
           <AIVersionNavigator state={aiVersionNavigator} />
           <button
-            onClick={() => onAIAssist(data?.blockId)}
+            onClick={(event) => onAIAssist(data?.blockId, event.currentTarget)}
             className="px-3 py-1 rounded-lg flex items-center gap-1.5"
             style={{
               fontSize: "12px",
@@ -678,7 +678,7 @@ interface ExperienceItemProps {
   toggleItemVisibility: (index: number) => void;
   toggleItemCollapsed: (index: number) => void;
   moveItem: (dragIndex: number, hoverIndex: number) => void;
-  onAIAssist: (blockId?: string) => void;
+  onAIAssist: (blockId?: string, anchor?: HTMLElement) => void;
   aiVersionNavigator?: AiVersionNavigatorState;
 }
 
@@ -848,7 +848,7 @@ function ExperienceItem({
           />
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onAIAssist(item.blockId ?? String(item.id ?? ""))}
+              onClick={(event) => onAIAssist(item.blockId ?? String(item.id ?? ""), event.currentTarget)}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",
@@ -873,7 +873,7 @@ interface ExperienceSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist: (blockId?: string) => void;
+  onAIAssist: (blockId?: string, anchor?: HTMLElement) => void;
   getAiVersionNavigator?: (blockId?: string) => AiVersionNavigatorState | undefined;
 }
 
@@ -986,7 +986,7 @@ interface EducationSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist?: (blockId?: string) => void;
+  onAIAssist?: (blockId?: string, anchor?: HTMLElement) => void;
   aiVersionNavigator?: AiVersionNavigatorState;
 }
 
@@ -1262,7 +1262,7 @@ export function EducationSection({
           <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
             <button
-              onClick={() => onAIAssist((data.items || [])[0]?.blockId)}
+              onClick={(event) => onAIAssist((data.items || [])[0]?.blockId, event.currentTarget)}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",
@@ -1318,7 +1318,7 @@ interface SkillsSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist?: (blockId?: string) => void;
+  onAIAssist?: (blockId?: string, anchor?: HTMLElement) => void;
   aiVersionNavigator?: AiVersionNavigatorState;
   suggestionPoolPanel?: ReactNode;
 }
@@ -1371,7 +1371,7 @@ export function SkillsSection({
           <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
             <button
-              onClick={() => onAIAssist(data.blockId)}
+              onClick={(event) => onAIAssist(data.blockId, event.currentTarget)}
               className="px-3 py-1 rounded-lg flex items-center gap-1.5"
               style={{
                 fontSize: "12px",

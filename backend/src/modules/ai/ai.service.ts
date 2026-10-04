@@ -41,6 +41,8 @@ import { AI_FLOW_REGISTRY } from "./flows/flow-registry";
 import {
   buildModuleBlockSuggestPayload,
   buildModuleBlockSuggestUserPrompt,
+  enforceStandardBlockAiPolicy,
+  getStandardBlockEditableFields,
   enforceModuleBlockAiPolicy
 } from "./module-block-suggest";
 import { cvParseOutputSchema } from "./flows/flow-contracts";
@@ -1850,6 +1852,11 @@ export class AiService {
       return applied;
     }
 
+    const editableFields = getStandardBlockEditableFields(currentBlock.block);
+    if (editableFields.length === 0) {
+      throw new ConflictError("AI improvement is not available for this section's factual fields.");
+    }
+
     const executed = await this.executeFlow({
       flow_type: "block_suggest",
       action_type: input.action_type,
@@ -1861,6 +1868,7 @@ export class AiService {
       input_payload: {
         action_type: input.action_type,
         block: currentBlock.block,
+        editable_fields: editableFields,
         user_instruction: input.user_instruction ?? "",
         job_description: target.linked_job?.job_description ?? ""
       },
@@ -1868,7 +1876,10 @@ export class AiService {
     });
 
     const output = asRecord(executed.output);
-    const suggestedBlock = normalizeCvBlock(asRecord(output.suggested_block), currentBlock.block);
+    const suggestedBlock = enforceStandardBlockAiPolicy({
+      currentBlock: currentBlock.block,
+      suggestedBlock: asRecord(output.suggested_block)
+    });
     const applied = await this.applyGeneratedBlockSuggestion({
       user_id: session.appUser.id,
       target,

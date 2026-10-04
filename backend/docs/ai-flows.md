@@ -148,6 +148,43 @@ Tailoring lifecycle endpoints (polling):
 
 ## Suggestion and Apply Model (Master + Tailored)
 
+### Instruction-based block editing
+
+The CV editor opens a small, non-modal popover anchored to the selected block's
+"Improve with AI" button. Users can submit a custom instruction (Enter to apply,
+Shift + Enter for a new line), or run Improve, Summarize, Expand, Make More
+Professional, or Make More Concise directly. The latter two use the existing
+`improve`/`summarize` actions with explicit `user_instruction` guidance. Quick
+actions run independently of any unsent custom text.
+
+The existing `POST /ai/block-suggest` endpoint accepts the instruction (trimmed,
+maximum 3,000 characters), saves it in the run's flow input, and retains prompt
+profile resolution, provider routing, usage accounting, automatic apply, and
+version history. Standard skills keep their dedicated suggestion-pool experience.
+
+All real providers allow `user_instruction` only as a bounded preference for
+editing narrative wording, tone, length, and organisation in `block_suggest`.
+Within those bounds it takes precedence over the generic action. It cannot
+override factual, language, schema, or system constraints. Instructions embedded
+in CV content and job descriptions remain untrusted. Payload JSON escapes markup
+delimiters to prevent values from closing prompt sections; raw user text is never
+interpolated into system or user prompt templates. This runtime guard also applies
+to DB-managed prompts, without requiring a prompt migration.
+
+Standard block output is restricted server-side to existing narrative fields
+(`description`, `summary`, `text`, `content`, `details`, `highlights`, `notes`).
+Field shape is preserved; factual fields, IDs, ordering, visibility, metadata,
+and unrelated fields come from the original block. Medical blocks continue to
+use their descriptor-defined editable field lists and fact guards. Output with
+no usable editable field fails without applying a change. These constraints
+limit what an injected response can change; they do not guarantee that generated
+narrative text is truthful or immune to prompt injection.
+
+The editor saves pending CV edits before the request, prevents duplicate runs,
+pauses autosave and locks CV controls while AI is running, keeps custom text and
+inline errors for retries, and applies the returned block through the existing
+persisted-update path.
+
 Suggestion generation:
 - supported for master or tailored targets
 - target payload requires exactly one of:
@@ -155,7 +192,10 @@ Suggestion generation:
   - `tailored_cv_id`
 
 Persistence:
-- suggestion rows stay `pending` until user action
+- the current `block_suggest` endpoint applies the generated block immediately
+  and persists the suggestion as `applied`
+- legacy suggestion rows can remain `pending` until user action through the
+  apply/reject endpoints below
 - `before_content` stores pre-AI snapshot
 - `suggested_content` stores AI block variant
 

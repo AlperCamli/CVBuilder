@@ -15,7 +15,7 @@ interface ModuleSectionProps {
   onToggleVisibility: () => void;
   onRemove: () => void;
   onChange: (data: any) => void;
-  onAIAssist?: (blockId?: string) => void;
+  onAIAssist?: (blockId?: string, anchor?: HTMLElement) => void;
   getAiVersionNavigator?: (blockId?: string) => AiVersionNavigatorState | undefined;
 }
 
@@ -276,7 +276,7 @@ export function ModuleSection({
                   {!item.hidden && definition.aiSuggest && onAIAssist ? (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => onAIAssist(item.blockId ?? String(item.id ?? ""))}
+                        onClick={(event) => onAIAssist(item.blockId ?? String(item.id ?? ""), event.currentTarget)}
                         className="px-3 py-1 rounded-lg flex items-center gap-1.5"
                         style={{
                           fontSize: "12px",
