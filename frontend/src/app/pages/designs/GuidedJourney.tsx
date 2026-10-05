@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   ArrowDown,
@@ -32,6 +38,7 @@ import {
   type MessageId,
 } from "./mascot-config";
 import { GUIDED_JOURNEY_FAQ_ITEMS } from "../../../content/seo-meta.mjs";
+import { TemplateShowcase } from "./TemplateShowcase";
 import "./round-two.css";
 import "./guided-journey.css";
 
@@ -40,10 +47,14 @@ export default function GuidedJourney({
   basePath: BASE = "/designs/guided-journey",
   review = true,
   settings,
+  templateSection,
+  templateOverlayOpen = false,
 }: {
   pricing?: boolean;
   basePath?: string;
   review?: boolean;
+  templateSection?: ReactNode;
+  templateOverlayOpen?: boolean;
   settings?: {
     config: MascotConfig;
     pinned: MessageId | null;
@@ -56,6 +67,7 @@ export default function GuidedJourney({
   const [menu, setMenu] = useState(false);
   const [trial, setTrial] = useState(false);
   const [demoModal, setDemoModal] = useState(false);
+  const [templateModal, setTemplateModal] = useState(false);
   const [demoStep, setDemoStep] = useState(1);
   const [reaction, setReaction] = useState<DemoAction | null>(null);
   const [helpRequest, setHelpRequest] = useState(0);
@@ -174,6 +186,9 @@ export default function GuidedJourney({
           <Link onClick={() => setMenu(false)} to={`${BASE}#demo`}>
             Try the demo
           </Link>
+          <Link onClick={() => setMenu(false)} to={`${BASE}#templates`}>
+            Templates
+          </Link>
           <Link
             onClick={() => setMenu(false)}
             to={`${BASE}/pricing`}
@@ -286,6 +301,12 @@ export default function GuidedJourney({
                 <p>Polished PDF and editable DOCX exports.</p>
               </div>
             </section>
+            {templateSection ?? (
+              <TemplateShowcase
+                direction="lookbook"
+                onOverlayChange={setTemplateModal}
+              />
+            )}
           </>
         ) : (
           <section
@@ -424,7 +445,9 @@ export default function GuidedJourney({
         pricing={pricing}
         demoStep={demoStep}
         reaction={reaction}
-        suspended={trial || demoModal || menu}
+        suspended={
+          trial || demoModal || templateModal || menu || templateOverlayOpen
+        }
         openRequest={helpRequest}
         onTrial={() => setTrial(true)}
       />

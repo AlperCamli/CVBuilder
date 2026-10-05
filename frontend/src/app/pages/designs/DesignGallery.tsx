@@ -2,6 +2,8 @@ import { ArrowRight, ArrowUpRight, FileText } from "lucide-react";
 import { Link } from "react-router";
 import { CONCEPTS, isNewConcept } from "./concepts";
 import { ReviewBar } from "./DesignShared";
+import { SHOWCASE_DIRECTIONS, showcasePath } from "./template-showcase-data";
+import "./template-showcase.css";
 
 export function DesignGallery() {
   return (
@@ -27,6 +29,27 @@ export function DesignGallery() {
             Explore each landing page and its matching pricing experience.
           </p>
         </header>
+        <section className="ts-gallery-intro">
+          <h2>One collection. Three ways to show it.</h2>
+          <p>
+            Seven real CV templates, placed between the Guided Journey demo and
+            pricing.
+          </p>
+          <div className="ts-gallery-links">
+            {SHOWCASE_DIRECTIONS.map((direction, index) => (
+              <Link
+                key={direction.id}
+                to={`${showcasePath(direction.id)}#templates`}
+              >
+                <strong>
+                  {index + 1}. {direction.name}
+                  <ArrowUpRight size={18} />
+                </strong>
+                <p>{direction.description}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
         <section className="cv-gallery-combined">
           <div>
             <span>LATEST DIRECTION · JOURNEY + COMPANION</span>

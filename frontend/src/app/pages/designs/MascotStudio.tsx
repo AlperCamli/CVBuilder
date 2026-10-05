@@ -49,6 +49,7 @@ const BASE = "/designs/guided-journey";
 const ACTION_LABELS = {
   none: "No button",
   demo: "Scroll to demo",
+  templates: "Scroll to template collection",
   plans: "Scroll to pricing",
   signup: "Create free account",
   signin: "Sign in",
@@ -329,7 +330,10 @@ export default function MascotStudio() {
     return () => observer.disconnect();
   }, []);
   const jump = (id: RailStop, message: MessageId = STOP_MESSAGE[id]) => {
-    if (page === "pricing" && ["hero", "demo", "return"].includes(id)) {
+    if (
+      page === "pricing" &&
+      ["hero", "demo", "showcase", "return"].includes(id)
+    ) {
       setNotice("Choose the landing page preview to adjust this stop.");
       return;
     }
@@ -498,7 +502,8 @@ export default function MascotStudio() {
                 className={stop === id ? "is-active" : ""}
                 onClick={() => jump(id)}
                 disabled={
-                  page === "pricing" && ["hero", "demo", "return"].includes(id)
+                  page === "pricing" &&
+                  ["hero", "demo", "showcase", "return"].includes(id)
                 }
                 aria-pressed={stop === id}
               >
@@ -555,6 +560,18 @@ export default function MascotStudio() {
                   Drag the character or speech bubble in the desktop preview.
                   Values are offsets from the responsive rail.
                 </p>
+                {stop === "plans" && (
+                  <label className="ms-field">
+                    Pricing anchor
+                    <select
+                      value={selected.anchor ?? "outer"}
+                      onChange={(e) => updateStop("anchor", e.target.value)}
+                    >
+                      <option value="pro-card">Beside the Pro card</option>
+                      <option value="outer">Original outer rail</option>
+                    </select>
+                  </label>
+                )}
                 <Toggle
                   label="Drag handles in preview"
                   checked={inspect}
@@ -889,6 +906,14 @@ export default function MascotStudio() {
                   onChange={(v) => updateMotion("demoEarly", v)}
                 />
                 <NumberControl
+                  label="Approach template collection earlier"
+                  value={m.showcaseEarly}
+                  min={-400}
+                  max={400}
+                  step={10}
+                  onChange={(v) => updateMotion("showcaseEarly", v)}
+                />
+                <NumberControl
                   label="Move to pricing earlier"
                   value={m.pricingEarly}
                   min={-400}
@@ -923,8 +948,9 @@ export default function MascotStudio() {
               <>
                 <h3>A small-screen companion.</h3>
                 <p className="ms-help">
-                  Below 1360px, the character floats in a corner. The bubble
-                  opens on tap and closes while typing or in a dialog.
+                  Below 1360px wide or 560px high, the character floats in a
+                  corner. The bubble opens on tap and closes while typing or in
+                  a dialog.
                 </p>
                 <button
                   className="ms-text-button"

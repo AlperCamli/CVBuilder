@@ -77,7 +77,9 @@ export function useMascotSettings() {
             ? "gj-hero"
             : data.stop === "signup"
               ? "get-started"
-              : data.stop;
+              : data.stop === "showcase"
+                ? "templates"
+                : data.stop;
         const el = document.getElementById(id);
         if (!el) return;
         if (data.stop === "hero" || data.stop === "return")

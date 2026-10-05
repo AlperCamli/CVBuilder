@@ -4,6 +4,8 @@ In local development, start at `/designs`. The current `/` and `/pricing` pages 
 
 The gallery, earlier alternatives, and Companion Studio are kept in Git but excluded from default production builds. To enable them in a dedicated review build, set `VITE_ENABLE_DESIGN_TOOLS=true`.
 
+The latest review adds [three template showcase directions](./template-showcase-explorations.md): Collection, Spotlight, and Lookbook. Each inserts seven real CV template examples between Guided Journey's demo and pricing, with a comparison switcher and enlarged previews.
+
 The latest combined direction is at `/designs/guided-journey`, with matching `/pricing`. It merges Journey's visuals and pricing layout with Companion's actual-renderer demo and a reactive mascot tour. See [Guided Journey notes](./guided-journey.md) for behavior, trial handling, assets, prompts, and verification.
 
 | Direction | Landing | Pricing | Approach |

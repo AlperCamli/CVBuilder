@@ -10,7 +10,11 @@ export function journeyScrollTarget(id: string): number | null {
     0,
     target.getBoundingClientRect().top +
       window.scrollY -
-      (id === "plans" ? 24 : 0),
+      (id === "plans"
+        ? 24
+        : id === "templates"
+          ? parseFloat(getComputedStyle(section).scrollMarginTop) || 0
+          : 0),
   );
 }
 

@@ -31,7 +31,7 @@
 .cv-guided-journey .gj-centered-copy h1 {
   max-width: 1100px;
   margin: auto;
-  font-size: clamp(48px, 5.4vw, 78px);
+  font-size: clamp(48px, 5.8vw, 84px);
   line-height: 1.055;
   letter-spacing: -0.048em;
 }
@@ -426,7 +426,7 @@
     transform: translateY(-2px) rotate(3deg);
   }
 }
-@media (min-width: 1360px) {
+@media (min-width: 1360px) and (min-height: 560px) {
   .gj-demo-track {
     padding-left: 224px;
   }
@@ -754,7 +754,7 @@
 [data-mascot-inspect="true"] .gj-rail-bubble:active {
   cursor: grabbing;
 }
-@media (min-width: 1360px) {
+@media (min-width: 1360px) and (min-height: 560px) {
   .gj-rail-bubble,
   .gj-rail-bubble[hidden],
   .gj-rail-bubble[data-context="return"] {
@@ -791,7 +791,7 @@
     border-bottom: 1px solid #cad7be;
   }
 }
-@media (max-width: 1359px) {
+@media (max-width: 1359px), (max-height: 559px) {
   .gj-rail,
   .gj-rail-character {
     width: var(--compact-size, 50px);
@@ -825,5 +825,65 @@
   }
   .gj-rail-character {
     transform: scale(var(--mascot-scale, 1));
+  }
+}
+
+/* Fit the workspace to the available height; let phone content scroll naturally. */
+.cv-guided-journey .pd-editor-columns {
+  height: clamp(280px, calc(100svh - 260px), 582px);
+}
+.cv-guided-journey .cv-navigation.is-open {
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+}
+.cv-guided-journey .pd-dialog {
+  max-height: calc(100dvh - 24px);
+}
+.gj-rail-bubble {
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+@media (max-width: 1359px), (max-height: 559px) {
+  .gj-rail-bubble {
+    max-height: calc(
+      100dvh - var(--compact-bottom, 12px) - var(--compact-size, 50px) * 1.5 -
+        33px
+    );
+  }
+}
+@media (max-height: 760px) {
+  .gj-centered-hero {
+    padding-block: clamp(22px, 5svh, 38px);
+  }
+  .gj-centered-copy .cv-eyebrow {
+    margin-bottom: 20px;
+  }
+  .gj-centered-copy > p {
+    margin-block: 22px;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  .gj-demo-section {
+    padding-block: 28px;
+  }
+  .gj-section-title {
+    margin-bottom: 20px;
+  }
+  .gj-signup-art img {
+    height: clamp(220px, 50svh, 380px);
+  }
+}
+@media (max-width: 700px) {
+  .cv-guided-journey .pd-editor-columns {
+    height: auto;
+  }
+  .cv-guided-journey .pd-edit-panel,
+  .cv-guided-journey .pd-preview-panel {
+    height: auto;
+    overflow: visible;
+  }
+  .gj-signup-art img {
+    height: auto;
+    aspect-ratio: 1.5;
   }
 }

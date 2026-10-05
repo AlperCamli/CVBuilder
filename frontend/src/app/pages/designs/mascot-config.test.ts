@@ -8,6 +8,11 @@ import {
 } from "./mascot-config";
 afterEach(() => vi.unstubAllGlobals());
 describe("portable companion configuration", () => {
+  it("ships the approved delighted pricing welcome without browser storage", () => {
+    vi.stubGlobal("localStorage", { getItem: () => null });
+    expect(readMascotConfig().messages.plans.pose).toBe("celebrate");
+    expect(readMascotConfig().stops.plans.x).toBe(0);
+  });
   it("round-trips edited positions, dialogue, actions and timing without losing settings", () => {
     const config = cloneConfig();
     config.stops.demo = {
@@ -101,6 +106,35 @@ describe("portable companion configuration", () => {
     expect(parsed.messages.dragging.pose).toBe("celebrate");
     expect(parsed.messages.dropped.action).toBe("none");
     expect(JSON.stringify(previous)).toBe(original);
+  });
+  it("keeps legacy browser pricing offsets relative to the original rail", () => {
+    const previous = cloneConfig();
+    delete previous.stops.plans.anchor;
+    previous.stops.plans.x = -360;
+    previous.messages.plans.pose = "celebrate";
+    const parsed = parseMascotConfig(previous);
+    expect(parsed.stops.plans.anchor).toBe("outer");
+    expect(parsed.stops.plans.x).toBe(-360);
+    expect(cloneConfig().stops.plans.anchor).toBe("pro-card");
+  });
+  it("adds the collection stop to old exports without changing their route or dialogue", () => {
+    const previous = cloneConfig() as any;
+    delete previous.stops.showcase;
+    delete previous.messages.showcase;
+    delete previous.motion.showcaseEarly;
+    previous.stops.plans.x = -360;
+    previous.stops.demo.y = 80;
+    previous.messages.hero.text = "My welcome";
+    const parsed = parseMascotConfig(previous);
+    expect(parsed.stops.showcase).toEqual(DEFAULT_MASCOT_CONFIG.stops.showcase);
+    expect(parsed.messages.showcase).toEqual(
+      DEFAULT_MASCOT_CONFIG.messages.showcase,
+    );
+    expect(parsed.motion.showcaseEarly).toBe(0);
+    for (const id of Object.keys(previous.stops))
+      expect(parsed.stops[id]).toEqual(previous.stops[id]);
+    for (const id of Object.keys(previous.messages))
+      expect(parsed.messages[id]).toEqual(previous.messages[id]);
   });
   it("reads applied settings and tolerates corrupt or unavailable storage", () => {
     const data = cloneConfig();

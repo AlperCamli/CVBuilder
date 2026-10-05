@@ -42,6 +42,9 @@ const MascotStudioRoute = DESIGN_TOOLS_ENABLED
 const DesignExplorationsRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/DesignRoutes"))
   : null;
+const TemplateExplorationsRoute = DESIGN_TOOLS_ENABLED
+  ? lazyRoute(() => import("./pages/designs/TemplateExplorations"))
+  : null;
 const SignUpRoute = lazyRoute(() =>
   import("./routes/AuthRoutes").then(({ SignUpRoute }) => ({
     default: SignUpRoute,
@@ -180,6 +183,9 @@ export function RouteElements({
           path="/designs/guided-journey/editor"
           element={lazyElement(MascotStudioRoute)}
         />
+      )}
+      {TemplateExplorationsRoute && (
+        <Route path="/designs/guided-journey/templates/:presentation" element={lazyElement(TemplateExplorationsRoute)} />
       )}
       {DesignExplorationsRoute && (
         <>

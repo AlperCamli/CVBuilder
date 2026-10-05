@@ -1,9 +1,18 @@
-/** Versioned, portable configuration for the design-review companion. */
-export const STOP_IDS = ["hero", "demo", "plans", "signup", "return"] as const;
+/** Versioned companion settings shared by public pages and fresh Studio drafts.
+ * Approved changes belong here so deployments do not depend on localStorage. */
+export const STOP_IDS = [
+  "hero",
+  "demo",
+  "showcase",
+  "plans",
+  "signup",
+  "return",
+] as const;
 export type RailStop = (typeof STOP_IDS)[number];
 export const STOP_LABELS: Record<RailStop, string> = {
   hero: "Welcome",
   demo: "Demo",
+  showcase: "Template collection",
   plans: "Pricing",
   signup: "Closing",
   return: "Return to top",
@@ -13,6 +22,7 @@ export type MascotPose = (typeof POSES)[number];
 export const ACTIONS = [
   "none",
   "demo",
+  "templates",
   "plans",
   "signup",
   "signin",
@@ -23,6 +33,7 @@ export const MESSAGE_IDS = [
   "hero",
   "keywords",
   "editing",
+  "showcase",
   "templates",
   "plans",
   "signup",
@@ -40,6 +51,7 @@ export const MESSAGE_LABELS: Record<MessageId, string> = {
   hero: "Welcome",
   keywords: "Choosing keywords",
   editing: "Editing a CV",
+  showcase: "Exploring the template collection",
   templates: "Choosing a template",
   plans: "Free versus Pro",
   signup: "Create an account",
@@ -56,6 +68,7 @@ export const MESSAGE_STOP: Record<MessageId, RailStop> = {
   hero: "hero",
   keywords: "demo",
   editing: "demo",
+  showcase: "showcase",
   templates: "demo",
   plans: "plans",
   signup: "signup",
@@ -71,11 +84,14 @@ export const MESSAGE_STOP: Record<MessageId, RailStop> = {
 export const STOP_MESSAGE: Record<RailStop, MessageId> = {
   hero: "hero",
   demo: "editing",
+  showcase: "showcase",
   plans: "plans",
   signup: "signup",
   return: "return",
 };
 export type StopConfig = {
+  /** Pricing only; old browser exports keep their original outer-rail offsets. */
+  anchor?: "outer" | "pro-card";
   x: number;
   y: number;
   scale: number;
@@ -109,6 +125,7 @@ export type MascotConfig = {
     cooldownMs: number;
     hideWhileTraveling: boolean;
     demoEarly: number;
+    showcaseEarly: number;
     pricingEarly: number;
     closingEarly: number;
     returnDistance: number;
@@ -140,6 +157,7 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
     STOP_IDS.map((id) => [
       id,
       {
+        ...(id === "plans" ? { anchor: "pro-card" } : {}),
         x: 0,
         y: 0,
         scale: 1,
@@ -167,10 +185,14 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
       "thinking",
     ),
     templates: message("Try a template for a fresh look.", "guide"),
+    showcase: message(
+      "Find a style that feels like you—tap a CV for a closer look.",
+      "guide",
+    ),
     plans: {
       ...message(
         "Start Free, or go Pro for unlimited CVs and exports.",
-        "thinking",
+        "celebrate",
         "signup",
         "Start free",
       ),
@@ -224,6 +246,7 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
     cooldownMs: 6000,
     hideWhileTraveling: true,
     demoEarly: 0,
+    showcaseEarly: 0,
     pricingEarly: 0,
     closingEarly: 0,
     returnDistance: 240,
@@ -273,6 +296,15 @@ export function parseMascotConfig(value: unknown): MascotConfig {
     const s = record(stops[id]),
       d = result.stops[id];
     result.stops[id] = {
+      ...(id === "plans"
+        ? {
+            anchor: pick(
+              s.anchor,
+              ["outer", "pro-card"],
+              stops.plans ? "outer" : (d.anchor ?? "pro-card"),
+            ),
+          }
+        : {}),
       x: num(s.x, d.x, -1600, 1600),
       y: num(s.y, d.y, -900, 900),
       scale: num(s.scale, d.scale, 0.5, 1.8),
@@ -308,6 +340,7 @@ export function parseMascotConfig(value: unknown): MascotConfig {
     editDelay: [200, 2000],
     cooldownMs: [1000, 30000],
     demoEarly: [-400, 400],
+    showcaseEarly: [-400, 400],
     pricingEarly: [-400, 400],
     closingEarly: [-400, 400],
     returnDistance: [120, 600],

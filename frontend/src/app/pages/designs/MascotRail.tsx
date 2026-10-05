@@ -134,14 +134,18 @@ export function MascotRail({
     const root = node.closest<HTMLElement>(".cv-guided-journey")!;
     const hero = document.getElementById("gj-hero")!;
     const demo = document.getElementById("demo");
+    const showcase = document.getElementById("templates");
     const plans = document.getElementById("plans")!;
     const cards = plans.querySelector<HTMLElement>(".cv-plan-grid")!;
+    const paidCard = cards.querySelector<HTMLElement>(".cv-plan-pro")!;
     const signup = document.getElementById("get-started")!;
     const footer = root.querySelector<HTMLElement>(".cv-footer")!;
     const headerCTA = root.querySelector<HTMLElement>(
       "#gj-header-actions > a:last-child",
     )!;
-    const media = window.matchMedia("(min-width: 1360px)");
+    const media = window.matchMedia(
+      "(min-width: 1360px) and (min-height: 560px)",
+    );
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     const character = node.querySelector<HTMLElement>(".gj-rail-character")!;
     let frame = 0;
@@ -187,8 +191,13 @@ export function MascotRail({
         hero: rect(hero),
         demo: demo ? rect(demo) : null,
         demoContent: demo ? rect(demo.querySelector(".cv-wrap")!) : null,
+        showcase: showcase ? rect(showcase) : null,
+        showcaseContent: showcase
+          ? rect(showcase.querySelector(".cv-wrap")!)
+          : null,
         plans: rect(plans),
         cards: rect(cards),
+        paidCard: rect(paidCard),
         signup: rect(signup),
         footer: rect(footer),
         heading: rect(hero.querySelector("h1")!),
@@ -223,9 +232,11 @@ export function MascotRail({
           ? "signup"
           : pricing || g.plans.top - scroll < height * 0.6
             ? "plans"
-            : g.demo && scroll > 140 && g.demo.top - scroll < height * 0.65
-              ? "demo"
-              : "hero";
+            : g.showcase && g.showcase.top - scroll < height * 0.6
+              ? "showcase"
+              : g.demo && scroll > 140 && g.demo.top - scroll < height * 0.65
+                ? "demo"
+                : "hero";
       if (next !== currentContext) {
         currentContext = next;
         setContext(next);
@@ -234,13 +245,14 @@ export function MascotRail({
       node.dataset.mode = wide ? "desktop" : "compact";
       if (!wide) {
         const m = cfg.mobile;
+        const side = next === "showcase" ? "left" : m.side;
         node.style.setProperty("--compact-size", `${m.size}px`);
         node.style.setProperty("--compact-bottom", `${m.bottom}px`);
         bubbleNode.style.setProperty("--compact-size", `${m.size}px`);
         bubbleNode.style.setProperty("--compact-bottom", `${m.bottom}px`);
         bubbleNode.style.width = `${Math.min(m.bubbleWidth, innerWidth - 24)}px`;
-        node.dataset.compactSide = m.side;
-        bubbleNode.dataset.compactSide = m.side;
+        node.dataset.compactSide = side;
+        bubbleNode.dataset.compactSide = side;
         node.style.setProperty("--mascot-scale", "1");
         node.style.setProperty("--mascot-lean", "0deg");
         position = null;
@@ -252,7 +264,7 @@ export function MascotRail({
         node.dataset.traveling = "false";
         bubbleNode.dataset.traveling = "false";
         bubbleNode.inert = false;
-        node.dataset.side = m.side;
+        node.dataset.side = side;
         node.inert = false;
         if (manual.current) {
           // Both layers start at their normal compact anchors. Clamp the visible
@@ -275,11 +287,7 @@ export function MascotRail({
           bubbleNode.style.transform = `translate3d(${clamp(b.left + dx, 12, innerWidth - b.width - 12) - b.left}px, ${clamp(b.top + dy, 12, height - b.height - 12) - b.top}px, 0)`;
           face(cfg.stops[next].facing, x, false);
         } else {
-          face(
-            cfg.stops[next].facing,
-            m.side === "left" ? 0 : innerWidth,
-            false,
-          );
+          face(cfg.stops[next].facing, side === "left" ? 0 : innerWidth, false);
         }
         return;
       }
@@ -293,7 +301,13 @@ export function MascotRail({
       );
       const heroX = Math.max(20, (g.heading.left - width) / 2);
       const demoX = (g.demoContent?.left ?? heroX) + 8;
-      let x = rightX;
+      // Anchor to the real Pro card, so the published pricing welcome does not
+      // depend on a browser-local pixel offset or a particular screen width.
+      const plansX =
+        cfg.stops.plans.anchor === "pro-card"
+          ? g.paidCard.left - width / 2 - 66
+          : rightX;
+      let x = plansX;
       let y = clamp(g.cards.top - scroll + 36, 116, height - railHeight - 24);
       const plansY = y;
       let stop = cfg.stops.plans;
@@ -312,9 +326,31 @@ export function MascotRail({
           0,
           1,
         );
-        const crossingStart = Math.max(
+        const collectionStart = Math.max(
           approachEnd + 60,
-          g.demo.bottom - height * 0.65 - cfg.motion.pricingEarly,
+          g.demo.bottom - height * 0.65 - cfg.motion.showcaseEarly,
+        );
+        const collectionEnd = Math.max(
+          collectionStart + 1,
+          (g.showcase?.top ?? g.plans.top) -
+            height * 0.25 -
+            cfg.motion.showcaseEarly,
+        );
+        const collection = g.showcase
+          ? clamp(
+              (scroll - collectionStart) / (collectionEnd - collectionStart),
+              0,
+              1,
+            )
+          : 0;
+        const departureSection = g.showcase ?? g.demo;
+        const departureStop = g.showcase ? cfg.stops.showcase : cfg.stops.demo;
+        const departureX = g.showcaseContent
+          ? Math.max(16, (g.showcaseContent.left - width) / 2)
+          : demoX;
+        const crossingStart = Math.max(
+          (g.showcase ? collectionEnd : approachEnd) + 60,
+          departureSection.bottom - height * 0.65 - cfg.motion.pricingEarly,
         );
         const crossingEnd = Math.max(
           crossingStart + 1,
@@ -341,6 +377,19 @@ export function MascotRail({
             108,
             height - railHeight - 24,
           );
+          if (g.showcase && collection > 0) {
+            stop = blendStop(cfg.stops.demo, cfg.stops.showcase, collection);
+            x = mix(demoX, departureX, collection);
+            y = mix(
+              y,
+              clamp(
+                g.showcase.top - scroll + 105,
+                108,
+                height - railHeight - 24,
+              ),
+              collection,
+            );
+          }
           if (!reduced.matches) {
             // Descend beside the editor before crossing underneath it.
             const departureStart = crossingStart - height * 0.25;
@@ -352,21 +401,21 @@ export function MascotRail({
             const character =
               node.querySelector<HTMLElement>(".gj-rail-character")!;
             const crossingY = clamp(
-              g.demo.bottom - scroll + 16 - character.offsetTop,
+              departureSection.bottom - scroll + 16 - character.offsetTop,
               24,
               height - railHeight - 20,
             );
             y = mix(y, crossingY, departure);
           }
         } else if (crossing < 1 && !reduced.matches) {
-          stop = blendStop(cfg.stops.demo, cfg.stops.plans, crossing);
-          x = mix(demoX, rightX, crossing);
+          stop = blendStop(departureStop, cfg.stops.plans, crossing);
+          x = mix(departureX, plansX, crossing);
           // Cross in the space below the demo, with the bubble tucked away.
           const character =
             node.querySelector<HTMLElement>(".gj-rail-character")!;
           y = mix(
             clamp(
-              g.demo.bottom - scroll + 16 - character.offsetTop,
+              departureSection.bottom - scroll + 16 - character.offsetTop,
               24,
               height - railHeight - 20,
             ),
@@ -374,10 +423,14 @@ export function MascotRail({
             crossing,
           );
           traveling = true;
-        } else if (reduced.matches && crossing < 1 && next === "demo") {
-          x = demoX;
+        } else if (
+          reduced.matches &&
+          crossing < 1 &&
+          (next === "demo" || next === "showcase")
+        ) {
+          x = next === "showcase" ? departureX : demoX;
           y = 116;
-          stop = cfg.stops.demo;
+          stop = cfg.stops[next];
         }
       }
       const closingArrival = reduced.matches
@@ -391,6 +444,7 @@ export function MascotRail({
             0,
             1,
           );
+      x = mix(x, rightX, closingArrival);
       y = mix(
         y,
         clamp(g.signup.top - scroll + 25, 116, height - railHeight - 24),
@@ -508,6 +562,7 @@ export function MascotRail({
       bubbleNode,
       hero,
       ...(demo ? [demo] : []),
+      ...(showcase ? [showcase] : []),
       plans,
       signup,
     ])
