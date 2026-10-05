@@ -148,7 +148,7 @@ const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode =>
       {item.body ? (
         <p
           style={{
-            fontSize: scaledPx(12),
+            fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))",
             lineHeight: 1.6,
             color: bodyColor,
             whiteSpace: "pre-line",
@@ -161,7 +161,7 @@ const renderItemBody = (item: PresentationItem, bodyColor: string): ReactNode =>
       {item.bullets.length > 0 ? (
         <ul className="mt-1" style={{ paddingLeft: scaledPx(16), color: bodyColor, listStyle: "disc" }}>
           {item.bullets.map((bullet, index) => (
-            <li key={`${item.id}-bullet-${index}`} style={{ fontSize: scaledPx(12), lineHeight: 1.5 }}>
+            <li key={`${item.id}-bullet-${index}`} style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", lineHeight: 1.5 }}>
               {renderPreviewText(bullet)}
             </li>
           ))}
@@ -210,7 +210,7 @@ function DefaultItemBody({ item, colors }: { item: PresentationItem; colors: Pre
             </h3>
           ) : null}
           {item.subtitle ? (
-            <p style={{ fontSize: scaledPx(12), color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
+            <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
           ) : null}
         </div>
         {item.metadata_line || item.date_range ? (
@@ -258,7 +258,7 @@ function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: Pr
           </h3>
         ) : null}
         {item.subtitle ? (
-          <p style={{ fontSize: scaledPx(12), color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
+          <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
         ) : null}
         {renderItemBody(item, colors.body)}
       </div>
@@ -290,7 +290,7 @@ function buildSectionBlocks(
         <div style={{ marginBottom: scaledPx(sectionSpacing) }}>
           <SectionTitle title={section.title} color={colors.heading} headingStyle={sectionHeadingStyle} />
           {section.inline_text ? (
-            <p style={{ fontSize: scaledPx(12), lineHeight: 1.6, color: colors.body }}>
+            <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", lineHeight: 1.6, color: colors.body }}>
               {renderPreviewText(section.inline_text)}
             </p>
           ) : null}
@@ -315,7 +315,7 @@ function buildSectionBlocks(
       node: (
         <p
           style={{
-            fontSize: scaledPx(12),
+            fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))",
             lineHeight: 1.6,
             color: colors.body,
             marginBottom: scaledPx(blockSpacing)
@@ -355,11 +355,16 @@ function buildHeaderBlocks(
   mode: PreviewMode
 ): BlockSpec[] {
   const blocks: BlockSpec[] = [];
+  const signature = ["studio-banner", "editorial-index", "horizon-rail", "mosaic-columns", "ledger-split", "contour-cards"].includes(theme.mode);
+  const horizon = theme.mode === "horizon-rail";
+  const ledger = theme.mode === "ledger-split";
+  const mosaic = theme.mode === "mosaic-columns";
+  const contour = theme.mode === "contour-cards";
   const photoPosition = header.photo
     ? header.photo_position ?? theme.tokens.header_photo_position ?? "left"
     : "left";
   const stackedPhoto = photoPosition === "center";
-  const centerHeader = theme.tokens.header_alignment === "center" || stackedPhoto;
+  const centerHeader = !horizon && (theme.tokens.header_alignment === "center" || stackedPhoto);
   const headerPhotoSize = theme.tokens.header_photo_size ?? 72;
 
   blocks.push({
@@ -369,7 +374,8 @@ function buildHeaderBlocks(
       <div
         className="flex items-start gap-4"
         style={{
-          alignItems: stackedPhoto ? "center" : undefined,
+          alignItems: horizon ? "flex-start" : stackedPhoto ? "center" : undefined,
+          overflowWrap: signature ? "anywhere" : undefined,
           flexDirection: stackedPhoto ? "column" : photoPosition === "right" ? "row-reverse" : undefined,
           justifyContent: stackedPhoto ? "center" : undefined
         }}
@@ -397,7 +403,8 @@ function buildHeaderBlocks(
         >
           <h1
             style={{
-              fontSize: theme.mode === "compact-single-column" ? scaledPx(21) : scaledPx(23),
+              fontSize: scaledPx(theme.mode === "studio-banner" ? 34 : theme.mode === "editorial-index" ? 42 : horizon ? 27 : mosaic ? 32 : ledger ? 32 : contour ? 36 : theme.mode === "compact-single-column" ? 21 : 23),
+              lineHeight: signature ? 1.2 : undefined,
               color: colors.heading,
               fontWeight: 600
             }}
@@ -409,12 +416,12 @@ function buildHeaderBlocks(
               {renderPreviewText(header.title)}
             </p>
           ) : null}
-          {header.contact_items.length > 0 ? (
+          {!ledger && header.contact_items.length > 0 ? (
             <p style={{ fontSize: scaledPx(11), color: colors.muted, marginTop: scaledPx(6) }}>
               {renderPreviewText(header.contact_items.join(" • "))}
             </p>
           ) : null}
-          {header.social_links.length > 0 ? (
+          {!ledger && header.social_links.length > 0 ? (
             <div
               className="mt-2 flex flex-wrap gap-x-3 gap-y-1"
               style={{ justifyContent: centerHeader ? "center" : undefined }}
@@ -460,7 +467,92 @@ function buildHeaderBlocks(
     )
   });
 
+  if (signature) {
+    const studio = theme.mode === "studio-banner";
+    const editorial = theme.mode === "editorial-index";
+    const filled = studio || mosaic || contour;
+    const accent = theme.tokens.header_accent_color_hex ?? colors.accent;
+    return [{
+      key: "signature-header", column: "full",
+      node: <div style={{
+        background: filled ? theme.tokens.header_background_hex : undefined,
+        padding: filled ? scaledPx(contour ? 16 : 24) : undefined,
+        paddingTop: editorial ? scaledPx(18) : filled ? scaledPx(contour ? 16 : 24) : undefined,
+        paddingBottom: horizon ? scaledPx(22) : scaledPx(contour ? 16 : 24),
+        borderTop: editorial ? `6px solid ${accent}` : undefined,
+        borderLeft: contour ? `8px solid ${accent}` : undefined,
+        borderBottom: contour ? undefined : `${studio ? 6 : editorial ? 1 : 3}px solid ${accent}`,
+        marginBottom: scaledPx(contour ? 16 : 24)
+      }}>
+        {ledger ? <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 34%", gap: scaledPx(24) }}>
+          {blocks[0].node}
+          <div style={{ borderLeft: `1px solid ${accent}`, paddingLeft: scaledPx(16),
+            fontSize: scaledPx(11), lineHeight: 1.55, overflowWrap: "anywhere", color: colors.muted }}>
+            {header.contact_items.map((item, index) => <p key={index}>{renderPreviewText(item)}</p>)}
+            {header.social_links.map(link => <p key={link.id} style={{ marginTop: scaledPx(6) }}>
+              <a href={link.url} style={{ color: colors.accent, textDecoration: "underline" }}
+                target={mode === "thumbnail" ? undefined : "_blank"} rel="noreferrer">{link.label}</a>
+            </p>)}
+          </div>
+        </div> : blocks[0].node}
+      </div>
+    }];
+  }
   return blocks;
+}
+
+// Editorial section labels occupy a separate rail beside normalized CV content.
+function buildSignatureSectionBlocks(
+  section: PresentationSection,
+  options: Parameters<typeof buildSectionBlocks>[1],
+  layout: PresentationTheme["mode"],
+  sectionIndex = 0
+): BlockSpec[] {
+  if (layout === "ledger-split") {
+    return buildSectionBlocks(section, { ...options,
+      style: section.items.some(item => item.metadata_line || item.date_range) ? "timeline" : "default" });
+  }
+  if (layout === "contour-cards") {
+    return buildSectionBlocks(section, options).map((block, index) => ({ ...block,
+      node: <div style={{ position: "relative", paddingLeft: scaledPx(60) }}>
+        {index === 0 ? <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0,
+          width: scaledPx(32), height: scaledPx(32), background: options.colors.accent, color: "#ffffff",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", fontWeight: 700 }}>
+          {String(sectionIndex + 1).padStart(2, "0")}
+        </span> : null}
+        <div style={{ position: "absolute", left: scaledPx(44), top: 0, bottom: scaledPx(8),
+          width: 1, background: `${options.colors.accent}55` }} />
+        {block.node}
+      </div>
+    }));
+  }
+  if (layout === "editorial-index") {
+    // Use a content-only first block so the section label sits alongside its text.
+    const bodyBlocks: BlockSpec[] = [];
+    if (section.inline_text) bodyBlocks.push({
+      key: `${options.keyPrefix}${section.id}-intro`, column: options.column,
+      node: <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", lineHeight: 1.6, color: options.colors.body,
+        marginBottom: scaledPx(section.items.length ? options.blockSpacing : options.sectionSpacing) }}>
+        {renderPreviewText(section.inline_text)}</p>
+    });
+    section.items.forEach((item, index) => bodyBlocks.push({
+      key: `${options.keyPrefix}item-${item.id}`, column: options.column,
+      node: <div style={{ marginBottom: scaledPx(index === section.items.length - 1 ? options.sectionSpacing : options.blockSpacing) }}>
+        <DefaultItemBody item={item} colors={options.colors} />
+      </div>
+    }));
+    if (!bodyBlocks.length) bodyBlocks.push({ key: `${section.id}-empty`, column: options.column, node: null });
+    return bodyBlocks.map((block, index) => ({ ...block, node: <div style={{
+      display: "grid", gridTemplateColumns: `${scaledPx(108)} minmax(0, 1fr)`, gap: scaledPx(18)
+    }}>
+      {index === 0 ? <h2 style={{ color: options.colors.accent, fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", fontWeight: 700,
+        paddingTop: scaledPx(3), borderTop: `2px solid ${options.colors.accent}` }}>
+        {section.title}
+      </h2> : <div aria-hidden="true" />}
+      <div style={{ minWidth: 0 }}>{block.node}</div>
+    </div> }));
+  }
+  return buildSectionBlocks(section, options);
 }
 
 /**
@@ -528,7 +620,11 @@ export function CVPresentationPreview({
   const resolvedSpacingScale = clamp(spacingScale, MIN_SPACING_SCALE, MAX_SPACING_SCALE);
   const resolvedLayoutScale = clamp(layoutScale, MIN_LAYOUT_SCALE, MAX_LAYOUT_SCALE);
 
-  const rootScaleStyle = { "--cv-font-scale": String(resolvedFontScale) } as CSSProperties;
+  const compactSignature = presentation?.theme.mode === "ledger-split" || presentation?.theme.mode === "contour-cards";
+  const rootScaleStyle = {
+    "--cv-font-scale": String(resolvedFontScale),
+    "--cv-body-size": `${compactSignature ? presentation?.theme.tokens.body_text_size ?? 11 : 12}px`
+  } as CSSProperties;
 
   const measurementRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const heightsRef = useRef<Map<string, number>>(new Map());
@@ -558,16 +654,25 @@ export function CVPresentationPreview({
     const innerWidth = PAGE_WIDTH_PX - padX * 2;
     const innerHeight = PAGE_HEIGHT_PX - padY * 2;
 
-    const isTwoColumn = theme.mode === "portfolio-two-column";
-    const isTimeline = theme.mode === "timeline-split";
+    const isTwoColumn = ["portfolio-two-column", "studio-banner", "horizon-rail", "mosaic-columns"].includes(theme.mode);
+    const horizon = theme.mode === "horizon-rail";
+    const studio = theme.mode === "studio-banner";
+    const mosaic = theme.mode === "mosaic-columns";
+    const isTimeline = theme.mode === "timeline-split" || theme.mode === "ledger-split";
 
-    const sidebarOuterWidth = SIDEBAR_OUTER_WIDTH * resolvedFontScale;
-    const sidebarPadY = SIDEBAR_INNER_PADDING * resolvedFontScale;
-    const sidebarPadX = SIDEBAR_INNER_PADDING * resolvedFontScale;
+    const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP_PX) / 2 : SIDEBAR_OUTER_WIDTH * resolvedFontScale;
+    const sidebarPadY = mosaic ? 0 : SIDEBAR_INNER_PADDING * resolvedFontScale;
+    const sidebarPadX = mosaic ? 0 : SIDEBAR_INNER_PADDING * resolvedFontScale;
     const sidebarInnerWidth = Math.max(0, sidebarOuterWidth - sidebarPadX * 2);
     const mainColumnWidth = Math.max(0, innerWidth - sidebarOuterWidth - TWO_COLUMN_GAP_PX);
 
-    const headerBlocks = buildHeaderBlocks(presentation.header, theme, colors, mode);
+    const lightColors = {
+      heading: tokens.header_text_color_hex ?? colors.heading,
+      accent: tokens.header_accent_color_hex ?? colors.accent,
+      body: tokens.header_text_color_hex ?? colors.body,
+      muted: tokens.header_muted_color_hex ?? colors.muted
+    };
+    let headerBlocks = buildHeaderBlocks(presentation.header, theme, lightColors, mode);
 
     let sidebarBlocks: BlockSpec[] = [];
     let mainBlocks: BlockSpec[] = [];
@@ -575,16 +680,21 @@ export function CVPresentationPreview({
 
     if (isTwoColumn) {
       const sideSectionTypes = new Set(["skills", "languages", "references", "certifications", "courses"]);
-      const sidebarSections = presentation.sections.filter((s) => sideSectionTypes.has(s.type));
-      const mainSections = presentation.sections.filter((s) => !sideSectionTypes.has(s.type));
+      const flowSections = mosaic ? presentation.sections.filter(s => s.type !== "summary") : presentation.sections;
+      const sidebarSections = flowSections.filter((s) => mosaic ? s.type === "experience" : sideSectionTypes.has(s.type));
+      const mainSections = flowSections.filter((s) => mosaic ? s.type !== "experience" : !sideSectionTypes.has(s.type));
+      if (mosaic) headerBlocks.push(...presentation.sections.filter(s => s.type === "summary").flatMap(section =>
+        buildSectionBlocks(section, { colors, style: "default", sectionHeadingStyle: "ruled", blockSpacing: scaledBlockSpacing,
+          sectionSpacing: scaledSectionSpacing, column: "full", keyPrefix: "intro-" })));
 
-      const sidebarColors: PreviewColors = { ...colors, heading: colors.accent };
+
+      const sidebarColors: PreviewColors = horizon ? { ...lightColors, heading: lightColors.accent } : { ...colors, heading: colors.accent };
 
       sidebarBlocks = sidebarSections.flatMap((section) =>
         buildSectionBlocks(section, {
           colors: sidebarColors,
           style: "default",
-          sectionHeadingStyle: theme.tokens.section_heading_style,
+          sectionHeadingStyle: mosaic ? "ruled" : theme.tokens.section_heading_style,
           blockSpacing: Math.max(6, scaledBlockSpacing - 3),
           sectionSpacing: Math.max(10, scaledSectionSpacing - 3),
           column: "sidebar",
@@ -592,11 +702,16 @@ export function CVPresentationPreview({
         })
       );
 
+      if (horizon) {
+        sidebarBlocks = [...headerBlocks.map(block => ({ ...block, column: "sidebar" as const })), ...sidebarBlocks];
+        headerBlocks = [];
+      }
+
       mainBlocks = mainSections.flatMap((section) =>
         buildSectionBlocks(section, {
           colors,
           style: "default",
-          sectionHeadingStyle: theme.tokens.section_heading_style,
+          sectionHeadingStyle: mosaic ? "ruled" : theme.tokens.section_heading_style,
           blockSpacing: scaledBlockSpacing,
           sectionSpacing: scaledSectionSpacing,
           column: "main",
@@ -604,23 +719,25 @@ export function CVPresentationPreview({
         })
       );
     } else {
-      singleBlocks = presentation.sections.flatMap((section) =>
-        buildSectionBlocks(section, {
+      singleBlocks = presentation.sections.flatMap((section, sectionIndex) =>
+        buildSignatureSectionBlocks(section, {
           colors,
           style: isTimeline ? "timeline" : "default",
-          sectionHeadingStyle: theme.tokens.section_heading_style,
+          sectionHeadingStyle: mosaic ? "ruled" : theme.tokens.section_heading_style,
           blockSpacing: scaledBlockSpacing,
           sectionSpacing: scaledSectionSpacing,
           column: "full",
           keyPrefix: ""
-        })
+        }, theme.mode, sectionIndex)
       );
     }
 
     const sheetBaseStyle: CSSProperties = {
       width: `${PAGE_WIDTH_PX}px`,
       fontFamily: tokens.font_family,
-      background: tokens.page_background_hex,
+      background: horizon
+        ? `linear-gradient(to right, ${tokens.header_background_hex} 0px, ${tokens.header_background_hex} ${padX + sidebarOuterWidth}px, ${tokens.page_background_hex} ${padX + sidebarOuterWidth}px)`
+        : tokens.page_background_hex,
       color: colors.body,
       boxSizing: "border-box"
     };
@@ -787,28 +904,7 @@ export function CVPresentationPreview({
           <div key={block.key}>{block.node}</div>
         ))}
         {built.isTwoColumn ? (
-          <div
-            className="grid"
-            style={{ gridTemplateColumns: `${scaledPx(SIDEBAR_OUTER_WIDTH)} 1fr`, gap: `${TWO_COLUMN_GAP_PX}px` }}
-          >
-            <aside
-              style={{
-                background: `${built.colors.accent}0d`,
-                border: `1px solid ${built.colors.accent}2c`,
-                borderRadius: scaledPx(10),
-                padding: scaledPx(SIDEBAR_INNER_PADDING)
-              }}
-            >
-              {built.sidebarBlocks.map((block) => (
-                <div key={block.key}>{block.node}</div>
-              ))}
-            </aside>
-            <main>
-              {built.mainBlocks.map((block) => (
-                <div key={block.key}>{block.node}</div>
-              ))}
-            </main>
-          </div>
+          <TwoColumnPageContent page={{ kind: "two-column", header: [], sidebar: built.sidebarBlocks, main: built.mainBlocks }} built={built} />
         ) : (
           <div>
             {built.singleBlocks.map((block) => (
@@ -917,6 +1013,10 @@ function TwoColumnPageContent({
   page: TwoColumnPageSpec;
   built: BuiltPresentation;
 }) {
+  const studio = built.theme.mode === "studio-banner";
+  const horizon = built.theme.mode === "horizon-rail";
+  const mosaic = built.theme.mode === "mosaic-columns";
+  const tokens = built.theme.tokens;
   return (
     <>
       {page.header.map((block) => (
@@ -924,21 +1024,24 @@ function TwoColumnPageContent({
       ))}
       <div
         className="grid"
-        style={{ gridTemplateColumns: `${scaledPx(SIDEBAR_OUTER_WIDTH)} 1fr`, gap: `${TWO_COLUMN_GAP_PX}px` }}
+        style={{ gridTemplateColumns: mosaic ? "minmax(0, 1fr) minmax(0, 1fr)" : studio ? `minmax(0, 1fr) ${scaledPx(SIDEBAR_OUTER_WIDTH)}` : `${scaledPx(SIDEBAR_OUTER_WIDTH)} minmax(0, 1fr)`, gap: `${TWO_COLUMN_GAP_PX}px` }}
       >
         <aside
           style={{
-            background: `${built.colors.accent}0d`,
-            border: `1px solid ${built.colors.accent}2c`,
-            borderRadius: scaledPx(10),
-            padding: scaledPx(SIDEBAR_INNER_PADDING)
+            background: mosaic || ((studio || horizon) && page.sidebar.length === 0) ? undefined : horizon ? tokens.header_background_hex : studio ? tokens.surface_color_hex : `${built.colors.accent}0d`,
+            gridColumn: studio ? 2 : 1,
+            gridRow: 1,
+            alignSelf: studio || horizon ? "start" : undefined,
+            border: horizon || studio || mosaic ? undefined : `1px solid ${built.colors.accent}2c`,
+            borderRadius: horizon || studio || mosaic ? 0 : scaledPx(10),
+            padding: mosaic ? 0 : scaledPx(SIDEBAR_INNER_PADDING)
           }}
         >
           {page.sidebar.map((block) => (
             <div key={block.key}>{block.node}</div>
           ))}
         </aside>
-        <main>
+        <main style={{ gridColumn: studio ? 1 : 2, gridRow: 1, minWidth: 0 }}>
           {page.main.map((block) => (
             <div key={block.key}>{block.node}</div>
           ))}

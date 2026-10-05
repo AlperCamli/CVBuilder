@@ -14,13 +14,35 @@ export interface ExportDocumentTheme {
     | "creative-portfolio"
     | "academic-classic"
     | "tech-compact"
-    | "two-column-modern";
-  mode: "classic-single-column" | "compact-single-column" | "timeline-split" | "portfolio-two-column";
+    | "two-column-modern"
+    | "studio-banner"
+    | "editorial-index"
+    | "horizon-rail"
+    | "mosaic-columns"
+    | "ledger-split"
+    | "contour-cards";
+  mode:
+    | "classic-single-column"
+    | "compact-single-column"
+    | "timeline-split"
+    | "portfolio-two-column"
+    | "studio-banner"
+    | "editorial-index"
+    | "horizon-rail"
+    | "mosaic-columns"
+    | "ledger-split"
+    | "contour-cards";
   font_asset_key?: CvFontAssetKey;
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
+  /** Signature palette roles, shared by the preview and PDF exporter. */
+  header_background_hex?: string;
+  header_text_color_hex?: string;
+  header_accent_color_hex?: string;
+  header_muted_color_hex?: string;
+  surface_color_hex?: string;
   heading_color_hex: string;
   accent_color_hex: string;
   body_color_hex: string;
@@ -110,6 +132,11 @@ const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
     header_alignment: presentation.theme.tokens.header_alignment,
     header_photo_size: presentation.theme.tokens.header_photo_size,
     header_photo_position: presentation.theme.tokens.header_photo_position,
+    header_background_hex: presentation.theme.tokens.header_background_hex,
+    header_text_color_hex: presentation.theme.tokens.header_text_color_hex,
+    header_accent_color_hex: presentation.theme.tokens.header_accent_color_hex,
+    header_muted_color_hex: presentation.theme.tokens.header_muted_color_hex,
+    surface_color_hex: presentation.theme.tokens.surface_color_hex,
     section_heading_style: presentation.theme.tokens.section_heading_style
   };
 };

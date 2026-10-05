@@ -282,3 +282,64 @@ git diff --check
 ## Development-Only Templates
 
 For local or test-only rows, use `status = 'inactive'`. The seed currently includes `template-playground` as an inactive example so registry and listing behavior can be tested without exposing it to users.
+
+## Signature Templates
+
+The Signature collection has six layout modes, each with a base palette and two
+additional palettes (18 selectable templates). The catalog and all palette roles
+live in `src/modules/rendering/signature-template-profiles.ts`.
+
+| Layout | Mode | Composition | Palettes |
+| --- | --- | --- | --- |
+| Studio | `studio-banner` | Teal masthead, main content left, skills panel right | Teal (base), Ocean, Terracotta |
+| Editorial | `editorial-index` | Oversized serif masthead, section labels in a separate rail | Plum (base), Forest, Graphite |
+| Horizon | `horizon-rail` | Full-height identity sidebar, independent main column | Navy (base), Forest, Plum |
+| Mosaic | `mosaic-columns` | Centered masthead and full-width summary, equal experience/supporting columns | Ocean (base), Rose, Graphite |
+| Ledger | `ledger-split` | Split identity/contact masthead, date gutter and ruled headings | Terracotta (base), Teal, Plum |
+| Contour | `contour-cards` | Tinted name panel, numbered section gutter and indented content | Rose (base), Cobalt, Forest |
+
+Variant slugs append the palette to the mode, for example `studio-banner-ocean`.
+They resolve to the same layout mode as their base. Palette changes never change
+CV sections, their titles, or user content. Ledger and Contour use the existing
+inline skills presentation; the other families use the existing bulleted option.
+Samples use the standard system labels, including **Skills**.
+
+Optional presentation tokens `header_background_hex`, `header_text_color_hex`,
+`header_accent_color_hex`, `header_muted_color_hex`, and `surface_color_hex` are
+mapped directly into the export theme. Preview and PDF use these roles for every
+header, sidebar and decoration; do not hardcode variant colors in either renderer.
+Ledger and Contour use the `body_text_size` token for body/subtitle text in both.
+
+The six base layouts appear in the first gallery batch, followed by variants.
+The existing six-card lazy loading remains in place. Apply
+`20261005120000_signature_cv_templates.sql` and then
+`20261005130000_signature_layouts_and_palettes.sql` through the normal deployment
+process; fresh databases get all 18 from `seed.sql`. Deploy the frontend and backend
+renderer changes together with the migrations. No CV content migration is required.
+
+Custom sections remain in the main flow. Studio and Horizon put skills, languages,
+references, certifications and courses in the sidebar. Mosaic puts the summary
+above both columns, work experience in the left column, and all remaining sections
+in the right. Columns paginate independently. Photos are optional and respect the
+selected position and shape. Contour's numbers are decorative section positions,
+not new data fields or section names.
+
+PDF preserves the compositions with selectable text, embedded fonts and clickable
+links. DOCX remains an editable single-column export using the selected font and
+palette; it does not reproduce the Signature PDF composition.
+
+Generate sample PDFs, presentation JSON, PNGs and a standalone comparison gallery:
+
+```bash
+cd backend
+npx tsx scripts/preview-signature-templates.ts
+npx tsx scripts/render-signature-gallery.mts
+```
+
+Both scripts default to the root `artifacts/cv-templates/` directory and accept an
+optional output-directory argument. The gallery's family filters work locally and
+each card links to its PDF. Samples contain fictional data.
+
+`tests/signature-templates.unit.test.ts` verifies all 18 profiles: A4 output, bounds,
+text retention across pages, contact links, Unicode, photo positions, DOCX export,
+registration, palette propagation, contrast, and content equivalence within a family.

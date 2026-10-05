@@ -1,0 +1,150 @@
+{
+  "version": "v1",
+  "document_title": "Alex Morgan",
+  "theme": {
+    "layout": "contour-cards",
+    "mode": "contour-cards",
+    "template_slug": "contour-cards",
+    "template_name": "Contour",
+    "tokens": {
+      "font_family": "\"Noto Sans\", sans-serif",
+      "font_asset_key": "noto-sans",
+      "header_photo_size": 64,
+      "header_photo_position": "right",
+      "header_alignment": "left",
+      "header_background_hex": "#faeef4",
+      "header_text_color_hex": "#50243e",
+      "header_accent_color_hex": "#9b426d",
+      "header_muted_color_hex": "#526071",
+      "surface_color_hex": "#faeef4",
+      "heading_color_hex": "#50243e",
+      "accent_color_hex": "#9b426d",
+      "body_color_hex": "#293442",
+      "muted_color_hex": "#526071",
+      "page_background_hex": "#ffffff",
+      "section_heading_style": "plain",
+      "section_spacing": 10,
+      "block_spacing": 8,
+      "body_text_size": 11,
+      "compact_density": true
+    }
+  },
+  "header": {
+    "name": "Alex Morgan",
+    "title": "Senior Product Designer",
+    "email": "alex@example.com",
+    "phone": "+44 7700 900123",
+    "location": "London, UK",
+    "photo": null,
+    "photo_shape": "circle",
+    "photo_position": "right",
+    "contact_items": [
+      "alex@example.com",
+      "+44 7700 900123",
+      "London, UK"
+    ],
+    "social_links": [
+      {
+        "id": "portfolio",
+        "label": "alexmorgan.design",
+        "type": "website",
+        "url": "https://example.com/portfolio"
+      }
+    ]
+  },
+  "sections": [
+    {
+      "id": "summary",
+      "type": "summary",
+      "title": "Professional Summary",
+      "inline_text": "Product designer with eight years of experience turning complex problems into thoughtful digital experiences.",
+      "items": []
+    },
+    {
+      "id": "experience",
+      "type": "experience",
+      "title": "Work Experience",
+      "inline_text": null,
+      "items": [
+        {
+          "id": "role-1",
+          "title": "Senior Product Designer",
+          "subtitle": "Forma Studio",
+          "date_range": "2022 – Present",
+          "metadata_line": "2022 – Present",
+          "location": null,
+          "body": null,
+          "bullets": [
+            "Redesigned a platform for 40,000 customers, improving activation by 28%.",
+            "Built a shared design system across three products."
+          ]
+        },
+        {
+          "id": "role-2",
+          "title": "Product Designer",
+          "subtitle": "Northstar Digital",
+          "date_range": "2018 – 2022",
+          "metadata_line": "2018 – 2022",
+          "location": null,
+          "body": null,
+          "bullets": [
+            "Designed accessible web and mobile experiences.",
+            "Reduced support requests by 19% through usability testing."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "projects",
+      "type": "projects",
+      "title": "Projects",
+      "inline_text": null,
+      "items": [
+        {
+          "id": "project-1",
+          "title": "A clearer way to bank",
+          "subtitle": "Independent design project",
+          "date_range": "2024",
+          "metadata_line": "2024",
+          "location": null,
+          "body": null,
+          "bullets": [
+            "Simplified everyday banking with inclusive design."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "education",
+      "type": "education",
+      "title": "Education",
+      "inline_text": null,
+      "items": [
+        {
+          "id": "education-1",
+          "title": "BA, Communication Design",
+          "subtitle": "University of the Arts London",
+          "date_range": "2014 – 2018",
+          "metadata_line": "2014 – 2018",
+          "location": null,
+          "body": null,
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "type": "skills",
+      "title": "Skills",
+      "inline_text": "Product strategy, Interaction design, User research, Design systems, Figma & prototyping",
+      "items": []
+    },
+    {
+      "id": "languages",
+      "type": "languages",
+      "title": "Languages",
+      "inline_text": "English · Native\nFrench · Professional",
+      "items": []
+    }
+  ]
+}

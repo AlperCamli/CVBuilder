@@ -1,3 +1,4 @@
+import { SIGNATURE_TEMPLATE_PROFILES } from "./signature-template-profiles";
 import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import { buildCvFontFamily, type CvFontAssetKey } from "../../shared/cv-fonts/cv-font-catalog";
@@ -11,13 +12,25 @@ export type PresentationTemplateLayout =
   | "creative-portfolio"
   | "academic-classic"
   | "tech-compact"
-  | "two-column-modern";
+  | "two-column-modern"
+  | "studio-banner"
+  | "editorial-index"
+  | "horizon-rail"
+  | "mosaic-columns"
+  | "ledger-split"
+  | "contour-cards";
 
 export type PresentationLayoutMode =
   | "classic-single-column"
   | "compact-single-column"
   | "timeline-split"
-  | "portfolio-two-column";
+  | "portfolio-two-column"
+  | "studio-banner"
+  | "editorial-index"
+  | "horizon-rail"
+  | "mosaic-columns"
+  | "ledger-split"
+  | "contour-cards";
 
 export interface PresentationStyleTokens {
   font_family: string;
@@ -26,6 +39,12 @@ export interface PresentationStyleTokens {
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
+  /** Signature palette roles, shared by the preview and PDF exporter. */
+  header_background_hex?: string;
+  header_text_color_hex?: string;
+  header_accent_color_hex?: string;
+  header_muted_color_hex?: string;
+  surface_color_hex?: string;
   heading_color_hex: string;
   accent_color_hex: string;
   body_color_hex: string;
@@ -97,7 +116,7 @@ export interface RenderingPresentation {
 
 type SkillsDisplay = "inline" | "bulleted";
 
-interface TemplateProfile {
+export interface TemplateProfile {
   layout: PresentationTemplateLayout;
   mode: PresentationLayoutMode;
   tokens: PresentationStyleTokens;
@@ -125,6 +144,7 @@ const DEFAULT_PROFILE: TemplateProfile = {
 };
 
 const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
+  ...SIGNATURE_TEMPLATE_PROFILES,
   "modern-clean": DEFAULT_PROFILE,
   "minimal-professional": {
     layout: "minimal-professional",

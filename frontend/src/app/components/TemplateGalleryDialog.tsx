@@ -68,6 +68,14 @@ export function TemplateGalleryDialog({
   const sortedTemplates = useMemo(
     () =>
       [...templates].sort((a, b) => {
+        const aSignature = a.preview_config?.theme === "signature";
+        const bSignature = b.preview_config?.theme === "signature";
+        if (aSignature !== bSignature) return aSignature ? -1 : 1;
+        if (aSignature && bSignature) {
+          const aBase = a.preview_config?.family === a.slug;
+          const bBase = b.preview_config?.family === b.slug;
+          if (aBase !== bBase) return aBase ? -1 : 1;
+        }
         const aLatex = isLatexTemplate(a);
         const bLatex = isLatexTemplate(b);
         if (aLatex !== bLatex) {

@@ -339,13 +339,25 @@ export type PresentationTemplateLayout =
   | "creative-portfolio"
   | "academic-classic"
   | "tech-compact"
-  | "two-column-modern";
+  | "two-column-modern"
+  | "studio-banner"
+  | "editorial-index"
+  | "horizon-rail"
+  | "mosaic-columns"
+  | "ledger-split"
+  | "contour-cards";
 
 export type PresentationLayoutMode =
   | "classic-single-column"
   | "compact-single-column"
   | "timeline-split"
-  | "portfolio-two-column";
+  | "portfolio-two-column"
+  | "studio-banner"
+  | "editorial-index"
+  | "horizon-rail"
+  | "mosaic-columns"
+  | "ledger-split"
+  | "contour-cards";
 
 export interface PresentationStyleTokens {
   font_family: string;
@@ -362,6 +374,12 @@ export interface PresentationStyleTokens {
   header_photo_size?: number;
   header_photo_position?: "left" | "center" | "right";
   section_heading_style?: "plain" | "ruled";
+  /** Signature palette roles, shared by the preview and PDF exporter. */
+  header_background_hex?: string;
+  header_text_color_hex?: string;
+  header_accent_color_hex?: string;
+  header_muted_color_hex?: string;
+  surface_color_hex?: string;
   heading_color_hex: string;
   accent_color_hex: string;
   body_color_hex: string;

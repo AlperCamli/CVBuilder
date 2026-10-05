@@ -112,6 +112,9 @@ interface PdfBlock {
   column: ColumnKind;
   keepWithNext?: boolean;
   shape: BlockShape;
+  palette?: PdfPalette;
+  background?: { color: string; width: number; height: number };
+  badge?: string;
 }
 
 interface Style {
@@ -875,6 +878,7 @@ const buildSectionBlocks = (
     blockSpacing: number;
     sectionSpacing: number;
     isSidebar: boolean;
+    sectionIndex?: number;
   }
 ): PdfBlock[] => {
   const { column, keyPrefix, isTimeline, blockSpacing, sectionSpacing, isSidebar } = options;
@@ -963,6 +967,55 @@ const buildSectionBlocks = (
     });
   });
 
+  return blocks;
+};
+
+// Contour uses a numbered gutter; the original section titles and content are retained.
+const buildContourSectionBlocks = (
+  section: ExportDocumentSection, width: number, style: Style,
+  options: Parameters<typeof buildSectionBlocks>[3]
+): PdfBlock[] => {
+  const inset = 60 * style.fontScale;
+  const blocks = buildSectionBlocks(section, width - inset, style, options);
+  blocks.forEach((block, index) => {
+    block.shape.lines.forEach(line => { line.xOffset += inset; });
+    block.shape.shapes.forEach(shape => { shape.xOffset += inset; });
+    block.shape.shapes.push({ kind: "vertical-line", xOffset: 44 * style.fontScale,
+      yFromTop: 0, height: Math.max(0, block.shape.height - 8 * style.fontScale), colorKey: "accent", opacity: 0.35 });
+    if (index === 0) block.badge = String((options.sectionIndex ?? 0) + 1).padStart(2, "0");
+  });
+  return blocks;
+};
+
+// Editorial places each section label beside its first content block. Subsequent
+// items retain the same content inset and can paginate independently.
+const buildEditorialSectionBlocks = (
+  section: ExportDocumentSection, width: number, style: Style,
+  options: Parameters<typeof buildSectionBlocks>[3]
+): PdfBlock[] => {
+  const rail = 108 * style.fontScale;
+  const inset = rail + 18 * style.fontScale;
+  const contentWidth = width - inset;
+  const blocks: PdfBlock[] = [];
+  if (section.inline_text) blocks.push({ key: `${options.keyPrefix}intro`, column: options.column,
+    shape: buildInlineParagraphBlock(section.inline_text, contentWidth, style,
+      section.blocks.length ? options.blockSpacing : options.sectionSpacing) });
+  section.blocks.forEach((item, index) => blocks.push({
+    key: `${options.keyPrefix}item-${index}`, column: options.column,
+    shape: buildDefaultItemBlock(item, contentWidth, style,
+      index === section.blocks.length - 1 ? options.sectionSpacing : options.blockSpacing)
+  }));
+  if (!blocks.length) blocks.push({ key: `${options.keyPrefix}empty`, column: options.column,
+    shape: { lines: [], shapes: [], images: [], height: options.sectionSpacing } });
+  blocks.forEach(block => block.shape.lines.forEach(line => { line.xOffset += inset; }));
+  const first = blocks[0].shape;
+  const labelHeight = appendTextLines(first.lines, section.title, {
+    font: style.fonts.bold, fontWeight: "bold", size: 12 * style.fontScale, color: "accent",
+    maxWidth: rail, xOffset: 0, yFromTop: 5 * style.fontScale, lineHeight: 15.6 * style.fontScale
+  });
+  first.shapes.push({ kind: "horizontal-line", xOffset: 0, yFromTop: 1,
+    width: rail, colorKey: "accent", thickness: 2 });
+  first.height = Math.max(first.height, labelHeight + options.sectionSpacing);
   return blocks;
 };
 
@@ -1128,7 +1181,20 @@ const drawBlock = (
   topY: number,
   style: Style
 ): void => {
-  const palette = block.column === "sidebar" ? style.sidebarPalette : style.palette;
+  const palette = block.palette ?? (block.column === "sidebar" ? style.sidebarPalette : style.palette);
+  if (block.background) page.drawRectangle({
+    x: leftX, y: topY - block.background.height, width: block.background.width,
+    height: block.background.height, color: hexToRgb(block.background.color)
+  });
+
+  if (block.badge) {
+    const size = 32 * style.fontScale;
+    page.drawRectangle({ x: leftX, y: topY - size, width: size, height: size, color: palette.accent });
+    const textSize = 12 * style.fontScale;
+    const textWidth = style.fonts.bold.widthOfTextAtSize(block.badge, textSize);
+    page.drawText(block.badge, { x: leftX + (size - textWidth) / 2,
+      y: topY - size / 2 - textSize * 0.35, size: textSize, font: style.fonts.bold, color: rgb(1, 1, 1) });
+  }
 
   for (const image of block.shape.images) {
     const imageX = leftX + image.xOffset;
@@ -1233,6 +1299,14 @@ export const generatePdfDocument = async (
   pdf.registerFontkit(fontkit);
 
   const theme = documentModel.theme;
+  const studio = theme.mode === "studio-banner";
+  const horizon = theme.mode === "horizon-rail";
+  const editorial = theme.mode === "editorial-index";
+  const mosaic = theme.mode === "mosaic-columns";
+  const ledger = theme.mode === "ledger-split";
+  const contour = theme.mode === "contour-cards";
+  const signature = studio || horizon || editorial || mosaic || ledger || contour;
+  const filledHeader = studio || mosaic || contour;
   const fontAsset = resolveCvFontDefinition(theme.font_asset_key);
   const regularFontBytes = tryReadFontBytes(fontAsset.regularFile);
   const boldFontBytes = tryReadFontBytes(fontAsset.boldFile);
@@ -1247,7 +1321,13 @@ export const generatePdfDocument = async (
   };
   // Sidebar inherits a palette where "heading" is rendered with the accent color, matching
   // the preview's renderDefaultSection(... { heading: colors.accent }) for two-column mode.
-  const sidebarPalette: PdfPalette = { ...palette, heading: palette.accent };
+  const lightPalette: PdfPalette = {
+    heading: hexToRgb(theme.header_text_color_hex ?? theme.heading_color_hex),
+    accent: hexToRgb(theme.header_accent_color_hex ?? theme.accent_color_hex),
+    body: hexToRgb(theme.header_text_color_hex ?? theme.body_color_hex),
+    muted: hexToRgb(theme.header_muted_color_hex ?? theme.muted_color_hex)
+  };
+  const sidebarPalette: PdfPalette = horizon ? lightPalette : { ...palette, heading: palette.accent };
 
   const fontScale = scales.font_scale;
   const spacingScale = scales.spacing_scale;
@@ -1261,8 +1341,8 @@ export const generatePdfDocument = async (
   const innerWidth = PAGE_WIDTH - padX * 2;
   const innerHeight = PAGE_HEIGHT - padY * 2;
 
-  const sidebarOuterWidth = SIDEBAR_OUTER_WIDTH * fontScale;
-  const sidebarInnerPaddingScaled = SIDEBAR_INNER_PADDING * fontScale;
+  const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP) / 2 : SIDEBAR_OUTER_WIDTH * fontScale;
+  const sidebarInnerPaddingScaled = mosaic ? 0 : SIDEBAR_INNER_PADDING * fontScale;
   const sidebarInnerWidth = Math.max(0, sidebarOuterWidth - sidebarInnerPaddingScaled * 2);
   const mainColumnWidth = Math.max(0, innerWidth - sidebarOuterWidth - TWO_COLUMN_GAP);
 
@@ -1278,19 +1358,19 @@ export const generatePdfDocument = async (
     sectionSpacing: theme.section_spacing * spacingScale,
     sidebarBlockSpacing: Math.max(6, theme.block_spacing * spacingScale - 3),
     sidebarSectionSpacing: Math.max(10, theme.section_spacing * spacingScale - 3),
-    headerNameSize: (theme.mode === "compact-single-column" ? 21 : 23) * fontScale,
+    headerNameSize: (studio ? 34 : editorial ? 42 : horizon ? 27 : mosaic || ledger ? 32 : contour ? 36 : theme.mode === "compact-single-column" ? 21 : 23) * fontScale,
     headerTitleSize: 14 * fontScale,
     headerContactSize: 11 * fontScale,
     sectionTitleSize: 14 * fontScale,
     itemTitleSize: 13 * fontScale,
-    itemSubtitleSize: 12 * fontScale,
+    itemSubtitleSize: (ledger || contour ? theme.body_text_size : 12) * fontScale,
     itemMetaSize: 11 * fontScale,
-    itemBodySize: 12 * fontScale,
-    bulletSize: 12 * fontScale,
+    itemBodySize: (ledger || contour ? theme.body_text_size : 12) * fontScale,
+    bulletSize: (ledger || contour ? theme.body_text_size : 12) * fontScale,
     timelineDateSize: 11 * fontScale,
     photoSize: (theme.header_photo_size ?? 72) * fontScale,
     headerAlignment: theme.header_alignment ?? "left",
-    sectionHeadingStyle: theme.section_heading_style ?? "plain",
+    sectionHeadingStyle: mosaic || ledger ? "ruled" : theme.section_heading_style ?? "plain",
     sidebarInnerWidth,
     mainColumnWidth,
     fonts: { regular, bold },
@@ -1310,21 +1390,68 @@ export const generatePdfDocument = async (
     }
   }
 
-  const isTwoColumn = theme.mode === "portfolio-two-column";
-  const isTimeline = theme.mode === "timeline-split";
+  const isTwoColumn = theme.mode === "portfolio-two-column" || studio || horizon || mosaic;
+  const isTimeline = theme.mode === "timeline-split" || ledger;
 
-  // Build block lists. The header block list (header text + divider) is always full-width.
+  // Signature headers use measured text and the same embedded fonts as body content.
+  const headerWidth = horizon ? sidebarInnerWidth : filledHeader ? innerWidth - (contour ? 32 : 48) * fontScale - (contour ? 8 : 0) : innerWidth;
+  const headerStyle = { ...style, innerWidth: ledger ? innerWidth * 0.66 - 24 * fontScale : headerWidth };
+  const headerShape = buildHeaderBlock(ledger ? { ...documentModel, contact_items: [], social_links: [] } : documentModel, headerStyle, photoImage);
+  if (ledger) {
+    const rightX = innerWidth * 0.66 + 16 * fontScale;
+    const rightWidth = innerWidth * 0.34 - 16 * fontScale;
+    let y = 0;
+    for (const item of documentModel.contact_items) {
+      y += appendLinkedSegments(headerShape.lines, [toContactSegment(item)], "", {
+        font: style.fonts.regular, fontWeight: "regular", size: style.headerContactSize,
+        color: "muted", maxWidth: rightWidth, xOffset: rightX, yFromTop: y,
+        lineHeight: style.headerContactSize * 1.55
+      });
+    }
+    for (const link of documentModel.social_links) {
+      y += 6 * fontScale;
+      y += appendLinkedSegments(headerShape.lines, [{ text: link.label, link: link.url }], "", {
+        font: style.fonts.regular, fontWeight: "regular", size: style.headerContactSize,
+        color: "accent", maxWidth: rightWidth, xOffset: rightX, yFromTop: y,
+        lineHeight: style.headerContactSize * 1.55
+      });
+    }
+    headerShape.height = Math.max(headerShape.height, y);
+    headerShape.shapes.push({ kind: "vertical-line", xOffset: innerWidth * 0.66, yFromTop: 0,
+      height: headerShape.height, colorKey: "accent", thickness: 1 });
+  }
+  if (horizon) {
+    headerShape.lines.forEach(line => { line.alignCenter = false; });
+    if (documentModel.photo_position === "center") headerShape.images.forEach(image => { image.xOffset = 0; });
+  }
+  const insetX = filledHeader ? (contour ? 16 : 24) * fontScale + (contour ? 8 : 0) : 0;
+  const insetY = filledHeader ? (contour ? 16 : 24) * fontScale : editorial ? 18 * fontScale + 6 : 0;
+  headerShape.lines.forEach(line => { line.xOffset += insetX; line.yFromTop += insetY; });
+  headerShape.images.forEach(image => { image.xOffset += insetX; image.yFromTop += insetY; });
+  const headerVisibleHeight = headerShape.height + insetY +
+    (studio ? 24 * fontScale + 6 : editorial ? 24 * fontScale + 1 : horizon ? 22 * fontScale + 3 : signature ? (contour ? 16 : 24) * fontScale + (contour ? 0 : 3) : 0);
+  if (signature) {
+    if (contour) headerShape.shapes.push({ kind: "vertical-line", xOffset: 4, yFromTop: 0,
+      height: headerVisibleHeight, colorKey: "accent", thickness: 8 });
+    else headerShape.shapes.push({ kind: "horizontal-line", xOffset: 0,
+      yFromTop: editorial ? 3 : headerVisibleHeight - (studio ? 3 : 1.5),
+      width: horizon ? sidebarInnerWidth : innerWidth, colorKey: "accent", thickness: editorial || studio ? 6 : 3 });
+    headerShape.height = headerVisibleHeight + (contour ? 16 : 24) * fontScale;
+  }
   const headerBlock: PdfBlock = {
-    key: "header",
-    column: "full",
-    shape: buildHeaderBlock(documentModel, style, photoImage)
+    key: "header", column: horizon ? "sidebar" : "full", shape: headerShape,
+    palette: signature ? lightPalette : undefined,
+    background: filledHeader ? { color: theme.header_background_hex ?? theme.page_background_hex,
+      width: innerWidth, height: headerVisibleHeight } : undefined
   };
-  const headerDividerBlock: PdfBlock = {
-    key: "header-divider",
-    column: "full",
-    shape: buildHeaderDividerBlock(style)
-  };
-  const headerBlocks: PdfBlock[] = [headerBlock, headerDividerBlock];
+  if (editorial) headerShape.shapes.push({ kind: "horizontal-line", xOffset: 0,
+    yFromTop: headerVisibleHeight, width: innerWidth, colorKey: "accent", thickness: 0.7, opacity: 0.35 });
+  const headerBlocks: PdfBlock[] = horizon ? [] : signature ? [headerBlock] : [headerBlock, {
+    key: "header-divider", column: "full", shape: buildHeaderDividerBlock(style)
+  }];
+  if (mosaic) headerBlocks.push(...documentModel.sections.filter(section => section.type === "summary").flatMap((section, index) =>
+    buildSectionBlocks(section, innerWidth, style, { column: "full", keyPrefix: `intro-${index}-`,
+      isTimeline: false, blockSpacing: style.blockSpacing, sectionSpacing: style.sectionSpacing, isSidebar: false })));
   const headerTotalHeight = headerBlocks.reduce((sum, block) => sum + block.shape.height, 0);
 
   let singlePages: PdfBlock[][] = [];
@@ -1332,8 +1459,9 @@ export const generatePdfDocument = async (
   let mainPages: PdfBlock[][] = [];
 
   if (isTwoColumn) {
-    const sidebarSections = documentModel.sections.filter((s) => SIDEBAR_SECTION_TYPES.has(s.type));
-    const mainSections = documentModel.sections.filter((s) => !SIDEBAR_SECTION_TYPES.has(s.type));
+    const flowSections = mosaic ? documentModel.sections.filter(s => s.type !== "summary") : documentModel.sections;
+    const sidebarSections = flowSections.filter(s => mosaic ? s.type === "experience" : SIDEBAR_SECTION_TYPES.has(s.type));
+    const mainSections = flowSections.filter(s => mosaic ? s.type !== "experience" : !SIDEBAR_SECTION_TYPES.has(s.type));
 
     const sidebarBlocks: PdfBlock[] = sidebarSections.flatMap((section, sectionIndex) =>
       buildSectionBlocks(section, sidebarInnerWidth, style, {
@@ -1342,9 +1470,11 @@ export const generatePdfDocument = async (
         isTimeline: false,
         blockSpacing: style.sidebarBlockSpacing,
         sectionSpacing: style.sidebarSectionSpacing,
-        isSidebar: true
+        isSidebar: !mosaic
       })
     );
+
+    if (horizon) sidebarBlocks.unshift(headerBlock);
 
     const mainBlocks: PdfBlock[] = mainSections.flatMap((section, sectionIndex) =>
       buildSectionBlocks(section, mainColumnWidth, style, {
@@ -1367,10 +1497,11 @@ export const generatePdfDocument = async (
     mainPages = paginateBlocks(mainBlocks, [mainPage1Available, mainPageNAvailable]);
   } else {
     const singleBlocks: PdfBlock[] = documentModel.sections.flatMap((section, sectionIndex) =>
-      buildSectionBlocks(section, innerWidth, style, {
+      (editorial ? buildEditorialSectionBlocks : contour ? buildContourSectionBlocks : buildSectionBlocks)(section, innerWidth, style, {
         column: "full",
         keyPrefix: `s-${sectionIndex}-`,
-        isTimeline,
+        sectionIndex,
+        isTimeline: isTimeline && (!ledger || section.blocks.some(item => item.metadata_line)),
         blockSpacing: style.blockSpacing,
         sectionSpacing: style.sectionSpacing,
         isSidebar: false
@@ -1396,6 +1527,9 @@ export const generatePdfDocument = async (
       color: hexToRgb(theme.page_background_hex)
     });
 
+    if (horizon) page.drawRectangle({ x: 0, y: 0,
+      width: padX + sidebarOuterWidth, height: PAGE_HEIGHT, color: hexToRgb(theme.header_background_hex ?? theme.heading_color_hex) });
+
     const pageTopY = PAGE_HEIGHT - padY;
     const pageLeftX = padX;
 
@@ -1414,19 +1548,23 @@ export const generatePdfDocument = async (
 
       const sidebarHeight = sidebarBlocksOnPage.reduce((sum, block) => sum + block.shape.height, 0);
       const sidebarCardHeight = sidebarHeight + sidebarInnerPaddingScaled * 2;
-      if (sidebarBlocksOnPage.length > 0) {
-        drawSidebarCard(page, style, pageLeftX, cursorY, sidebarOuterWidth, sidebarCardHeight);
+      const sidebarX = studio ? pageLeftX + mainColumnWidth + TWO_COLUMN_GAP : pageLeftX;
+      const mainX = studio ? pageLeftX : pageLeftX + sidebarOuterWidth + TWO_COLUMN_GAP;
+      if (sidebarBlocksOnPage.length > 0 && !horizon && !mosaic) {
+        if (studio) page.drawRectangle({ x: sidebarX, y: cursorY - sidebarCardHeight,
+          width: sidebarOuterWidth, height: sidebarCardHeight, color: hexToRgb(theme.surface_color_hex ?? theme.page_background_hex) });
+        else drawSidebarCard(page, style, sidebarX, cursorY, sidebarOuterWidth, sidebarCardHeight);
       }
 
       let sidebarCursorY = cursorY - sidebarInnerPaddingScaled;
       for (const block of sidebarBlocksOnPage) {
-        drawBlock(page, block, pageLeftX + sidebarInnerPaddingScaled, sidebarCursorY, style);
+        drawBlock(page, block, sidebarX + sidebarInnerPaddingScaled, sidebarCursorY, style);
         sidebarCursorY -= block.shape.height;
       }
 
       let mainCursorY = cursorY;
       for (const block of mainBlocksOnPage) {
-        drawBlock(page, block, pageLeftX + sidebarOuterWidth + TWO_COLUMN_GAP, mainCursorY, style);
+        drawBlock(page, block, mainX, mainCursorY, style);
         mainCursorY -= block.shape.height;
       }
     } else {
