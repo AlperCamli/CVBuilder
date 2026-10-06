@@ -1,3 +1,4 @@
+import { reviewCv } from "../cv-review/cv-review";
 import type { Logger } from "pino";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
@@ -201,7 +202,8 @@ export class ImportsService {
 
     await this.importsRepository.updateImport(session.appUser.id, importId, {
       status: "parsing",
-      error_message: null
+      error_message: null,
+      review_context: null
     });
 
     try {
@@ -231,6 +233,7 @@ export class ImportsService {
         parser_name: effectiveParseResult.parserName,
         raw_extracted_text: effectiveParseResult.rawExtractedText,
         parsed_content: canonicalizedContent,
+        review_context: { diagnostics: effectiveParseResult.diagnostics ?? null, warnings: effectiveParseResult.warnings },
         error_message: null
       });
 
@@ -262,7 +265,10 @@ export class ImportsService {
       const failed = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "failed",
         error_message: message,
-        parser_name: null
+        parser_name: null,
+        parsed_content: null,
+        raw_extracted_text: null,
+        review_context: null
       });
 
       if (!failed) {
@@ -419,6 +425,7 @@ export class ImportsService {
 
   private toImportResultView(importRow: ImportRecord): ImportResultView {
     return {
+      review: reviewCv({ content: importRow.parsed_content, import_status: importRow.status, raw_text: importRow.raw_extracted_text, diagnostics: importRow.review_context?.diagnostics }),
       status: importRow.status,
       module_type: importRow.module_type,
       parser_name: importRow.parser_name,

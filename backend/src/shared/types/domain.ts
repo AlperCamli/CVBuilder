@@ -1,3 +1,4 @@
+import type { ImportReviewContext, TailoringReview } from "../../modules/cv-review/cv-review.types";
 import type { CvContent } from "../cv-content/cv-content.types";
 
 export type LocaleCode = "en" | "tr";
@@ -87,6 +88,7 @@ export interface MasterCvRecord {
 export type TailoredCvStatus = "draft" | "ready" | "exported" | "archived";
 
 export interface TailoredCvRecord {
+  tailoring_review?: TailoringReview | null;
   id: string;
   user_id: string;
   master_cv_id: string;
@@ -293,6 +295,7 @@ export interface CoverLetterExportRecord {
 export type ImportStatus = "uploaded" | "parsing" | "parsed" | "reviewed" | "converted" | "failed";
 
 export interface ImportRecord {
+  review_context?: ImportReviewContext | null;
   id: string;
   user_id: string;
   source_file_id: string;

@@ -396,7 +396,8 @@ export class TailoredCvService {
       last_exported_at: row.last_exported_at,
       current_content: row.current_content,
       preview: buildCvPreview(row.current_content),
-      source_master_cv: sourceMaster
+      source_master_cv: sourceMaster,
+      tailoring_review: row.tailoring_review ?? null
     };
   }
 

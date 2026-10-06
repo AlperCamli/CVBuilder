@@ -37,6 +37,7 @@ export interface TailoredCvSummary {
 }
 
 export interface TailoredCvDetail extends TailoredCvSummary {
+  tailoring_review: import("../cv-review/cv-review.types").TailoringReview | null;
   template_id: string | null;
   ai_generation_status: string | null;
   last_exported_at: string | null;

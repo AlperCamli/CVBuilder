@@ -185,6 +185,7 @@ export interface TailoredCvDraftJobSummary {
 }
 
 export interface TailoredCvDraftSummary {
+  tailoring_review: import("../cv-review/cv-review.types").TailoringReview | null;
   id: string;
   title: string;
   language: string;

@@ -1,3 +1,4 @@
+import { reviewTailoring } from "../cv-review/cv-review";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -1020,6 +1021,7 @@ export class AiService {
         language: normalizedContent.language,
         template_id: validatedTemplateId !== undefined ? validatedTemplateId : tailoredCv.template_id,
         ai_generation_status: "completed",
+        tailoring_review: reviewTailoring(masterCv.current_content, normalizedContent, input.job, selectedKeywords),
         job_id: job.id
       });
 
@@ -2484,6 +2486,7 @@ export class AiService {
         language: normalizedContent.language,
         template_id: validatedTemplateId !== undefined ? validatedTemplateId : tailoredCv.template_id,
         ai_generation_status: "completed",
+        tailoring_review: reviewTailoring(masterCv.current_content, normalizedContent, input.job, selectedKeywords),
         job_id: job.id
       });
 
@@ -3400,6 +3403,7 @@ export class AiService {
 
   private toTailoredDraftSummary(row: TailoredCvRecord): TailoredCvDraftSummary {
     return {
+      tailoring_review: row.tailoring_review ?? null,
       id: row.id,
       title: row.title,
       language: row.language,

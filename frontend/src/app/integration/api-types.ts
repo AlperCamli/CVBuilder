@@ -494,6 +494,7 @@ export interface TailoredCvSourceMasterSummary {
 }
 
 export interface TailoredCvDetail extends TailoredCvSummary {
+  tailoring_review: TailoringReview | null;
   template_id: string | null;
   ai_generation_status: string | null;
   last_exported_at: string | null;
@@ -598,6 +599,7 @@ export interface ParseImportResponse {
 }
 
 export interface ImportResultView {
+  review: CvReview;
   status: ImportStatus;
   module_type: string;
   parser_name: string | null;
@@ -753,6 +755,7 @@ export interface TailoringRunResultResponse {
 }
 
 export interface TailoredCvDraftSummary {
+  tailoring_review: TailoringReview | null;
   id: string;
   title: string;
   language: string;
@@ -1139,4 +1142,50 @@ export interface CreateCheckoutResponseData {
 
 export interface CreatePortalResponseData {
   portal_url: string;
+}
+
+export type ReviewDimensionId = "ats" | "sections" | "relevance" | "keywords" | "quality" | "impact" | "formatting";
+
+export interface ReviewCheck {
+  id: string;
+  label: string;
+  points: number;
+  max_points: number;
+  evidence: string;
+  suggestion: string;
+}
+
+export interface ReviewDimension {
+  id: ReviewDimensionId;
+  label: string;
+  weight: number;
+  score: number | null;
+  reason: string | null;
+  checks: ReviewCheck[];
+}
+
+export interface CvReview {
+  version: "cv-review-v1";
+  status: "complete" | "partial" | "unscorable";
+  score: number | null;
+  assessed_weight: number;
+  summary: string;
+  dimensions: ReviewDimension[];
+  strengths: string[];
+  improvements: string[];
+  matched_keywords: string[];
+  missing_keywords: string[];
+  limitations: string[];
+}
+
+export interface TailoringReview {
+  version: "cv-review-v1";
+  before: CvReview;
+  after: CvReview;
+  score_change: number | null;
+  changes: Array<{ dimension: ReviewDimensionId; label: string; before: number; after: number; reason: string }>;
+  added_keywords: string[];
+  removed_keywords: string[];
+  changed_sections: string[];
+  summary: string;
 }

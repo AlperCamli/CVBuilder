@@ -47,6 +47,7 @@ export interface ImportDetail {
 }
 
 export interface ImportResultView {
+  review: import("../cv-review/cv-review.types").CvReview;
   status: ImportStatus;
   module_type: string;
   parser_name: string | null;

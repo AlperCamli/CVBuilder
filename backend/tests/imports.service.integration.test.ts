@@ -502,6 +502,22 @@ const createPromptResolver = (): AiPromptResolver => {
 };
 
 describe("imports service integration checks", () => {
+  it("clears stale parsed content and withholds a score when a re-parse fails", async () => {
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("raw text")), "text/plain", "cv.txt");
+    await repository.updateImport(userId, repository.importId, { status: "parsed", parsed_content: createNonCanonicalContent(), raw_extracted_text: "previous extracted text" });
+    const parser: CvParser = { async parse() { throw new Error("Extraction unavailable"); } };
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser);
+    const session = buildSession(userId);
+    const response = await service.parseImport(session, repository.importId);
+    expect(response.parse_summary.status).toBe("failed");
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.parsed_content).toBeNull();
+    expect(result.raw_extracted_text).toBeNull();
+    expect(result.review.score).toBeNull();
+    expect(result.review.status).toBe("unscorable");
+  });
+
   it("returns parsed status with warnings on low-confidence PDF text and still converts to master CV", async () => {
     const userId = randomUUID();
 
@@ -536,6 +552,14 @@ describe("imports service integration checks", () => {
     expect(parsed.parse_summary.warnings.join("\n")).toMatch(
       /Extraction diagnostics|Low-confidence extraction detected|No readable text/i
     );
+
+    // A fresh service instance must use persisted evidence, not navigation state.
+    const refreshedService = new ImportsService(importsRepository, masterCvRepository, new SimpleCvParser());
+    const review = await refreshedService.getImportResult(session, importsRepository.importId);
+    expect(review.review.status).toBe("unscorable");
+    expect(review.review.score).toBeNull();
+    expect(review.review.summary).toContain("ATS compatibility issue");
+    expect(parsed.import.import.review_context?.diagnostics).toEqual(parsed.parse_summary.diagnostics);
 
     const converted = await service.createMasterCvFromImport(session, importsRepository.importId, {
       title: "Imported CV"

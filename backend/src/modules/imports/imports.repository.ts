@@ -22,6 +22,7 @@ export interface CreateImportPayload {
 }
 
 export interface ImportUpdatePayload {
+  review_context?: ImportRecord["review_context"];
   status?: ImportStatus;
   parser_name?: string | null;
   raw_extracted_text?: string | null;
@@ -77,6 +78,7 @@ const toImportRecord = (row: Record<string, unknown>): ImportRecord => {
     parser_name: (row.parser_name as string | null) ?? null,
     raw_extracted_text: (row.raw_extracted_text as string | null) ?? null,
     parsed_content: (row.parsed_content as CvContent | null) ?? null,
+    review_context: (row.review_context as ImportRecord["review_context"]) ?? null,
     error_message: (row.error_message as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at)

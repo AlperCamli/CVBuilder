@@ -18,6 +18,7 @@ export interface TailoredCvCreatePayload {
 }
 
 export interface TailoredCvUpdatePayload {
+  tailoring_review?: TailoredCvRecord["tailoring_review"];
   title?: string;
   language?: string;
   template_id?: string | null;
@@ -91,6 +92,7 @@ const toTailoredCvRecord = (row: Record<string, unknown>): TailoredCvRecord => {
     template_id: row.template_id ? String(row.template_id) : null,
     module_type: row.module_type ? String(row.module_type) : "standard",
     current_content: row.current_content as CvContent,
+    tailoring_review: (row.tailoring_review as TailoredCvRecord["tailoring_review"]) ?? null,
     status: row.status as TailoredCvStatus,
     ai_generation_status: (row.ai_generation_status as string | null) ?? null,
     last_exported_at: (row.last_exported_at as string | null) ?? null,

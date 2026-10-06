@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { TailoringReviewPanel } from "../components/CvReviewPanel";
 import { AddContentModal } from "../components/AddContentModal";
 import type { ContentType } from "../components/AddContentModal";
 import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble";
@@ -75,6 +76,7 @@ import type {
   MasterCvDetail,
   RenderingPreviewResponse,
   TailoredCvDetail,
+  TailoringReview,
   TemplateDetail,
   TemplateSummary
 } from "../integration/api-types";
@@ -478,6 +480,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const isUploadedFlow = Boolean(location.state?.isUploaded);
   const isAiImprovedFlow = Boolean(location.state?.aiImproved);
   const isTailoredFlow = Boolean(location.state?.isTailored);
+  const [tailoringReview, setTailoringReview] = useState<TailoringReview | null>(null);
+  const [showTailoringReview, setShowTailoringReview] = useState(false);
   const [cvKind, setCvKind] = useState<"master" | "tailored">("master");
   const [cvId, setCvId] = useState<string | null>(null);
   const [title, setTitle] = useState("CV");
@@ -620,6 +624,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const hydrateFromMaster = (master: MasterCvDetail) => {
     const nextModuleType = master.module_type ?? DEFAULT_MODULE_ID;
+    setTailoringReview(null);
     setCvKind("master");
     setCvId(master.id);
     setModuleType(nextModuleType);
@@ -636,6 +641,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const hydrateFromTailored = (tailored: TailoredCvDetail) => {
     const nextModuleType = tailored.module_type ?? DEFAULT_MODULE_ID;
+    setTailoringReview(tailored.tailoring_review ?? null);
     setCvKind("tailored");
     setCvId(tailored.id);
     setModuleType(nextModuleType);
@@ -2667,6 +2673,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 Tips
               </button>
 
+              {cvKind === "tailored" && tailoringReview ? (
+                <button type="button" onClick={() => setShowTailoringReview(true)} className="px-3 py-1.5 rounded-lg border text-sm font-medium" style={{ borderColor: "var(--color-teal-200)", color: "var(--color-teal-700)", background: "var(--color-teal-50)" }}>
+                  Tailoring review · {tailoringReview.after.score ?? "Unavailable"}{tailoringReview.after.score !== null ? "/100" : ""}
+                </button>
+              ) : null}
+
               {cvKind === "tailored" && (
                 <button
                   onClick={() => void openRevisionDialog()}
@@ -2700,6 +2712,16 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             </div>
           </div>
         </div>
+
+        <Dialog open={showTailoringReview} onOpenChange={setShowTailoringReview}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>What tailoring changed</DialogTitle>
+              <DialogDescription>Your CV before and after tailoring, evaluated against the same job description.</DialogDescription>
+            </DialogHeader>
+            {tailoringReview ? <TailoringReviewPanel review={tailoringReview} /> : null}
+          </DialogContent>
+        </Dialog>
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-auto p-6 transition-all duration-300" style={{ background: "var(--color-background-secondary)" }}>
