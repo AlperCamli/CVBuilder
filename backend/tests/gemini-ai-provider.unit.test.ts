@@ -765,4 +765,20 @@ describe("GeminiAiProvider", () => {
 
     expect(generateContentMock).toHaveBeenCalledTimes(3);
   });
+  it("reports actual model and billed usage before invalid or truncated output fails", async () => {
+    const provider = new GeminiAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    generateContentMock.mockResolvedValue({modelVersion: "actual-model", text: "invalid", usageMetadata: {promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 120}});
+    const onUsage = vi.fn(async () => {});
+    await expect(provider.generate({...{flow_type: "follow_up_questions" as const, model_name: "model", prompt: {prompt_key: "questions", prompt_version: "v1", system_prompt: "Questions", user_prompt: "Questions"}, output_schema: followUpQuestionsOutputSchema, input_payload: {}}, onUsage})).rejects.toBeInstanceOf(AiProviderError);
+    expect(onUsage).toHaveBeenCalledWith({provider: "gemini", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120}});
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a billed response when usage persistence fails", async () => {
+    const provider = new GeminiAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    generateContentMock.mockResolvedValue({text: JSON.stringify({questions: []}), usageMetadata: {promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 120}});
+    await expect(provider.generate({...{flow_type: "follow_up_questions" as const, model_name: "model", prompt: {prompt_key: "questions", prompt_version: "v1", system_prompt: "Questions", user_prompt: "Questions"}, output_schema: followUpQuestionsOutputSchema, input_payload: {}}, onUsage: async () => {throw new Error("database unavailable");}})).rejects.toThrow("AI usage could not be recorded");
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
 });

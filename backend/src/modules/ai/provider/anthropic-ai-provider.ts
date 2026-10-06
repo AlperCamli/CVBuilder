@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
-import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
+import { reportAiUsage, type AiProvider, type AiProviderRequest, type AiProviderResult } from "./ai-provider";
 import {
   HEAVY_MODEL_FLOW_TYPES,
   LARGE_OUTPUT_FLOW_TYPES,
@@ -288,6 +288,17 @@ export class AnthropicAiProvider implements AiProvider {
               : {})
           });
 
+          const usage = response.usage
+              ? {
+                  input_tokens: response.usage.input_tokens ?? 0,
+                  output_tokens: response.usage.output_tokens ?? 0,
+                  total_tokens:
+                    (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0)
+                }
+              : undefined;
+          const actualModel = response.model || candidateModel;
+          await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
+
           if (response.stop_reason === "refusal") {
             throw new AiProviderError("Anthropic refused the request", {
               reason: "provider_refusal",
@@ -337,16 +348,9 @@ export class AnthropicAiProvider implements AiProvider {
 
           return {
             provider: this.providerName,
-            model_name: candidateModel,
+            model_name: actualModel,
             output_payload: outputPayload,
-            usage: response.usage
-              ? {
-                  input_tokens: response.usage.input_tokens ?? 0,
-                  output_tokens: response.usage.output_tokens ?? 0,
-                  total_tokens:
-                    (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0)
-                }
-              : undefined
+            usage
           };
         } catch (error) {
           if (error instanceof AiProviderError) {

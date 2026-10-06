@@ -146,6 +146,14 @@ database guards intentionally invalidate historical unconsented external AI.
 Do not enable collection with incomplete provider/controller details. Existing
 accounts default to disabled optional permissions, without fabricated receipts.
 
+Upload-first AI tracking also requires
+`20261007010000_guest_ai_run_tracking.sql` before the backend update. It preserves
+account guards, tracks guest attempts without inventing accounts, transfers runs
+atomically during claim, and erases unclaimed run payloads with their guest
+session. Run `npm run test:privacy-sql` to verify claim/RLS/expiry/deletion races
+in the isolated database. `npm run privacy:check` checks the required tracking
+columns without returning CV or account rows.
+
 ## Daily maintenance and monitoring
 
 Keep the single Vercel cron at `0 3 * * *` UTC. Set backend `CRON_SECRET` in the

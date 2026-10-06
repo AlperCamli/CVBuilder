@@ -277,4 +277,20 @@ describe("OpenAiAiProvider", () => {
       expect.objectContaining({ reason: "output_truncated_by_token_limit" })
     );
   });
+  it("reports actual model and billed usage before invalid or truncated output fails", async () => {
+    const provider = new OpenAiAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    chatCompletionsCreateMock.mockResolvedValue({...successResponse, model: "actual-model", choices: [{message: {content: "invalid", refusal: null}, finish_reason: "length"}]});
+    const onUsage = vi.fn(async () => {});
+    await expect(provider.generate({...baseRequest, onUsage})).rejects.toBeInstanceOf(AiProviderError);
+    expect(onUsage).toHaveBeenCalledWith({provider: "openai", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120}});
+    expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a billed response when usage persistence fails", async () => {
+    const provider = new OpenAiAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    chatCompletionsCreateMock.mockResolvedValue(successResponse);
+    await expect(provider.generate({...baseRequest, onUsage: async () => {throw new Error("database unavailable");}})).rejects.toThrow("AI usage could not be recorded");
+    expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
+  });
+
 });

@@ -1,3 +1,4 @@
+import { trackedAiService } from "./helpers/tracked-ai-service";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import express from "express";
@@ -88,8 +89,8 @@ describe("privacy release and permissions", () => {
     const parser = { parse, extractRawText: async () => ({ parserName: "local-extraction", rawExtractedText: "Readable CV", warnings: [] }) };
     const provider = { providerName: "openai", resolveModelName: () => "test", generate };
     const prompts = { resolve: async () => ({ prompt_key: "cv_parse", prompt_version: "test", system_prompt: "Parse CV", model_name: "test" }) };
-    const service = new ImportsService({} as any, {} as any, parser as any, provider as any, prompts as any, undefined, undefined, {} as any);
-    await expect(service.parseGuestFile({ bytes: Buffer.from("%PDF"), originalFilename: "cv.pdf", mimeType: "application/pdf", sizeBytes: 4 }, true, permission)).rejects.toThrow("AI analysis could not be completed");
+    const service = new ImportsService({} as any, {} as any, parser as any, undefined, undefined, trackedAiService(provider as any).service, undefined, {} as any);
+    await expect(service.parseGuestFile({ bytes: Buffer.from("%PDF"), originalFilename: "cv.pdf", mimeType: "application/pdf", sizeBytes: 4 }, true, permission, {guest_import_id: randomUUID(), guest_lease_id: randomUUID()})).rejects.toThrow("AI analysis could not be completed");
     expect(permission).toHaveBeenCalled(); expect(generate).toHaveBeenCalledOnce(); expect(parse).not.toHaveBeenCalled();
   });
   it("rejects direct AI service calls before creating a run or contacting a provider", async () => {

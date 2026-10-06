@@ -1,3 +1,4 @@
+import { trackedAiService } from "./helpers/tracked-ai-service";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ImportsService } from "../src/modules/imports/imports.service";
@@ -599,8 +600,9 @@ describe("imports service integration checks", () => {
       importsRepository,
       masterCvRepository,
       parser,
-      new SuccessfulCvParseAiProvider(),
-      createPromptResolver()
+      undefined,
+      undefined,
+      trackedAiService(new SuccessfulCvParseAiProvider()).service
     );
     const session = buildSession(userId);
 
@@ -657,8 +659,9 @@ describe("imports service integration checks", () => {
       importsRepository,
       masterCvRepository,
       parser,
-      provider,
-      createPromptResolver()
+      undefined,
+      undefined,
+      trackedAiService(provider).service
     );
     const session = buildSession(userId);
 
@@ -765,8 +768,9 @@ describe("imports service integration checks", () => {
       importsRepository,
       masterCvRepository,
       parser,
-      new FailingCvParseAiProvider(),
-      createPromptResolver()
+      undefined,
+      undefined,
+      trackedAiService(new FailingCvParseAiProvider()).service
     );
     const session = buildSession(userId);
 
@@ -811,8 +815,9 @@ describe("imports service integration checks", () => {
       importsRepository,
       masterCvRepository,
       parser,
-      new FailingCvParseAiProvider(),
-      createPromptResolver()
+      undefined,
+      undefined,
+      trackedAiService(new FailingCvParseAiProvider()).service
     );
     const session = buildSession(userId);
 
@@ -905,8 +910,9 @@ describe("imports service integration checks", () => {
       importsRepository,
       masterCvRepository,
       parser,
-      new NeverCallCvParseAiProvider(),
-      createPromptResolver()
+      undefined,
+      undefined,
+      trackedAiService(new NeverCallCvParseAiProvider()).service
     );
     const session = buildSession(userId);
 

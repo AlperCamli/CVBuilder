@@ -317,4 +317,20 @@ describe("AnthropicAiProvider", () => {
     expect(messagesCreateMock.mock.calls[0][0].model).toBe("claude-sonnet-5");
     expect(messagesCreateMock.mock.calls[1][0].model).toBe("claude-haiku-4-5");
   });
+  it("reports actual model and billed usage before invalid or truncated output fails", async () => {
+    const provider = new AnthropicAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    messagesCreateMock.mockResolvedValue({...successResponse, model: "actual-model", content: [{type: "text", text: "invalid"}]});
+    const onUsage = vi.fn(async () => {});
+    await expect(provider.generate({...baseRequest, onUsage})).rejects.toBeInstanceOf(AiProviderError);
+    expect(onUsage).toHaveBeenCalledWith({provider: "anthropic", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120}});
+    expect(messagesCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a billed response when usage persistence fails", async () => {
+    const provider = new AnthropicAiProvider("model", "test-key", {maxAttempts: 3, retryDelayMs: [0, 0]});
+    messagesCreateMock.mockResolvedValue(successResponse);
+    await expect(provider.generate({...baseRequest, onUsage: async () => {throw new Error("database unavailable");}})).rejects.toThrow("AI usage could not be recorded");
+    expect(messagesCreateMock).toHaveBeenCalledTimes(1);
+  });
+
 });

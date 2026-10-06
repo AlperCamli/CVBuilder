@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
-import type { AiProvider, AiProviderRequest, AiProviderResult } from "./ai-provider";
+import { reportAiUsage, type AiProvider, type AiProviderRequest, type AiProviderResult } from "./ai-provider";
 import {
   HEAVY_MODEL_FLOW_TYPES,
   LARGE_OUTPUT_FLOW_TYPES,
@@ -321,6 +321,16 @@ export class OpenAiAiProvider implements AiProvider {
             }
           });
 
+          const usage = response.usage
+              ? {
+                  input_tokens: response.usage.prompt_tokens ?? 0,
+                  output_tokens: response.usage.completion_tokens ?? 0,
+                  total_tokens: response.usage.total_tokens ?? 0
+                }
+              : undefined;
+          const actualModel = response.model || candidateModel;
+          await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
+
           const choice = response.choices[0];
           const refusal = choice?.message?.refusal;
           if (typeof refusal === "string" && refusal.trim()) {
@@ -375,15 +385,9 @@ export class OpenAiAiProvider implements AiProvider {
 
           return {
             provider: this.providerName,
-            model_name: candidateModel,
+            model_name: actualModel,
             output_payload: outputPayload,
-            usage: response.usage
-              ? {
-                  input_tokens: response.usage.prompt_tokens ?? 0,
-                  output_tokens: response.usage.completion_tokens ?? 0,
-                  total_tokens: response.usage.total_tokens ?? 0
-                }
-              : undefined
+            usage
           };
         } catch (error) {
           if (error instanceof AiProviderError) {

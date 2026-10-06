@@ -10,8 +10,13 @@ import type {
   AiSuggestionStatus
 } from "../../shared/types/domain";
 
+export type AiRunOwner = string | { guest_import_id: string };
+
 export interface CreateAiRunPayload {
-  user_id: string;
+  user_id: string | null;
+  guest_import_id?: string | null;
+  guest_lease_id?: string | null;
+  import_id?: string | null;
   flow_type: AiFlowType;
   provider: string;
   model_name: string;
@@ -49,22 +54,23 @@ export interface UpdateAiSuggestionPayload {
 
 export interface AiRepository {
   createRun(payload: CreateAiRunPayload): Promise<AiRunRecord>;
+  recordRunUsage?(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }): Promise<void>;
   claimRunForExecution(userId: string, runId: string): Promise<AiRunRecord | null>;
   completeRun(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
     tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
   ): Promise<AiRunRecord | null>;
   failRun(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     errorMessage: string,
     debugPayload?: Record<string, unknown> | null
   ): Promise<AiRunRecord | null>;
-  findRunById(userId: string, runId: string): Promise<AiRunRecord | null>;
+  findRunById(userId: AiRunOwner, runId: string): Promise<AiRunRecord | null>;
   updateRunProgressStage(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     progressStage: AiRunProgressStage
   ): Promise<AiRunRecord | null>;
@@ -97,7 +103,10 @@ export interface AiRepository {
 const toAiRunRecord = (row: Record<string, unknown>): AiRunRecord => {
   return {
     id: String(row.id),
-    user_id: String(row.user_id),
+    user_id: row.user_id == null ? null : String(row.user_id),
+    guest_import_id: (row.guest_import_id as string | null) ?? null,
+    guest_lease_id: (row.guest_lease_id as string | null) ?? null,
+    import_id: (row.import_id as string | null) ?? null,
     master_cv_id: (row.master_cv_id as string | null) ?? null,
     tailored_cv_id: (row.tailored_cv_id as string | null) ?? null,
     job_id: (row.job_id as string | null) ?? null,
@@ -139,11 +148,40 @@ const toAiSuggestionRecord = (row: Record<string, unknown>): AiSuggestionRecord 
 export class SupabaseAiRepository implements AiRepository {
   constructor(private readonly supabaseClient: SupabaseClient) {}
 
+  private scopeRun(query: any, owner: AiRunOwner) {
+    if (typeof owner === "string") return query.eq("user_id", owner);
+    if (!owner.guest_import_id) throw new InternalServerError("AI run owner is required");
+    return query.is("user_id", null).eq("guest_import_id", owner.guest_import_id);
+  }
+
+  async recordRunUsage(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }) {
+    const patch = {
+      provider: result.provider, model_name: result.model_name,
+      ...(result.usage ? { input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, total_tokens: result.usage.total_tokens } : {})
+    };
+    const { data, error } = await this.scopeRun(this.supabaseClient.from("ai_runs").update(patch)
+      .eq("id", runId), owner).select("id").maybeSingle();
+    if (error) throw new InternalServerError("Failed to record AI usage");
+    if (data || typeof owner === "string") return;
+    // A superseded guest call can return after another attempt completed and
+    // signup claimed the CV. Preserve its incurred usage under the actual claim
+    // owner, never its late output. Deleted subjects/runs are never recreated.
+    const { data: claim, error: claimError } = await this.supabaseClient.from("guest_imports")
+      .select("claimed_user_id,claimed_import_id").eq("id", owner.guest_import_id).maybeSingle();
+    if (claimError) throw new InternalServerError("Failed to resolve AI usage owner");
+    if (!claim?.claimed_user_id || !claim.claimed_import_id) return;
+    const { error: transferError } = await this.supabaseClient.from("ai_runs").update(patch)
+      .eq("id", runId).eq("user_id", claim.claimed_user_id).eq("import_id", claim.claimed_import_id);
+    if (transferError) throw new InternalServerError("Failed to record claimed AI usage");
+  }
+
   async createRun(payload: CreateAiRunPayload): Promise<AiRunRecord> {
     const { data, error } = await this.supabaseClient
       .from("ai_runs")
       .insert({
         user_id: payload.user_id,
+        ...(payload.guest_import_id ? { guest_import_id: payload.guest_import_id, guest_lease_id: payload.guest_lease_id } : {}),
+        ...(payload.import_id ? { import_id: payload.import_id } : {}),
         flow_type: payload.flow_type,
         provider: payload.provider,
         model_name: payload.model_name,
@@ -198,12 +236,12 @@ export class SupabaseAiRepository implements AiRepository {
   }
 
   async completeRun(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
     tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
   ): Promise<AiRunRecord | null> {
-    const { data, error } = await this.supabaseClient
+    const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
       .update({
         status: "completed",
@@ -216,8 +254,7 @@ export class SupabaseAiRepository implements AiRepository {
         total_tokens: tokenUsage?.total_tokens ?? null,
         completed_at: new Date().toISOString()
       })
-      .eq("id", runId)
-      .eq("user_id", userId)
+      .eq("id", runId), userId)
       .eq("status", "pending")
       .select("*")
       .maybeSingle();
@@ -236,12 +273,12 @@ export class SupabaseAiRepository implements AiRepository {
   }
 
   async failRun(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     errorMessage: string,
     debugPayload?: Record<string, unknown> | null
   ): Promise<AiRunRecord | null> {
-    const { data, error } = await this.supabaseClient
+    const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
       .update({
         status: "failed",
@@ -250,8 +287,7 @@ export class SupabaseAiRepository implements AiRepository {
         debug_payload: debugPayload ?? null,
         completed_at: new Date().toISOString()
       })
-      .eq("id", runId)
-      .eq("user_id", userId)
+      .eq("id", runId), userId)
       .eq("status", "pending")
       .select("*")
       .maybeSingle();
@@ -291,12 +327,11 @@ export class SupabaseAiRepository implements AiRepository {
     return (data ?? []).length;
   }
 
-  async findRunById(userId: string, runId: string): Promise<AiRunRecord | null> {
-    const { data, error } = await this.supabaseClient
+  async findRunById(userId: AiRunOwner, runId: string): Promise<AiRunRecord | null> {
+    const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
       .select("*")
-      .eq("id", runId)
-      .eq("user_id", userId)
+      .eq("id", runId), userId)
       .maybeSingle();
 
     if (error) {
@@ -313,17 +348,16 @@ export class SupabaseAiRepository implements AiRepository {
   }
 
   async updateRunProgressStage(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     progressStage: AiRunProgressStage
   ): Promise<AiRunRecord | null> {
-    const { data, error } = await this.supabaseClient
+    const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
       .update({
         progress_stage: progressStage
       })
-      .eq("id", runId)
-      .eq("user_id", userId)
+      .eq("id", runId), userId)
       .eq("status", "pending")
       .select("*")
       .maybeSingle();

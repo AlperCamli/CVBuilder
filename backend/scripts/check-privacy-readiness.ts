@@ -47,6 +47,8 @@ async function main() {
   const heartbeat = data?.last_success_at ?? data?.initialized_at;
   check("Maintenance heartbeat within 30 hours", !!heartbeat && Date.now() - Date.parse(heartbeat) <= 30 * 3_600_000, "Apply the migration and run the protected cleanup endpoint; verify the deployed daily schedule.");
   const buckets = checks[5];
+  const tracking = await db.from("ai_runs").select("id,guest_import_id,guest_lease_id,import_id").limit(0);
+  check("Guest AI tracking schema", !tracking.error, "Apply 20261007010000_guest_ai_run_tracking.sql before updating the backend.");
   for (const id of ["imports", "exports", "cv-assets"]) {
     const bucket = buckets.status === "fulfilled" && !buckets.value.error ? (buckets.value.data as { id: string; public: boolean }[]).find(row => row.id === id) : undefined;
     check(`Private storage bucket: ${id}`, !!bucket && !bucket.public, "Verify bucket existence and private access policies.");

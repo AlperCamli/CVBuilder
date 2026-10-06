@@ -135,7 +135,10 @@ export type AiRunProgressStage =
 
 export interface AiRunRecord {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  guest_import_id?: string | null;
+  guest_lease_id?: string | null;
+  import_id?: string | null;
   master_cv_id: string | null;
   tailored_cv_id: string | null;
   job_id: string | null;

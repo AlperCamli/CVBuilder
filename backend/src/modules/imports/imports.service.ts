@@ -10,8 +10,6 @@ import { getCvModule } from "../../shared/cv-modules/module-registry";
 import type { CreateMasterCvPayload, MasterCvRepository } from "../master-cv/master-cv.repository";
 import type { AiProvider } from "../ai/provider/ai-provider";
 import type { AiPromptResolver } from "../ai/prompts/prompt-resolver";
-import { AI_FLOW_REGISTRY } from "../ai/flows/flow-registry";
-import { cvParseOutputSchema } from "../ai/flows/flow-contracts";
 import type {
   CreateMasterCvFromImportInput,
   CreateImportSessionInput,
@@ -52,9 +50,6 @@ const countBlocks = (content: CvContent): number => {
 };
 
 const DEFAULT_IMPORTS_STORAGE_BUCKET = "imports";
-const AI_PARSE_FLOW_TYPE = "cv_parse";
-const DEFAULT_AI_PARSE_USER_PROMPT =
-  "Convert raw CV text into strict CV content JSON without inventing facts.";
 const MAX_AI_PARSE_RAW_TEXT_LENGTH = 40_000;
 
 interface CvParseAiFlowRunner {
@@ -66,6 +61,7 @@ interface CvParseAiFlowRunner {
       mime_type: string;
       language_hint: string;
       prompt_profile?: string | null;
+      import_id?: string;
     }
   ): Promise<{
     ai_run_id: string;
@@ -79,6 +75,10 @@ interface CvParseAiFlowRunner {
       prompt_version: string;
     };
   }>;
+  parseGuestCvContent?(guest: { guest_import_id: string; guest_lease_id: string },
+    input: Parameters<CvParseAiFlowRunner["parseCvContent"]>[1],
+    assertPermission: () => Promise<void>
+  ): ReturnType<CvParseAiFlowRunner["parseCvContent"]>;
 }
 
 const sanitizeFilename = (value: string): string => {
@@ -101,8 +101,10 @@ export class ImportsService {
     private readonly importsRepository: ImportsRepository,
     private readonly masterCvRepository: MasterCvRepository,
     private readonly parser: CvParser,
-    private readonly aiProvider?: AiProvider,
-    private readonly aiPromptResolver?: AiPromptResolver,
+    // Legacy constructor slots are retained for compatibility; provider access
+    // must go through aiFlowRunner to persist every AI attempt.
+    _legacyAiProvider?: AiProvider,
+    _legacyAiPromptResolver?: AiPromptResolver,
     private readonly aiFlowRunner?: CvParseAiFlowRunner,
     private readonly logger?: Pick<Logger, "info" | "warn">,
     private readonly privacy?: PrivacyService
@@ -227,7 +229,8 @@ export class ImportsService {
 
       const effectiveParseResult = await this.resolveEffectiveParseResult(parseInput, {
         original_filename: detail.sourceFile.original_filename,
-        mime_type: detail.sourceFile.mime_type
+        mime_type: detail.sourceFile.mime_type,
+        import_id: importId
       }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
       const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
 
@@ -452,41 +455,37 @@ export class ImportsService {
     return base.length <= 160 ? base : `${base.slice(0, 157)}...`;
   }
 
-  async parseGuestFile(input: ParseCvFileInput, allowAi = false, assertPermission?: () => Promise<void>): Promise<ParseCvFileResult> {
+  async parseGuestFile(input: ParseCvFileInput, allowAi = false, assertPermission?: () => Promise<void>, guest?: { guest_import_id: string; guest_lease_id: string }): Promise<ParseCvFileResult> {
     if (this.privacy && privacyConfig().ai_required && (!allowAi || !assertPermission)) throw new ValidationError("Enable AI processing before analyzing your CV.");
+    if (allowAi && (!guest || !assertPermission || !this.aiFlowRunner?.parseGuestCvContent)) throw new ValidationError("Tracked guest AI analysis is unavailable. Please retry later.");
     const result = allowAi && (!this.privacy || assertPermission) ? await this.resolveEffectiveParseResult(input, {
       original_filename: input.originalFilename, mime_type: input.mimeType
-    }, "en", undefined, getCvModule("standard").promptProfile, assertPermission) : await this.parser.parse(input);
+    }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest) : await this.parser.parse(input);
     return { ...result, parsedContent: canonicalizeImportedCvContent(result.parsedContent) };
   }
 
   private async resolveEffectiveParseResult(
     parseInput: ParseCvFileInput,
-    sourceFile: { original_filename: string; mime_type: string | null },
+    sourceFile: { original_filename: string; mime_type: string | null; import_id?: string },
     defaultLanguage: string,
     session: SessionContext | undefined,
     promptProfile: string | null = null,
-    assertPermission?: () => Promise<void>
+    assertPermission?: () => Promise<void>,
+    guest?: { guest_import_id: string; guest_lease_id: string }
   ): Promise<ParseCvFileResult> {
     if (session && this.privacy) {
       if (privacyConfig().ai_required) await this.privacy.assertAi(session.appUser.id);
       else if (!(await this.privacy.aiPermission(session.appUser.id))) return this.parser.parse(parseInput);
     }
-    if (!this.aiProvider && !this.aiFlowRunner) {
+    if (!this.aiFlowRunner) {
       if (this.privacy && privacyConfig().ai_required) throw new ValidationError("AI analysis is unavailable. Please try again later.");
       return this.parser.parse(parseInput);
     }
 
     const extraction = await this.extractRawTextForAi(parseInput);
-    const aiAttempt = this.aiFlowRunner && session
-      ? await this.tryParseWithAiFlowRunner(
-          extraction.extracted,
-          sourceFile,
-          defaultLanguage,
-          session,
-          promptProfile
-        )
-      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage, promptProfile, assertPermission);
+    const aiAttempt = await this.tryParseWithAiFlowRunner(
+      extraction.extracted, sourceFile, defaultLanguage, session, promptProfile, assertPermission, guest
+    );
     if (aiAttempt.parseResult) {
       return aiAttempt.parseResult;
     }
@@ -526,117 +525,14 @@ export class ImportsService {
     };
   }
 
-  private async tryParseWithAi(
-    extractedResult: ExtractCvRawTextResult,
-    sourceFile: { original_filename: string; mime_type: string | null },
-    defaultLanguage: string,
-    promptProfile: string | null = null,
-    assertPermission?: () => Promise<void>
-  ): Promise<{
-    parseResult: ParseCvFileResult | null;
-    failureWarning: string | null;
-  }> {
-    if (!this.aiProvider || !this.aiPromptResolver) {
-      return {
-        parseResult: null,
-        failureWarning: null
-      };
-    }
-
-    const rawExtractedText = extractedResult.rawExtractedText.trim();
-    if (!rawExtractedText) {
-      return {
-        parseResult: null,
-        failureWarning: null
-      };
-    }
-    const hasNoReadableTextSignal = extractedResult.warnings.some((warning) =>
-      /no readable text was extracted/i.test(warning)
-    );
-    if (hasNoReadableTextSignal) {
-      return {
-        parseResult: null,
-        failureWarning: null
-      };
-    }
-
-    const flowDefinition = AI_FLOW_REGISTRY[AI_PARSE_FLOW_TYPE];
-    const fallbackModelName = this.aiProvider.resolveModelName(AI_PARSE_FLOW_TYPE);
-
-    try {
-      const prompt = await this.aiPromptResolver.resolve({
-        flow_type: AI_PARSE_FLOW_TYPE,
-        provider: this.aiProvider.providerName,
-        action_type: null,
-        profile: promptProfile ?? undefined,
-        fallback: {
-          prompt_key: flowDefinition.prompt_key,
-          prompt_version: flowDefinition.prompt_version,
-          system_prompt: flowDefinition.system_prompt,
-          model_name: fallbackModelName
-        }
-      });
-
-      await assertPermission?.();
-      const aiResult = await this.aiProvider.generate({
-        flow_type: AI_PARSE_FLOW_TYPE,
-        model_name: prompt.model_name,
-        prompt: {
-          prompt_key: prompt.prompt_key,
-          prompt_version: prompt.prompt_version,
-          system_prompt: prompt.system_prompt,
-          user_prompt: prompt.user_prompt_template?.trim() || DEFAULT_AI_PARSE_USER_PROMPT
-        },
-        output_schema: flowDefinition.output_schema,
-        input_payload: {
-          raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
-          source_filename: "cv." + (sourceFile.mime_type === "application/pdf" ? "pdf" : "docx"),
-          mime_type: sourceFile.mime_type ?? "application/octet-stream",
-          language_hint: defaultLanguage || "en"
-        }
-      });
-
-      await assertPermission?.();
-      const parsed = cvParseOutputSchema.safeParse(aiResult.output_payload);
-      if (!parsed.success) {
-        throw new Error("AI CV parsing output did not match contract");
-      }
-
-      const normalized = normalizeCvContent(
-        parsed.data.parsed_content,
-        parsed.data.parsed_content.language || defaultLanguage || "en"
-      );
-      const mergedWarnings = [
-        ...extractedResult.warnings,
-        ...(parsed.data.warnings ?? [])
-      ];
-
-      return {
-        parseResult: {
-          parserName: `${this.aiProvider.providerName}_cv_parser_v1`,
-          rawExtractedText: extractedResult.rawExtractedText,
-          parsedContent: normalized,
-          warnings: [...new Set(mergedWarnings)],
-          diagnostics: extractedResult.diagnostics
-        },
-        failureWarning: null
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown AI parsing error";
-
-      return {
-        parseResult: null,
-        failureWarning: `AI parser failed; fallback parser output was used (${this.privacy ? "AI_PARSE_FAILED" : message.slice(0, 180)}).`
-      };
-    }
-  }
-
   private async tryParseWithAiFlowRunner(
     extractedResult: ExtractCvRawTextResult,
-    sourceFile: { original_filename: string; mime_type: string | null },
+    sourceFile: { original_filename: string; mime_type: string | null; import_id?: string },
     defaultLanguage: string,
-    session: SessionContext,
-    promptProfile: string | null = null
+    session: SessionContext | undefined,
+    promptProfile: string | null = null,
+    assertPermission?: () => Promise<void>,
+    guest?: { guest_import_id: string; guest_lease_id: string }
   ): Promise<{
     parseResult: ParseCvFileResult | null;
     failureWarning: string | null;
@@ -667,13 +563,19 @@ export class ImportsService {
     }
 
     try {
-      const aiResult = await this.aiFlowRunner.parseCvContent(session, {
+      const payload = {
         raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
         source_filename: "cv." + (sourceFile.mime_type === "application/pdf" ? "pdf" : "docx"),
         mime_type: sourceFile.mime_type ?? "application/octet-stream",
         language_hint: defaultLanguage || "en",
-        prompt_profile: promptProfile
-      });
+        prompt_profile: promptProfile,
+        import_id: sourceFile.import_id
+      };
+      const aiResult = session
+        ? await this.aiFlowRunner.parseCvContent(session, payload)
+        : guest && assertPermission && this.aiFlowRunner.parseGuestCvContent
+          ? await this.aiFlowRunner.parseGuestCvContent(guest, payload, assertPermission)
+          : (() => { throw new ValidationError("Tracked AI run context is required"); })();
 
       const mergedWarnings = [...extractedResult.warnings, ...aiResult.warnings];
       this.logger?.info(

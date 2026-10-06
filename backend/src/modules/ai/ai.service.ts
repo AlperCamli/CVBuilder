@@ -93,7 +93,7 @@ import type {
   TailoredCvDraftJobSummary,
   TailoredCvDraftSummary
 } from "./ai.types";
-import type { AiRepository } from "./ai.repository";
+import type { AiRepository, AiRunOwner } from "./ai.repository";
 import type { AiPromptResolver } from "./prompts/prompt-resolver";
 import type { AiProvider } from "./provider/ai-provider";
 import {
@@ -624,7 +624,11 @@ const toPersistableAiRunDebugPayload = (error: unknown): Record<string, unknown>
 
 interface ExecuteFlowOptions {
   flow_type: keyof typeof AI_FLOW_REGISTRY;
-  user_id: string;
+  user_id: string | null;
+  guest_import_id?: string;
+  guest_lease_id?: string;
+  import_id?: string;
+  assert_permission?: () => Promise<void>;
   input_payload: Record<string, unknown>;
   user_prompt: string;
   action_type?: AiSuggestionActionType | null;
@@ -669,7 +673,11 @@ interface ResolvedPromptSnapshot {
 }
 
 interface RunFlowExecutionOptions {
-  user_id: string;
+  user_id: string | null;
+  guest_import_id?: string;
+  guest_lease_id?: string;
+  import_id?: string;
+  assert_permission?: () => Promise<void>;
   ai_run_id: string;
   flow_type: AiFlowType;
   prompt: ResolvedPromptSnapshot;
@@ -1542,14 +1550,29 @@ export class AiService {
     return insertIndex;
   }
 
-  async parseCvContent(
-    session: SessionContext,
+  async parseCvContent(session: SessionContext, input: {
+    raw_text: string; source_filename: string; mime_type: string; language_hint: string;
+    prompt_profile?: string | null; import_id?: string;
+  }) {
+    return this.parseCvForSubject({ user_id: session.appUser.id }, input);
+  }
+
+  async parseGuestCvContent(guest: { guest_import_id: string; guest_lease_id: string }, input: {
+    raw_text: string; source_filename: string; mime_type: string; language_hint: string;
+    prompt_profile?: string | null;
+  }, assertPermission: () => Promise<void>) {
+    return this.parseCvForSubject({ user_id: null, ...guest, assert_permission: assertPermission }, input);
+  }
+
+  private async parseCvForSubject(
+    subject: Pick<ExecuteFlowOptions, "user_id" | "guest_import_id" | "guest_lease_id" | "assert_permission">,
     input: {
       raw_text: string;
       source_filename: string;
       mime_type: string;
       language_hint: string;
       prompt_profile?: string | null;
+      import_id?: string;
     }
   ): Promise<{
     ai_run_id: string;
@@ -1572,7 +1595,8 @@ export class AiService {
 
     const executed = await this.executeFlow({
       flow_type: "cv_parse",
-      user_id: session.appUser.id,
+      ...subject,
+      import_id: input.import_id,
       prompt_profile: input.prompt_profile ?? null,
       input_payload: flowInput,
       user_prompt: "Parse raw CV text and return canonical cv_content JSON."
@@ -2227,7 +2251,9 @@ export class AiService {
   private async executeFlow<TOutput>(
     options: ExecuteFlowOptions
   ): Promise<ExecuteFlowResult<TOutput>> {
-    await this.privacy?.assertAi(options.user_id);
+    const owner = this.runOwner(options);
+    if (typeof owner === "string") await this.privacy?.assertAi(owner);
+    else await options.assert_permission!();
     const prompt = await this.resolvePromptForFlow({
       flow_type: options.flow_type,
       action_type: options.action_type ?? null,
@@ -2240,6 +2266,9 @@ export class AiService {
 
     const aiRun = await this.aiRepository.createRun({
       user_id: options.user_id,
+      guest_import_id: options.guest_import_id,
+      guest_lease_id: options.guest_lease_id,
+      import_id: options.import_id,
       flow_type: options.flow_type,
       provider: this.aiProvider.providerName,
       model_name: prompt.model_name,
@@ -2263,15 +2292,18 @@ export class AiService {
       const executed = await this.executeRunFlow({
         user_id: options.user_id,
         ai_run_id: aiRun.id,
+        guest_import_id: options.guest_import_id,
+        assert_permission: options.assert_permission,
         flow_type: options.flow_type,
         prompt,
         input_payload: options.input_payload
       });
       const completed = await this.completeRunWithPayload(
-        options.user_id,
+        owner,
         aiRun.id,
         executed.output_payload,
-        executed.token_usage
+        executed.token_usage,
+        options.assert_permission
       );
 
       return {
@@ -2283,7 +2315,7 @@ export class AiService {
         prompt_version: prompt.prompt_version
       };
     } catch (error) {
-      await this.failRunBestEffort(options.user_id, aiRun.id, error);
+      await this.failRunBestEffort(owner, aiRun.id, error);
       throw error;
     }
   }
@@ -2539,14 +2571,33 @@ export class AiService {
     }
   }
 
+  private runOwner(options: { user_id: string | null; guest_import_id?: string; assert_permission?: () => Promise<void> }): AiRunOwner {
+    if (options.user_id) return options.user_id;
+    if (options.guest_import_id && options.assert_permission) return { guest_import_id: options.guest_import_id };
+    throw new InternalServerError("AI run owner and permission check are required");
+  }
+
   private async executeRunFlow(options: RunFlowExecutionOptions): Promise<RunFlowExecutionResult> {
-    const revision = await this.privacy?.assertAi(options.user_id);
+    const owner = this.runOwner(options);
+    const revision = typeof owner === "string" ? await this.privacy?.assertAi(owner) : undefined;
+    if (typeof owner !== "string") await options.assert_permission!();
     const definition = AI_FLOW_REGISTRY[options.flow_type];
 
-    await this.updateRunStage(options.user_id, options.ai_run_id, "building_prompt");
-    await this.updateRunStage(options.user_id, options.ai_run_id, "calling_model");
+    await this.updateRunStage(owner, options.ai_run_id, "building_prompt");
+    await this.updateRunStage(owner, options.ai_run_id, "calling_model");
 
     let providerResult;
+    let reported = false;
+    let receivedUsage: { input_tokens: number; output_tokens: number; total_tokens: number } | null = null;
+    const recordUsage = async (result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }) => {
+      reported = true;
+      if (result.usage) receivedUsage = {
+        input_tokens: (receivedUsage?.input_tokens ?? 0) + result.usage.input_tokens,
+        output_tokens: (receivedUsage?.output_tokens ?? 0) + result.usage.output_tokens,
+        total_tokens: (receivedUsage?.total_tokens ?? 0) + result.usage.total_tokens
+      };
+      await this.aiRepository.recordRunUsage?.(owner, options.ai_run_id, { ...result, usage: receivedUsage ?? undefined });
+    };
     try {
       providerResult = await this.aiProvider.generate({
         flow_type: options.flow_type,
@@ -2559,12 +2610,13 @@ export class AiService {
         },
         output_schema: definition.output_schema,
         input_payload: options.input_payload,
+        onUsage: recordUsage,
         onStage: async () => {
-          await this.updateRunStage(options.user_id, options.ai_run_id, "parsing_output");
+          await this.updateRunStage(owner, options.ai_run_id, "parsing_output");
         }
       });
     } catch (error) {
-      await this.failRunWithDiagnostics(options.user_id, options.ai_run_id, error);
+      await this.failRunWithDiagnostics(owner, options.ai_run_id, error);
 
       if (error instanceof AiProviderError) {
         throw error;
@@ -2573,7 +2625,9 @@ export class AiService {
       throw new AiFlowFailedError("AI flow execution failed", { flow_type: options.flow_type });
     }
 
-    if (revision !== undefined) await this.privacy!.assertAiUnchanged(options.user_id, revision);
+    if (!reported) await recordUsage(providerResult);
+    if (revision !== undefined) await this.privacy!.assertAiUnchanged(owner as string, revision);
+    if (typeof owner !== "string") await options.assert_permission!();
     const outputPayloadForValidation =
       options.flow_type === "tailored_draft"
         ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
@@ -2581,7 +2635,7 @@ export class AiService {
           ? coerceJobAnalysisOutputPayload(providerResult.output_payload)
           : providerResult.output_payload;
 
-    await this.updateRunStage(options.user_id, options.ai_run_id, "validating_output");
+    await this.updateRunStage(owner, options.ai_run_id, "validating_output");
     const parsed = definition.output_schema.safeParse(outputPayloadForValidation);
     if (!parsed.success) {
       const validationDetails = parsed.error.issues.slice(0, 20).map((issue) => ({
@@ -2592,7 +2646,7 @@ export class AiService {
         .map((issue) => `${issue.path}: ${issue.message}`)
         .join("; ")}`;
 
-      await this.aiRepository.failRun(options.user_id, options.ai_run_id, validationMessage.slice(0, 2000), {
+      await this.aiRepository.failRun(owner, options.ai_run_id, validationMessage.slice(0, 2000), {
         error_name: "AiFlowFailedError",
         reason: "output_contract_invalid",
         stage: "validating_output",
@@ -2612,7 +2666,7 @@ export class AiService {
       output_payload: serializedOutput,
       provider: providerResult.provider,
       model_name: providerResult.model_name,
-      token_usage: providerResult.usage ?? null
+      token_usage: receivedUsage ?? providerResult.usage ?? null
     };
   }
 
@@ -2688,30 +2742,34 @@ export class AiService {
   }
 
   private async completeRunWithPayload(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
     tokenUsage: {
       input_tokens: number;
       output_tokens: number;
       total_tokens: number;
-    } | null = null
+    } | null = null,
+    assertPermission?: () => Promise<void>
   ): Promise<AiRunRecord> {
-    const result = await this.tryCompleteRun(userId, runId, outputPayload, tokenUsage);
+    const result = await this.tryCompleteRun(userId, runId, outputPayload, tokenUsage, assertPermission);
     return result.run;
   }
 
   private async tryCompleteRun(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
     tokenUsage: {
       input_tokens: number;
       output_tokens: number;
       total_tokens: number;
-    } | null = null
+    } | null = null,
+    assertPermission?: () => Promise<void>
   ): Promise<{ run: AiRunRecord; claimed_completion: boolean }> {
-    await this.privacy?.assertAi(userId);
+    if (typeof userId === "string") await this.privacy?.assertAi(userId);
+    else if (assertPermission) await assertPermission();
+    else throw new InternalServerError("Guest AI permission check is required");
     await this.updateRunStage(userId, runId, "persisting_result");
     const completed = await this.aiRepository.completeRun(userId, runId, outputPayload, tokenUsage);
     if (completed) {
@@ -2727,7 +2785,7 @@ export class AiService {
   }
 
   private async failRunWithDiagnostics(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     error: unknown
   ): Promise<void> {
@@ -2736,7 +2794,7 @@ export class AiService {
     await this.aiRepository.failRun(userId, runId, message, debugPayload);
   }
 
-  private async failRunBestEffort(userId: string, runId: string, error: unknown): Promise<void> {
+  private async failRunBestEffort(userId: AiRunOwner, runId: string, error: unknown): Promise<void> {
     try {
       await this.failRunWithDiagnostics(userId, runId, error);
     } catch {
@@ -2903,7 +2961,7 @@ export class AiService {
   }
 
   private async updateRunStage(
-    userId: string,
+    userId: AiRunOwner,
     runId: string,
     progressStage: AiRunProgressStage
   ): Promise<void> {

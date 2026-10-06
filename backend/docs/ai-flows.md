@@ -140,6 +140,25 @@ Key outputs:
    - persist sanitized debug metadata in `debug_payload` (including raw-output excerpt only on parse/provider failures)
    - throw normalized AI error
 
+CV parsing always uses this tracked service, including upload-first guest
+onboarding. Apply `20261007010000_guest_ai_run_tracking.sql` before deploying
+that backend. Guest runs have `user_id=NULL`, `guest_import_id` and a unique
+`guest_lease_id`; browser RLS cannot read them. Current AI permission and the
+active processing lease are checked before sending data and accepting results.
+Signup claim atomically transfers every guest attempt to `user_id` and
+`import_id`, clearing the guest ownership fields. Import conversion links those
+runs to `master_cv_id` so they appear in existing CV history. Guest deletion or
+abandonment cleanup removes unclaimed run payloads; claimed history remains
+account-owned until account deletion.
+
+OpenAI, Gemini and Anthropic report actual model/received token usage before
+parsing or refusal checks. Billed invalid/truncated responses remain failed
+runs with usage, rather than disappearing from accounting. Permission withdrawal
+rejects results while retaining incurred usage for an existing run. Neither
+late responses nor accounting writes recreate deleted runs. Historical calls
+that bypassed tracking cannot have their token usage reconstructed from CVs;
+do not fabricate run records or rerun a provider to backfill them.
+
 Tailoring lifecycle endpoints (polling):
 - `POST /ai/tailoring-runs/start`
 - `POST /ai/tailoring-runs/:aiRunId/execute`

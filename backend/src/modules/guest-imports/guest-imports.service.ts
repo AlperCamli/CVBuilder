@@ -157,10 +157,10 @@ export class GuestImportsService {
         bytes,
       }, Boolean(row.ai_processing && row.ai_notice_version === NOTICE_VERSION && row.ai_provider === privacyConfig().ai_provider_key && privacyConfig().ai_enabled), async () => {
         const current = await this.authorize(id, token);
-        if (current.processing_restricted_at || !current.ai_processing || current.ai_notice_version !== NOTICE_VERSION || current.privacy_revision !== row.privacy_revision || current.ai_provider !== privacyConfig().ai_provider_key || !privacyConfig().ai_enabled) {
+        if (current.lease_id !== leaseId || Date.parse(current.lease_expires_at ?? "") <= Date.now() || current.processing_restricted_at || !current.ai_processing || current.ai_notice_version !== NOTICE_VERSION || current.privacy_revision !== row.privacy_revision || current.ai_provider !== privacyConfig().ai_provider_key || !privacyConfig().ai_enabled) {
           throw new ConflictError("AI permission changed during processing.");
         }
-      });
+      }, { guest_import_id: id, guest_lease_id: leaseId });
       await this.repository.finish(id, leaseId, result, row.privacy_revision ?? 0);
     } catch {
       await this.repository.finish(id, leaseId, null, row.privacy_revision ?? 0);
