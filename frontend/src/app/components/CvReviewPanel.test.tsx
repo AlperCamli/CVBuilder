@@ -19,13 +19,19 @@ describe("CV review presentation", () => {
     expect(html).toContain("ATS compatibility issue");
     expect(html).toContain("Upload a text-based PDF or DOCX");
     expect(html).not.toContain(" / 100");
-    expect(html).not.toContain("What works well");
+    expect(html).not.toContain('aria-label="Strengths"');
     expect(html).not.toContain("Score breakdown");
   });
 
   it("labels unavailable dimensions and shows evidence and the actual evaluation formula", () => {
     const html = renderToStaticMarkup(<CvReviewPanel review={reviewCv({ content })} />);
-    expect(html).toContain("Partial review");
+    expect(html).not.toContain("Partial review");
+    expect(html).not.toContain("% of the rubric assessed");
+    const evaluation = html.slice(html.indexOf('<details class="group'));
+    expect(html.slice(0, html.indexOf('<details class="group'))).not.toContain("Score breakdown");
+    expect(evaluation).toContain("Score breakdown");
+    expect(evaluation).toContain("Not assessed");
+    expect(html).not.toMatch(/<details[^>]*\sopen(?:[\s=>])/);
     expect(html).toContain("Not assessed");
     expect(html).toContain("Add a job description");
     expect(html).toContain("Measurable achievements");

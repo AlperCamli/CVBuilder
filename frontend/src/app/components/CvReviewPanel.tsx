@@ -1,22 +1,79 @@
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
 import type { CvReview, TailoringReview } from "../integration/api-types";
+
+const strengthLabels: Record<string, string> = {
+  "Text extraction quality": "Your CV text is clear and readable.",
+  "Readable text layer": "Your document has selectable text.",
+  "Name and contact details": "Your name and contact details are included.",
+  "Experience or projects": "Work experience or projects are included.",
+  "Education or qualifications": "Education or qualifications are included.",
+  Skills: "Your skills are listed.",
+  "Clear, concise experience statements": "Your experience statements are concise.",
+  "Statements beginning with an action": "Your experience uses action verbs.",
+  "Wording without generic phrases": "Your wording avoids generic phrases.",
+  "Statements with measurable scope or results": "Your experience includes measurable scope or results.",
+  "Distinct section headings": "Your sections have clear headings.",
+  "No empty content placeholders": "Your sections contain no empty placeholders.",
+  "No detected broken text characters": "No broken text characters were found."
+};
 
 export function CvReviewPanel({ review }: { review: CvReview }) {
   const unscorable = review.score === null;
   const tone = unscorable ? "var(--color-yellow-700)" : review.score! >= 80 ? "var(--color-teal-600)" : review.score! >= 60 ? "var(--color-yellow-700)" : "var(--color-red-600)";
+  const background = unscorable ? "var(--color-yellow-50)" : review.score! >= 80 ? "var(--color-teal-50)" : review.score! >= 60 ? "var(--color-yellow-50)" : "var(--color-red-50)";
+  const circumference = 2 * Math.PI * 90;
+  const strengthTitles = review.strengths.map(strength => strength.split(": ")[0]);
+  const conciseStrengths = strengthTitles.filter(title => title !== "Readable text layer" || !strengthTitles.includes("Text extraction quality")).slice(0, 3);
   return (
     <div className="space-y-6" style={{ color: "var(--color-text-primary)" }}>
-      <div className="text-center rounded-xl p-6" style={{ background: "var(--color-background-secondary)" }}>
-        {unscorable ? <AlertCircle size={32} className="mx-auto mb-3" style={{ color: tone }} /> : null}
-        <p className="font-medium" style={{ fontSize: unscorable ? "20px" : "48px", color: tone }}>
-          {unscorable ? "Score unavailable" : <>{review.score}<span style={{ fontSize: "18px", color: "var(--color-text-secondary)" }}> / 100</span></>}
-        </p>
-        <p className="mt-2 text-sm leading-6">{review.summary}</p>
-        {review.status === "partial" ? <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>Partial review · {review.assessed_weight}% of the rubric assessed</p> : null}
+      <div className="text-center rounded-2xl p-6" style={{ background }}>
+        {unscorable ? (
+          <>
+            <AlertCircle size={32} className="mx-auto mb-3" style={{ color: tone }} />
+            <p className="text-xl font-medium" style={{ color: tone }}>Score unavailable</p>
+            <p className="mt-2 text-sm leading-6">{review.summary}</p>
+          </>
+        ) : (
+          <>
+            <div className="relative mx-auto h-[200px] w-[200px]">
+              <svg className="-rotate-90" width="200" height="200" aria-hidden="true">
+                <circle cx="100" cy="100" r="90" fill="none" stroke="var(--color-border-secondary)" strokeWidth="12" />
+                <circle cx="100" cy="100" r="90" fill="none" stroke={tone} strokeWidth="12" strokeDasharray={`${(review.score! / 100) * circumference} ${circumference}`} strokeLinecap="round" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center" aria-label={`CV score: ${review.score} out of 100`}>
+                <p className="font-medium text-5xl" style={{ color: tone }}>{review.score}</p>
+                <p className="text-sm mt-1" style={{ color: "var(--color-text-secondary)" }}>out of 100</p>
+              </div>
+            </div>
+            <p className="font-medium mt-4" style={{ color: tone }}>{review.summary.split(". ")[0]}</p>
+          </>
+        )}
       </div>
 
-      {!unscorable ? (
-        <section aria-label="Score breakdown" className="space-y-3">
+      {review.strengths.length ? (
+        <section aria-label="Strengths" className="rounded-xl p-4" style={{ background: "var(--color-teal-50)", border: "1px solid var(--color-teal-100)" }}>
+          <h2 className="font-medium text-base mb-3 flex items-center gap-2" style={{ color: "var(--color-teal-700)" }}><CheckCircle2 size={18} /> Strengths</h2>
+          <ul className="space-y-2 text-sm leading-6">
+            {conciseStrengths.map(strength => <li key={strength} className="flex items-start gap-2"><CheckCircle2 size={16} className="mt-1 shrink-0" style={{ color: "var(--color-teal-600)" }} /><span>{strengthLabels[strength] ?? strength}</span></li>)}
+          </ul>
+        </section>
+      ) : null}
+
+      {review.improvements.length ? (
+        <section aria-label={unscorable ? "Next steps" : "Weaknesses"} className="rounded-xl p-4" style={{ background: "var(--color-yellow-50)", border: "1px solid var(--color-yellow-100)" }}>
+          <h2 className="font-medium text-base mb-3 flex items-center gap-2" style={{ color: "var(--color-yellow-700)" }}><AlertCircle size={18} /> {unscorable ? "Next steps" : "Weaknesses"}</h2>
+          <ul className="space-y-2 text-sm leading-6">
+            {review.improvements.slice(0, 3).map(improvement => <li key={improvement} className="flex items-start gap-2"><span className="mt-2 h-1.5 w-1.5 rounded-full shrink-0" style={{ background: "var(--color-yellow-600)" }} /><span>{improvement}</span></li>)}
+          </ul>
+        </section>
+      ) : null}
+
+      <details className="group rounded-xl border p-4 text-xs leading-5" style={{ borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}>
+        <summary className="cursor-pointer font-medium flex items-center justify-between gap-2 text-sm" style={{ color: "var(--color-text-primary)" }}>How we evaluate your CV<ChevronDown size={16} className="shrink-0 group-open:rotate-180" /></summary>
+        <p className="mt-4">{review.summary}</p>
+        <p className="mt-3">Your score reflects the areas we can assess. Job relevance and keyword coverage require a job description.</p>
+        {!unscorable ? (
+        <section aria-label="Score breakdown" className="space-y-3 mt-4">
           <h2 className="font-medium text-base">Score breakdown</h2>
           {review.dimensions.map(dimension => (
             <details key={dimension.id} className="rounded-xl border p-3" style={{ borderColor: "var(--color-border-secondary)" }}>
@@ -40,38 +97,18 @@ export function CvReviewPanel({ review }: { review: CvReview }) {
             </details>
           ))}
         </section>
-      ) : null}
-
-      {review.strengths.length ? (
-        <section aria-label="What works well">
-          <h2 className="font-medium text-base mb-3 flex items-center gap-2"><CheckCircle2 size={18} style={{ color: "var(--color-teal-600)" }} /> What works well</h2>
-          <ul className="list-disc pl-5 space-y-2 text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
-            {review.strengths.map(strength => <li key={strength}>{strength}</li>)}
-          </ul>
-        </section>
-      ) : null}
-
-      {review.improvements.length ? (
-        <section aria-label="Priority improvements">
-          <h2 className="font-medium text-base mb-3 flex items-center gap-2"><AlertCircle size={18} /> {unscorable ? "Next steps" : "Priority improvements"}</h2>
-          <ol className="list-decimal pl-5 space-y-2 text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
-            {review.improvements.map(improvement => <li key={improvement}>{improvement}</li>)}
-          </ol>
-        </section>
-      ) : null}
-
-      {review.matched_keywords.length || review.missing_keywords.length ? (
-        <section aria-label="Job keywords" className="text-sm leading-6">
+        ) : null}
+        {review.strengths.length ? <section className="mt-4"><h3 className="font-medium mb-2">Strength details</h3><ul className="list-disc pl-5 space-y-2">{review.strengths.map(strength => <li key={strength}>{strength}</li>)}</ul></section> : null}
+        {review.improvements.length > 3 ? <section className="mt-4"><h3 className="font-medium mb-2">All suggested improvements</h3><ul className="list-disc pl-5 space-y-2">{review.improvements.map(improvement => <li key={improvement}>{improvement}</li>)}</ul></section> : null}
+        {review.matched_keywords.length || review.missing_keywords.length ? (
+        <section aria-label="Job keywords" className="text-sm leading-6 mt-4">
           <h2 className="font-medium text-base mb-2">Job keywords</h2>
           <p><span className="font-medium">Found: </span>{review.matched_keywords.join(", ") || "None"}</p>
           <p className="mt-2"><span className="font-medium">Missing: </span>{review.missing_keywords.join(", ") || "None"}</p>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>Include a missing term only if it accurately describes your skills or experience.</p>
         </section>
-      ) : null}
-
-      <details className="text-xs leading-5" style={{ color: "var(--color-text-secondary)" }}>
-        <summary className="cursor-pointer font-medium">How we evaluate your CV</summary>
-        <p className="mt-3">Each dimension uses the checks shown above. The total is the weighted average of assessed dimensions: sum of (dimension score × weight) ÷ sum of assessed weights. Unassessed dimensions receive no points or penalty. Scores with different assessed dimensions should not be compared.</p>
+        ) : null}
+        <p className="mt-4">The total is the weighted average of assessed dimensions: sum of (dimension score × weight) ÷ sum of assessed weights. Unassessed dimensions receive no points or penalty. Scores with different assessed dimensions should not be compared.</p>
         <ul className="list-disc pl-5 mt-2 space-y-2">{review.limitations.map(limitation => <li key={limitation}>{limitation}</li>)}</ul>
         <p className="mt-2">Review formula: {review.version}</p>
       </details>

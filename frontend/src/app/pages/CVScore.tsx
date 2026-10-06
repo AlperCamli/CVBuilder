@@ -189,10 +189,10 @@ export function CVScore() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="max-w-2xl w-full">
         <div
-          className="p-8 rounded-2xl border"
+          className="p-5 sm:p-8 rounded-2xl border"
           style={{
             background: "var(--color-background-primary)",
             borderColor: "var(--color-border-tertiary)"
