@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Menu, X } from "lucide-react";
 import { CAREER_CATEGORIES, getCareerCategoryPath } from "../../content/career-advice";
+import { CV_START_PATH } from "../design-tools";
 
 type PublicHeaderProps = {
   activeCategorySlug?: string;
@@ -11,9 +12,7 @@ type PublicHeaderProps = {
 export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Anonymous visitors go straight to sign-up (not a sign-in bounce) and resume
-  // at the CV creation flow once authenticated.
-  const getStartedTarget = "/signup";
+  const getStartedTarget = CV_START_PATH;
   const getStartedState = { from: "/app/create" };
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
+import { readGuestUpload } from "../integration/guest-import";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import { startStripeCheckout } from "../integration/checkout-redirect";
@@ -13,12 +14,13 @@ import { clearPendingCheckout, readPendingCheckout } from "../integration/pendin
 // step instead of "sign up, then go hunt for the upgrade button again".
 export function CheckoutIntentResumer() {
   const { api, isAuthenticated } = useAuth();
+  const { pathname } = useLocation();
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!isAuthenticated || startedRef.current) {
+    if (!isAuthenticated || startedRef.current || readGuestUpload() || pathname === "/app/onboarding" || pathname === "/app/cv-score") {
       return;
     }
 
@@ -47,7 +49,7 @@ export function CheckoutIntentResumer() {
         );
       }
     })();
-  }, [api, isAuthenticated]);
+  }, [api, isAuthenticated, pathname]);
 
   if (!active) {
     return null;

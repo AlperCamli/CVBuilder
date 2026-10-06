@@ -7,6 +7,8 @@ const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
 const aiProviderSchema = z.enum(["mock", "gemini", "openai", "anthropic"]);
 const openaiReasoningEffortSchema = z.enum(["none", "minimal", "low", "medium", "high"]);
 
+const optionalApiKey = z.preprocess(value => value === "" ? undefined : value, z.string().min(1).optional());
+
 const envSchema = z
   .object({
     APP_NAME: z.string().min(1).default("cv-builder-backend"),
@@ -19,7 +21,7 @@ const envSchema = z
     AI_PROVIDER: aiProviderSchema.default("mock"),
     AI_DEFAULT_MODEL: z.string().min(1).default("mock-cv-builder-v1"),
     AI_PROMPT_PROFILE: z.string().min(1).default("phase3-v1"),
-    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_API_KEY: optionalApiKey,
     AI_GEMINI_MODEL_LIGHT: z.string().min(1).default("gemini-2.5-flash-preview"),
     AI_GEMINI_MODEL_HEAVY: z.string().min(1).default("gemini-3-flash"),
     AI_GEMINI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(8).default(3),
@@ -28,11 +30,11 @@ const envSchema = z
     AI_GEMINI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
     AI_GEMINI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
     AI_GEMINI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
-    OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: optionalApiKey,
     AI_OPENAI_MODEL_LIGHT: z.string().min(1).default("gpt-5.6-luna"),
     AI_OPENAI_MODEL_HEAVY: z.string().min(1).default("gpt-5.6-terra"),
     AI_OPENAI_REASONING_EFFORT: openaiReasoningEffortSchema.default("low"),
-    ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    ANTHROPIC_API_KEY: optionalApiKey,
     AI_ANTHROPIC_MODEL_LIGHT: z.string().min(1).default("claude-haiku-4-5"),
     AI_ANTHROPIC_MODEL_HEAVY: z.string().min(1).default("claude-sonnet-5"),
     // Shared knobs for the non-Gemini providers (Gemini keeps its AI_GEMINI_* set).

@@ -1,3 +1,4 @@
+import { personalizationGuidance } from "../guest-imports/personalization";
 import { reviewTailoring } from "../cv-review/cv-review";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -755,7 +756,7 @@ export class AiService {
       input.flow_type,
       parsedInput
     );
-    const userPrompt = this.buildTailoringUserPrompt(input.flow_type, parsedInput);
+    const userPrompt = [this.buildTailoringUserPrompt(input.flow_type, parsedInput), ...personalizationGuidance(session.appUser.onboarding_answers)].join("\n");
     const resolvedPrompt = await this.resolvePromptForFlow({
       flow_type: input.flow_type,
       action_type: null,
@@ -1074,7 +1075,7 @@ export class AiService {
       asRecord(input.parsed_content),
       input.language ?? "en"
     );
-    const improvementGuidance = asStringArray(input.improvement_guidance);
+    const improvementGuidance = [...asStringArray(input.improvement_guidance), ...personalizationGuidance(session.appUser.onboarding_answers)];
     const modulePromptProfile = this.resolveModulePromptProfile(input.module_type ?? null);
     const taskPlan = planImportImproveTasks(normalizedContent);
     const parentPrompt = await this.resolvePromptForFlow({

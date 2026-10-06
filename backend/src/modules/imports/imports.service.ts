@@ -449,11 +449,18 @@ export class ImportsService {
     return base.length <= 160 ? base : `${base.slice(0, 157)}...`;
   }
 
+  async parseGuestFile(input: ParseCvFileInput): Promise<ParseCvFileResult> {
+    const result = await this.resolveEffectiveParseResult(input, {
+      original_filename: input.originalFilename, mime_type: input.mimeType
+    }, "en", undefined, getCvModule("standard").promptProfile);
+    return { ...result, parsedContent: canonicalizeImportedCvContent(result.parsedContent) };
+  }
+
   private async resolveEffectiveParseResult(
     parseInput: ParseCvFileInput,
     sourceFile: { original_filename: string; mime_type: string | null },
     defaultLanguage: string,
-    session: SessionContext,
+    session: SessionContext | undefined,
     promptProfile: string | null = null
   ): Promise<ParseCvFileResult> {
     if (!this.aiProvider && !this.aiFlowRunner) {
@@ -461,7 +468,7 @@ export class ImportsService {
     }
 
     const extraction = await this.extractRawTextForAi(parseInput);
-    const aiAttempt = this.aiFlowRunner
+    const aiAttempt = this.aiFlowRunner && session
       ? await this.tryParseWithAiFlowRunner(
           extraction.extracted,
           sourceFile,

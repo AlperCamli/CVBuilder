@@ -17,5 +17,11 @@
       "src": "/api/(.*)",
       "dest": "/api/index.ts"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/guest-imports/cleanup",
+      "schedule": "0 3 * * *"
+    }
   ]
 }

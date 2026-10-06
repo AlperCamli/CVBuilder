@@ -39,7 +39,8 @@ const buildUrl = (
   query?: Record<string, string | number | boolean | null | undefined>
 ): string => {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const url = new URL(`${baseUrl}${normalizedPath}`);
+  const origin = typeof window !== "undefined" ? window.location?.origin : undefined;
+  const url = new URL(`${baseUrl}${normalizedPath}`, origin);
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {

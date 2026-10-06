@@ -1,3 +1,5 @@
+import { GuestImportsService } from "../modules/guest-imports/guest-imports.service";
+import { SupabaseGuestImportsRepository, type GuestImportsRepository } from "../modules/guest-imports/guest-imports.repository";
 import type { Logger } from "pino";
 import type { AppConfig } from "../shared/config/env";
 import {
@@ -93,6 +95,7 @@ export interface AppServices {
   systemService: SystemService;
   masterCvService: MasterCvService;
   importsService: ImportsService;
+  guestImportsService?: GuestImportsService;
   jobsService: JobsService;
   coverLettersService: CoverLettersService;
   tailoredCvService: TailoredCvService;
@@ -116,6 +119,7 @@ export interface ServiceOverrides {
   databaseHealthChecker?: DatabaseHealthCheckerPort;
   masterCvRepository?: MasterCvRepository;
   importsRepository?: ImportsRepository;
+  guestImportsRepository?: GuestImportsRepository;
   jobsRepository?: JobsRepository;
   coverLettersRepository?: CoverLettersRepository;
   tailoredCvRepository?: TailoredCvRepository;
@@ -279,6 +283,10 @@ export const buildDefaultServices = (
     aiService,
     logger
   );
+  const guestImportsService = new GuestImportsService(
+    overrides?.guestImportsRepository ?? new SupabaseGuestImportsRepository(supabaseClients.serviceRoleClient),
+    importsRepository, importsService
+  );
   const exportsService = new ExportsService(
     exportsRepository,
     tailoredCvRepository,
@@ -298,6 +306,7 @@ export const buildDefaultServices = (
     systemService,
     masterCvService,
     importsService,
+    guestImportsService,
     jobsService,
     coverLettersService,
     tailoredCvService,

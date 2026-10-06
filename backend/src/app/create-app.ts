@@ -56,6 +56,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
     systemService: options?.services?.systemService ?? defaultServices?.systemService!,
     masterCvService: options?.services?.masterCvService ?? defaultServices?.masterCvService!,
     importsService: options?.services?.importsService ?? defaultServices?.importsService!,
+    guestImportsService: options?.services?.guestImportsService ?? defaultServices?.guestImportsService,
     jobsService: options?.services?.jobsService ?? defaultServices?.jobsService!,
     coverLettersService: options?.services?.coverLettersService ?? defaultServices?.coverLettersService!,
     tailoredCvService: options?.services?.tailoredCvService ?? defaultServices?.tailoredCvService!,
@@ -99,7 +100,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
       },
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization"]
+      allowedHeaders: ["Content-Type", "Authorization", "X-Guest-Token"]
     })
   );
 

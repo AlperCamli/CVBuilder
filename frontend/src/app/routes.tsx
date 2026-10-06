@@ -36,6 +36,8 @@ const SignInRoute = lazyRoute(() =>
   })),
 );
 const GuidedJourneyRoute = lazyRoute(() => import("./pages/GuidedJourneyPage"));
+const OnboardingRoute = lazyRoute(() => import("./pages/PreSignupOnboarding"));
+const OnboardingResumeRoute = lazyRoute(() => import("./pages/OnboardingResume").then(({ OnboardingResume }) => ({ default: OnboardingResume })));
 const MascotStudioRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/MascotStudio"))
   : null;
@@ -172,6 +174,7 @@ export function RouteElements({
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/onboarding" element={lazyElement(OnboardingRoute)} />
       <Route path="/pricing" element={<PublicPricing />} />
       <Route path="/guided-journey" element={lazyElement(guidedJourney)} />
       <Route
@@ -222,6 +225,7 @@ export function RouteElements({
 
       <Route path="/app" element={lazyElement(AppShellRoute)}>
         <Route index element={lazyElement(DashboardRoute)} />
+        <Route path="onboarding" element={lazyElement(OnboardingResumeRoute)} />
         <Route path="create" element={lazyElement(CreateOrUploadRoute)} />
         <Route
           path="upload-processing"

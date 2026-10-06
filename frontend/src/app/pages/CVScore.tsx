@@ -1,20 +1,28 @@
+import { personalizedGuidance } from "../onboarding/pre-signup-questions";
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
 import type { CvContent, CvReview } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { ApiClientError } from "../integration/api-error";
-import { trackOnboardingStepCompleted, trackOnboardingStepView } from "../integration/analytics";
+import {
+  trackOnboardingStepCompleted,
+  trackOnboardingStepView,
+} from "../integration/analytics";
 
 export function CVScore() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { api } = useAuth();
+  const { api, me } = useAuth();
+  const [params] = useSearchParams();
+  const fromGuest = params.get("source") === "guest";
   const { completeStep } = useOnboarding();
 
-  const importId = location.state?.importId as string | undefined;
+  const importId = (location.state?.importId ??
+    params.get("import") ??
+    undefined) as string | undefined;
   const fileName = location.state?.fileName as string | undefined;
   const [review, setReview] = useState<CvReview | null>(null);
 
@@ -23,7 +31,7 @@ export function CVScore() {
   const [error, setError] = useState<string | null>(null);
   const [parsedContent, setParsedContent] = useState<CvContent | null>(null);
   const [moduleType, setModuleType] = useState<string | undefined>(
-    location.state?.moduleType as string | undefined
+    location.state?.moduleType as string | undefined,
   );
 
   useEffect(() => {
@@ -79,31 +87,48 @@ export function CVScore() {
   useEffect(() => {
     trackOnboardingStepView({
       step: "cv_score",
-      source: "upload_processing"
+      source: "upload_processing",
     });
   }, []);
 
-  const convertImportToMasterCv = async (contentToSave: CvContent, destination: "tailor" | "editor") => {
+  const convertImportToMasterCv = async (
+    contentToSave: CvContent,
+    destination: "tailor" | "editor",
+  ) => {
     if (!importId) {
       return;
     }
 
     setError(null);
 
-    try {
-      const targetModule = moduleType ?? "standard";
-      const existing = (await api.listMasterCvs()).filter(
-        (cv) => (cv.module_type ?? "standard") === targetModule
-      );
-      if (existing.length > 0) {
-        const confirmed = window.confirm(
-          "You already have a main CV. Creating a new one will permanently delete the existing one. Continue?"
-        );
-        if (!confirmed) {
+    if (fromGuest) {
+      try {
+        const detail = await api.getImport(importId);
+        if (detail.target_master_cv) {
+          navigate(`/app/cv/${detail.target_master_cv.id}`);
           return;
         }
-        for (const cv of existing) {
-          await api.deleteMasterCv(cv.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't load your CV.");
+        return;
+      }
+    }
+    try {
+      if (!fromGuest) {
+        const targetModule = moduleType ?? "standard";
+        const existing = (await api.listMasterCvs()).filter(
+          (cv) => (cv.module_type ?? "standard") === targetModule,
+        );
+        if (existing.length > 0) {
+          const confirmed = window.confirm(
+            "You already have a main CV. Creating a new one will permanently delete the existing one. Continue?",
+          );
+          if (!confirmed) {
+            return;
+          }
+          for (const cv of existing) {
+            await api.deleteMasterCv(cv.id);
+          }
         }
       }
     } catch {
@@ -121,14 +146,14 @@ export function CVScore() {
       trackOnboardingStepCompleted({
         step: "cv_score",
         destination,
-        parse_needs_manual_review: parseNeedsManualReview
+        parse_needs_manual_review: parseNeedsManualReview,
       });
 
       if (destination === "tailor") {
         navigate(`/app/tailor/${converted.master_cv.id}`, {
           state: {
-            source: "onboarding_upload"
-          }
+            source: "onboarding_upload",
+          },
         });
         return;
       }
@@ -137,8 +162,8 @@ export function CVScore() {
         state: {
           cvKind: "master",
           masterCvId: converted.master_cv.id,
-          isUploaded: true
-        }
+          isUploaded: true,
+        },
       });
     } catch (err) {
       if (err instanceof Error) {
@@ -161,8 +186,8 @@ export function CVScore() {
         parsedContent,
         improvements,
         moduleType,
-        source: "onboarding_upload"
-      }
+        source: "onboarding_upload",
+      },
     });
   };
 
@@ -182,31 +207,52 @@ export function CVScore() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
-        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>Loading your CV review...</p>
+      <div
+        className="min-h-screen flex items-center justify-center p-8"
+        style={{ background: "var(--color-background-secondary)" }}
+      >
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
+          Loading your CV review...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8" style={{ background: "var(--color-background-secondary)" }}>
+    <div
+      className="min-h-screen flex items-center justify-center p-4 sm:p-8"
+      style={{ background: "var(--color-background-secondary)" }}
+    >
       <div className="max-w-2xl w-full">
         <div
           className="p-5 sm:p-8 rounded-2xl border"
           style={{
             background: "var(--color-background-primary)",
-            borderColor: "var(--color-border-tertiary)"
+            borderColor: "var(--color-border-tertiary)",
           }}
         >
           <div className="text-center mb-8">
-            <h1 className="font-medium mb-2" style={{ fontSize: "24px", color: "var(--color-text-primary)" }}>
+            <h1
+              className="font-medium mb-2"
+              style={{ fontSize: "24px", color: "var(--color-text-primary)" }}
+            >
               Your CV Score
             </h1>
-            <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
+            <p
+              style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
+            >
               Based on {fileName || "uploaded file"}
             </p>
           </div>
 
+          {fromGuest && me?.user.onboarding_answers && (
+            <p
+              className="mb-6 text-sm"
+              style={{ color: "var(--color-text-secondary)" }}
+            >
+              {personalizedGuidance(me.user.onboarding_answers)[0]}
+            </p>
+          )}
           {error && (
             <div
               className="mb-6 p-4 rounded-xl border"
@@ -214,7 +260,7 @@ export function CVScore() {
                 borderColor: "var(--color-red-200)",
                 background: "var(--color-red-50)",
                 color: "var(--color-red-700)",
-                fontSize: "13px"
+                fontSize: "13px",
               }}
             >
               {error}
@@ -222,26 +268,69 @@ export function CVScore() {
           )}
 
           <div className="mb-8">
-            {review ? <CvReviewPanel review={review} /> : <p role="status" style={{ color: "var(--color-text-secondary)" }}>A reliable review is unavailable. Please try uploading your CV again.</p>}
+            {review ? (
+              <CvReviewPanel review={review} />
+            ) : (
+              <p role="status" style={{ color: "var(--color-text-secondary)" }}>
+                A reliable review is unavailable. Please try uploading your CV
+                again.
+              </p>
+            )}
           </div>
 
           {parseNeedsManualReview ? (
-            <button type="button" onClick={() => navigate("/app/create")} className="w-full mb-4 px-6 py-3 rounded-lg border text-sm font-medium" style={{ borderColor: "var(--color-border-secondary)", color: "var(--color-text-primary)" }}>Upload another CV</button>
+            <button
+              type="button"
+              onClick={() => navigate("/app/create")}
+              className="w-full mb-4 px-6 py-3 rounded-lg border text-sm font-medium"
+              style={{
+                borderColor: "var(--color-border-secondary)",
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Upload another CV
+            </button>
           ) : null}
 
           <div className="space-y-3">
+            {fromGuest && (
+              <button
+                onClick={handleReviewInEditor}
+                disabled={converting || !parsedContent}
+                className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2"
+                style={{
+                  background: "var(--color-teal-600)",
+                  color: "white",
+                  fontSize: "14px",
+                }}
+              >
+                {converting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <ArrowRight size={16} />
+                )}
+                Continue to CV editor
+              </button>
+            )}
             <button
               onClick={handleCustomizeForJob}
               disabled={converting || !parsedContent || parseNeedsManualReview}
               className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all hover:shadow-md"
               style={{
-                background: "var(--color-teal-600)",
-                color: "white",
+                background: fromGuest ? "transparent" : "var(--color-teal-600)",
+                color: fromGuest ? "var(--color-text-primary)" : "white",
+                border: fromGuest
+                  ? "1px solid var(--color-border-tertiary)"
+                  : undefined,
                 fontSize: "14px",
-                opacity: converting || parseNeedsManualReview ? 0.7 : 1
+                opacity: converting || parseNeedsManualReview ? 0.7 : 1,
               }}
             >
-              {converting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {converting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Sparkles size={16} />
+              )}
               Customize for a job
               <ArrowRight size={16} />
             </button>
@@ -255,28 +344,32 @@ export function CVScore() {
                 border: "1px solid var(--color-border-tertiary)",
                 color: "var(--color-text-primary)",
                 fontSize: "14px",
-                opacity: converting ? 0.7 : 1
+                opacity: converting ? 0.7 : 1,
               }}
             >
               <Sparkles size={16} />
               Improve with AI
             </button>
 
-            <button
-              onClick={handleReviewInEditor}
-              disabled={converting || !parsedContent}
-              className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
-              style={{
-                background: "transparent",
-                border: "1px solid var(--color-border-tertiary)",
-                color: "var(--color-text-secondary)",
-                fontSize: "14px",
-                opacity: converting ? 0.7 : 1
-              }}
-            >
-              {converting ? <Loader2 size={16} className="animate-spin" /> : null}
-              Review parsed result in editor
-            </button>
+            {!fromGuest && (
+              <button
+                onClick={handleReviewInEditor}
+                disabled={converting || !parsedContent}
+                className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
+                style={{
+                  background: "transparent",
+                  border: "1px solid var(--color-border-tertiary)",
+                  color: "var(--color-text-secondary)",
+                  fontSize: "14px",
+                  opacity: converting ? 0.7 : 1,
+                }}
+              >
+                {converting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : null}
+                Review parsed result in editor
+              </button>
+            )}
           </div>
         </div>
       </div>

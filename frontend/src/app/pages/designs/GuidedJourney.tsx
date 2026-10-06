@@ -135,7 +135,7 @@ export default function GuidedJourney({
   const jumpTo = scrollToJourneySection;
   const beginTrial = () => {
     setPendingCheckout({ plan_code: "weekly", with_trial: true });
-    navigate("/signup", { state: { from: "/app/create" } });
+    navigate("/onboarding");
   };
   return (
     <div
@@ -207,7 +207,7 @@ export default function GuidedJourney({
           <Link to="/signin" className="cv-signin">
             Sign in
           </Link>
-          <StartLink className="cv-button cv-button-small">
+          <StartLink to="/onboarding" className="cv-button cv-button-small">
             Start free <ArrowUpRight size={15} />
           </StartLink>
         </div>
@@ -240,7 +240,7 @@ export default function GuidedJourney({
                   ATS-friendly version focused on the role in front of you.
                 </p>
                 <div className="cv-hero-actions">
-                  <StartLink>
+                  <StartLink to="/onboarding">
                     Tailor your CV — it’s free <ArrowRight size={17} />
                   </StartLink>
                   <button
@@ -385,7 +385,7 @@ export default function GuidedJourney({
               <span>A CV that’s ready for it.</span>
             </h2>
             <p>Bring your experience. We’ll help you put it to work.</p>
-            <StartLink>
+            <StartLink to="/onboarding">
               Let’s tailor my CV <ArrowRight size={17} />
             </StartLink>
             <small>Free to start. No card required.</small>
@@ -488,7 +488,7 @@ export default function GuidedJourney({
             <button className="pd-primary" onClick={beginTrial}>
               Create account & try Weekly Pro <ArrowRight size={15} />
             </button>
-            <StartLink className="gj-dialog-link">
+            <StartLink to="/onboarding" className="gj-dialog-link">
               Prefer Free? No card required <ArrowRight size={14} />
             </StartLink>
           </DemoDialog>

@@ -9,6 +9,8 @@ export const createLogger = (config: AppConfig): Logger => {
     redact: {
       paths: [
         "req.headers.authorization",
+        'req.headers["x-guest-token"]',
+        'headers["x-guest-token"]',
         "authorization",
         "headers.authorization",
         "supabase.serviceRoleKey",

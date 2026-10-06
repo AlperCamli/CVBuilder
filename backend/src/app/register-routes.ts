@@ -1,3 +1,4 @@
+import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports.routes";
 import type { Router } from "express";
 import type { AppConfig } from "../shared/config/env";
 import { createAiRateLimiter } from "../shared/middleware/rate-limit";
@@ -59,6 +60,7 @@ export const registerV1Routes = (
   const billingController = new BillingController(services.billingService);
 
   router.use(createSystemRouter(systemController));
+  if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
   router.use(createUsersRouter(usersController, authMiddleware));
   router.use(createDashboardRouter(dashboardController, authMiddleware));
   router.use(createMasterCvRouter(masterCvController, authMiddleware));

@@ -1,22 +1,17 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "../integration/auth-context";
 import { consumePostAuthRedirect } from "../integration/post-auth-redirect";
 
 export function AuthCallback() {
   const navigate = useNavigate();
 
+  const { initialized, isAuthenticated, authMessage } = useAuth();
   useEffect(() => {
-    // Supabase handles the OAuth token exchange automatically via the URL hash.
-    // The AuthProvider's onAuthStateChange listener will detect the new session.
-    // We just need to wait briefly and redirect — to the stashed post-signup
-    // destination (e.g. /app/create) when one exists, otherwise /app.
-    const timeout = setTimeout(() => {
-      navigate(consumePostAuthRedirect() ?? "/app", { replace: true });
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [navigate]);
+    if (!initialized || !isAuthenticated) return;
+    navigate(consumePostAuthRedirect() ?? "/app", { replace: true });
+  }, [initialized, isAuthenticated, navigate]);
 
   return (
     <div
@@ -30,8 +25,16 @@ export function AuthCallback() {
           style={{ color: "var(--color-teal-600)" }}
         />
         <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-          Completing sign-in...
+          {initialized && !isAuthenticated
+            ? (authMessage ??
+              "Your sign-in link couldn't be completed. Please sign in again.")
+            : "Completing sign-in..."}
         </p>
+        {initialized && !isAuthenticated && (
+          <Link to="/signin" className="block mt-4 underline">
+            Sign in
+          </Link>
+        )}
       </div>
     </div>
   );

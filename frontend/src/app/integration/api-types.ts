@@ -1,3 +1,4 @@
+import type { OnboardingAnswers } from "../onboarding/pre-signup-questions";
 export interface ApiSuccessResponse<TData> {
   success: true;
   data: TData;
@@ -42,6 +43,7 @@ export interface UserRecord {
   default_cv_language: string | null;
   onboarding_completed: boolean;
   onboarding_state: OnboardingState;
+  onboarding_answers?: OnboardingAnswers;
   created_at: string;
   updated_at: string;
 }

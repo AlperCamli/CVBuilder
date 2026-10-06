@@ -1,3 +1,4 @@
+import type { GuestAnswers } from "../../modules/guest-imports/guest-imports.schemas";
 import type { ImportReviewContext, TailoringReview } from "../../modules/cv-review/cv-review.types";
 import type { CvContent } from "../cv-content/cv-content.types";
 
@@ -26,6 +27,7 @@ export interface UserRecord {
   default_cv_language: string | null;
   onboarding_completed: boolean;
   onboarding_state: OnboardingState;
+  onboarding_answers?: GuestAnswers;
   created_at: string;
   updated_at: string;
 }

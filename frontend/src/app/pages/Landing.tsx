@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { CAREER_ARTICLES, getCareerArticlePath } from "../../content/career-advice";
 import { PublicHeader } from "../components/PublicHeader";
+import { CV_START_PATH } from "../design-tools";
 
 type Step = {
   number: string;
@@ -410,9 +411,7 @@ function FaqItem({ faq }: { faq: Faq }) {
 }
 
 export function Landing() {
-  // New visitors go straight to sign-up and resume at the CV creation flow after
-  // authenticating, instead of bouncing through the sign-in page.
-  const createCvTarget = "/signup";
+  const createCvTarget = CV_START_PATH;
   const createCvState = { from: "/app/create" };
 
   return (

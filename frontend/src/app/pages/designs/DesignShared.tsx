@@ -1,3 +1,4 @@
+import { CV_START_PATH } from "../../design-tools";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
@@ -41,13 +42,15 @@ export function StartLink({
     </>
   ),
   className = "cv-button",
+  to = CV_START_PATH,
 }: {
   children?: ReactNode;
   className?: string;
+  to?: string;
 }) {
   return (
     <Link
-      to="/signup"
+      to={to}
       state={{ from: "/app/create" }}
       className={className}
       onClick={clearPendingCheckout}
@@ -377,7 +380,7 @@ export function PricingCards({
       plan_code: period,
       ...(period === "weekly" ? { with_trial: false } : {}),
     });
-    navigate("/signup", { state: { from: "/app/create" } });
+    navigate(guided ? "/onboarding" : "/signup", { state: { from: "/app/create" } });
   };
   const proFeatures = [
     "Unlimited tailored CVs",
