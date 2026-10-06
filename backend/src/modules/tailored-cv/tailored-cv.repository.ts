@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Logger } from "pino";
+import { embeddedReview, updateWithReviewFallback, withoutReviewMetadata } from "../cv-review/cv-review.persistence";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type { CvContent, CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { TailoredCvRecord, TailoredCvStatus } from "../../shared/types/domain";
@@ -91,8 +93,8 @@ const toTailoredCvRecord = (row: Record<string, unknown>): TailoredCvRecord => {
     language: String(row.language),
     template_id: row.template_id ? String(row.template_id) : null,
     module_type: row.module_type ? String(row.module_type) : "standard",
-    current_content: row.current_content as CvContent,
-    tailoring_review: (row.tailoring_review as TailoredCvRecord["tailoring_review"]) ?? null,
+    current_content: withoutReviewMetadata(row.current_content as CvContent)!,
+    tailoring_review: (row.tailoring_review ?? embeddedReview(row.current_content as CvContent, "tailoring_review")) as TailoredCvRecord["tailoring_review"],
     status: row.status as TailoredCvStatus,
     ai_generation_status: (row.ai_generation_status as string | null) ?? null,
     last_exported_at: (row.last_exported_at as string | null) ?? null,
@@ -103,7 +105,7 @@ const toTailoredCvRecord = (row: Record<string, unknown>): TailoredCvRecord => {
 };
 
 export class SupabaseTailoredCvRepository implements TailoredCvRepository {
-  constructor(private readonly supabaseClient: SupabaseClient) {}
+  constructor(private readonly supabaseClient: SupabaseClient, private readonly logger?: Logger) {}
 
   async listByUser(userId: string, query?: TailoredCvListQuery): Promise<TailoredCvRecord[]> {
     let builder = this.supabaseClient
@@ -155,7 +157,7 @@ export class SupabaseTailoredCvRepository implements TailoredCvRepository {
       .from("tailored_cvs")
       .insert({
         ...payload,
-        current_content: toDbContent(payload.current_content)
+        current_content: toDbContent(withoutReviewMetadata(payload.current_content)!)
       })
       .select("*")
       .single();
@@ -182,20 +184,11 @@ export class SupabaseTailoredCvRepository implements TailoredCvRepository {
       updatePayload.current_content = toDbContent(payload.current_content);
     }
 
-    const { data, error } = await this.supabaseClient
-      .from("tailored_cvs")
-      .update(updatePayload)
-      .eq("id", tailoredCvId)
-      .eq("user_id", userId)
-      .eq("is_deleted", false)
-      .select("*")
-      .maybeSingle();
-
-    if (error) {
-      throw new InternalServerError("Failed to update tailored CV", {
-        reason: error.message
-      });
-    }
+    const data = await updateWithReviewFallback({
+      client: this.supabaseClient, table: "tailored_cvs", userId, id: tailoredCvId,
+      payload: updatePayload, reviewColumn: "tailoring_review", contentColumn: "current_content",
+      errorMessage: "Failed to update tailored CV", logger: this.logger
+    });
 
     if (!data) {
       return null;

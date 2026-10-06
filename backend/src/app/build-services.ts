@@ -158,14 +158,14 @@ export const buildDefaultServices = (
   const masterCvRepository =
     overrides?.masterCvRepository ?? new SupabaseMasterCvRepository(supabaseClients.serviceRoleClient);
   const importsRepository =
-    overrides?.importsRepository ?? new SupabaseImportsRepository(supabaseClients.serviceRoleClient);
+    overrides?.importsRepository ?? new SupabaseImportsRepository(supabaseClients.serviceRoleClient, logger);
   const jobsRepository =
     overrides?.jobsRepository ?? new SupabaseJobsRepository(supabaseClients.serviceRoleClient);
   const coverLettersRepository =
     overrides?.coverLettersRepository ??
     new SupabaseCoverLettersRepository(supabaseClients.serviceRoleClient);
   const tailoredCvRepository =
-    overrides?.tailoredCvRepository ?? new SupabaseTailoredCvRepository(supabaseClients.serviceRoleClient);
+    overrides?.tailoredCvRepository ?? new SupabaseTailoredCvRepository(supabaseClients.serviceRoleClient, logger);
   const cvRevisionsRepository =
     overrides?.cvRevisionsRepository ??
     new SupabaseCvRevisionsRepository(supabaseClients.serviceRoleClient);

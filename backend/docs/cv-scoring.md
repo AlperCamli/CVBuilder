@@ -90,6 +90,16 @@ the backend**. It adds nullable `imports.review_context` and
 from editable CV JSON. Existing ownership-scoped repository reads/writes and
 table access policies apply; no new public endpoint or permission is introduced.
 
+If the API schema cache cannot see either new column during rollout, repository
+writes retry only that specific missing-column error. Evidence is temporarily
+stored in reserved server metadata inside the existing CV JSONB column. Reads
+extract that evidence and remove the envelope before returning CV content to
+clients, the editor or AI. Editor saves preserve the stored evidence and ignore
+client-supplied envelopes. Tailoring snapshots survive the same fallback. Once
+the column is available, a subsequent content save promotes the saved evidence
+to it. Other database failures still fail normally; fallback errors are not hidden.
+The migration also requests a PostgREST schema cache reload.
+
 ## Verification
 
 `tests/cv-review.unit.test.ts` covers formula consistency, excluded dimensions,

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Logger } from "pino";
+import { embeddedReview, updateWithReviewFallback, withoutReviewMetadata } from "../cv-review/cv-review.persistence";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
 import type { FileRecord, ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
@@ -77,8 +79,8 @@ const toImportRecord = (row: Record<string, unknown>): ImportRecord => {
     module_type: row.module_type ? String(row.module_type) : "standard",
     parser_name: (row.parser_name as string | null) ?? null,
     raw_extracted_text: (row.raw_extracted_text as string | null) ?? null,
-    parsed_content: (row.parsed_content as CvContent | null) ?? null,
-    review_context: (row.review_context as ImportRecord["review_context"]) ?? null,
+    parsed_content: withoutReviewMetadata((row.parsed_content as CvContent | null) ?? null),
+    review_context: (row.review_context ?? embeddedReview(row.parsed_content as CvContent | null, "review_context")) as ImportRecord["review_context"],
     error_message: (row.error_message as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at)
@@ -98,7 +100,7 @@ const toMasterCvSummary = (
 };
 
 export class SupabaseImportsRepository implements ImportsRepository {
-  constructor(private readonly supabaseClient: SupabaseClient) {}
+  constructor(private readonly supabaseClient: SupabaseClient, private readonly logger?: Logger) {}
 
   async createFile(payload: CreateFilePayload): Promise<FileRecord> {
     const { data, error } = await this.supabaseClient
@@ -216,19 +218,11 @@ export class SupabaseImportsRepository implements ImportsRepository {
       updatePayload.parsed_content = payload.parsed_content;
     }
 
-    const { data, error } = await this.supabaseClient
-      .from("imports")
-      .update(updatePayload)
-      .eq("id", importId)
-      .eq("user_id", userId)
-      .select("*")
-      .maybeSingle();
-
-    if (error) {
-      throw new InternalServerError("Failed to update import session", {
-        reason: error.message
-      });
-    }
+    const data = await updateWithReviewFallback({
+      client: this.supabaseClient, table: "imports", userId, id: importId,
+      payload: updatePayload, reviewColumn: "review_context", contentColumn: "parsed_content",
+      errorMessage: "Failed to update import session", logger: this.logger
+    });
 
     if (!data) {
       return null;
