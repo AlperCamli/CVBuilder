@@ -1,3 +1,4 @@
+import type { PrivacyService } from "../privacy/privacy.service";
 import { personalizationGuidance } from "../guest-imports/personalization";
 import { reviewTailoring } from "../cv-review/cv-review";
 import { randomUUID } from "node:crypto";
@@ -738,13 +739,15 @@ export class AiService {
     private readonly cvRevisionsService: CvRevisionsService,
     private readonly templatesService: TemplatesService,
     private readonly promptResolver: AiPromptResolver,
-    private readonly billingService: BillingService
+    private readonly billingService: BillingService,
+    private readonly privacy?: PrivacyService
   ) {}
 
   async startTailoringRun(
     session: SessionContext,
     input: TailoringRunStartInput
   ): Promise<TailoringRunStartResponse> {
+    if (this.privacy) await this.privacy.assertAi(session.appUser.id);
     await this.billingService.assertActionAllowed(
       session.appUser.id,
       input.flow_type === "tailored_draft" ? "tailored_cv_generation" : "ai_action"
@@ -2224,6 +2227,7 @@ export class AiService {
   private async executeFlow<TOutput>(
     options: ExecuteFlowOptions
   ): Promise<ExecuteFlowResult<TOutput>> {
+    await this.privacy?.assertAi(options.user_id);
     const prompt = await this.resolvePromptForFlow({
       flow_type: options.flow_type,
       action_type: options.action_type ?? null,
@@ -2536,6 +2540,7 @@ export class AiService {
   }
 
   private async executeRunFlow(options: RunFlowExecutionOptions): Promise<RunFlowExecutionResult> {
+    const revision = await this.privacy?.assertAi(options.user_id);
     const definition = AI_FLOW_REGISTRY[options.flow_type];
 
     await this.updateRunStage(options.user_id, options.ai_run_id, "building_prompt");
@@ -2568,6 +2573,7 @@ export class AiService {
       throw new AiFlowFailedError("AI flow execution failed", { flow_type: options.flow_type });
     }
 
+    if (revision !== undefined) await this.privacy!.assertAiUnchanged(options.user_id, revision);
     const outputPayloadForValidation =
       options.flow_type === "tailored_draft"
         ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
@@ -2705,6 +2711,7 @@ export class AiService {
       total_tokens: number;
     } | null = null
   ): Promise<{ run: AiRunRecord; claimed_completion: boolean }> {
+    await this.privacy?.assertAi(userId);
     await this.updateRunStage(userId, runId, "persisting_result");
     const completed = await this.aiRepository.completeRun(userId, runId, outputPayload, tokenUsage);
     if (completed) {
@@ -2724,8 +2731,8 @@ export class AiService {
     runId: string,
     error: unknown
   ): Promise<void> {
-    const message = toPersistableAiRunError(error).slice(0, 2000);
-    const debugPayload = toPersistableAiRunDebugPayload(error);
+    const message = this.privacy ? "AI processing could not be completed" : toPersistableAiRunError(error).slice(0, 2000);
+    const debugPayload = this.privacy ? null : toPersistableAiRunDebugPayload(error);
     await this.aiRepository.failRun(userId, runId, message, debugPayload);
   }
 

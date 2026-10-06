@@ -1,6 +1,7 @@
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router";
 import { RouteElements } from "./app/routes";
+import { PrivacyControls } from "./app/components/PrivacyControls";
 
 export async function renderRoute(path: string): Promise<string> {
   // Load the public alternative before synchronous static rendering. The same
@@ -11,6 +12,7 @@ export async function renderRoute(path: string): Promise<string> {
   return renderToString(
     <StaticRouter location={path}>
       <RouteElements guidedJourney={guidedJourney} />
+      <PrivacyControls />
     </StaticRouter>,
   );
 }

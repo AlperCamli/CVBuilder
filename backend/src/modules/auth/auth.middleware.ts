@@ -25,6 +25,10 @@ export const createAuthMiddleware = (authService: AuthService): RequestHandler =
         throw new UnauthorizedError("Missing or malformed bearer token");
       }
 
+      // Processing guards and route handlers share this authenticated request.
+      // Database/privacy guards still check current state before sensitive work.
+      if (request.auth) { next(); return; }
+
       request.auth = await authService.authenticate(token);
       next();
     } catch (error) {

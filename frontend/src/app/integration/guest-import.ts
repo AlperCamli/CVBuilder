@@ -1,3 +1,4 @@
+import { choices, type PrivacyChoices } from "./privacy";
 import { createApiClient } from "./api-client";
 import { integrationConfig } from "./config";
 import { supabase } from "./supabase-client";
@@ -15,6 +16,10 @@ export interface GuestUpload {
   question: number;
 }
 export interface GuestStatus {
+  answers: OnboardingAnswers;
+  original_filename: string;
+  ai_processing: boolean;
+  analytics: boolean;
   status: "uploaded" | "parsing" | "parsed" | "failed" | "claimed";
   error_message: string | null;
   retry_available: boolean;
@@ -31,10 +36,12 @@ export function readGuestUpload(): GuestUpload | null {
       typeof row.guest_token === "string" &&
       /^[A-Za-z0-9_-]{43}$/.test(row.guest_token) &&
       Date.parse(row.expires_at) > Date.now() &&
-      row.answers &&
-      typeof row.answers === "object"
-    )
-      return row;
+      typeof row.expires_at === "string"
+    ) {
+      const minimal = { id: row.id, guest_token: row.guest_token, expires_at: row.expires_at, step: row.step === "signup" ? "signup" as const : "questions" as const, question: Number.isInteger(row.question) ? row.question : 0 };
+      localStorage.setItem(KEY, JSON.stringify(minimal));
+      return { ...minimal, answers: {}, original_filename: "Your CV" };
+    }
   } catch {
     /* corrupt or unavailable browser storage */
   }
@@ -44,7 +51,7 @@ export function readGuestUpload(): GuestUpload | null {
 export function saveGuestUpload(row: GuestUpload) {
   // Persist the proof before starting auth; report unavailable storage instead
   // of silently losing the CV when OAuth leaves the page.
-  localStorage.setItem(KEY, JSON.stringify(row));
+  localStorage.setItem(KEY, JSON.stringify({ id: row.id, guest_token: row.guest_token, expires_at: row.expires_at, step: row.step, question: row.question }));
 }
 export function clearGuestUpload() {
   if (typeof window !== "undefined") {
@@ -69,7 +76,7 @@ const authenticated = createApiClient({
 const options = (row: GuestUpload) => ({
   headers: { "X-Guest-Token": row.guest_token },
 });
-export async function uploadGuestCv(file: File) {
+export async function uploadGuestCv(file: File, aiProcessing = false) {
   const mime = /\.pdf$/i.test(file.name)
     ? "application/pdf"
     : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -79,6 +86,7 @@ export async function uploadGuestCv(file: File) {
     expires_at: string;
     upload: { storage_bucket: string; storage_path: string; token: string };
   }>("/guest-imports", {
+    ...choices(aiProcessing),
     original_filename: file.name,
     mime_type: mime,
     size_bytes: file.size,
@@ -132,3 +140,15 @@ export const claimGuestCv = (row: GuestUpload) =>
     original_filename: string;
     answers: OnboardingAnswers;
   }>(`/guest-imports/${row.id}/claim`, {}, options(row));
+
+export const updateGuestPrivacy = (row: GuestUpload, input: PrivacyChoices) => client.patch<GuestStatus>(`/guest-imports/${row.id}/privacy`, input, options(row));
+export const deleteGuestUpload = (row: GuestUpload) => client.delete(`/guest-imports/${row.id}`, options(row));
+export function installGuestExpiryCheck() {
+  let previous = readGuestUpload();
+  const timer = window.setInterval(() => {
+    const row = readGuestUpload();
+    if (previous && !row) window.dispatchEvent(new Event("cv-builder:guest-expired"));
+    previous = row;
+  }, 30_000);
+  return () => window.clearInterval(timer);
+}

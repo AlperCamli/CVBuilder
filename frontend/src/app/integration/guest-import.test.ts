@@ -13,8 +13,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("guest upload handoff", () => {
-  it("preserves the proof, answers, and cursor for refresh and auth redirects", () => {
-    saveGuestUpload(row); expect(readGuestUpload()).toEqual(row); clearGuestUpload(); expect(readGuestUpload()).toBeNull();
+  it("preserves only the proof and cursor for refresh and auth redirects", () => {
+    saveGuestUpload(row); expect(readGuestUpload()).toEqual({ ...row, answers: {}, original_filename: "Your CV" }); expect(localStorage.getItem("cv-builder:guest-import")).not.toContain("answers"); expect(localStorage.getItem("cv-builder:guest-import")).not.toContain("cv.pdf"); clearGuestUpload(); expect(readGuestUpload()).toBeNull();
   });
   it("discards expired, corrupt and malformed handoffs", () => {
     saveGuestUpload({ ...row, expires_at: new Date(0).toISOString() }); expect(readGuestUpload()).toBeNull(); expect(data.size).toBe(0);

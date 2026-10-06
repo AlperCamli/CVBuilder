@@ -1,5 +1,6 @@
 import type { ApiClient } from "./api-client";
 import type {
+  JobStatus,
   CvAiBlockVersionsResponse,
   CvAiHistoryResponse,
   AiSuggestResponse,

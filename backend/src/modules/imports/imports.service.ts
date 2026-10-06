@@ -1,3 +1,5 @@
+import type { PrivacyService } from "../privacy/privacy.service";
+import { privacyConfig } from "../privacy/privacy.config";
 import { reviewCv } from "../cv-review/cv-review";
 import type { Logger } from "pino";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
@@ -102,7 +104,8 @@ export class ImportsService {
     private readonly aiProvider?: AiProvider,
     private readonly aiPromptResolver?: AiPromptResolver,
     private readonly aiFlowRunner?: CvParseAiFlowRunner,
-    private readonly logger?: Pick<Logger, "info" | "warn">
+    private readonly logger?: Pick<Logger, "info" | "warn">,
+    private readonly privacy?: PrivacyService
   ) {}
 
   async createImportSession(
@@ -407,7 +410,7 @@ export class ImportsService {
       storagePath.length <= expectedPrefix.length ||
       storagePath.includes("..") ||
       storagePath.includes("\\") ||
-      storagePath.includes(" ")
+      storagePath.includes("\0")
     ) {
       throw new ValidationError("Invalid storage location for import session");
     }
@@ -449,10 +452,11 @@ export class ImportsService {
     return base.length <= 160 ? base : `${base.slice(0, 157)}...`;
   }
 
-  async parseGuestFile(input: ParseCvFileInput): Promise<ParseCvFileResult> {
-    const result = await this.resolveEffectiveParseResult(input, {
+  async parseGuestFile(input: ParseCvFileInput, allowAi = false, assertPermission?: () => Promise<void>): Promise<ParseCvFileResult> {
+    if (this.privacy && privacyConfig().ai_required && (!allowAi || !assertPermission)) throw new ValidationError("Enable AI processing before analyzing your CV.");
+    const result = allowAi && (!this.privacy || assertPermission) ? await this.resolveEffectiveParseResult(input, {
       original_filename: input.originalFilename, mime_type: input.mimeType
-    }, "en", undefined, getCvModule("standard").promptProfile);
+    }, "en", undefined, getCvModule("standard").promptProfile, assertPermission) : await this.parser.parse(input);
     return { ...result, parsedContent: canonicalizeImportedCvContent(result.parsedContent) };
   }
 
@@ -461,9 +465,15 @@ export class ImportsService {
     sourceFile: { original_filename: string; mime_type: string | null },
     defaultLanguage: string,
     session: SessionContext | undefined,
-    promptProfile: string | null = null
+    promptProfile: string | null = null,
+    assertPermission?: () => Promise<void>
   ): Promise<ParseCvFileResult> {
+    if (session && this.privacy) {
+      if (privacyConfig().ai_required) await this.privacy.assertAi(session.appUser.id);
+      else if (!(await this.privacy.aiPermission(session.appUser.id))) return this.parser.parse(parseInput);
+    }
     if (!this.aiProvider && !this.aiFlowRunner) {
+      if (this.privacy && privacyConfig().ai_required) throw new ValidationError("AI analysis is unavailable. Please try again later.");
       return this.parser.parse(parseInput);
     }
 
@@ -476,11 +486,12 @@ export class ImportsService {
           session,
           promptProfile
         )
-      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage, promptProfile);
+      : await this.tryParseWithAi(extraction.extracted, sourceFile, defaultLanguage, promptProfile, assertPermission);
     if (aiAttempt.parseResult) {
       return aiAttempt.parseResult;
     }
 
+    if (this.privacy && privacyConfig().ai_required) throw new ValidationError("AI analysis could not be completed. Please retry your CV analysis.");
     const fallbackResult = extraction.precomputedFallbackResult ?? (await this.parser.parse(parseInput));
     if (!aiAttempt.failureWarning) {
       return fallbackResult;
@@ -519,7 +530,8 @@ export class ImportsService {
     extractedResult: ExtractCvRawTextResult,
     sourceFile: { original_filename: string; mime_type: string | null },
     defaultLanguage: string,
-    promptProfile: string | null = null
+    promptProfile: string | null = null,
+    assertPermission?: () => Promise<void>
   ): Promise<{
     parseResult: ParseCvFileResult | null;
     failureWarning: string | null;
@@ -565,6 +577,7 @@ export class ImportsService {
         }
       });
 
+      await assertPermission?.();
       const aiResult = await this.aiProvider.generate({
         flow_type: AI_PARSE_FLOW_TYPE,
         model_name: prompt.model_name,
@@ -577,12 +590,13 @@ export class ImportsService {
         output_schema: flowDefinition.output_schema,
         input_payload: {
           raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
-          source_filename: sourceFile.original_filename,
+          source_filename: "cv." + (sourceFile.mime_type === "application/pdf" ? "pdf" : "docx"),
           mime_type: sourceFile.mime_type ?? "application/octet-stream",
           language_hint: defaultLanguage || "en"
         }
       });
 
+      await assertPermission?.();
       const parsed = cvParseOutputSchema.safeParse(aiResult.output_payload);
       if (!parsed.success) {
         throw new Error("AI CV parsing output did not match contract");
@@ -612,7 +626,7 @@ export class ImportsService {
 
       return {
         parseResult: null,
-        failureWarning: `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
+        failureWarning: `AI parser failed; fallback parser output was used (${this.privacy ? "AI_PARSE_FAILED" : message.slice(0, 180)}).`
       };
     }
   }
@@ -655,7 +669,7 @@ export class ImportsService {
     try {
       const aiResult = await this.aiFlowRunner.parseCvContent(session, {
         raw_text: rawExtractedText.slice(0, MAX_AI_PARSE_RAW_TEXT_LENGTH),
-        source_filename: sourceFile.original_filename,
+        source_filename: "cv." + (sourceFile.mime_type === "application/pdf" ? "pdf" : "docx"),
         mime_type: sourceFile.mime_type ?? "application/octet-stream",
         language_hint: defaultLanguage || "en",
         prompt_profile: promptProfile
@@ -689,14 +703,14 @@ export class ImportsService {
       this.logger?.warn(
         {
           import_parser: "cv_parse",
-          reason: message.slice(0, 300)
+          reason: "AI_PARSE_FAILED"
         },
         "CV parse AI flow failed, using fallback parser"
       );
 
       return {
         parseResult: null,
-        failureWarning: `AI parser failed; fallback parser output was used (${message.slice(0, 180)}).`
+        failureWarning: `AI parser failed; fallback parser output was used (${this.privacy ? "AI_PARSE_FAILED" : message.slice(0, 180)}).`
       };
     }
   }

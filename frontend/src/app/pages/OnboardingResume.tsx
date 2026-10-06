@@ -8,7 +8,6 @@ import {
   getGuestStatus,
   processGuestCv,
   readGuestUpload,
-  saveGuestAnswers,
 } from "../integration/guest-import";
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
@@ -23,24 +22,9 @@ export function OnboardingResume() {
     if (!guest) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    let answersSaved = false;
     let parseRetryAttempted = false;
     const resume = async () => {
       try {
-        if (!answersSaved) {
-          try {
-            await saveGuestAnswers(guest, guest.answers);
-          } catch (err) {
-            // Already claimed uploads no longer accept anonymous answer writes.
-            // The authenticated claim below still verifies the owner and proof.
-            if (
-              !(err instanceof ApiClientError) ||
-              ![404, 409].includes(err.status)
-            )
-              throw err;
-          }
-          answersSaved = true;
-        }
         // Claim first so a lost response or a second tab can safely replay the
         // handoff. A claimed guest no longer exposes anonymous status.
         try {

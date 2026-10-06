@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app/create-app";
 import { AuthService } from "../src/modules/auth/auth.service";
 import type { ExportsService } from "../src/modules/exports/exports.service";
+import type { PrivacyService } from "../src/modules/privacy/privacy.service";
 import type {
   CreateExportInput,
   ExportDetailResponse,
@@ -378,6 +379,9 @@ const buildApp = () => {
     config: createTestConfig(),
     services: {
       authService,
+      // This endpoint suite uses in-memory users/storage. Privacy worker and
+      // restriction behavior have their own SQL/service integration coverage.
+      privacyService: { assertProductAccess: async () => undefined } as unknown as PrivacyService,
       exportsService: exportsService as unknown as ExportsService
     },
     serviceOverrides: {

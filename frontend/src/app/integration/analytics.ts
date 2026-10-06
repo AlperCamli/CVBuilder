@@ -1,8 +1,10 @@
+import { analyticsAllowed, PRIVACY_EVENT, CONSENT_KEY, getPrivacyConfig } from "./privacy";
 type AnalyticsValue = string | number | boolean | null | undefined;
 
 export type AnalyticsParams = Record<string, AnalyticsValue>;
 
 type GtagCommand =
+  | ["consent", "update", AnalyticsParams]
   | ["js", Date]
   | ["config", string, AnalyticsParams?]
   | ["event", string, AnalyticsParams?];
@@ -15,6 +17,7 @@ declare global {
 }
 
 const GA_MEASUREMENT_ID = (import.meta.env.VITE_GA_MEASUREMENT_ID ?? "").trim();
+let analyticsReady = false;
 const GA_SCRIPT_ID = "ga4-google-tag";
 const CHECKOUT_ATTRIBUTION_KEY = "analytics:checkout-attribution";
 const PAYMENT_COMPLETED_PREFIX = "analytics:payment-completed";
@@ -41,11 +44,12 @@ export type CheckoutAttribution = {
 const hasWindow = (): boolean => typeof window !== "undefined";
 
 const shouldSkipAnalytics = (): boolean =>
-  !hasWindow() || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent);
+  !hasWindow() || !analyticsAllowed() || !analyticsReady || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent);
 
+const SAFE_PARAMS = new Set(["step", "question", "file_extension", "file_mime_type", "file_size_bucket", "file_type", "answered_questions", "plan_code", "plan_name", "trial_applied", "trial_period_days", "value", "currency", "cv_kind", "format", "source", "cta_index", "article_slug", "category_slug"]);
 const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
   Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== undefined && value !== null)
+    Object.entries(params).filter(([key, value]) => SAFE_PARAMS.has(key) && value !== undefined && value !== null)
   );
 
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
@@ -60,6 +64,7 @@ const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number |
 export function initializeAnalytics(): void {
   if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
 
+  if (document.getElementById(GA_SCRIPT_ID)) return;
   window.dataLayer = window.dataLayer ?? [];
   window.gtag =
     window.gtag ??
@@ -76,19 +81,22 @@ export function initializeAnalytics(): void {
   }
 
   window.gtag("js", new Date());
-  window.gtag("config", GA_MEASUREMENT_ID);
+  window.gtag("config", GA_MEASUREMENT_ID, {
+    send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false,
+    page_location: window.location.origin + "/", page_referrer: "", page_title: "CV Builder"
+  });
 }
 
 export function scheduleAnalytics(): void {
-  if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
-
-  const start = () => initializeAnalytics();
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(start, { timeout: 3000 });
-    return;
-  }
-
-  window.setTimeout(start, 1500);
+  if (!hasWindow() || !GA_MEASUREMENT_ID || !analyticsAllowed()) return;
+  void getPrivacyConfig().then(config => {
+    analyticsReady = config.analytics_enabled === true;
+    if (!analyticsReady) { const active = !!document.getElementById(GA_SCRIPT_ID); removeAnalyticsData(); if (active) window.location.reload(); return; }
+    if (shouldSkipAnalytics()) return;
+    const start = () => initializeAnalytics();
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(start, { timeout: 3000 });
+    else window.setTimeout(start, 1500);
+  }).catch(() => { analyticsReady = false; });
 }
 
 export function trackEvent(eventName: string, params: AnalyticsParams = {}): void {
@@ -98,7 +106,7 @@ export function trackEvent(eventName: string, params: AnalyticsParams = {}): voi
     initializeAnalytics();
   }
 
-  window.gtag?.("event", eventName, cleanParams(params));
+  if (document.getElementById(GA_SCRIPT_ID)) window.gtag?.("event", eventName, cleanParams(params));
 }
 
 export function trackBlogCtaClick(params: {
@@ -185,7 +193,7 @@ export function fileAnalyticsParams(file: Pick<File, "name" | "size" | "type">):
 }
 
 export function rememberCheckoutAttribution(params: CheckoutAttribution): void {
-  if (!hasWindow()) return;
+  if (!hasWindow() || !analyticsAllowed()) return;
 
   const value = params.value ?? normalizePlanValue(params.plan_code, params.trial_applied);
   const payload: CheckoutAttribution = {
@@ -197,7 +205,7 @@ export function rememberCheckoutAttribution(params: CheckoutAttribution): void {
 }
 
 export function readCheckoutAttribution(): CheckoutAttribution | null {
-  if (!hasWindow()) return null;
+  if (!hasWindow() || !analyticsAllowed()) return null;
 
   const raw = window.sessionStorage.getItem(CHECKOUT_ATTRIBUTION_KEY);
   if (!raw) return null;
@@ -219,11 +227,50 @@ export function paymentCompletedTrackingKey(attribution: CheckoutAttribution | n
 }
 
 export function hasTrackedPaymentCompleted(key: string): boolean {
-  if (!hasWindow()) return false;
+  if (!hasWindow() || !analyticsAllowed()) return false;
   return window.sessionStorage.getItem(key) === "true";
 }
 
 export function markPaymentCompletedTracked(key: string): void {
-  if (!hasWindow()) return;
+  if (!hasWindow() || !analyticsAllowed()) return;
   window.sessionStorage.setItem(key, "true");
+}
+
+
+export function removeAnalyticsData() {
+  if (!hasWindow()) return;
+  (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] = true;
+  window.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+  document.getElementById(GA_SCRIPT_ID)?.remove();
+  window.dataLayer = [];
+  const hostname = window.location.hostname.split(".");
+  const domains = ["", ...hostname.map((_, index) => "." + hostname.slice(index).join("."))];
+  const paths = ["/", ...window.location.pathname.split("/").filter(Boolean).map((_, index, parts) => "/" + parts.slice(0, index + 1).join("/"))];
+  for (const cookie of document.cookie.split(";")) {
+    const name = cookie.split("=")[0].trim();
+    if (!/^(_ga(?:_|$)|_gid$|_gat(?:_|$))/.test(name)) continue;
+    for (const domain of domains) for (const path of paths) document.cookie = `${name}=; Max-Age=0; path=${path}${domain ? "; domain=" + domain : ""}`;
+  }
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    try {
+      const storage = window[name];
+      for (let index = storage.length - 1; index >= 0; index--) {
+        const key = storage.key(index)!;
+        if (key.startsWith("analytics:") || key.startsWith("_ga")) storage.removeItem(key);
+      }
+    } catch {
+      // Tracking is still disabled when a browser denies storage access.
+    }
+  }
+}
+export function installAnalyticsConsentListener() {
+  if (!hasWindow()) return;
+  const update = () => {
+    if (analyticsAllowed()) { (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] = false; scheduleAnalytics(); }
+    else { const active = !!document.getElementById(GA_SCRIPT_ID); removeAnalyticsData(); if (active) window.location.reload(); }
+  };
+  window.addEventListener(PRIVACY_EVENT, update);
+  window.addEventListener("storage", event => { if (event.key === CONSENT_KEY || event.key === null) update(); });
+  if (!analyticsAllowed()) removeAnalyticsData();
+  window.setInterval(update, 60_000);
 }

@@ -1,3 +1,4 @@
+import { privacyChoicesSchema } from "../privacy/privacy.routes";
 import { Router, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
 import { timingSafeEqual } from "node:crypto";
@@ -17,6 +18,7 @@ export function createGuestImportsRouter(
   auth: RequestHandler,
 ) {
   const router = Router();
+  router.use((_, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   const uploadLimit = rateLimit({
     windowMs: 60 * 60_000,
     limit: 10,
@@ -79,6 +81,8 @@ export function createGuestImportsRouter(
       sendSuccess(res, await service.process(req.params.id, token(req)));
     }),
   );
+  router.patch("/guest-imports/:id/privacy", validate({ params: guestIdSchema, body: privacyChoicesSchema }), asyncHandler(async (req, res) => { sendSuccess(res, await service.updatePrivacy(req.params.id, token(req), req.body)); }));
+  router.delete("/guest-imports/:id", validate({ params: guestIdSchema }), asyncHandler(async (req, res) => { sendSuccess(res, await service.delete(req.params.id, token(req))); }));
   router.post(
     "/guest-imports/:id/claim",
     auth,

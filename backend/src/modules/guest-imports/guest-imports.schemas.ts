@@ -24,6 +24,9 @@ export const guestAnswersSchema = z
 export type GuestAnswers = z.infer<typeof guestAnswersSchema>;
 export const guestCreateSchema = z
   .object({
+    notice_version: z.string().max(40).optional(),
+    ai_processing: z.boolean().default(false),
+    analytics: z.boolean().default(false),
     original_filename: z.string().trim().min(1).max(260),
     mime_type: z.enum([
       "application/pdf",

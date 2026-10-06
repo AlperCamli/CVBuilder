@@ -1,3 +1,5 @@
+import { createPrivacyRouter } from "../modules/privacy/privacy.routes";
+import { asyncHandler } from "../shared/utils/async-handler";
 import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports.routes";
 import type { Router } from "express";
 import type { AppConfig } from "../shared/config/env";
@@ -60,7 +62,21 @@ export const registerV1Routes = (
   const billingController = new BillingController(services.billingService);
 
   router.use(createSystemRouter(systemController));
+  if (services.privacyService) {
+    router.use(createPrivacyRouter(services.privacyService, authMiddleware));
+    router.use(asyncHandler(async (req, _res, next) => {
+      if (req.method === "POST" && ["/imports/upload-url", "/imports", "/cv-photos/upload-url"].includes(req.path)) await services.privacyService!.assertCollection(false);
+      next();
+    }));
+  }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
+  if (services.privacyService) router.use((req, res, next) => {
+    if (!["POST", "PATCH", "PUT"].includes(req.method) || !/^\/(imports|ai|master-cvs|tailored-cvs|jobs|cover-letters|cv-photos|exports|rendering)(\/|$)/.test(req.path)) { next(); return; }
+    authMiddleware(req, res, error => {
+      if (error) { next(error); return; }
+      void services.privacyService!.assertProductAccess(req.auth!.appUser.id).then(() => next(), next);
+    });
+  });
   router.use(createUsersRouter(usersController, authMiddleware));
   router.use(createDashboardRouter(dashboardController, authMiddleware));
   router.use(createMasterCvRouter(masterCvController, authMiddleware));

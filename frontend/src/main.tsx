@@ -1,7 +1,9 @@
+import { hasGlobalPrivacyControl, saveAnalyticsChoice } from "./app/integration/privacy";
+import { installGuestExpiryCheck } from "./app/integration/guest-import";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./app/App.tsx";
 import "./styles/index.css";
-import { scheduleAnalytics } from "./app/integration/analytics";
+import { scheduleAnalytics, installAnalyticsConsentListener } from "./app/integration/analytics";
 
 const container = document.getElementById("root")!;
 
@@ -18,6 +20,12 @@ const shouldHydrate =
   Boolean(prerenderPath) &&
   normalizePath(prerenderPath!) === normalizePath(window.location.pathname);
 
+if (hasGlobalPrivacyControl()) {
+  try { saveAnalyticsChoice(false, { notify: false, pending: true }); }
+  catch { /* Unavailable storage leaves optional analytics disabled. */ }
+}
+installGuestExpiryCheck();
+installAnalyticsConsentListener();
 scheduleAnalytics();
 
 if (shouldHydrate) {

@@ -1,3 +1,4 @@
+import { PrivacyControls } from "./components/PrivacyControls";
 import {
   lazy,
   Suspense,
@@ -35,6 +36,7 @@ const SignInRoute = lazyRoute(() =>
     default: SignInRoute,
   })),
 );
+const PrivacyNoticeRoute = lazyRoute(() => import("./pages/PrivacyNotice"));
 const GuidedJourneyRoute = lazyRoute(() => import("./pages/GuidedJourneyPage"));
 const OnboardingRoute = lazyRoute(() => import("./pages/PreSignupOnboarding"));
 const OnboardingResumeRoute = lazyRoute(() => import("./pages/OnboardingResume").then(({ OnboardingResume }) => ({ default: OnboardingResume })));
@@ -164,6 +166,7 @@ export function AppRoutes() {
     <BrowserRouter>
       <RouteSeo />
       <RouteElements />
+      <PrivacyControls />
     </BrowserRouter>
   );
 }
@@ -173,6 +176,8 @@ export function RouteElements({
 }: { guidedJourney?: ComponentType } = {}) {
   return (
     <Routes>
+      <Route path="/privacy" element={lazyElement(PrivacyNoticeRoute)} />
+      <Route path="/cookies" element={lazyElement(PrivacyNoticeRoute)} />
       <Route path="/" element={<Landing />} />
       <Route path="/onboarding" element={lazyElement(OnboardingRoute)} />
       <Route path="/pricing" element={<PublicPricing />} />

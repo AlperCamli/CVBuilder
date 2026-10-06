@@ -424,6 +424,7 @@ export class BillingService {
       return false;
     }
 
+    if (!(await this.usersRepository.getById(userId))) return false;
     await this.syncStripeSubscription(userId, subscription);
     return true;
   }
@@ -480,11 +481,14 @@ export class BillingService {
       return false;
     }
 
+    if (!(await this.usersRepository.getById(userId))) return false;
     await this.syncStripeSubscription(userId, subscription);
     return true;
   }
 
   private async syncStripeSubscription(userId: string, subscription: StripeSubscriptionSummary): Promise<void> {
+    const owner = await this.usersRepository.getById(userId);
+    if (!owner || (owner as unknown as { deletion_requested_at?: string }).deletion_requested_at) return;
     const mappedPlanCode = this.resolvePlanCodeFromPrices(subscription.price_ids);
 
     await this.subscriptionsRepository.ensureCustomerLink({

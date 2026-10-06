@@ -243,6 +243,7 @@ export function CVScore() {
             >
               Based on {fileName || "uploaded file"}
             </p>
+            <p className="mt-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>This score is guidance and does not guarantee employment outcomes.</p>
           </div>
 
           {fromGuest && me?.user.onboarding_answers && (

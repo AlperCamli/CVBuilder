@@ -1,3 +1,4 @@
+import { getPrivacyConfig, choices, openPrivacyChoices, type PrivacyConfig } from "../integration/privacy";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
@@ -21,6 +22,8 @@ import {
 import { AuthProvider, useAuth } from "../integration/auth-context";
 import {
   clearGuestUpload,
+  deleteGuestUpload,
+  updateGuestPrivacy,
   getGuestStatus,
   ONBOARDING_RESUME_PATH,
   processGuestCv,
@@ -67,6 +70,12 @@ function OnboardingFlow() {
   const { signUp, signInWithGoogle, isAuthenticated, initialized } = useAuth();
   const [params, setParams] = useSearchParams();
   const [guest, setGuest] = useState<GuestUpload | null>(readGuestUpload);
+  const [hydrated, setHydrated] = useState(() => !guest);
+  const [config, setConfig] = useState<PrivacyConfig | null>(null);
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiDeclined, setAiDeclined] = useState(false);
+  const aiRequired = config?.ai_required !== false;
+  const uploadAllowed = !!config?.collection_enabled && (!aiRequired || (aiProcessing && config.ai_enabled));
   const rawStage = params.get("step");
   const stage: Stage = guest
     ? rawStage === "upload" || rawStage === "questions" || rawStage === "signup"
@@ -96,6 +105,25 @@ function OnboardingFlow() {
   const content = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
 
+  useEffect(() => {
+    let active = true;
+    void getPrivacyConfig().then(value => { if (active) setConfig(value); }).catch(() => { if (active) setUploadError("Upload availability could not be checked. Please try again."); });
+    const expired = () => { if (!readGuestUpload()) { setGuest(null); setAnswers({}); setProcessing("idle"); setHydrated(true); setError("Your recovery window has expired. Please upload your CV again."); } };
+    window.addEventListener("cv-builder:guest-expired", expired);
+    return () => { active = false; window.removeEventListener("cv-builder:guest-expired", expired); };
+  }, []);
+  useEffect(() => {
+    if (!guest || hydrated) return;
+    let active = true;
+    void getGuestStatus(guest).then(value => {
+      if (!active) return;
+      setAnswers(value.answers); setAiProcessing(value.ai_processing);
+      setGuest(previous => previous ? { ...previous, original_filename: value.original_filename, answers: value.answers } : null);
+      setHydrated(true);
+    }).catch(() => { if (active) setError("We couldn't restore your upload. Refresh to retry, or delete it and start again."); });
+    return () => { active = false; };
+  }, [guest?.id, hydrated]);
+
   function go(next: Stage, index = 0) {
     setParams(
       next === "questions"
@@ -114,7 +142,7 @@ function OnboardingFlow() {
     });
   }, [stage, questionIndex, question.id]);
   useEffect(() => {
-    if (!guest || stage === "upload") return;
+    if (!guest || !hydrated || stage === "upload") return;
     const row = { ...guest, answers, step: stage, question: questionIndex };
     try {
       saveGuestUpload(row);
@@ -126,7 +154,7 @@ function OnboardingFlow() {
         "We couldn't save your answers. Please try again before signing up.",
       ),
     );
-  }, [guest, answers, stage, questionIndex]);
+  }, [guest, answers, stage, questionIndex, hydrated]);
   useEffect(() => {
     if (!guest) return;
     let cancelled = false;
@@ -136,6 +164,8 @@ function OnboardingFlow() {
       try {
         const result = await getGuestStatus(guest);
         if (cancelled) return;
+        setAiProcessing(result.ai_processing);
+        if (config?.ai_required !== false && !result.ai_processing) { setProcessing("idle"); return; }
         setProcessing(
           result.status === "parsed"
             ? "ready"
@@ -175,11 +205,12 @@ function OnboardingFlow() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [guest]);
+  }, [guest, aiProcessing, config?.ai_required]);
 
   async function selectFile(files: File[]) {
     setDragging(false);
     if (uploadingRef.current) return;
+    if (!uploadAllowed) { setUploadError(aiRequired && !aiProcessing ? "Enable AI processing to upload your CV. You can change this choice at any time." : "Uploads are currently unavailable."); return; }
     if (files.length !== 1) {
       setUploadError("Please choose one CV at a time.");
       return;
@@ -198,7 +229,9 @@ function OnboardingFlow() {
     setUploadError("");
     setError("");
     try {
-      const row = await uploadGuestCv(selected);
+      if (guest) { await deleteGuestUpload(guest); clearGuestUpload(); setGuest(null); }
+      const row = await uploadGuestCv(selected, aiProcessing);
+      setHydrated(true);
       setAnswers({});
       setGuest(row);
       setEmailSent(false);
@@ -215,6 +248,17 @@ function OnboardingFlow() {
       setUploading(false);
     }
   }
+  async function changeGuestAi(accepted: boolean) {
+    if (!guest) { setAiProcessing(accepted); setAiDeclined(!accepted); return; }
+    setBusy(true); setError("");
+    try {
+      const result = await updateGuestPrivacy(guest, choices(accepted));
+      setAiProcessing(result.ai_processing);
+      setAiDeclined(!accepted);
+      setProcessing(result.status === "parsed" ? "ready" : "idle");
+    } catch (err) { setError(err instanceof Error ? err.message : "Your AI choice could not be saved. Please try again."); }
+    finally { setBusy(false); }
+  }
   function advanceQuestion(skip = false) {
     if (skip)
       setAnswers((previous) => {
@@ -229,10 +273,15 @@ function OnboardingFlow() {
     if (questionIndex < 3) go("questions", questionIndex + 1);
     else go("signup");
   }
-  function reset() {
+  async function reset() {
     if (uploading || busy) return;
+    setBusy(true);
+    try { if (guest) await deleteGuestUpload(guest); }
+    catch { setError("Your upload could not be deleted. Please retry; it has not been cleared from this device."); return; }
+    finally { setBusy(false); }
     clearGuestUpload();
     setGuest(null);
+    setHydrated(true);
     setAnswers({});
     setName("");
     setUploadError("");
@@ -246,6 +295,7 @@ function OnboardingFlow() {
     const row = { ...guest, answers, step: "signup" as const };
     saveGuestUpload(row);
     await saveGuestAnswers(row, answers);
+    await updateGuestPrivacy(row, choices(aiProcessing));
     stashPostAuthRedirect(ONBOARDING_RESUME_PATH);
   }
   async function submitSignup(event: FormEvent<HTMLFormElement>) {
@@ -321,16 +371,17 @@ function OnboardingFlow() {
         <button
           type="button"
           className="ob-reset"
-          onClick={reset}
+          onClick={() => void reset()}
           disabled={uploading || busy}
         >
           <RotateCcw size={14} />
-          <span>Restart</span>
+          <span>{guest ? "Delete upload & restart" : "Restart"}</span>
         </button>
       </header>
       <main ref={content} className="ob-main">
         <div className="ob-layout">
           <div className="ob-content" key={`${stage}-${questionIndex}`}>
+            {!hydrated && guest && <p role="status">Restoring your upload and answers…</p>}
             {error && (
               <p className="ob-error" role="alert">
                 {error}
@@ -341,12 +392,28 @@ function OnboardingFlow() {
                 Retry analysis
               </button>
             )}
+            {guest && stage !== "upload" && hydrated && <div className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>
+              <label style={{ display: "flex", gap: 8 }}><input type="checkbox" aria-label="AI processing for this upload" checked={aiProcessing} disabled={busy || (!config?.ai_enabled && !aiProcessing)} onChange={event => void changeGuestAi(event.target.checked)} />AI processing {config?.ai_provider ? `with ${config.ai_provider}` : ""}</label>
+              <span>You can change this choice at any time. <Link to="/privacy">Privacy notice</Link>.</span>
+            </div>}
+            {guest && stage !== "upload" && hydrated && aiRequired && !aiProcessing && <>
+              <h1 tabIndex={-1}>Enable AI to continue</h1>
+              <p className="ob-description">Your upload is saved for your remaining recovery window. JobSpecificCV needs AI to analyze it. You can enable AI above to resume, or delete your upload and leave.</p>
+            </>}
             {stage === "upload" && (
               <>
                 <h1 tabIndex={-1}>Upload your CV</h1>
                 <p className="ob-description">
                   Start with your existing CV. No account needed.
                 </p>
+                <p className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information. <Link to="/privacy">Privacy notice</Link>.</p>
+                {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? "Uploads are temporarily unavailable while privacy arrangements are verified." : "Checking upload availability…"}</p>}
+                <label className="ob-footnote" style={{ alignItems: "flex-start" }}>
+                  <input type="checkbox" checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={event => void changeGuestAi(event.target.checked)} />
+                  <span>Use AI to analyze my CV {config?.ai_enabled ? `with ${config.ai_provider}` : "(currently unavailable)"}. Relevant CV text is sent to this provider. {aiRequired ? "AI processing is required for JobSpecificCV’s CV-building experience. You can withdraw and enable it again at any time." : "Without AI, basic parsing, your score and manual editing still work."}</span>
+                </label>
+                {aiRequired && <button type="button" className="ob-back" disabled={uploading || busy} onClick={() => void changeGuestAi(false)}>Not now</button>}
+                {aiRequired && !aiProcessing && <p className="ob-footnote" role="status">{aiDeclined ? guest ? "AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave." : "AI remains off. You can change your mind by enabling it above; nothing has been uploaded." : "Enable AI above to upload and analyze your CV."}</p>}
                 <input
                   ref={fileInput}
                   className="ob-visually-hidden"
@@ -355,7 +422,7 @@ function OnboardingFlow() {
                   tabIndex={-1}
                   accept=".pdf,.docx"
                   aria-label="Choose a CV file"
-                  disabled={uploading}
+                  disabled={uploading || !uploadAllowed}
                   onChange={(event) => {
                     void selectFile(Array.from(event.target.files ?? []));
                     event.target.value = "";
@@ -363,7 +430,7 @@ function OnboardingFlow() {
                 />
                 <button
                   type="button"
-                  disabled={uploading}
+                  disabled={uploading || !uploadAllowed}
                   className={`ob-upload-zone${dragging ? " is-dragging" : ""}`}
                   onClick={() => fileInput.current?.click()}
                   onDragOver={(event) => {
@@ -406,13 +473,13 @@ function OnboardingFlow() {
                   </button>
                 )}
                 <p className="ob-footnote">
-                  <ShieldCheck size={14} /> Your upload is private. Create an
-                  account to keep it.
+                  <ShieldCheck size={14} /> Temporary storage starts on upload. Create an account to keep your CV.
                 </p>
               </>
             )}
-            {stage === "questions" && (
+            {stage === "questions" && hydrated && (!aiRequired || aiProcessing) && (
               <>
+                <p className="ob-footnote" style={{ display: "block" }}>{question.id === "source" ? "Optional: helps us understand how people find us. With analytics acceptance, we retain anonymous aggregate counts. This answer is not sent to AI." : "Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile."}</p>
                 <div className="ob-question-progress">
                   <span>Question {questionIndex + 1} of 4</span>
                   <button
@@ -498,14 +565,14 @@ function OnboardingFlow() {
                 <ParsingStatus phase={processing} />
               </>
             )}
-            {stage === "signup" && (
+            {stage === "signup" && (!aiRequired || aiProcessing) && (
               <>
                 <h1 tabIndex={-1}>
                   {emailSent ? "Check your email" : "Save your CV"}
                 </h1>
                 <p className="ob-description">
                   {emailSent
-                    ? "Confirm your email to save your CV and see your score. Your upload and answers will be waiting on this device for 24 hours."
+                    ? "Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading."
                     : "Create a free account to save your CV and see your score."}
                 </p>
                 <div className="ob-ready-strip">
@@ -634,7 +701,7 @@ function OnboardingFlow() {
                 )}
                 <ParsingStatus phase={processing} />
                 <p className="ob-footnote">
-                  <LockKeyhole size={13} /> Your CV is only saved to your
+                  <LockKeyhole size={13} /> Your CV is stored temporarily now and linked to your
                   account after sign-up.
                 </p>
                 <p className="ob-signin">

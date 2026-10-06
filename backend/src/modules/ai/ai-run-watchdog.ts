@@ -32,7 +32,7 @@ export const startAiRunWatchdog = (
       return failedCount;
     } catch (error) {
       if (options.logger) {
-        options.logger.error({ err: error }, "AI run watchdog sweep failed");
+        options.logger.error({ code: "AI_WATCHDOG_FAILED" }, "AI run watchdog sweep failed");
       }
       return 0;
     }

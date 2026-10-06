@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "inspect:import": "tsx scripts/inspect-import-parser.ts",
     "stripe:webhook-secret": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks --print-secret",
-    "stripe:listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks"
+    "stripe:listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks",
+    "test:privacy-sql": "bash scripts/verify-privacy-sql.sh",
+    "privacy:check": "tsx scripts/check-privacy-readiness.ts"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -36,6 +36,6 @@ const bootstrap = async () => {
 };
 
 void bootstrap().catch((error) => {
-  console.error("Failed to bootstrap application", error);
+  console.error("Failed to bootstrap application (APPLICATION_BOOTSTRAP_FAILED)");
   process.exitCode = 1;
 });

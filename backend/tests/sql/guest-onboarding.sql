@@ -14,7 +14,7 @@ begin
   replay := public.claim_guest_import(g,'testhash',u);
   if i <> replay then raise exception 'Duplicate import on replay'; end if;
   if (select count(*) from public.imports where id=i and user_id=u) <> 1 then raise exception 'Import ownership missing'; end if;
-  if (select onboarding_answers->>'source' from public.users where id=u) <> 'friend' then raise exception 'Answers not saved'; end if;
+  if (select onboarding_answers->>'career' from public.users where id=u) <> 'student' then raise exception 'Answers not saved'; end if;
   begin
     perform public.claim_guest_import(g,'testhash',other_user); raise exception 'Second owner accepted';
   exception when others then if sqlerrm <> 'guest_not_found' then raise; end if; end;

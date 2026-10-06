@@ -10,12 +10,10 @@ export const createErrorHandler = (config: AppConfig): ErrorRequestHandler => {
     if (request.log) {
       request.log.error(
         {
-          err: error,
           code: normalizedError.code,
           statusCode: normalizedError.statusCode,
-          details: normalizedError.details
         },
-        normalizedError.message
+        "Request failed"
       );
     }
 

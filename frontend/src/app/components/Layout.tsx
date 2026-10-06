@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
+import { AiExperienceGate } from "./AiExperienceGate";
 
 export function Layout() {
   const location = useLocation();
@@ -169,7 +170,7 @@ export function Layout() {
             </button>
           </div>
         )}
-        <Outlet />
+        <AiExperienceGate><Outlet /></AiExperienceGate>
       </main>
     </div>
   );

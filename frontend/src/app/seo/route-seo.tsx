@@ -87,6 +87,10 @@ export function getHeadMetaForPath(pathname: string): HeadMeta | null {
     return { title: "Get started | jobspecificCV", robots: "noindex, nofollow" };
   }
 
+  if (path === "/privacy" || path === "/cookies") {
+    return { title: `${path === "/privacy" ? "Privacy notice" : "Cookies and storage"} | jobspecificCV`, robots: "noindex, follow" };
+  }
+
   if (path.startsWith("/designs/guided-journey/templates/")) {
     const direction = path.split("/").pop()!;
     return { title: `${direction[0].toUpperCase()}${direction.slice(1)} template presentation | JobSpecificCV design review`, robots: "noindex, nofollow", description: "Compare three ways to showcase the JobSpecificCV template collection." };

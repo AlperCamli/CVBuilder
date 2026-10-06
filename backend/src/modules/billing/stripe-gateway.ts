@@ -59,6 +59,7 @@ export interface CreateStripePortalInput {
 }
 
 export interface StripeGateway {
+  cancelCustomerSubscriptions?(customerId: string, deadline?: number): Promise<void>;
   createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary>;
   createCheckoutSession(input: CreateStripeCheckoutInput): Promise<StripeCheckoutSessionSummary>;
   createPortalSession(input: CreateStripePortalInput): Promise<{ url: string }>;
@@ -125,6 +126,27 @@ export class StripeBillingGateway implements StripeGateway {
       // Keep Stripe API behavior stable and explicit across environments.
       apiVersion: "2024-06-20"
     });
+  }
+
+  async cancelCustomerSubscriptions(customerId: string, deadline = Date.now() + 20_000): Promise<void> {
+    const options = (): Stripe.RequestOptions => {
+      if (Date.now() >= deadline - 250) throw new Error("PRIVACY_BILLING_DEADLINE");
+      return { timeout: Math.max(1, deadline - Date.now() - 250), maxNetworkRetries: 0 };
+    };
+    let customer: Stripe.Customer | Stripe.DeletedCustomer;
+    try { customer = await this.stripe.customers.retrieve(customerId, options()); }
+    catch (error) { if (error instanceof Error && /No such customer/i.test(error.message)) return; throw error; }
+    if ("deleted" in customer && customer.deleted) return;
+    let after: string | undefined;
+    do {
+      const page = await this.stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100, starting_after: after }, options());
+      for (const subscription of page.data) {
+        if (!["canceled", "incomplete_expired"].includes(subscription.status)) await this.stripe.subscriptions.cancel(subscription.id, options());
+      }
+      after = page.has_more ? page.data.at(-1)?.id : undefined;
+    } while (after);
+    // Keep statutory transaction records in Stripe; remove our application link.
+    await this.stripe.customers.del(customerId, options());
   }
 
   async createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary> {

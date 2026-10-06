@@ -1,3 +1,4 @@
+import { AccountPrivacyPanel } from "../components/AccountPrivacyPanel";
 import { User, CreditCard, Bell, Globe, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -413,6 +414,7 @@ export function Profile() {
           </div>
         </div>
       )}
+      {!loading && <AccountPrivacyPanel />}
     </div>
   );
 }

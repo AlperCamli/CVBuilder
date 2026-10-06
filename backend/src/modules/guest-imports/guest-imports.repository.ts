@@ -10,6 +10,11 @@ import {
 
 export interface GuestImport extends GuestCreate {
   id: string;
+  ai_provider?: string | null;
+  ai_notice_version?: string | null;
+  deleted_at?: string | null;
+  processing_restricted_at?: string | null;
+  privacy_revision?: number;
   token_hash: string;
   storage_path: string;
   expires_at: string;
@@ -43,6 +48,7 @@ export interface GuestImportsRepository {
     id: string,
     leaseId: string,
     result: ParseCvFileResult | null,
+    revision?: number,
   ): Promise<void>;
   claim(id: string, tokenHash: string, userId: string): Promise<string>;
   cleanup(): Promise<number>;
@@ -87,6 +93,9 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
       .update({ answers })
       .eq("id", id)
       .is("claimed_user_id", null)
+      .is("deleted_at", null)
+      .is("processing_restricted_at", null)
+      .gt("expires_at", new Date().toISOString())
       .select("id")
       .maybeSingle();
     this.check(error);
@@ -101,7 +110,7 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
     this.check(error);
     return Boolean(data);
   }
-  async finish(id: string, leaseId: string, result: ParseCvFileResult | null) {
+  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0) {
     const payload = result
       ? {
           cv_review: reviewCv({
@@ -129,7 +138,11 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
       .from("guest_imports")
       .update({ ...payload, lease_id: null, lease_expires_at: null })
       .eq("id", id)
-      .eq("lease_id", leaseId);
+      .eq("lease_id", leaseId)
+      .eq("privacy_revision", revision)
+      .is("deleted_at", null)
+      .is("processing_restricted_at", null)
+      .gt("expires_at", new Date().toISOString());
     this.check(error);
   }
   async claim(id: string, tokenHash: string, userId: string) {

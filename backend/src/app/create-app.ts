@@ -56,6 +56,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
     systemService: options?.services?.systemService ?? defaultServices?.systemService!,
     masterCvService: options?.services?.masterCvService ?? defaultServices?.masterCvService!,
     importsService: options?.services?.importsService ?? defaultServices?.importsService!,
+    privacyService: options?.services?.privacyService ?? defaultServices?.privacyService,
     guestImportsService: options?.services?.guestImportsService ?? defaultServices?.guestImportsService,
     jobsService: options?.services?.jobsService ?? defaultServices?.jobsService!,
     coverLettersService: options?.services?.coverLettersService ?? defaultServices?.coverLettersService!,

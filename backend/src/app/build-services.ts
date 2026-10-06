@@ -1,3 +1,4 @@
+import { PrivacyService } from "../modules/privacy/privacy.service";
 import { GuestImportsService } from "../modules/guest-imports/guest-imports.service";
 import { SupabaseGuestImportsRepository, type GuestImportsRepository } from "../modules/guest-imports/guest-imports.repository";
 import type { Logger } from "pino";
@@ -96,6 +97,7 @@ export interface AppServices {
   masterCvService: MasterCvService;
   importsService: ImportsService;
   guestImportsService?: GuestImportsService;
+  privacyService?: PrivacyService;
   jobsService: JobsService;
   coverLettersService: CoverLettersService;
   tailoredCvService: TailoredCvService;
@@ -231,7 +233,8 @@ export const buildDefaultServices = (
       }
     );
 
-  const authService = new AuthService(authProvider, usersRepository);
+  const privacyService = new PrivacyService(supabaseClients.serviceRoleClient, stripeGateway, logger);
+  const authService = new AuthService(authProvider, usersRepository, privacyService);
   const usersService = new UsersService(usersRepository, billingService);
   const dashboardService = new DashboardService(usersService, dashboardRepository);
   const systemService = new SystemService(config, databaseHealthChecker);
@@ -272,7 +275,8 @@ export const buildDefaultServices = (
     cvRevisionsService,
     templatesService,
     aiPromptResolver,
-    billingService
+    billingService,
+    privacyService
   );
   const importsService = new ImportsService(
     importsRepository,
@@ -281,11 +285,12 @@ export const buildDefaultServices = (
     aiProvider,
     aiPromptResolver,
     aiService,
-    logger
+    logger,
+    privacyService
   );
   const guestImportsService = new GuestImportsService(
     overrides?.guestImportsRepository ?? new SupabaseGuestImportsRepository(supabaseClients.serviceRoleClient),
-    importsRepository, importsService
+    importsRepository, importsService, privacyService
   );
   const exportsService = new ExportsService(
     exportsRepository,
@@ -301,6 +306,7 @@ export const buildDefaultServices = (
 
   return {
     authService,
+    privacyService,
     usersService,
     dashboardService,
     systemService,

@@ -179,6 +179,7 @@ describe("guest onboarding", () => {
     ]);
     expect(parser.parseGuestFile).toHaveBeenCalledTimes(1);
     expect(await service.status(created.id, created.guest_token)).toEqual({
+      answers: {}, original_filename: "cv.pdf", ai_processing: false, analytics: false,
       status: "parsed",
       error_message: null,
       retry_available: true,
