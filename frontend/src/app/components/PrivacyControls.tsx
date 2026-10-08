@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { consentSyncPending, PRIVACY_EVENT, hasGlobalPrivacyControl, getPrivacyConfig, openPrivacyChoices, readAnalyticsChoice, saveAnalyticsChoice, syncBrowserChoice } from "../integration/privacy";
+import { ACCOUNT_READY_EVENT, consentSyncPending, PRIVACY_EVENT, hasGlobalPrivacyControl, getPrivacyConfig, markBrowserChoicePending, openPrivacyChoices, readAnalyticsChoice, saveAnalyticsChoice, syncBrowserChoice } from "../integration/privacy";
 import { removeAnalyticsData } from "../integration/analytics";
 import "./privacy.css";
 
@@ -15,6 +15,15 @@ export function PrivacyControls() {
   const [details, setDetails] = useState(false);
   const [error, setError] = useState("");
   const [syncPending, setSyncPending] = useState(false);
+  const syncing = useRef(false);
+  const resyncRequested = useRef(false);
+  const finishSync = () => {
+    syncing.current = false;
+    if (resyncRequested.current) {
+      resyncRequested.current = false;
+      window.dispatchEvent(new Event(ACCOUNT_READY_EVENT));
+    }
+  };
   useEffect(() => {
     setOpen(readAnalyticsChoice() === null);
     let active = true;
@@ -45,24 +54,48 @@ export function PrivacyControls() {
       // event until the backend receipt has been attempted.
       const analytics = accepted && !hasGlobalPrivacyControl();
       const reloadAfterWithdrawal = !analytics && !!document.getElementById("ga4-google-tag");
-      saveAnalyticsChoice(analytics, { notify: false, pending: true });
+      const snapshot = saveAnalyticsChoice(analytics, { notify: false, pending: true })!;
       if (!analytics) removeAnalyticsData();
       setSyncPending(true);
+      syncing.current = true;
       let pending = false;
       try { await syncBrowserChoice(); }
       catch { pending = true; setError("Your browser choice is saved. Account/upload synchronization will retry when the connection returns."); }
-      saveAnalyticsChoice(analytics, { pending });
+      if (saveAnalyticsChoice(analytics, { pending, expectedSnapshot: snapshot }) === null) {
+        markBrowserChoicePending();
+        window.dispatchEvent(new Event(PRIVACY_EVENT));
+      }
       setOpen(false);
       if (reloadAfterWithdrawal) window.location.reload();
     } catch { setError("Browser storage is unavailable. Analytics stays disabled."); }
-    finally { setSyncPending(false); }
+    finally { finishSync(); setSyncPending(false); }
   }
   useEffect(() => {
-    const retry = () => { if (consentSyncPending()) void syncBrowserChoice().then(() => saveAnalyticsChoice(readAnalyticsChoice() === true, { notify: false })).catch(() => setError("Your browser choice is saved; synchronization is pending.")); };
+    let active = true;
+    const retry = (force = false) => {
+      const choice = readAnalyticsChoice();
+      if (choice === null || syncing.current || (!force && !consentSyncPending())) return;
+      syncing.current = true;
+      let snapshot: string | null;
+      try { snapshot = markBrowserChoicePending(); }
+      catch { syncing.current = false; return; }
+      void syncBrowserChoice().then(synced => {
+        if (synced === readAnalyticsChoice() && snapshot) {
+          if (saveAnalyticsChoice(synced === true, {notify: false, expectedSnapshot: snapshot}) === null) markBrowserChoicePending();
+        } else markBrowserChoicePending();
+        if (active) setError("");
+      }).catch(() => { if (active) setError("Your browser choice is saved; synchronization is pending."); }).finally(finishSync);
+    };
+    const online = () => retry();
+    const accountReady = () => {
+      if (syncing.current) resyncRequested.current = true;
+      else retry(true);
+    };
     retry();
-    const timer = window.setInterval(retry, 30_000);
-    window.addEventListener("online", retry);
-    return () => { window.clearInterval(timer); window.removeEventListener("online", retry); };
+    const timer = window.setInterval(online, 30_000);
+    window.addEventListener("online", online);
+    window.addEventListener(ACCOUNT_READY_EVENT, accountReady);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("online", online); window.removeEventListener(ACCOUNT_READY_EVENT, accountReady); };
   }, []);
   return <>
     <PrivacyLinks />

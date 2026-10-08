@@ -35,7 +35,9 @@ export function OnboardingChecklist() {
     justCompleted,
     isStepComplete,
     skipOnboarding,
-    clearJustCompleted
+    clearJustCompleted,
+    saveError,
+    retryProgressSave
   } = useOnboarding();
   const location = useLocation();
   const navigate = useNavigate();
@@ -73,6 +75,11 @@ export function OnboardingChecklist() {
     return () => window.clearTimeout(timer);
   }, [justCompleted, clearJustCompleted]);
 
+  if (saveError) {
+    return <aside className="fixed bottom-4 right-4 z-40 max-w-xs rounded-xl bg-white p-4 shadow-xl" role="status">
+      <p>{saveError}</p><button type="button" onClick={retryProgressSave} className="mt-2 underline">Retry saving progress</button>
+    </aside>;
+  }
   if (!visible) {
     return null;
   }

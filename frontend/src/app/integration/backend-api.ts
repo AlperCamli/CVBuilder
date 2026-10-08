@@ -62,6 +62,7 @@ import type {
   CreatePortalResponseData,
   TailoringRunFlowType
 } from "./api-types";
+import { withProductAnalytics } from "./product-analytics";
 
 export interface UpdateMeInput {
   full_name?: string;
@@ -294,7 +295,8 @@ export interface BillingPortalInput {
 }
 
 export class BackendApi {
-  constructor(private readonly client: ApiClient) {}
+  private readonly client: ApiClient;
+  constructor(client: ApiClient) { this.client = withProductAnalytics(client); }
 
   getMe(): Promise<MeResponseData> {
     return this.client.get<MeResponseData>("/me");

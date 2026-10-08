@@ -3,7 +3,7 @@ import { installGuestExpiryCheck } from "./app/integration/guest-import";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./app/App.tsx";
 import "./styles/index.css";
-import { scheduleAnalytics, installAnalyticsConsentListener } from "./app/integration/analytics";
+import { installAnalyticsConsentListener } from "./app/integration/analytics";
 
 const container = document.getElementById("root")!;
 
@@ -26,7 +26,6 @@ if (hasGlobalPrivacyControl()) {
 }
 installGuestExpiryCheck();
 installAnalyticsConsentListener();
-scheduleAnalytics();
 
 if (shouldHydrate) {
   hydrateRoot(container, <App />);

@@ -60,8 +60,13 @@ export class PrivacyService {
     const current = await this.assertAi(userId);
     if (current !== revision) throw new ForbiddenError("Privacy choices changed during processing. This result was discarded.");
   }
-  async record(userId: string | null, guestId: string | null, input: { notice_version: string; ai_processing: boolean; analytics: boolean }) {
+  async record(userId: string | null, guestId: string | null, input: { notice_version: string; ai_processing?: boolean; analytics: boolean }) {
     if (input.notice_version !== NOTICE_VERSION) throw new ValidationError("Please reload to review the current privacy notice.");
+    if (input.ai_processing === undefined) {
+      if (input.analytics && !privacyConfig().analytics_enabled) throw new ForbiddenError("Analytics is currently unavailable.");
+      check((await this.db.rpc("record_analytics_choice", {p_user: userId, p_guest: guestId, p_version: input.notice_version, p_analytics: input.analytics})).error);
+      return;
+    }
     if (input.ai_processing && userId) await this.assertProcessingAvailable(userId);
     if (input.ai_processing && guestId) {
       const guest = await this.db.from("guest_imports").select("processing_restricted_at").eq("id", guestId).maybeSingle();

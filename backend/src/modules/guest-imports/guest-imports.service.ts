@@ -184,7 +184,7 @@ export class GuestImportsService {
       answers: row.answers as GuestAnswers,
     };
   }
-  async updatePrivacy(id: string, token: string, input: { notice_version: string; ai_processing: boolean; analytics: boolean }) {
+  async updatePrivacy(id: string, token: string, input: { notice_version: string; ai_processing?: boolean; analytics: boolean }) {
     await this.authorize(id, token);
     if (!this.privacy) throw new ConflictError("Privacy preferences are unavailable.");
     await this.privacy.record(null, id, input);

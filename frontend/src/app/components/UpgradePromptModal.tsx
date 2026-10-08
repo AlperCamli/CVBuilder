@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { useAuth } from "../integration/auth-context";
+import { useOnboarding } from "../contexts/OnboardingContext";
 import { startStripeCheckout } from "../integration/checkout-redirect";
 import {
   PAID_PLAN_CARDS,
@@ -152,6 +153,7 @@ const getCopy = (
 
 export function UpgradePromptModal({ open, variant, options, onClose }: UpgradePromptModalProps) {
   const { api, isAuthenticated } = useAuth();
+  const { completeStep } = useOnboarding();
   const navigate = useNavigate();
   const [busy, setBusy] = useState<CheckoutTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -200,13 +202,10 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     });
 
     if (isAuthenticated && options.firstOnboardingPaywall) {
-      void api.patchSettings({
-        onboarding_completed: true
-      }).catch(() => {
-        // Analytics and checkout should not depend on settings persistence.
-      });
+      completeStep("export");
     }
   }, [
+    completeStep,
     api,
     isAuthenticated,
     open,

@@ -29,15 +29,15 @@ export function AppShellRoute() {
     <AuthProvider>
       <RequireAuth>
         <SidebarProvider>
-          <UpgradePromptProvider>
-            <OnboardingProvider>
+          <OnboardingProvider>
+            <UpgradePromptProvider>
               <CheckoutIntentResumer />
               <PostAuthRedirectResumer />
               <Layout />
               <OnboardingChecklist />
               <Toaster richColors position="top-right" />
-            </OnboardingProvider>
-          </UpgradePromptProvider>
+            </UpgradePromptProvider>
+          </OnboardingProvider>
         </SidebarProvider>
       </RequireAuth>
     </AuthProvider>

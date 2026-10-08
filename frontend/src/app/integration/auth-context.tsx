@@ -15,6 +15,7 @@ import type { MeResponseData } from "./api-types";
 import { BackendApi } from "./backend-api";
 import { ensureSupabaseConfigured, integrationConfig } from "./config";
 import { supabase } from "./supabase-client";
+import { ACCOUNT_READY_EVENT } from "./privacy";
 
 interface SignUpResult {
   needsEmailVerification: boolean;
@@ -86,6 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const meResponse = await api.getMe();
       setMe(meResponse);
+      window.dispatchEvent(new Event(ACCOUNT_READY_EVENT));
       return meResponse;
     } catch (error) {
       if (error instanceof ApiClientError) {

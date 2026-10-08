@@ -1,4 +1,4 @@
-import { choices, type PrivacyChoices } from "./privacy";
+import { choices, type PrivacyChoices, type AnalyticsChoice } from "./privacy";
 import { createApiClient } from "./api-client";
 import { integrationConfig } from "./config";
 import { supabase } from "./supabase-client";
@@ -130,7 +130,7 @@ export function saveGuestAnswers(row: GuestUpload, answers: OnboardingAnswers) {
   saving = saving
     .catch(() => undefined)
     .then(() =>
-      client.patch(`/guest-imports/${row.id}/answers`, answers, options(row)),
+      client.patch(`/guest-imports/${row.id}/answers`, answers, {...options(row), keepalive: true}),
     );
   return saving;
 }
@@ -141,7 +141,7 @@ export const claimGuestCv = (row: GuestUpload) =>
     answers: OnboardingAnswers;
   }>(`/guest-imports/${row.id}/claim`, {}, options(row));
 
-export const updateGuestPrivacy = (row: GuestUpload, input: PrivacyChoices) => client.patch<GuestStatus>(`/guest-imports/${row.id}/privacy`, input, options(row));
+export const updateGuestPrivacy = (row: GuestUpload, input: PrivacyChoices | AnalyticsChoice) => client.patch<GuestStatus>(`/guest-imports/${row.id}/privacy`, input, {...options(row), keepalive: true});
 export const deleteGuestUpload = (row: GuestUpload) => client.delete(`/guest-imports/${row.id}`, options(row));
 export function installGuestExpiryCheck() {
   let previous = readGuestUpload();

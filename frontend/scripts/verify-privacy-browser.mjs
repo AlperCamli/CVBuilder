@@ -21,7 +21,7 @@ const waitText = (page, text) => page.waitForFunction(text => document.body.inne
 const limits = { tailored_cv_generations: 3, exports: 5, ai_actions: 20, storage_bytes: 1000000 };
 const content = { schema_version: '1.0', language: 'en', metadata: {}, sections: [{ id: 'header', type: 'header', title: 'Personal details', order: 0, blocks: [{ id: 'header-block', type: 'header', data: { full_name: 'Test Candidate', headline: 'Software engineer', email: 'candidate@example.invalid' }, meta: {} }] }] };
 const review = { status: 'scored', score: 72, summary: 'Your CV is readable. Guidance only.', strengths: [], improvements: [], dimensions: [], limitations: ['Guidance, not an employment guarantee.'], matched_keywords: [], missing_keywords: [], version: 'fixture' };
-async function scenario(method) {
+async function scenario(method, acceptAnalytics = false) {
   const context = await browser.createBrowserContext();
   const userId = randomUUID(), authId = randomUUID(), guestId = randomUUID(), importId = randomUUID(), cvId = randomUUID();
   const now = new Date().toISOString();
@@ -32,8 +32,9 @@ async function scenario(method) {
   const me = { user: appUser, current_plan: { plan_code: 'free', status: 'active' }, entitlements: { plan_code: 'free', limits, remaining: limits }, usage_summary: { plan_code: 'free', limits, remaining: limits, period_month: now.slice(0,7), ai_actions_count: 0, exports_count: 0, tailored_cv_generations_count: 0, storage_bytes_used: 0 } };
   const master = { id: cvId, user_id: userId, title: 'Imported CV', language: 'en', template_id: null, module_type: 'standard', current_content: content, original_content: content, source_type: 'import', created_at: now, updated_at: now, is_deleted: false };
   let answers = {}, parsed = false, uploaded = false, claimed = false;
-  const requests = [], googleRequests = [], unexpected = [], errors = [];
+  const requests = [], googleRequests = [], gaEvents = [], unexpected = [], errors = [];
   const preferences = { analytics: false, ai_processing: false, privacy_revision: 0 };
+  let delayAnalyticsPatch = false;
   const attach = async page => {
     await page.setViewport({ width: 1280, height: 900 });
     page.on('pageerror', error => errors.push(error.message));
@@ -45,7 +46,23 @@ async function scenario(method) {
         const respond = data => req.respond({ status: 200, headers, body: JSON.stringify({ success: true, data }) });
         const raw = data => req.respond({ status: 200, headers, body: JSON.stringify(data) });
         if (url.hostname.includes('googletagmanager') || url.hostname.includes('google-analytics')) {
-          googleRequests.push(url.pathname); await req.respond({ status: 200, contentType: 'application/javascript', body: '// Isolated Google tag fixture' }); return;
+          googleRequests.push(url.pathname);
+          if (url.hostname.includes('google-analytics')) {
+            if (req.method() === 'POST') gaEvents.push(JSON.parse(req.postData()));
+            await req.respond({status: 204, headers}); return;
+          }
+          const fixture = `(() => {
+            const layer = window.dataLayer ?? [];
+            const send = command => {
+              const args = Array.from(command);
+              if (args[0] !== 'event' || window['ga-disable-G-TEST']) return;
+              void fetch('https://www.google-analytics.com/g/collect', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:args[1],params:args[2]})});
+            };
+            layer.forEach(send);
+            const push = layer.push.bind(layer);
+            layer.push = (...commands) => {const length = push(...commands); commands.forEach(send); return length;};
+          })();`;
+          await req.respond({ status: 200, contentType: 'application/javascript', body: fixture }); return;
         }
         if (req.method() === 'OPTIONS') { await req.respond({ status: 204, headers }); return; }
         if (url.hostname === 'privacy-fixture.supabase.invalid') {
@@ -68,10 +85,19 @@ async function scenario(method) {
         const status = () => ({ answers, original_filename: 'private-person-cv.pdf', ...preferences, status: parsed ? 'parsed' : 'uploaded', retry_available: true, can_resume: true, error_message: null });
         if (path === '/privacy/config') { await respond(config); return; }
         if (path === '/me') { assert(claimed || req.headers().authorization); await respond(me); return; }
-        if (path === '/me/privacy') { if (req.method() === 'PATCH') Object.assign(preferences, body); await respond(preferences); return; }
+        if (path === '/me/privacy') {
+          if (req.method() === 'PATCH') {
+            if (delayAnalyticsPatch && !Object.hasOwn(body, 'ai_processing')) {
+              delayAnalyticsPatch = false;
+              await new Promise(resolve => setTimeout(resolve, 750));
+            }
+            Object.assign(preferences, body);
+          }
+          await respond(preferences); return;
+        }
         if (path === '/me/settings') { await respond({ settings: { default_cv_language: 'en', locale: 'en', onboarding_completed: false, onboarding_state: {} } }); return; }
         if (path === '/me/onboarding-answers') { appUser.onboarding_answers = body; await respond({ answers: body }); return; }
-        if (path === '/guest-imports') { assert.equal(body.ai_processing, true); assert.equal(body.analytics, false); Object.assign(preferences, body); await respond({ id: guestId, guest_token: 't'.repeat(43), expires_at: new Date(Date.now()+86400000).toISOString(), upload: { storage_bucket: 'imports', storage_path: `guests/${guestId}/source.pdf`, token: 'fixture-upload' } }); return; }
+        if (path === '/guest-imports') { assert.equal(body.ai_processing, true); assert.equal(body.analytics, acceptAnalytics); Object.assign(preferences, body); await respond({ id: guestId, guest_token: 't'.repeat(43), expires_at: new Date(Date.now()+86400000).toISOString(), upload: { storage_bucket: 'imports', storage_path: `guests/${guestId}/source.pdf`, token: 'fixture-upload' } }); return; }
         if (path.startsWith(`/guest-imports/${guestId}`)) {
           assert.equal(req.headers()['x-guest-token'], 't'.repeat(43));
           if (path.endsWith('/answers')) { answers = body; await respond({ saved: true }); return; }
@@ -99,7 +125,7 @@ async function scenario(method) {
   const page = await context.newPage(); await attach(page);
   await page.goto(`${base}/guided-journey`, { waitUntil: 'networkidle0' });
   assert.equal(googleRequests.length, 0);
-  await clickText(page, 'Reject analytics');
+  await clickText(page, acceptAnalytics ? 'Accept analytics' : 'Reject analytics');
   await page.goto(`${base}/onboarding`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('input[type=checkbox]:not([disabled])');
   assert.equal(await page.$eval('input[type=checkbox]', el => el.checked), false);
@@ -124,19 +150,19 @@ async function scenario(method) {
   assert.deepEqual(Object.keys(recovery).sort(), ['expires_at','guest_token','id','question','step']);
   for (let index = 2; index <= 4; index++) { await waitText(page, `Question ${index} of 4`); await clickText(page, 'Skip'); }
   await waitText(page, 'Save your CV');
-  assert.equal(googleRequests.length, 0);
+  if (!acceptAnalytics) assert.equal(googleRequests.length, 0);
   if (method === 'google') await clickText(page, 'Continue with Google');
   else {
     await page.type('#onboarding-name', 'Test Candidate'); await page.type('#onboarding-email', user.email); await page.type('#onboarding-password', 'fixture-password');
     await clickText(page, 'Create account & see my score');
   }
   await waitText(page, 'Your CV Score');
-  assert(claimed); assert.equal(preferences.ai_processing, true); assert.equal(preferences.analytics, false);
+  assert(claimed); assert.equal(preferences.ai_processing, true); assert.equal(preferences.analytics, acceptAnalytics);
   assert.equal(await page.evaluate(() => localStorage.getItem('cv-builder:guest-import')), null);
   await clickText(page, 'Continue to CV editor');
   await page.waitForFunction(id => location.pathname === `/app/cv/${id}`, {}, cvId);
   await waitText(page, 'Imported CV');
-  assert.equal(googleRequests.length, 0);
+  if (!acceptAnalytics) assert.equal(googleRequests.length, 0);
   await page.goto(`${base}/app/profile`, { waitUntil: 'networkidle0' });
   await waitText(page, 'Privacy & your data');
   await clickText(page, 'Clear onboarding answers'); await waitText(page, 'Your onboarding answers have been cleared.');
@@ -154,6 +180,26 @@ async function scenario(method) {
   await clickText(page, 'Privacy choices'); await clickText(page, 'Accept analytics');
   await page.waitForFunction(() => !!document.getElementById('ga4-google-tag'));
   assert(googleRequests.length > 0);
+  assert.equal(preferences.analytics, true);
+  assert.equal(preferences.ai_processing, true);
+  assert(!Object.hasOwn(requests.filter(row => row.path === '/me/privacy' && row.method === 'PATCH').at(-1).body, 'ai_processing'));
+  // A later account-ready signal cannot be lost while an older sync is active.
+  const analyticsPatches = () => requests.filter(row => row.path === '/me/privacy' && row.method === 'PATCH' && !Object.hasOwn(row.body, 'ai_processing')).length;
+  const beforeResync = analyticsPatches();
+  delayAnalyticsPatch = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('cv-builder:account-ready')));
+  while (analyticsPatches() === beforeResync) await new Promise(resolve => setTimeout(resolve, 20));
+  await page.evaluate(() => window.dispatchEvent(new Event('cv-builder:account-ready')));
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('cv-builder:privacy-choices')).pending_sync === false);
+  assert(analyticsPatches() >= beforeResync + 2, 'account readiness during consent sync was dropped');
+  if (acceptAnalytics) {
+    assert(gaEvents.some(event => event.name === 'pre_signup_upload_completed'));
+    assert(gaEvents.some(event => event.name === 'pre_signup_analysis_ready'));
+    assert(gaEvents.some(event => event.name === 'page_view' && event.params.page_location.endsWith('/app/cv/editor')));
+    const payloads = JSON.stringify(gaEvents);
+    for (const excluded of [guestId, userId, authId, cvId, importId, 'private-person-cv.pdf', 'candidate@example.invalid', 'fixture-password', 't'.repeat(43)]) assert(!payloads.includes(excluded), 'analytics fixture received excluded data');
+    assert(gaEvents.every(event => !Object.hasOwn(event.params, 'answer')));
+  }
   const tab = await context.newPage(); await attach(tab); await tab.goto(`${base}/cookies`, { waitUntil: 'networkidle0' });
   await tab.waitForFunction(() => !!document.getElementById('ga4-google-tag'));
   await clickText(page, 'Privacy choices'); await clickText(page, 'Reject analytics');
@@ -204,5 +250,6 @@ async function gpcScenario() {
 try {
   console.log(await scenario('email'));
   console.log(await scenario('google'));
+  console.log(await scenario('email', true));
   console.log(await gpcScenario());
 } finally { await browser.close(); await rm(dir, { recursive: true, force: true }); }

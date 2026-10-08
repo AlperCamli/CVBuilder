@@ -1,4 +1,5 @@
 import { PrivacyControls } from "./components/PrivacyControls";
+import { AnalyticsNavigation } from "./components/AnalyticsNavigation";
 import {
   lazy,
   Suspense,
@@ -164,6 +165,7 @@ const ProfileRoute = lazyRoute(() =>
 export function AppRoutes() {
   return (
     <BrowserRouter>
+      <AnalyticsNavigation />
       <RouteSeo />
       <RouteElements />
       <PrivacyControls />

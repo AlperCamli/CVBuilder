@@ -24,6 +24,12 @@ describe("privacy choices and analytics", () => {
     vi.stubGlobal("navigator", { globalPrivacyControl: true }); expect(analyticsAllowed()).toBe(false);
     saveAnalyticsChoice(true); expect(JSON.parse(local.get(CONSENT_KEY)!).analytics).toBe(false);
   });
+  it("does not let a slow acceptance overwrite a newer rejection from another tab", () => {
+    const accepting = saveAnalyticsChoice(true, {notify: false, pending: true})!;
+    saveAnalyticsChoice(false, {notify: false});
+    expect(saveAnalyticsChoice(true, {expectedSnapshot: accepting})).toBeNull();
+    expect(analyticsAllowed()).toBe(false);
+  });
   it("does not initialize tags, queue events or write attribution without consent", () => {
     initializeAnalytics(); trackEvent("pre_signup_answer", { answer: "doctorate", email: "private@example.invalid" });
     rememberCheckoutAttribution({ checkout_session_id: "secret", value: 10 }); markPaymentCompletedTracked("analytics:completed");

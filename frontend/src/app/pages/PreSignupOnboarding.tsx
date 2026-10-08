@@ -35,6 +35,7 @@ import {
 } from "../integration/guest-import";
 import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { trackEvent } from "../integration/analytics";
+import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
 import "./pre-signup-onboarding.css";
 
 type Stage = "upload" | "questions" | "signup";
@@ -104,6 +105,14 @@ function OnboardingFlow() {
   const fileInput = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
+  const trackedProcessing = useRef("");
+  useEffect(() => {
+    if (!guest || (processing !== "ready" && processing !== "failed")) return;
+    const key = `${guest.id}:${processing}`;
+    if (trackedProcessing.current === key) return;
+    trackedProcessing.current = key;
+    trackEvent(processing === "ready" ? "pre_signup_analysis_ready" : "pre_signup_analysis_failed", {result: processing === "ready" ? "success" : "failure"});
+  }, [guest?.id, processing]);
 
   useEffect(() => {
     let active = true;
@@ -225,6 +234,7 @@ function OnboardingFlow() {
       return;
     }
     uploadingRef.current = true;
+    trackEvent("pre_signup_upload_started", {file_type: /\.pdf$/i.test(selected.name) ? "pdf" : "docx"});
     setUploading(true);
     setUploadError("");
     setError("");
@@ -240,6 +250,7 @@ function OnboardingFlow() {
         file_type: /\.pdf$/i.test(selected.name) ? "pdf" : "docx",
       });
     } catch (err) {
+      trackEvent("pre_signup_upload_failed", {result: "failure"});
       setUploadError(
         err instanceof Error ? err.message : "Upload failed. Please try again.",
       );
@@ -268,7 +279,7 @@ function OnboardingFlow() {
       });
     trackEvent("pre_signup_answer", {
       question: question.id,
-      answer: skip ? "skipped" : answers[question.id],
+      skipped: skip,
     });
     if (questionIndex < 3) go("questions", questionIndex + 1);
     else go("signup");
@@ -408,10 +419,7 @@ function OnboardingFlow() {
                 </p>
                 <p className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information. <Link to="/privacy">Privacy notice</Link>.</p>
                 {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? "Uploads are temporarily unavailable while privacy arrangements are verified." : "Checking upload availability…"}</p>}
-                <label className="ob-footnote" style={{ alignItems: "flex-start" }}>
-                  <input type="checkbox" checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={event => void changeGuestAi(event.target.checked)} />
-                  <span>Use AI to analyze my CV {config?.ai_enabled ? `with ${config.ai_provider}` : "(currently unavailable)"}. Relevant CV text is sent to this provider. {aiRequired ? "AI processing is required for JobSpecificCV’s CV-building experience. You can withdraw and enable it again at any time." : "Without AI, basic parsing, your score and manual editing still work."}</span>
-                </label>
+                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} />
                 {aiRequired && <button type="button" className="ob-back" disabled={uploading || busy} onClick={() => void changeGuestAi(false)}>Not now</button>}
                 {aiRequired && !aiProcessing && <p className="ob-footnote" role="status">{aiDeclined ? guest ? "AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave." : "AI remains off. You can change your mind by enabling it above; nothing has been uploaded." : "Enable AI above to upload and analyze your CV."}</p>}
                 <input

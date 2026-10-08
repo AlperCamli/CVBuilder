@@ -10,7 +10,7 @@ import { AiService } from "../src/modules/ai/ai.service";
 import { ForbiddenError } from "../src/shared/errors/app-error";
 import { PrivacyService } from "../src/modules/privacy/privacy.service";
 import { GuestImportsService } from "../src/modules/guest-imports/guest-imports.service";
-import { createPrivacyRouter } from "../src/modules/privacy/privacy.routes";
+import { createPrivacyRouter, privacyChoicesSchema } from "../src/modules/privacy/privacy.routes";
 import { ImportsService } from "../src/modules/imports/imports.service";
 import type { ImportsRepository } from "../src/modules/imports/imports.repository";
 import type { MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
@@ -29,6 +29,16 @@ function jwt(sub: string, method: string, timestamp: number, iat = Date.now() / 
   return `header.${Buffer.from(JSON.stringify({ sub, iat, amr: [{ method, timestamp }] })).toString("base64url")}.signature`;
 }
 describe("privacy release and permissions", () => {
+  it("accepts analytics-only updates and records them without AI reads or changes", async () => {
+    approved();
+    vi.stubEnv("PRIVACY_PROCESSORS_JSON", JSON.stringify([processor("supabase"), processor("vercel"), processor("openai"), processor("google-analytics")]));
+    const input = privacyChoicesSchema.parse({notice_version: NOTICE_VERSION, analytics: true});
+    const rpc = vi.fn(async () => ({error: null})); const from = vi.fn();
+    const service = new PrivacyService({rpc, from} as any, null, {error: vi.fn()});
+    const user = randomUUID(); await service.record(user, null, input);
+    expect(rpc).toHaveBeenCalledWith("record_analytics_choice", {p_user: user, p_guest: null, p_version: NOTICE_VERSION, p_analytics: true});
+    expect(from).not.toHaveBeenCalled();
+  });
   it("fails closed without verified identity/arrangements and binds AI approval to its actual provider", () => {
     vi.stubEnv("PRIVACY_REVIEW_APPROVED", "false"); expect(privacyConfig().collection_enabled).toBe(false);
     approved(); expect(privacyConfig().collection_enabled).toBe(true); expect(privacyConfig().ai_enabled).toBe(true);

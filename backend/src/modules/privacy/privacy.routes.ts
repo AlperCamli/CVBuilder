@@ -7,7 +7,7 @@ import { guestAnswersSchema } from "../guest-imports/guest-imports.schemas";
 import type { PrivacyService } from "./privacy.service";
 import { requireFreshAuthentication } from "./reauthentication";
 
-export const privacyChoicesSchema = z.object({ notice_version: z.string().max(40), ai_processing: z.boolean(), analytics: z.boolean() }).strict();
+export const privacyChoicesSchema = z.object({ notice_version: z.string().max(40), ai_processing: z.boolean().optional(), analytics: z.boolean() }).strict();
 export function createPrivacyRouter(service: PrivacyService, auth: RequestHandler) {
   const router = Router();
   router.use((_, res, next) => { res.set("Cache-Control", "no-store"); next(); });

@@ -1,9 +1,11 @@
 import { analyticsAllowed, PRIVACY_EVENT, CONSENT_KEY, getPrivacyConfig } from "./privacy";
+import { analyticsPage, type AnalyticsPage } from "./analytics-pages";
 type AnalyticsValue = string | number | boolean | null | undefined;
 
 export type AnalyticsParams = Record<string, AnalyticsValue>;
 
 type GtagCommand =
+  | ["consent", "default", AnalyticsParams]
   | ["consent", "update", AnalyticsParams]
   | ["js", Date]
   | ["config", string, AnalyticsParams?]
@@ -18,6 +20,16 @@ declare global {
 
 const GA_MEASUREMENT_ID = (import.meta.env.VITE_GA_MEASUREMENT_ID ?? "").trim();
 let analyticsReady = false;
+let initializing: Promise<void> | null = null;
+let generation = 0;
+let currentPage: AnalyticsPage | null = null;
+let currentPathname = "";
+let pageSequence = 0;
+let lastQueuedPage = -1;
+type PendingEvent = { name: string; params: AnalyticsParams; at: number };
+let pendingEvents: PendingEvent[] = [];
+const MAX_PENDING_EVENTS = 100;
+const EVENT_MAX_AGE_MS = 60_000;
 const GA_SCRIPT_ID = "ga4-google-tag";
 const CHECKOUT_ATTRIBUTION_KEY = "analytics:checkout-attribution";
 const PAYMENT_COMPLETED_PREFIX = "analytics:payment-completed";
@@ -47,10 +59,43 @@ const shouldSkipAnalytics = (): boolean =>
   !hasWindow() || !analyticsAllowed() || !analyticsReady || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent);
 
 const SAFE_PARAMS = new Set(["step", "question", "file_extension", "file_mime_type", "file_size_bucket", "file_type", "answered_questions", "plan_code", "plan_name", "trial_applied", "trial_period_days", "value", "currency", "cv_kind", "format", "source", "cta_index", "article_slug", "category_slug"]);
+SAFE_PARAMS.add("action");
+for (const key of ["flow", "surface", "path_selected", "method", "verification_required", "skipped", "completed_steps", "onboarding_completed_before", "module_type", "parse_status", "parse_quality", "parse_needs_manual_review", "parser_name", "page_count", "section_count", "block_count", "master_cv_loaded", "generated_question_count", "answered_follow_up_count", "selected_keyword_count", "selected_topic_count", "has_company", "has_job_posting_url", "has_location", "has_notes", "has_role", "has_template", "pasted_character_count", "download_available", "export_status", "has_redirect_state", "result"]) SAFE_PARAMS.add(key);
 const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
   Object.fromEntries(
     Object.entries(params).filter(([key, value]) => SAFE_PARAMS.has(key) && value !== undefined && value !== null)
+      .map(([key, value]) => [key, key === "source" && typeof value === "string" && value.startsWith("/") ? analyticsPage(value)?.path ?? "other" : value])
+      .filter(([, value]) => typeof value !== "string" || (value.length <= 128 && !value.includes("@") && !/https?:|[?#]|[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}/i.test(value)))
   );
+
+function pageParams(page = currentPage): AnalyticsParams {
+  return { page_location: window.location.origin + (page?.path ?? "/screens/other"), page_referrer: "", page_title: page?.title ?? "CV Builder" };
+}
+function queueEvent(name: string, params: AnalyticsParams) {
+  pendingEvents = pendingEvents.filter(event => Date.now() - event.at < EVENT_MAX_AGE_MS);
+  if (pendingEvents.length >= MAX_PENDING_EVENTS) pendingEvents.shift();
+  pendingEvents.push({name, params, at: Date.now()});
+}
+function flushEvents() {
+  if (shouldSkipAnalytics() || !document.getElementById(GA_SCRIPT_ID)) return;
+  const events = pendingEvents; pendingEvents = [];
+  for (const event of events) {
+    if (!analyticsAllowed()) break;
+    if (Date.now() - event.at < EVENT_MAX_AGE_MS) window.gtag?.("event", event.name, event.params);
+  }
+}
+
+export function trackPageView(pathname: string): void {
+  if (!hasWindow() || pathname === currentPathname) return;
+  currentPathname = pathname; currentPage = analyticsPage(pathname); pageSequence++;
+  if (!currentPage || !analyticsAllowed() || !GA_MEASUREMENT_ID) return;
+  lastQueuedPage = pageSequence;
+  queueEvent("page_view", pageParams());
+  if (analyticsReady) {
+    window.gtag?.("config", GA_MEASUREMENT_ID, {send_page_view: false, ...pageParams()});
+    flushEvents();
+  } else scheduleAnalytics();
+}
 
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
   if (planCode === "lifetime") return 99;
@@ -77,36 +122,42 @@ export function initializeAnalytics(): void {
     script.id = GA_SCRIPT_ID;
     script.async = true;
     script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_MEASUREMENT_ID)}`;
+    script.onerror = () => { if (document.getElementById(GA_SCRIPT_ID) === script) { script.remove(); analyticsReady = false; } };
     document.head.appendChild(script);
   }
 
+  window.gtag("consent", "default", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
   window.gtag("js", new Date());
   window.gtag("config", GA_MEASUREMENT_ID, {
     send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false,
-    page_location: window.location.origin + "/", page_referrer: "", page_title: "CV Builder"
+    ...pageParams()
   });
 }
 
 export function scheduleAnalytics(): void {
-  if (!hasWindow() || !GA_MEASUREMENT_ID || !analyticsAllowed()) return;
-  void getPrivacyConfig().then(config => {
+  if (!hasWindow() || !currentPage || !GA_MEASUREMENT_ID || !analyticsAllowed() || initializing || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent)) return;
+  const attempt = generation;
+  const request = getPrivacyConfig().then(config => {
+    if (attempt !== generation || !analyticsAllowed() || !currentPage) return;
     analyticsReady = config.analytics_enabled === true;
     if (!analyticsReady) { const active = !!document.getElementById(GA_SCRIPT_ID); removeAnalyticsData(); if (active) window.location.reload(); return; }
-    if (shouldSkipAnalytics()) return;
-    const start = () => initializeAnalytics();
-    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(start, { timeout: 3000 });
-    else window.setTimeout(start, 1500);
-  }).catch(() => { analyticsReady = false; });
+    initializeAnalytics();
+    // Acceptance on an already open screen must capture that screen, without
+    // replaying any rejected/pre-consent interactions.
+    if (currentPage && lastQueuedPage !== pageSequence) {
+      lastQueuedPage = pageSequence;
+      pendingEvents.unshift({name: "page_view", params: pageParams(), at: Date.now()});
+    }
+    flushEvents();
+  }).catch(() => { if (attempt === generation) analyticsReady = false; }).finally(() => { if (initializing === request) initializing = null; });
+  initializing = request;
 }
 
 export function trackEvent(eventName: string, params: AnalyticsParams = {}): void {
-  if (shouldSkipAnalytics() || !GA_MEASUREMENT_ID) return;
-
-  if (!window.gtag) {
-    initializeAnalytics();
-  }
-
-  if (document.getElementById(GA_SCRIPT_ID)) window.gtag?.("event", eventName, cleanParams(params));
+  if (!hasWindow() || !analyticsAllowed() || !GA_MEASUREMENT_ID || CRAWLER_USER_AGENT_RE.test(window.navigator.userAgent) || !/^[a-z][a-z0-9_]{0,39}$/.test(eventName) || !currentPage) return;
+  queueEvent(eventName, {...pageParams(), ...cleanParams(params)});
+  if (!analyticsReady) scheduleAnalytics();
+  else { initializeAnalytics(); flushEvents(); }
 }
 
 export function trackBlogCtaClick(params: {
@@ -239,6 +290,7 @@ export function markPaymentCompletedTracked(key: string): void {
 
 export function removeAnalyticsData() {
   if (!hasWindow()) return;
+  generation++; initializing = null; analyticsReady = false; pendingEvents = []; lastQueuedPage = -1;
   (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] = true;
   window.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
   document.getElementById(GA_SCRIPT_ID)?.remove();
@@ -270,6 +322,7 @@ export function installAnalyticsConsentListener() {
     else { const active = !!document.getElementById(GA_SCRIPT_ID); removeAnalyticsData(); if (active) window.location.reload(); }
   };
   window.addEventListener(PRIVACY_EVENT, update);
+  window.addEventListener("online", update);
   window.addEventListener("storage", event => { if (event.key === CONSENT_KEY || event.key === null) update(); });
   if (!analyticsAllowed()) removeAnalyticsData();
   window.setInterval(update, 60_000);

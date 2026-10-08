@@ -10,6 +10,7 @@ import {
 } from "react";
 import { trackOnboardingSkipped, trackOnboardingStepCompleted } from "../integration/analytics";
 import type { OnboardingState, OnboardingStepId } from "../integration/api-types";
+import { createOnboardingSaver } from "../integration/onboarding-saver";
 import { useAuth } from "../integration/auth-context";
 import {
   applyOnboardingCompletion,
@@ -33,6 +34,8 @@ interface OnboardingContextValue {
   clearJustCompleted: () => void;
   isCoachMarkDismissed: (stepId: OnboardingStepId) => boolean;
   dismissCoachMark: (stepId: OnboardingStepId) => void;
+  saveError: string | null;
+  retryProgressSave: () => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | undefined>(undefined);
@@ -41,6 +44,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { me, api } = useAuth();
   const [state, setState] = useState<OnboardingState | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saver = useMemo(() => createOnboardingSaver(patch => api.patchSettings(patch), setSaveError), [api, me?.user.id]);
+  useEffect(() => {
+    saver.activate();
+    const retry = () => saver.retry();
+    window.addEventListener("online", retry);
+    return () => { window.removeEventListener("online", retry); saver.dispose(); };
+  }, [saver]);
   const [dismissedCoachMarks, setDismissedCoachMarks] = useState<ReadonlySet<OnboardingStepId>>(
     () => new Set()
   );
@@ -90,11 +101,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           }
         : { onboarding_state: { steps: { [stepId]: now } } };
 
-      // Keep the optimistic state on failure; worst case the step re-appears
-      // unchecked next session.
-      void api.patchSettings(payload).catch(() => {});
+      saver.enqueue(payload);
     },
-    [api]
+    [saver]
   );
 
   const skipOnboarding = useCallback(() => {
@@ -110,10 +119,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     trackOnboardingSkipped({ flow: "checklist_v1", completed_steps: completedStepCount(next) });
 
-    void api
-      .patchSettings({ onboarding_state: { skipped_at: now }, onboarding_completed: true })
-      .catch(() => {});
-  }, [api]);
+    saver.enqueue({ onboarding_state: { skipped_at: now }, onboarding_completed: true });
+  }, [saver]);
 
   const clearJustCompleted = useCallback(() => {
     setJustCompleted(false);
@@ -142,7 +149,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       skipOnboarding,
       clearJustCompleted,
       isCoachMarkDismissed: (stepId) => dismissedCoachMarks.has(stepId),
-      dismissCoachMark
+      dismissCoachMark,
+      saveError,
+      retryProgressSave: saver.retry
     };
   }, [
     state,
@@ -151,7 +160,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     completeStep,
     skipOnboarding,
     clearJustCompleted,
-    dismissCoachMark
+    dismissCoachMark,
+    saveError,
+    saver
   ]);
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

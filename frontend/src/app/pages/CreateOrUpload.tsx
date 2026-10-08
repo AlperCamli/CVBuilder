@@ -3,7 +3,9 @@ import { FileText, Upload, CheckCircle, Check } from "lucide-react";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useSidebar } from "../contexts/SidebarContext";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
+import { getPrivacyConfig, type PrivacyConfig } from "../integration/privacy";
 import {
   fileAnalyticsParams,
   trackCvUploadStarted,
@@ -17,6 +19,16 @@ export function CreateOrUpload() {
   const { setSidebarVisible } = useSidebar();
   const { active, currentStep, isStepComplete } = useOnboarding();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig | null>(null);
+  const [privacyError, setPrivacyError] = useState(false);
+  const [privacyAttempt, setPrivacyAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setPrivacyError(false);
+    void getPrivacyConfig().then(config => { if (active) setPrivacyConfig(config); })
+      .catch(() => { if (active) setPrivacyError(true); });
+    return () => { active = false; };
+  }, [privacyAttempt]);
 
   useEffect(() => {
     // Hide sidebar when entering this page from main buttons
@@ -126,8 +138,11 @@ export function CreateOrUpload() {
 
           {/* Right side - Action Cards */}
           <div className="flex flex-col gap-4">
+            {privacyConfig ? <AiUploadDisclosure config={privacyConfig} /> :
+              <p role="status">{privacyError ? <>We couldn’t load the AI provider information. <button type="button" onClick={() => setPrivacyAttempt(attempt => attempt + 1)}>Retry</button></> : "Loading AI provider information…"}</p>}
             <button
               onClick={handleUploadClick}
+              disabled={!privacyConfig}
               data-onboarding="upload-cv"
               className="p-6 rounded-xl border-2 group transition-all hover:shadow-lg text-left"
               style={{

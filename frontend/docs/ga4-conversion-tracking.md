@@ -1,11 +1,49 @@
 # GA4 Conversion Tracking
 
-The frontend initializes GA4 only when `VITE_GA_MEASUREMENT_ID` is set.
+The frontend initializes GA4 only when `VITE_GA_MEASUREMENT_ID` is set, the
+visitor accepted analytics, GPC is absent and the backend enables analytics.
+AI and analytics choices remain independent. Screens and business outcomes are
+measured; CV content, questionnaire answers and account identifiers are excluded.
+
+## Consent and delivery
+
+SPA navigation sends one manual `page_view` per screen. Accepting on an open
+screen records that screen without replaying earlier rejected interactions.
+Only events occurring after consent can wait in memory during initialization
+(maximum 100 events, expiring after one minute). Configuration and tag failures
+retry on connectivity/periodic checks; withdrawal clears the queue across tabs.
+No history or event queue is stored in browser persistence. Ad blockers, offline
+navigation, closed tabs and GA property configuration can still prevent delivery;
+client events are not a guaranteed accounting ledger.
+
+Configure the GA4 web stream for **manual measurement**: turn off Enhanced
+Measurement automatic page/history views, form interactions, outbound clicks,
+site search and file downloads. The app sends its own safe screen and action
+events. Leaving those automatic collectors enabled can duplicate views and
+capture real URLs, form details or filenames outside the app's payload filter.
+Keep Google Signals, advertising integrations and ad personalization disabled.
+See [Google's manual page-view guidance](https://developers.google.com/analytics/devguides/collection/ga4/views).
+
+Virtual page locations replace CV/job IDs with fixed screen paths, remove
+queries/fragments, use fixed titles and omit raw authentication URLs. Auth
+callback/reset-token pages are excluded. The app sanitizes route-valued sources
+as well. Referral/career/education answers are never sent to Google.
+
+Browser consent is associated with the guest at upload and with an account
+after authentication. Analytics-only PATCH updates write notice/analytics
+receipts without altering AI permission, its notice revision or processing lease.
+Apply `20261008010000_independent_analytics_consent.sql` before the backend update.
 
 ## Funnel Events
 
 | Event | Meaning | Fired from |
 |---|---|---|
+| `page_view` | Safe public/app screen navigation | Shared router observer |
+| `pre_signup_upload_started/completed/failed` | Guest upload outcome | Upload-first onboarding |
+| `pre_signup_analysis_ready/failed` | Guest processing outcome | Upload-first onboarding |
+| `pre_signup_answer` | Question advanced/skipped, without its answer | Upload-first onboarding |
+| `pre_signup_cv_claimed` | Uploaded CV linked after signup | Signup handoff |
+| `product_action` | Confirmed CV edits, AI requests, suggestions, jobs, cover letters and revision outcomes | Backend API wrapper |
 | `blog_cta_click` | User clicked a blog CTA toward signup/tool flow | Career article CTA blocks |
 | `signup_page_view` | User reached `/signup` | Signup page mount |
 | `cv_upload_started` | User selected a CV file | Create/upload page |
@@ -37,7 +75,7 @@ Production collection is considered healthy when DevTools shows:
 - `https://www.google-analytics.com/g/collect` returning `204`.
 - Custom events appearing as `en=<event_name>` in the request URL or POST payload.
 
-Example confirmed events:
+Example events to verify:
 
 - `page_view`
 - `blog_cta_click`
@@ -71,9 +109,11 @@ Priority custom dimensions:
 |---|---|---|
 | Article slug | `article_slug` | See which blog pages drive CTA clicks |
 | Category slug | `category_slug` | Compare SEO clusters by conversion intent |
-| CTA text | `cta_text` | Compare CTA copy performance |
-| CTA destination | `destination` | Confirm where blog clicks send users |
-| Signup path | `path` | Confirm which signup/tool path users reached |
+| CTA position | `cta_index` | Compare article CTA placements |
+| Product action | `action` | Compare edits, AI requests and job actions |
+| Action result | `result` | Separate successful and failed actions |
+| Journey flow | `flow` | Compare onboarding entry points |
+| Selected path | `path_selected` | Compare upload and manual creation |
 | Export format | `format` | Compare PDF vs DOCX export intent |
 | CV kind | `cv_kind` | Compare master CV vs tailored CV exports |
 | Checkout source | `source` | See where payment attempts started |

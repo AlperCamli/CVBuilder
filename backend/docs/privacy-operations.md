@@ -156,6 +156,12 @@ columns without returning CV or account rows.
 
 ## Daily maintenance and monitoring
 
+Analytics synchronization requires `20261008010000_independent_analytics_consent.sql`
+before deploying the updated backend and frontend. Its service-only RPC records
+analytics and notice receipts without changing AI permission, its version or an
+in-flight processing lease. Browser choices are associated after guest creation
+or authentication; retries never manufacture consent for an unknown choice.
+
 Keep the single Vercel cron at `0 3 * * *` UTC. Set backend `CRON_SECRET` in the
 deployment environment. Never put it in frontend variables, URLs or this repo.
 

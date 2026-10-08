@@ -34,5 +34,6 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/guest-onboarding.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/privacy-controls.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/guest-ai-tracking.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-consent.sql"
 
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/privacy-restore.sql"

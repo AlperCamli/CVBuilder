@@ -25,6 +25,7 @@ export interface RequestOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  keepalive?: boolean;
 }
 
 interface CreateApiClientOptions {
@@ -127,6 +128,7 @@ export const createApiClient = (options: CreateApiClientOptions): ApiClient => {
       method,
       headers,
       signal: requestOptions?.signal,
+      keepalive: requestOptions?.keepalive,
       body: body === undefined ? undefined : JSON.stringify(body)
     });
 
