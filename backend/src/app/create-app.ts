@@ -75,6 +75,10 @@ export const createApp = (options?: CreateAppOptions): Express => {
 
   const app = express();
 
+  // Vercel overwrites X-Forwarded-For at its ingress. Trust that one hop,
+  // never an arbitrary chain or client-supplied headers on a direct server.
+  app.set("trust proxy", process.env.VERCEL === "1" ? 1 : false);
+
   app.disable("x-powered-by");
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(createRequestLogger(logger));

@@ -24,6 +24,9 @@ Fixed gaps:
   teardown disposes pending work.
 - Guest answers/consent saves can be interrupted by navigation. Small requests
   use fetch keepalive; signup still waits for answers and privacy saves.
+- Production verification exposed an incorrect proxy configuration in rate
+  limiting, which could combine unrelated visitors and block requests. Vercel
+  now trusts one ingress hop; direct servers still ignore forged headers.
 
 Verified existing persistence:
 

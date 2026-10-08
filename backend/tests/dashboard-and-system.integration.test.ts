@@ -1,5 +1,5 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
 import { BillingService } from "../src/modules/billing/billing.service";
 import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
@@ -19,8 +19,9 @@ import {
   createTestConfig
 } from "./helpers/in-memory";
 
-const buildTestApp = (databaseConnected: boolean) => {
+const buildTestApp = (databaseConnected: boolean, productionLimits = false) => {
   const config = createTestConfig();
+  if (productionLimits) config.appEnv = "production";
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
   const usageRepository = new InMemoryUsageRepository();
@@ -73,6 +74,32 @@ const buildTestApp = (databaseConnected: boolean) => {
 };
 
 describe("dashboard + system endpoints", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("keeps Vercel visitor limits separate and ignores forged forwarding entries", async () => {
+    vi.stubEnv("VERCEL", "1");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const app = buildTestApp(true, true);
+      for (let index = 0; index < 100; index++) {
+        const response = await request(app).get("/api/v1/health")
+          .set("X-Forwarded-For", `198.51.100.${index + 1}, 203.0.113.10`)
+          .set("Forwarded", `for=198.51.100.${index + 1}`);
+        expect(response.status).toBe(200);
+      }
+      expect((await request(app).get("/api/v1/health").set("X-Forwarded-For", "198.51.100.200, 203.0.113.10")).status).toBe(429);
+      expect((await request(app).get("/api/v1/health").set("X-Forwarded-For", "203.0.113.11")).status).toBe(200);
+      expect(errorLog).not.toHaveBeenCalled();
+    } finally { errorLog.mockRestore(); }
+  });
+
+  it("does not trust a client-supplied forwarding header on a direct server", async () => {
+    vi.stubEnv("VERCEL", "");
+    const app = buildTestApp(true, true);
+    for (let index = 0; index < 100; index++) expect((await request(app).get("/api/v1/health")).status).toBe(200);
+    expect((await request(app).get("/api/v1/health").set("X-Forwarded-For", "203.0.113.200")).status).toBe(429);
+  });
+
   it("returns health and version with success envelope", async () => {
     const app = buildTestApp(true);
 

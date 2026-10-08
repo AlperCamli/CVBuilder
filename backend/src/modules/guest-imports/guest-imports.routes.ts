@@ -24,12 +24,14 @@ export function createGuestImportsRouter(
     limit: 10,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
   });
   const processLimit = rateLimit({
     windowMs: 60_000,
     limit: 10,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
   });
   const token = (req: Parameters<RequestHandler>[0]) =>
     req.get("X-Guest-Token") ?? "";

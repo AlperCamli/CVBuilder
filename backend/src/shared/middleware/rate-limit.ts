@@ -31,6 +31,9 @@ export const createGlobalRateLimiter = (config: AppConfig): RequestHandler => {
     limit: 100,
     standardHeaders: true,
     legacyHeaders: false,
+    // Vercel supplies the trusted X-Forwarded-For header. The alternative
+    // Forwarded header is deliberately ignored, including client forgeries.
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
     handler: handleRateLimited
   });
 };

@@ -162,6 +162,11 @@ analytics and notice receipts without changing AI permission, its version or an
 in-flight processing lease. Browser choices are associated after guest creation
 or authentication; retries never manufacture consent for an unknown choice.
 
+On Vercel, Express trusts one ingress hop using its overwritten
+`X-Forwarded-For` header. The alternative `Forwarded` header is ignored. Direct
+local/self-hosted servers trust no forwarding headers by default; review the
+actual proxy topology before changing that deployment's trust configuration.
+
 Keep the single Vercel cron at `0 3 * * *` UTC. Set backend `CRON_SECRET` in the
 deployment environment. Never put it in frontend variables, URLs or this repo.
 
