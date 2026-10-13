@@ -110,6 +110,10 @@ export async function uploadGuestCv(file: File, aiProcessing = false) {
     question: 0,
   };
   saveGuestUpload(row);
+  // Keep parsing/scoring in its durable request while the questions render.
+  // Polling and auth handoff reuse this same request; server consent/lease
+  // checks still decide whether any AI processing is permitted.
+  void processGuestCv(row).catch(() => { /* Status polling reports/retries failures. */ });
   return row;
 }
 export const getGuestStatus = (row: GuestUpload) =>

@@ -123,7 +123,7 @@ export function CVScore() {
     }
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
     const matching = availableMasters.filter(cv => documentLocale(cv.language) === cvLanguage && (cv.module_type ?? "standard") === (moduleType ?? "standard"));
-    const updateId = matching.length === 1 ? matching[0].id : updateMasterId;
+    const updateId = matching.length === 1 ? matching[0].id : matching.find(cv => cv.id === updateMasterId)?.id;
     if (matching.length > 1 && !updateId) { setError(t("Choose the existing master to update.")); return; }
     if (updateId && !window.confirm(t("Update the existing master with this upload? Its previous content will be saved as a revision; customized CVs will be preserved."))) return;
 
@@ -169,8 +169,8 @@ export function CVScore() {
 
   const handleImproveWithAI = () => {
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
-    const matching = availableMasters.filter(cv => cv.language === cvLanguage && (cv.module_type ?? "standard") === (moduleType ?? "standard"));
-    const updateId = matching.length === 1 ? matching[0].id : updateMasterId;
+    const matching = availableMasters.filter(cv => documentLocale(cv.language) === cvLanguage && (cv.module_type ?? "standard") === (moduleType ?? "standard"));
+    const updateId = matching.length === 1 ? matching[0].id : matching.find(cv => cv.id === updateMasterId)?.id;
     if (matching.length > 1 && !updateId) { setError(t("Choose the existing master to update.")); return; }
     if (updateId && !window.confirm(t("Update the existing master with this upload? Its previous content will be saved as a revision; customized CVs will be preserved."))) return;
     if (!parsedContent || !importId || parseNeedsManualReview) {

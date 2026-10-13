@@ -1,6 +1,6 @@
 begin;
 do $$
-declare u uuid; other_user uuid; master_en uuid; master_tr uuid; prior_revision uuid; f uuid; imported uuid; run_id uuid; nonce jsonb; retried jsonb; updated public.master_cvs; completed public.ai_runs;
+declare u uuid; other_user uuid; master_en uuid; master_tr uuid; linked_tailored uuid; prior_revision uuid; f uuid; imported uuid; run_id uuid; nonce jsonb; retried jsonb; updated public.master_cvs; completed public.ai_runs;
 begin
   insert into public.users(auth_user_id,email) values(gen_random_uuid(),'localization-fixture@example.test') returning id into u;
   insert into public.users(auth_user_id,email) values(gen_random_uuid(),'other-fixture@example.test') returning id into other_user;
@@ -8,6 +8,7 @@ begin
     values(u,'English master','en','{"version":"v1","language":"en","metadata":{},"sections":[]}','scratch') returning id into master_en;
   insert into public.master_cvs(user_id,title,language,current_content,source_type)
     values(u,'Turkish master','tr','{"version":"v1","language":"tr","metadata":{},"sections":[]}','scratch') returning id into master_tr;
+  insert into public.tailored_cvs(user_id,master_cv_id,title,language,current_content,status) values(u,master_en,'Linked tailored CV','en','{"version":"v1","language":"en","metadata":{},"sections":[]}','draft') returning id into linked_tailored;
   begin
     insert into public.master_cvs(user_id,title,language,current_content,source_type) values(u,'Duplicate','en','{"language":"en"}','scratch');
     raise exception 'duplicate master unexpectedly allowed';
@@ -27,9 +28,11 @@ begin
   exception when raise_exception then if sqlerrm <> 'checkout_already_pending' then raise; end if; end;
   insert into public.files(user_id,file_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes)
     values(u,'source_upload','imports','fixture/cv.docx','cv.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',100) returning id into f;
-  insert into public.imports(user_id,source_file_id,status,parsed_content) values(u,f,'parsed','{"version":"v1","language":"en","metadata":{"full_name":"Updated"},"sections":[]}') returning id into imported;
+  insert into public.imports(user_id,source_file_id,status,parsed_content) values(u,f,'reviewed','{"version":"v1","language":"en","metadata":{"full_name":"Updated"},"sections":[]}') returning id into imported;
   updated:=public.replace_master_from_import(u,master_en,imported,'{"version":"v1","language":"en","metadata":{"full_name":"Updated"},"sections":[]}','Updated');
   if updated.id <> master_en then raise exception 'reimport changed master ID'; end if;
+  if not exists(select 1 from public.tailored_cvs where id=linked_tailored and master_cv_id=master_en) then raise exception 'reimport lost tailored CV relationship'; end if;
+  if (select status from public.imports where id=imported) <> 'converted' then raise exception 'reviewed reimport was not converted'; end if;
   if (select count(*) from public.cv_block_revisions where master_cv_id=master_en and block_id='__document__') <> 1 then raise exception 'missing prior revision'; end if;
   perform public.replace_master_from_import(u,master_en,imported,'{"language":"en"}',null);
   if (select count(*) from public.cv_block_revisions where master_cv_id=master_en and block_id='__document__') <> 1 then raise exception 'reimport retry added revisions'; end if;

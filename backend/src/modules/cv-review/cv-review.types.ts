@@ -5,6 +5,7 @@ export type ReviewDimensionId = "ats" | "sections" | "relevance" | "keywords" | 
 export interface ImportReviewContext {
   diagnostics: ParseCvFileDiagnostics | null;
   warnings: string[];
+  cv_review?: CvReview;
 }
 
 export interface ReviewCheck {

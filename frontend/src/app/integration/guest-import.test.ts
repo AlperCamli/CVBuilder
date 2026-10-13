@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-vi.mock("./supabase-client", () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) } } }));
-import { clearGuestUpload, readGuestUpload, saveGuestAnswers, saveGuestUpload, type GuestUpload } from "./guest-import";
+vi.mock("./supabase-client", () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) }, storage: { from: () => ({ uploadToSignedUrl: async () => ({ error: null }) }) } } }));
+import { clearGuestUpload, readGuestUpload, saveGuestAnswers, saveGuestUpload, uploadGuestCv, processGuestCv, type GuestUpload } from "./guest-import";
 
 const row: GuestUpload = { id: "12345678-1234-1234-1234-123456789012", guest_token: "a".repeat(43),
   expires_at: new Date(Date.now() + 86_400_000).toISOString(), original_filename: "cv.pdf", answers: { career: "student" }, step: "questions", question: 1 };
@@ -13,6 +13,28 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("guest upload handoff", () => {
+  it("starts analysis immediately and saves answers without waiting for it or starting a second run", async () => {
+    let release: () => void = () => {};
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const paths: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      let result: unknown;
+      if (path.endsWith("/process")) { await pending; result = { status: "parsed" }; }
+      else if (path.endsWith("/answers")) result = { saved: true };
+      else result = { id: row.id, guest_token: row.guest_token, expires_at: row.expires_at, upload: { storage_bucket: "imports", storage_path: "fixture/cv.pdf", token: "fixture" } };
+      return new Response(JSON.stringify({ success: true, data: result }), { headers: { "Content-Type": "application/json" } });
+    }));
+    const uploaded = await uploadGuestCv(new File(["%PDF-fixture"], "cv.pdf"), true);
+    await vi.waitFor(() => expect(paths.some(path => path.endsWith("/process"))).toBe(true));
+    const resumed = processGuestCv(uploaded);
+    await saveGuestAnswers(uploaded, { career: "student" });
+    expect(paths.filter(path => path.endsWith("/process"))).toHaveLength(1);
+    expect(paths.some(path => path.endsWith("/answers"))).toBe(true);
+    release();
+    await expect(resumed).resolves.toMatchObject({ status: "parsed" });
+  });
   it("preserves only the proof and cursor for refresh and auth redirects", () => {
     saveGuestUpload(row); expect(readGuestUpload()).toEqual({ ...row, answers: {}, original_filename: "Your CV" }); expect(localStorage.getItem("cv-builder:guest-import")).not.toContain("answers"); expect(localStorage.getItem("cv-builder:guest-import")).not.toContain("cv.pdf"); clearGuestUpload(); expect(readGuestUpload()).toBeNull();
   });

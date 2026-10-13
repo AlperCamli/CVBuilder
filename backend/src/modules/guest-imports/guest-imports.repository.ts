@@ -111,19 +111,21 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
     return Boolean(data);
   }
   async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0) {
+    const review = result ? reviewCv({
+      content: result.parsedContent,
+      import_status: "parsed",
+      raw_text: result.rawExtractedText,
+      diagnostics: result.diagnostics,
+    }) : null;
     const payload = result
       ? {
-          cv_review: reviewCv({
-            content: result.parsedContent,
-            import_status: "parsed",
-            raw_text: result.rawExtractedText,
-            diagnostics: result.diagnostics,
-          }),
+          cv_review: review,
           status: "parsed",
           parser_name: result.parserName,
           raw_extracted_text: result.rawExtractedText,
           parsed_content: result.parsedContent,
           review_context: {
+            cv_review: review,
             diagnostics: result.diagnostics,
             warnings: result.warnings,
           },

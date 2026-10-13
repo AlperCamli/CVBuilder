@@ -1,4 +1,5 @@
 import { trackedAiService } from "./helpers/tracked-ai-service";
+import { reviewCv } from "../src/modules/cv-review/cv-review";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ImportsService } from "../src/modules/imports/imports.service";
@@ -503,6 +504,19 @@ const createPromptResolver = (): AiPromptResolver => {
 };
 
 describe("imports service integration checks", () => {
+  it("reuses the onboarding score but invalidates it when reviewed content changes", async () => {
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("raw text")), "text/plain", "cv.txt");
+    const content: CvContent = { version: "v1", language: "en", metadata: { full_name: "Sample Person" }, sections: [] };
+    const cached = { ...reviewCv({ content, import_status: "parsed" }), summary: "Analysis finished while answering questions." };
+    await repository.updateImport(userId, repository.importId, { status: "parsed", parsed_content: content, review_context: { diagnostics: null, warnings: [], cv_review: cached } });
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), new SimpleCvParser());
+    const session = buildSession(userId);
+    expect((await service.getImportResult(session, repository.importId)).review).toEqual(cached);
+    const updated = await service.updateImportResult(session, repository.importId, { parsed_content: { ...content, language: "tr" } });
+    expect(updated.review.summary).not.toBe(cached.summary);
+    expect((await repository.findImportDetailById(userId, repository.importId))?.importRow.review_context?.cv_review).toBeUndefined();
+  });
   it("clears stale parsed content and withholds a score when a re-parse fails", async () => {
     const userId = randomUUID();
     const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("raw text")), "text/plain", "cv.txt");

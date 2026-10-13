@@ -328,9 +328,12 @@ export class ImportsService {
 
     const fallbackLanguage = detail.importRow.parsed_content?.language ?? "en";
     const normalizedContent = normalizeCvContent(input.parsed_content, fallbackLanguage);
+    const reviewContext = detail.importRow.review_context ? { ...detail.importRow.review_context } : null;
+    if (reviewContext) delete reviewContext.cv_review;
 
     const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
       parsed_content: normalizedContent,
+      review_context: reviewContext,
       status: "reviewed",
       error_message: null
     });
@@ -446,7 +449,7 @@ export class ImportsService {
 
   private toImportResultView(importRow: ImportRecord): ImportResultView {
     return {
-      review: reviewCv({ content: importRow.parsed_content, import_status: importRow.status, raw_text: importRow.raw_extracted_text, diagnostics: importRow.review_context?.diagnostics }),
+      review: (importRow.status === "parsed" && importRow.review_context?.cv_review?.version === "cv-review-v1" ? importRow.review_context.cv_review : null) ?? reviewCv({ content: importRow.parsed_content, import_status: importRow.status, raw_text: importRow.raw_extracted_text, diagnostics: importRow.review_context?.diagnostics }),
       status: importRow.status,
       module_type: importRow.module_type,
       parser_name: importRow.parser_name,
