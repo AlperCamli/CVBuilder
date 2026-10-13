@@ -80,6 +80,7 @@ export interface ImportImproveInput {
 }
 
 export interface CoverLetterGenerationInput {
+  language?: "en" | "tr";
   job_title: string;
   company_name?: string;
   job_description?: string;

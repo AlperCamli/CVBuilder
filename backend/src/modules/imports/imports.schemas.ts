@@ -56,6 +56,7 @@ export const updateImportResultSchema = z
 
 export const createMasterCvFromImportSchema = z
   .object({
+    update_master_cv_id: uuidSchema.optional(),
     title: z.string().trim().min(1).max(160).optional(),
     language: z.string().trim().min(2).max(16).optional(),
     template_id: uuidSchema.nullable().optional()

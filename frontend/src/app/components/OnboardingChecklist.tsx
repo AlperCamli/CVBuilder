@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronUp, ListChecks, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -27,6 +29,7 @@ function readMinimized(): boolean {
 }
 
 export function OnboardingChecklist() {
+  useTranslation();
   const { api } = useAuth();
   const {
     active,
@@ -77,7 +80,7 @@ export function OnboardingChecklist() {
 
   if (saveError) {
     return <aside className="fixed bottom-4 right-4 z-40 max-w-xs rounded-xl bg-white p-4 shadow-xl" role="status">
-      <p>{saveError}</p><button type="button" onClick={retryProgressSave} className="mt-2 underline">Retry saving progress</button>
+      <p>{saveError}</p><button type="button" onClick={retryProgressSave} className="mt-2 underline">{t("Retry saving progress")}</button>
     </aside>;
   }
   if (!visible) {
@@ -138,18 +141,15 @@ export function OnboardingChecklist() {
       >
         <button
           onClick={clearJustCompleted}
-          aria-label="Dismiss"
+          aria-label={t("Dismiss")}
           className="absolute top-2.5 right-2.5 p-1.5 rounded-lg hover:bg-white/15 transition-colors"
         >
           <X size={14} />
         </button>
         <h3 className="font-medium mb-1" style={{ fontSize: "16px" }}>
-          You're all set 🎉
-        </h3>
+          {t("You're all set 🎉")}</h3>
         <p style={{ fontSize: "13px", lineHeight: "1.6", color: "rgba(255,255,255,0.85)" }}>
-          You exported your first tailored CV. Next up: cover letters and job tracking are waiting in
-          the sidebar.
-        </p>
+          {t("You exported your first tailored CV. Next up: cover letters and job tracking are waiting in the sidebar.")}</p>
       </div>
     );
   }
@@ -168,7 +168,7 @@ export function OnboardingChecklist() {
       >
         <ListChecks size={16} />
         <span>
-          Setup {completedCount}/{TOTAL_STEPS}
+          {t("Setup")}{" "}{completedCount}{"/"}{TOTAL_STEPS}
         </span>
         <ChevronUp size={14} />
       </button>
@@ -188,14 +188,13 @@ export function OnboardingChecklist() {
         style={{ background: "var(--color-teal-600)", color: "white" }}
       >
         <div>
-          <h3 style={{ fontSize: "14px", fontWeight: 500 }}>Get your first tailored CV</h3>
+          <h3 style={{ fontSize: "14px", fontWeight: 500 }}>{t("Get your first tailored CV")}</h3>
           <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)" }}>
-            {completedCount} of {TOTAL_STEPS} steps done
-          </p>
+            {completedCount} {"of"}{TOTAL_STEPS} {" "}{t("steps done")}</p>
         </div>
         <button
           onClick={() => setMinimizedPersisted(true)}
-          aria-label="Minimize checklist"
+          aria-label={t("Minimize checklist")}
           className="p-1.5 rounded-lg hover:bg-white/15 transition-colors"
         >
           <ChevronDown size={16} />
@@ -253,12 +252,12 @@ export function OnboardingChecklist() {
                     textDecoration: done ? "line-through" : undefined
                   }}
                 >
-                  {step.label}
+                  {t(step.label)}
                 </p>
                 {isCurrent && (
                   <>
                     <p style={{ fontSize: "12px", lineHeight: "1.5", color: "var(--color-text-secondary)" }}>
-                      {step.description}
+                      {t(step.description)}
                     </p>
                     {!isAtStepTarget(step.id) && (
                       <button
@@ -271,8 +270,7 @@ export function OnboardingChecklist() {
                           fontWeight: 500
                         }}
                       >
-                        Go to this step
-                      </button>
+                        {t("Go to this step")}</button>
                     )}
                   </>
                 )}
@@ -289,20 +287,17 @@ export function OnboardingChecklist() {
         {confirmSkip ? (
           <>
             <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              Skip for good?
-            </span>
+              {t("Skip for good?")}</span>
             <button
               onClick={() => setConfirmSkip(false)}
               style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-secondary)" }}
             >
-              Cancel
-            </button>
+              {t("Cancel")}</button>
             <button
               onClick={skipOnboarding}
               style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-red-600, #dc2626)" }}
             >
-              Skip tour
-            </button>
+              {t("Skip tour")}</button>
           </>
         ) : (
           <button
@@ -310,8 +305,7 @@ export function OnboardingChecklist() {
             style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
             className="hover:underline"
           >
-            Skip tour
-          </button>
+            {t("Skip tour")}</button>
         )}
       </div>
     </div>

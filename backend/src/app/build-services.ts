@@ -1,3 +1,4 @@
+import { RegionalPricingService } from "../modules/billing/regional-pricing";
 import { PrivacyService } from "../modules/privacy/privacy.service";
 import { GuestImportsService } from "../modules/guest-imports/guest-imports.service";
 import { SupabaseGuestImportsRepository, type GuestImportsRepository } from "../modules/guest-imports/guest-imports.repository";
@@ -224,6 +225,16 @@ export const buildDefaultServices = (
       entitlementsService,
       stripeGateway,
       {
+        regionalPricing: new RegionalPricingService(supabaseClients.serviceRoleClient, stripeGateway, {
+          secret: config.billing.quoteSecret ?? null, productId: config.billing.productId ?? null,
+          productIds: { weekly: config.billing.weeklyProductId ?? null, monthly: config.billing.monthlyProductId ?? null, annual: config.billing.annualProductId ?? null },
+          prices: {
+            GLOBAL: { weekly: config.billing.stripeWeeklyPriceId, monthly: config.billing.stripeMonthlyPriceId, annual: config.billing.stripeAnnualPriceId },
+            TR: { weekly: config.billing.tryWeeklyPriceId ?? null, monthly: config.billing.tryMonthlyPriceId ?? null, annual: config.billing.tryAnnualPriceId ?? null }
+          },
+          portals: { GLOBAL: config.billing.usdPortalConfigurationId ?? null, TR: config.billing.tryPortalConfigurationId ?? null },
+          historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
+        }),
         provider: config.billing.provider,
         checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
         checkoutCancelUrl: config.billing.checkoutCancelUrl,
@@ -255,7 +266,8 @@ export const buildDefaultServices = (
     coverLettersRepository,
     jobsRepository,
     filesService,
-    billingService
+    billingService,
+    tailoredCvRepository
   );
   const cvRevisionsService = new CvRevisionsService(cvRevisionsRepository, tailoredCvRepository);
   const tailoredCvService = new TailoredCvService(

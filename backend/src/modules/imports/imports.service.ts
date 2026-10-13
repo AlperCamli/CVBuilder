@@ -1,3 +1,4 @@
+import { detectCvLanguage } from "../../shared/localization/languages";
 import type { PrivacyService } from "../privacy/privacy.service";
 import { privacyConfig } from "../privacy/privacy.config";
 import { reviewCv } from "../cv-review/cv-review";
@@ -233,6 +234,12 @@ export class ImportsService {
         import_id: importId
       }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
       const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
+      if (cvModule.id === "standard") {
+        const detected = detectCvLanguage(effectiveParseResult.rawExtractedText);
+        canonicalizedContent.language = detected ?? canonicalizedContent.language;
+        canonicalizedContent.metadata.detected_language = detected;
+        canonicalizedContent.metadata.needs_language_confirmation = !detected;
+      }
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
@@ -347,6 +354,11 @@ export class ImportsService {
     const importRow = detail.importRow;
 
     if (importRow.status === "converted") {
+      if (detail.targetMasterCv && (!input.update_master_cv_id || input.update_master_cv_id === detail.targetMasterCv.id)) {
+        const saved = await this.masterCvRepository.findById(session.appUser.id, detail.targetMasterCv.id);
+        if (!saved) throw new NotFoundError("Master CV was not found");
+        return { master_cv: toMasterCvDetail(saved), import: { id: importRow.id, status: importRow.status, target_master_cv_id: importRow.target_master_cv_id, updated_at: importRow.updated_at } };
+      }
       throw new ConflictError("Import is already converted");
     }
 
@@ -362,6 +374,7 @@ export class ImportsService {
 
     const language = input.language ?? importRow.parsed_content.language;
     const currentContent = normalizeCvContent(importRow.parsed_content, language);
+    currentContent.language = language;
     const title = input.title?.trim() || this.deriveTitleFromFilename(detail.sourceFile.original_filename);
 
     const payload: CreateMasterCvPayload = {
@@ -375,7 +388,9 @@ export class ImportsService {
       source_type: "import"
     };
 
-    const createdMasterCv = await this.masterCvRepository.create(payload);
+    const createdMasterCv = input.update_master_cv_id
+      ? await this.masterCvRepository.replaceFromImport!(session.appUser.id, input.update_master_cv_id, importId, currentContent, payload.summary_text)
+      : await this.masterCvRepository.create(payload);
 
     const updatedImport = await this.importsRepository.updateImport(session.appUser.id, importId, {
       target_master_cv_id: createdMasterCv.id,
@@ -461,7 +476,12 @@ export class ImportsService {
     const result = allowAi && (!this.privacy || assertPermission) ? await this.resolveEffectiveParseResult(input, {
       original_filename: input.originalFilename, mime_type: input.mimeType
     }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest) : await this.parser.parse(input);
-    return { ...result, parsedContent: canonicalizeImportedCvContent(result.parsedContent) };
+    const content = canonicalizeImportedCvContent(result.parsedContent);
+    const detected = detectCvLanguage(result.rawExtractedText);
+    content.language = detected ?? content.language;
+    content.metadata.detected_language = detected;
+    content.metadata.needs_language_confirmation = !detected;
+    return { ...result, parsedContent: content };
   }
 
   private async resolveEffectiveParseResult(

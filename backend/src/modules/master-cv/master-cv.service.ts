@@ -1,4 +1,5 @@
-import { NotFoundError } from "../../shared/errors/app-error";
+import { normalizeLanguage } from "../../shared/localization/languages";
+import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import {
   buildCvPreview,
   buildCvSummaryText,
@@ -31,6 +32,18 @@ export class MasterCvService {
     private readonly renderingService: RenderingService
   ) {}
 
+  async listDocumentRevisions(session: SessionContext, masterId: string) {
+    await this.requireMasterCv(session.appUser.id, masterId);
+    return this.masterCvRepository.listDocumentRevisions?.(session.appUser.id, masterId) ?? [];
+  }
+
+  async restoreDocumentRevision(session: SessionContext, masterId: string, revisionId: string) {
+    await this.requireMasterCv(session.appUser.id, masterId);
+    const row = await this.masterCvRepository.restoreDocumentRevision?.(session.appUser.id, masterId, revisionId);
+    if (!row) throw new NotFoundError("Document revision was not found");
+    return this.toDetail(row);
+  }
+
   async listMasterCvs(session: SessionContext): Promise<MasterCvSummary[]> {
     const rows = await this.masterCvRepository.listByUser(session.appUser.id);
     return rows.map((row) => this.toSummary(row));
@@ -38,6 +51,7 @@ export class MasterCvService {
 
   async createMasterCv(session: SessionContext, input: CreateMasterCvInput): Promise<MasterCvDetail> {
     const cvModule = getCvModule(input.module_type);
+    if (cvModule.id === "standard") await this.assertLanguageAvailable(session.appUser.id, input.language);
     const templateId =
       input.template_id !== undefined
         ? await this.templatesService.validateAssignableTemplateId(input.template_id)
@@ -91,11 +105,7 @@ export class MasterCvService {
       );
     }
 
-    if (input.language && input.language !== existing.current_content.language) {
-      const nextContent = cloneCvContent(existing.current_content);
-      nextContent.language = input.language;
-      updatePayload.current_content = nextContent;
-    }
+    if (input.language && input.language !== existing.language) throw new ValidationError("Use translation to create a CV in another language");
 
     const updated = await this.masterCvRepository.updateById(session.appUser.id, masterCvId, updatePayload);
 
@@ -132,6 +142,8 @@ export class MasterCvService {
   ): Promise<MasterCvDetail> {
     const existing = await this.requireMasterCv(session.appUser.id, masterCvId);
     const content = normalizeCvContent(input.current_content, existing.language);
+    if (content.language !== existing.language && (!normalizeLanguage(existing.language) || normalizeLanguage(content.language) !== normalizeLanguage(existing.language))) throw new ValidationError("Use translation to create a CV in another language");
+    content.language = existing.language;
 
     const updated = await this.masterCvRepository.updateById(session.appUser.id, masterCvId, {
       current_content: content,
@@ -173,6 +185,7 @@ export class MasterCvService {
 
   async duplicateMasterCv(session: SessionContext, masterCvId: string): Promise<MasterCvDetail> {
     const existing = await this.requireMasterCv(session.appUser.id, masterCvId);
+    if (existing.module_type === "standard") await this.assertLanguageAvailable(session.appUser.id, existing.language);
     const copiedContent = cloneCvContent(existing.current_content);
 
     const created = await this.masterCvRepository.create({
@@ -235,6 +248,12 @@ export class MasterCvService {
       rendering: renderingResult.rendering,
       presentation: renderingResult.presentation
     };
+  }
+
+  private async assertLanguageAvailable(userId: string, language: string) {
+    if (!["en", "tr"].includes(language)) throw new ValidationError("Choose English or Turkish for your CV");
+    const existing = (await this.masterCvRepository.listByUser(userId)).find(cv => cv.module_type === "standard" && normalizeLanguage(cv.language) === language);
+    if (existing) throw new ConflictError("A master CV already exists in this language", { existing_master_cv_id: existing.id, reason: "master_language_exists" });
   }
 
   private async requireMasterCv(userId: string, masterCvId: string): Promise<MasterCvRecord> {

@@ -118,6 +118,7 @@ interface PdfBlock {
 }
 
 interface Style {
+  language: string;
   fontScale: number;
   spacingScale: number;
   layoutScale: number;
@@ -587,7 +588,7 @@ const buildSectionTitleBlock = (
   const ruleGap = isRuled ? 3 * style.fontScale : 0;
   const ruleThickness = 0.7;
 
-  const displayTitle = isRuled ? title.toUpperCase() : title;
+  const displayTitle = isRuled ? title.toLocaleUpperCase(style.language) : title;
 
   const totalLines = appendTextLines(lines, displayTitle, {
     font: style.fonts.bold,
@@ -894,7 +895,7 @@ const buildSectionBlocks = (
     const ruleGap = isRuled ? 3 * style.fontScale : 0;
     const ruleThickness = 0.7;
     let y = 0;
-    y += appendTextLines(lines, isRuled ? section.title.toUpperCase() : section.title, {
+    y += appendTextLines(lines, isRuled ? section.title.toLocaleUpperCase(style.language) : section.title, {
       font: style.fonts.bold,
       fontWeight: "bold",
       size: style.sectionTitleSize,
@@ -1347,6 +1348,7 @@ export const generatePdfDocument = async (
   const mainColumnWidth = Math.max(0, innerWidth - sidebarOuterWidth - TWO_COLUMN_GAP);
 
   const style: Style = {
+    language: documentModel.language?.toLowerCase().startsWith("tr") ? "tr" : "en",
     fontScale,
     spacingScale,
     layoutScale,

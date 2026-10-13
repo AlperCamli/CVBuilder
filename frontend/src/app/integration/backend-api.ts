@@ -1,3 +1,4 @@
+import type { BillingPrices } from "./regional-pricing";
 import type { ApiClient } from "./api-client";
 import type {
   JobStatus,
@@ -8,6 +9,7 @@ import type {
   BlockRevisionListResponse,
   BillingPlanResponseData,
   CreateCheckoutResponseData,
+  CvContent,
   CoverLetterDetail,
   CoverLetterExportDetailResponse,
   CoverLetterExportDownloadResponse,
@@ -145,6 +147,7 @@ export interface CvPhotoAccess {
 }
 
 export interface CreateMasterCvFromImportInput {
+  update_master_cv_id?: string;
   title?: string;
   language?: string;
   template_id?: string | null;
@@ -260,6 +263,7 @@ export interface ImportImproveInput {
 }
 
 export interface CoverLetterGenerationInput {
+  language?: "en" | "tr";
   job_title: string;
   company_name?: string;
   job_description?: string;
@@ -277,12 +281,14 @@ export interface CreateExportInput {
 }
 
 export interface UpdateCoverLetterContentInput {
+  language?: "en" | "tr";
   title?: string;
   content: string;
   status?: "draft" | "ready" | "archived";
 }
 
 export interface BillingCheckoutInput {
+  pricing_quote?: string;
   plan_code: "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";
   success_url?: string;
   cancel_url?: string;
@@ -305,6 +311,15 @@ export class BackendApi {
   patchMe(payload: UpdateMeInput): Promise<{ user: MeResponseData["user"] }> {
     return this.client.patch<{ user: MeResponseData["user"] }, UpdateMeInput>("/me", payload);
   }
+
+  cancelBillingCheckout(): Promise<{ cancelled: boolean }> { return this.client.post("/billing/checkout/cancel"); }
+  getMasterDocumentRevisions(masterId: string): Promise<MasterDocumentRevision[]> { return this.client.get(`/master-cvs/${masterId}/revisions`); }
+  restoreMasterDocumentRevision(masterId: string, revisionId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/revisions/${revisionId}/restore`); }
+  getBillingPrices(): Promise<BillingPrices> { return this.client.get<BillingPrices>("/billing/prices"); }
+  startTranslation(masterId: string, target_language: "en" | "tr"): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language }); }
+  executeTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/execute`); }
+  getTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}`); }
+  applyTranslation(masterId: string, runId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/apply`); }
 
   getSettings(): Promise<{ settings: SettingsResponseData }> {
     return this.client.get<{ settings: SettingsResponseData }>("/me/settings");
@@ -818,3 +833,7 @@ export class BackendApi {
     return this.client.post<CreatePortalResponseData, BillingPortalInput>("/billing/portal", payload);
   }
 }
+
+export interface TranslationRun { id: string; status: "pending" | "completed" | "failed"; progress_stage: string; error_message: string | null; output_payload: { current_content: CvContent } | null; }
+
+export interface MasterDocumentRevision { id: string; revision_number: number; created_at: string; content_snapshot: CvContent; }

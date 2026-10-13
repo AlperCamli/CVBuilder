@@ -1,3 +1,5 @@
+import { verifyGeoContext } from "./geo-context";
+import type { AppConfig } from "../../shared/config/env";
 import type { Request, Response } from "express";
 import { UnauthorizedError, ValidationError } from "../../shared/errors/app-error";
 import { sendSuccess } from "../../shared/http/response";
@@ -13,7 +15,18 @@ const requireSession = (request: Request) => {
 };
 
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(private readonly billingService: BillingService, private readonly config?: AppConfig) {}
+
+  private country(request: Request) {
+    const trustedContextRequired = process.env.VERCEL === "1" || process.env.NODE_ENV === "production" || this.config?.appEnv === "production" || this.config?.appEnv === "staging";
+    return verifyGeoContext(request, this.config?.billing.geoSecret ?? null, trustedContextRequired, this.config?.billing.developmentCountry);
+  }
+
+  getPrices = asyncHandler(async (request: Request, response: Response) => {
+    response.setHeader("Cache-Control", "no-store");
+    const data = await this.billingService.getPrices(this.country(request), request.auth?.appUser.id);
+    sendSuccess(response, data);
+  });
 
   getPlan = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.billingService.getBillingPlan(requireSession(request).appUser.id);
@@ -33,11 +46,14 @@ export class BillingController {
   postCheckout = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.billingService.createCheckoutSession(
       requireSession(request).appUser.id,
-      request.body
+      request.body,
+      this.country(request)
     );
 
     sendSuccess(response, data);
   });
+
+  postCancelCheckout = asyncHandler(async (request: Request, response: Response) => { sendSuccess(response, await this.billingService.cancelCheckout(requireSession(request).appUser.id)); });
 
   postPortal = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.billingService.createPortalSession(requireSession(request).appUser.id, request.body);

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { InternalServerError } from "../../shared/errors/app-error";
+import { ConflictError, InternalServerError } from "../../shared/errors/app-error";
 import type { CvContent, CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { MasterCvRecord, MasterCvSourceType } from "../../shared/types/domain";
 
@@ -24,9 +24,12 @@ export interface CreateMasterCvPayload {
 }
 
 export interface MasterCvRepository {
+  listDocumentRevisions?(userId: string, masterId: string): Promise<Array<{ id: string; revision_number: number; created_at: string; content_snapshot: CvContent }>>;
+  restoreDocumentRevision?(userId: string, masterId: string, revisionId: string): Promise<MasterCvRecord>;
   listByUser(userId: string): Promise<MasterCvRecord[]>;
   findById(userId: string, masterCvId: string): Promise<MasterCvRecord | null>;
   findAnyById(userId: string, masterCvId: string): Promise<MasterCvRecord | null>;
+  replaceFromImport?(userId: string, masterId: string, importId: string, content: CvContent, summary: string | null): Promise<MasterCvRecord>;
   create(payload: CreateMasterCvPayload): Promise<MasterCvRecord>;
   updateById(userId: string, masterCvId: string, payload: MasterCvUpdatePayload): Promise<MasterCvRecord | null>;
   softDelete(userId: string, masterCvId: string): Promise<boolean>;
@@ -86,6 +89,18 @@ const toDbContent = (content: CvContent): Record<string, unknown> => {
 
 export class SupabaseMasterCvRepository implements MasterCvRepository {
   constructor(private readonly supabaseClient: SupabaseClient) {}
+
+  async listDocumentRevisions(userId: string, masterId: string) {
+    const { data, error } = await this.supabaseClient.from("cv_block_revisions").select("id,revision_number,created_at,content_snapshot").eq("user_id", userId).eq("master_cv_id", masterId).eq("block_id", "__document__").order("revision_number", { ascending: false });
+    if (error) throw new InternalServerError("Could not load document revisions");
+    return (data ?? []) as Array<{ id: string; revision_number: number; created_at: string; content_snapshot: CvContent }>;
+  }
+
+  async restoreDocumentRevision(userId: string, masterId: string, revisionId: string): Promise<MasterCvRecord> {
+    const { data, error } = await this.supabaseClient.rpc("restore_master_document_revision", { p_user_id: userId, p_master_id: masterId, p_revision_id: revisionId }).single();
+    if (error) throw new ConflictError("Could not restore this document revision");
+    return toMasterCvRecord(data as Record<string, unknown>);
+  }
 
   async listByUser(userId: string): Promise<MasterCvRecord[]> {
     const { data, error } = await this.supabaseClient
@@ -147,6 +162,12 @@ export class SupabaseMasterCvRepository implements MasterCvRepository {
     return toMasterCvRecord(data as Record<string, unknown>);
   }
 
+  async replaceFromImport(userId: string, masterId: string, importId: string, content: CvContent, summary: string | null): Promise<MasterCvRecord> {
+    const { data, error } = await this.supabaseClient.rpc("replace_master_from_import", { p_user_id: userId, p_master_id: masterId, p_import_id: importId, p_content: toDbContent(content), p_summary: summary }).single();
+    if (error) throw new ConflictError("Could not update the existing master CV", { reason: error.message });
+    return toMasterCvRecord(data as Record<string, unknown>);
+  }
+
   async create(payload: CreateMasterCvPayload): Promise<MasterCvRecord> {
     const { data, error } = await this.supabaseClient
       .from("master_cvs")
@@ -164,6 +185,7 @@ export class SupabaseMasterCvRepository implements MasterCvRepository {
       .single();
 
     if (error) {
+      if (error.code === "23505" && error.message.includes("master_language_exists")) throw new ConflictError("A master CV already exists in this language", { existing_master_cv_id: error.details, reason: "master_language_exists" });
       throw new InternalServerError("Failed to create master CV", {
         reason: error.message
       });

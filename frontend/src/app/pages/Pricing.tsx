@@ -1,3 +1,7 @@
+import { useRegionalPricing } from "../integration/regional-pricing";
+import { PricingAvailability } from "../components/PricingAvailability";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router";
@@ -24,6 +28,8 @@ const formatTrialEnd = (iso: string | null): string | null => {
 };
 
 export function Pricing() {
+  const regional = useRegionalPricing();
+  useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
   const location = useLocation();
@@ -63,7 +69,7 @@ export function Pricing() {
         if (err instanceof ApiClientError || err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Failed to load billing details.");
+          setError(t("Failed to load billing details."));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -83,7 +89,7 @@ export function Pricing() {
     try {
       await startStripeCheckout(api, target, { withTrial, source: "pricing_page" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open checkout.");
+      setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusyTarget(null);
     }
   };
@@ -100,13 +106,13 @@ export function Pricing() {
       if (
         err instanceof ApiClientError &&
         err.code === "VALIDATION_ERROR" &&
-        err.message.includes("Start checkout again")
+        err.details?.reason === "provider_customer_not_found"
       ) {
         await startCheckout("weekly");
         return;
       }
 
-      setError(err instanceof Error ? err.message : "Failed to open billing portal.");
+      setError(err instanceof Error ? err.message : t("Failed to open billing portal."));
       setBusyTarget(null);
     }
   };
@@ -174,9 +180,9 @@ export function Pricing() {
       label:
         card.code === "weekly" && trialEligible
           ? "Start 3-day free trial"
-          : `Choose ${card.name.toLowerCase()}`,
+          : t("Choose {{plan}}", { plan: card.name }),
       disabled: false,
-      onClick: () => void startCheckout(card.code)
+      onClick: () => void startCheckout(card.code as CheckoutTarget)
     };
   };
 
@@ -184,19 +190,17 @@ export function Pricing() {
     <div className="p-8">
       <div className="max-w-4xl mx-auto text-center mb-10">
         <h1 className="font-medium mb-3" style={{ fontSize: "28px", color: "var(--color-text-primary)" }}>
-          Choose your plan
-        </h1>
+          {t("Choose your plan")}</h1>
         <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
           {hasPaidPlan
-            ? "You have unlimited access to job-specific CVs, exports, AI rewrites, cover letters, and job tracking."
-            : "Pick a plan by weekly price. Weekly starts with a 3-day trial; monthly and annual unlock the same workflow at a lower weekly equivalent."}
+            ? t("You have unlimited access to job-specific CVs, exports, AI rewrites, cover letters, and job tracking.")
+            : t("Pick a plan by weekly price. Weekly starts with a 3-day trial; monthly and annual unlock the same workflow at a lower weekly equivalent.")}
         </p>
       </div>
 
       {loading && (
         <p className="text-center" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          Loading billing details...
-        </p>
+          {t("Loading billing details...")}</p>
       )}
 
       {isTrialing && trialEnd && (
@@ -206,9 +210,7 @@ export function Pricing() {
         >
           <Sparkles size={16} style={{ color: "var(--color-teal-600)" }} />
           <span style={{ fontSize: "13px", color: "var(--color-teal-800)" }}>
-            You're on a free trial. Your first charge is on <strong>{trialEnd}</strong>. Cancel any time before then in
-            the billing portal.
-          </span>
+            {t("You're on a free trial. Your first charge is on")}{" "}<strong>{trialEnd}</strong>{t(". Cancel any time before then in the billing portal.")}</span>
         </div>
       )}
 
@@ -222,8 +224,7 @@ export function Pricing() {
             fontSize: "13px"
           }}
         >
-          Checkout completed. Refreshing your billing state...
-        </div>
+          {t("Checkout completed. Refreshing your billing state...")}</div>
       )}
 
       {checkoutState === "cancel" && (
@@ -236,8 +237,7 @@ export function Pricing() {
             fontSize: "13px"
           }}
         >
-          Checkout was canceled.
-        </div>
+          {t("Checkout was canceled.")}</div>
       )}
 
       {error && (
@@ -250,14 +250,14 @@ export function Pricing() {
             fontSize: "13px"
           }}
         >
-          {error}
+          {t(error)}
         </div>
       )}
 
       {!loading && (
         <>
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-5 mb-12 items-stretch">
-            {PLAN_CARDS.map((card) => {
+            {regional.cards.map((card) => {
               const cta = resolveCta(card);
               const isBusy =
                 (card.code !== "free" && busyTarget === card.code) ||
@@ -296,21 +296,21 @@ export function Pricing() {
                     {card.name}
                   </h3>
                   <p className="mb-4" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                    {card.description}
+                    {t(card.description)}
                   </p>
                   <div className="mb-6">
                     <span className="font-medium" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
                       {card.weeklyPrice}
                     </span>
                     <span style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                      {" "}/{card.billingPeriod}
+                      {" "}{"/"}{t(card.billingPeriod)}
                     </span>
                     <p className="mt-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                       {card.totalPrice}
                     </p>
                     {card.savings ? (
                       <p className="mt-1 font-medium" style={{ fontSize: "12px", color: "var(--color-teal-700)" }}>
-                        {card.savings}
+                        {t(card.savings)}
                       </p>
                     ) : null}
                   </div>
@@ -328,7 +328,7 @@ export function Pricing() {
                   </ul>
                   <button
                     onClick={cta.onClick}
-                    disabled={cta.disabled || isBusy}
+                    disabled={cta.disabled || isBusy || (card.code !== "free" && !regional.ready)}
                     className="w-full px-6 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                     style={{
                       fontSize: "13px",
@@ -350,7 +350,7 @@ export function Pricing() {
                     }}
                   >
                     {isBusy ? <Loader2 size={14} className="animate-spin" /> : null}
-                    {cta.label}
+                    {t(cta.label)}
                   </button>
                 </div>
               );
@@ -363,28 +363,27 @@ export function Pricing() {
               style={{ borderColor: "var(--color-border-tertiary)" }}
             >
               <h3 className="font-medium mb-3" style={{ fontSize: "16px", color: "var(--color-text-primary)" }}>
-                Current usage snapshot ({usage.period_month})
-              </h3>
+                {t("Current usage snapshot (")}{usage.period_month}{")"}</h3>
               <div
                 className="grid grid-cols-1 md:grid-cols-2 gap-3"
                 style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
               >
                 <div>
-                  Customized generations: {usage.tailored_cv_generations_count}
+                  {t("Customized generations:")}{" "}{usage.tailored_cv_generations_count}
                   {usage.limits.tailored_cv_generations !== null
                     ? ` / ${usage.limits.tailored_cv_generations}`
-                    : " / unlimited"}
+                    : t(" / unlimited")}
                 </div>
                 <div>
-                  Exports: {usage.exports_count}
-                  {usage.limits.exports !== null ? ` / ${usage.limits.exports}` : " / unlimited"}
+                  {t("Exports:")}{" "}{usage.exports_count}
+                  {usage.limits.exports !== null ? ` / ${usage.limits.exports}` : t(" / unlimited")}
                 </div>
                 <div>
-                  AI actions: {usage.ai_actions_count}
-                  {usage.limits.ai_actions !== null ? ` / ${usage.limits.ai_actions}` : " / unlimited"}
+                  {t("AI actions:")}{" "}{usage.ai_actions_count}
+                  {usage.limits.ai_actions !== null ? ` / ${usage.limits.ai_actions}` : t(" / unlimited")}
                 </div>
                 <div>
-                  Remaining storage: {entitlements.remaining.storage_bytes ?? "unlimited"}
+                  {t("Remaining storage:")}{" "}{entitlements.remaining.storage_bytes ?? "unlimited"}
                 </div>
               </div>
             </div>

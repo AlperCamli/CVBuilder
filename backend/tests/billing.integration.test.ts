@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app/create-app";
 import { AuthService } from "../src/modules/auth/auth.service";
 import { BillingService } from "../src/modules/billing/billing.service";
+import type { RegionalPricingService } from "../src/modules/billing/regional-pricing";
 import type {
   StripeCheckoutSessionSummary,
   StripeCustomerSummary,
@@ -22,6 +23,8 @@ import {
 } from "./helpers/in-memory";
 
 class FakeStripeGateway implements StripeGateway {
+  public providerHasActiveSubscription = false;
+  async hasBillableSubscription(): Promise<boolean> { return this.providerHasActiveSubscription; }
   private readonly customers = new Map<string, StripeCustomerSummary>();
   private readonly subscriptions = new Map<string, StripeSubscriptionSummary>();
   public lastCheckoutPriceId: string | null | undefined;
@@ -109,7 +112,7 @@ class FakeStripeGateway implements StripeGateway {
   }
 }
 
-const buildApp = () => {
+const buildApp = (regionalPricing?: RegionalPricingService) => {
   const config = createTestConfig();
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
@@ -143,6 +146,7 @@ const buildApp = () => {
     stripeGateway,
     {
       provider: config.billing.provider,
+      regionalPricing,
       checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
       checkoutCancelUrl: config.billing.checkoutCancelUrl,
       portalReturnUrl: config.billing.portalReturnUrl,
@@ -170,6 +174,33 @@ const buildApp = () => {
 };
 
 describe("billing endpoints", () => {
+  it("requires explicit paid intent if regional checkout is no longer trial eligible", async () => {
+    const regional = {
+      resolveCheckout: async () => ({ priceId: "price_tr_week", market: "TR", currency: "try", amount: 6990 }),
+      reserveCheckout: async () => ({ nonce: "checkout-reservation", expires_at: new Date(Date.now() + 31 * 60_000).toISOString() }),
+      rememberCheckout: async () => {}
+    } as unknown as RegionalPricingService;
+    const { app, stripeGateway, subscriptionsRepository, usersRepository } = buildApp(regional);
+    await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+    subscriptionsRepository.seed({ id: "prior-trial", user_id: user!.id, provider: "stripe", provider_customer_id: "cus_prior", provider_subscription_id: "sub_prior", plan_code: "weekly", status: "canceled", current_period_start: "2026-01-01T00:00:00.000Z", current_period_end: "2026-01-04T00:00:00.000Z", cancel_at_period_end: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-04T00:00:00.000Z" });
+    const declined = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", pricing_quote: "signed-quote" });
+    expect(declined.status).toBe(409);
+    expect(declined.body.error.details.reason).toBe("pricing_changed");
+    expect(stripeGateway.lastCheckoutPriceId).toBeUndefined();
+    const confirmed = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", pricing_quote: "signed-quote", with_trial: false });
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body.data.trial_applied).toBe(false);
+    expect(confirmed.body.data.currency).toBe("try");
+    expect(stripeGateway.lastCheckoutPriceId).toBe("price_tr_week");
+  });
+  it("blocks another checkout when Stripe has an active subscription before its webhook arrives", async () => {
+    const { app, stripeGateway } = buildApp();
+    stripeGateway.providerHasActiveSubscription = true;
+    const response = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly" });
+    expect(response.status).toBe(409);
+    expect(stripeGateway.lastCheckoutPriceId).toBeUndefined();
+  });
   it("requires auth for protected billing routes", async () => {
     const { app } = buildApp();
 

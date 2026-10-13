@@ -8,7 +8,8 @@ export interface IntegrationConfig {
 const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, "");
 
 const defaultApiBaseUrl = import.meta.env.PROD ? "/api/v1" : "http://localhost:4000/api/v1";
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl;
+// Production API calls pass through the frontend server boundary that signs geo context.
+const rawApiBaseUrl = import.meta.env.PROD ? "/api/v1" : import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl;
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const rawImportsBucket = import.meta.env.VITE_SUPABASE_IMPORTS_BUCKET ?? "imports";

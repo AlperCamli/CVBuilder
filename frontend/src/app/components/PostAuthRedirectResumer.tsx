@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { consumePostAuthRedirect } from "../integration/post-auth-redirect";
+import { isLanguagePreview } from "../localization/i18n";
 
 // Mounted inside the authenticated layout (like CheckoutIntentResumer). Catches
 // auth round-trips that re-enter the app without passing through /auth/callback —
@@ -11,6 +12,7 @@ export function PostAuthRedirectResumer() {
   const location = useLocation();
 
   useEffect(() => {
+    if (isLanguagePreview()) return;
     const destination = consumePostAuthRedirect();
     if (destination && destination !== `${location.pathname}${location.search}`) {
       navigate(destination, { replace: true });

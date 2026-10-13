@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -24,6 +26,7 @@ export function TutorialGuide({
   message,
   position = "right",
 }: TutorialGuideProps) {
+  useTranslation();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
   const [visible, setVisible] = useState(false);
@@ -190,7 +193,7 @@ export function TutorialGuide({
       >
         <button
           onClick={handleClose}
-          aria-label="Dismiss guide"
+          aria-label={t("Dismiss guide")}
           className="absolute top-2.5 right-2.5 p-1.5 rounded-lg transition-colors"
           style={{ color: "var(--color-text-secondary)" }}
           onMouseEnter={(event) => {

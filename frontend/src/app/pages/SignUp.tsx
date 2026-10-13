@@ -1,3 +1,6 @@
+import { publicPath } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
@@ -9,6 +12,7 @@ import { hasSupabaseConfig } from "../integration/config";
 import { trackSignupPageView } from "../integration/analytics";
 
 export function SignUp() {
+  useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { signUp, signInWithGoogle } = useAuth();
@@ -75,7 +79,7 @@ export function SignUp() {
     <div className="min-h-screen flex">
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
-          <Link to="/" className="flex items-center gap-2 mb-12">
+          <Link to={publicPath("/")} className="flex items-center gap-2 mb-12">
             <img
               src="/images/logo.png"
               alt=""
@@ -85,17 +89,14 @@ export function SignUp() {
               className="w-8 h-8 rounded-lg object-contain shrink-0"
             />
             <span className="font-semibold" style={{ fontSize: "20px", color: "var(--color-text-primary)" }}>
-              jobspecificCV
-            </span>
+              {t("jobspecificCV")}</span>
           </Link>
 
           <div className="mb-8">
             <h1 className="font-semibold mb-2" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
-              Create your account
-            </h1>
+              {t("Create your account")}</h1>
             <p style={{ fontSize: "15px", color: "var(--color-text-secondary)" }}>
-              Start building professional resumes in minutes
-            </p>
+              {t("Start building professional resumes in minutes")}</p>
           </div>
 
           {!hasSupabaseConfig && (
@@ -108,9 +109,7 @@ export function SignUp() {
                 fontSize: "13px"
               }}
             >
-              Missing frontend Supabase env vars. Set `VITE_SUPABASE_URL` and
-              `VITE_SUPABASE_ANON_KEY`.
-            </div>
+              {t("Missing frontend Supabase env vars. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.")}</div>
           )}
 
           {errorMessage && (
@@ -123,7 +122,7 @@ export function SignUp() {
                 fontSize: "13px"
               }}
             >
-              {errorMessage}
+              {t(errorMessage)}
             </div>
           )}
 
@@ -137,7 +136,7 @@ export function SignUp() {
                 fontSize: "13px"
               }}
             >
-              {successMessage}
+              {t(successMessage)}
             </div>
           )}
 
@@ -161,20 +160,19 @@ export function SignUp() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
             </svg>
-            {isGoogleLoading ? "Connecting..." : "Continue with Google"}
+            {isGoogleLoading ? t("Connecting...") : t("Continue with Google")}
           </button>
 
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px" style={{ background: "var(--color-border-secondary)" }} />
-            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>or</span>
+            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{"or"}</span>
             <div className="flex-1 h-px" style={{ background: "var(--color-border-secondary)" }} />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="name" className="block mb-2 font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                Full name
-              </label>
+                {t("Full name")}</label>
               <div className="relative">
                 <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
@@ -182,7 +180,7 @@ export function SignUp() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe"
+                  placeholder={t("John Doe")}
                   required
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg border"
                   style={{
@@ -196,8 +194,7 @@ export function SignUp() {
 
             <div>
               <label htmlFor="email" className="block mb-2 font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                Email address
-              </label>
+                {t("Email address")}</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
@@ -205,7 +202,7 @@ export function SignUp() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t("you@example.com")}
                   required
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg border"
                   style={{
@@ -219,8 +216,7 @@ export function SignUp() {
 
             <div>
               <label htmlFor="password" className="block mb-2 font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                Password
-              </label>
+                {t("Password")}</label>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
@@ -228,7 +224,7 @@ export function SignUp() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create a strong password"
+                  placeholder={t("Create a strong password")}
                   required
                   minLength={8}
                   className="w-full pl-10 pr-12 py-2.5 rounded-lg border"
@@ -251,8 +247,7 @@ export function SignUp() {
                 </button>
               </div>
               <p className="mt-1.5" style={{ fontSize: "12px", color: "var(--color-text-tertiary)" }}>
-                Must be at least 8 characters
-              </p>
+                {t("Must be at least 8 characters")}</p>
             </div>
 
             <button
@@ -266,20 +261,19 @@ export function SignUp() {
                 cursor: isLoading || !hasSupabaseConfig ? "not-allowed" : "pointer"
               }}
             >
-              {isLoading ? "Creating account..." : "Create account"}
+              {isLoading ? t("Creating account...") : t("Create account")}
             </button>
           </form>
 
           <p className="text-center mt-8" style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            Already have an account?{" "}
+            {t("Already have an account?")}{" "}
             <Link
               to="/signin"
               state={location.state}
               className="font-medium transition-colors"
               style={{ color: "var(--color-teal-600)" }}
             >
-              Sign in
-            </Link>
+              {t("Sign in")}</Link>
           </p>
         </div>
       </div>
@@ -287,11 +281,9 @@ export function SignUp() {
       <div className="hidden lg:flex flex-1 items-center justify-center p-12" style={{ background: "var(--color-teal-600)" }}>
         <div className="max-w-lg text-white">
           <h2 className="font-semibold mb-6" style={{ fontSize: "36px" }}>
-            Join thousands of job seekers
-          </h2>
+            {t("Join thousands of job seekers")}</h2>
           <p className="mb-8" style={{ fontSize: "16px", lineHeight: "1.6", opacity: 0.9 }}>
-            Create your account and start building professional resumes customized for each role.
-          </p>
+            {t("Create your account and start building professional resumes customized for each role.")}</p>
         </div>
       </div>
     </div>

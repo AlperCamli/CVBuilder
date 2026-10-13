@@ -9,6 +9,16 @@
       "source": "/medical",
       "destination": "/app/medical",
       "permanent": false
+    },
+    {
+      "source": "/guided-journey",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/guided-journey/pricing",
+      "destination": "/pricing",
+      "permanent": true
     }
   ],
   "headers": [
@@ -121,5 +131,12 @@
       "source": "/((?!api/)(?!.*\\..*).*)",
       "destination": "/spa-fallback"
     }
-  ]
+  ],
+  "proxy": {
+    "entrypoint": "proxy.ts",
+    "matcher": [
+      "/api/v1/billing/prices",
+      "/api/v1/billing/checkout"
+    ]
+  }
 }

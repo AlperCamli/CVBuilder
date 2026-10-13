@@ -28,6 +28,9 @@ function routeJsonLdScripts(route) {
 }
 
 export function injectRouteMetadata(html, route) {
+  html = html.replace(/<html([^>]*)lang="[^"]*"/, `<html$1lang="${route.language || "en"}"`);
+  html = html.replace(/\s*<link[^>]+data-locale-alternate="true"[^>]*>/g, "");
+  if (route.alternates) html = html.replace("</head>", Object.entries(route.alternates).map(([language, url]) => `<link rel="alternate" hreflang="${language}" href="${escapeAttribute(url)}" data-locale-alternate="true" />`).join("\n") + "\n</head>");
   let next = html.replace(
     /\s*<script type="application\/ld\+json" data-route-json-ld="true">[\s\S]*?<\/script>/g,
     ""

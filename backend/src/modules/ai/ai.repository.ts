@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { InternalServerError } from "../../shared/errors/app-error";
+import { ConflictError, InternalServerError } from "../../shared/errors/app-error";
 import type {
   AiFlowType,
   AiRunProgressStage,
@@ -53,6 +53,7 @@ export interface UpdateAiSuggestionPayload {
 }
 
 export interface AiRepository {
+  completeTranslationRun?(userId: string, runId: string, output: Record<string, unknown>, maxAiActions: number | null, tokenUsage: { input_tokens: number; output_tokens: number; total_tokens: number } | null): Promise<AiRunRecord | null>;
   createRun(payload: CreateAiRunPayload): Promise<AiRunRecord>;
   recordRunUsage?(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }): Promise<void>;
   claimRunForExecution(userId: string, runId: string): Promise<AiRunRecord | null>;
@@ -270,6 +271,14 @@ export class SupabaseAiRepository implements AiRepository {
     }
 
     return toAiRunRecord(data as Record<string, unknown>);
+  }
+
+  async completeTranslationRun(userId: string, runId: string, output: Record<string, unknown>, maxAiActions: number | null, tokenUsage: { input_tokens: number; output_tokens: number; total_tokens: number } | null): Promise<AiRunRecord | null> {
+    const { data, error } = await this.supabaseClient.rpc("complete_cv_translation_run", { p_user_id: userId, p_run_id: runId, p_output: output, p_max_ai_actions: maxAiActions, p_token_usage: tokenUsage }).maybeSingle();
+    if (error?.message.includes("translation_allowance_exhausted")) throw new ConflictError("AI action allowance was used by another request. Review your usage and retry.", { reason: "ai_allowance_exhausted" });
+    if (error) throw new InternalServerError("Failed to complete translation", { reason: error.message });
+    const row = data as Record<string, unknown> | null;
+    return row?.id ? toAiRunRecord(row) : null;
   }
 
   async failRun(

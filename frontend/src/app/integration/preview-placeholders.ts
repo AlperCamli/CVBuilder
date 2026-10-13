@@ -1,3 +1,4 @@
+import { i18n } from "../localization/i18n";
 // Preview-only field placeholders. Before the editor requests a rendering preview, empty
 // fields get filled with their label wrapped in marker brackets, so the preview shows
 // where each field lands on the template before the user writes anything. The markers are
@@ -15,7 +16,7 @@ export const PLACEHOLDER_CLOSE = "⟫";
 // Matches one marked placeholder segment inside presentation text.
 export const PLACEHOLDER_SEGMENT_RE = /⟪([^⟫]*)⟫/g;
 
-const mark = (text: string): string => `${PLACEHOLDER_OPEN}${text}${PLACEHOLDER_CLOSE}`;
+const mark = (text: string, language = "en"): string => `${PLACEHOLDER_OPEN}${i18n.getFixedT(language)(text, { defaultValue: text })}${PLACEHOLDER_CLOSE}`;
 
 interface SectionPlaceholders {
   blockType: string;
@@ -168,13 +169,13 @@ const isEmptyValue = (value: CvJsonValue | undefined): boolean => {
   return false;
 };
 
-const toPlaceholderValue = (placeholder: string | string[]): CvJsonValue =>
-  Array.isArray(placeholder) ? placeholder.map((entry) => mark(entry)) : mark(placeholder);
+const toPlaceholderValue = (placeholder: string | string[], language = "en"): CvJsonValue =>
+  Array.isArray(placeholder) ? placeholder.map((entry) => mark(entry, language)) : mark(placeholder, language);
 
-const buildPlaceholderBlock = (sectionType: string, entry: SectionPlaceholders): CvBlock => {
+const buildPlaceholderBlock = (sectionType: string, entry: SectionPlaceholders, language = "en"): CvBlock => {
   const fields: Record<string, CvJsonValue> = {};
   for (const [key, placeholder] of Object.entries(entry.fields)) {
-    fields[key] = toPlaceholderValue(placeholder);
+    fields[key] = toPlaceholderValue(placeholder, language);
   }
 
   return {
@@ -191,11 +192,12 @@ export const injectPreviewPlaceholders = (
   content: CvContent,
   moduleType: string | null | undefined
 ): CvContent => {
+  const language = moduleType === "medical_uk" ? "en" : content.language;
   const next: CvContent = JSON.parse(JSON.stringify(content));
 
   for (const [key, placeholder] of Object.entries(METADATA_PLACEHOLDERS)) {
     if (isEmptyValue(next.metadata[key])) {
-      next.metadata[key] = mark(placeholder);
+      next.metadata[key] = mark(placeholder, language);
     }
   }
 
@@ -207,7 +209,7 @@ export const injectPreviewPlaceholders = (
     const entry = resolveSectionPlaceholders(section.type, moduleType);
 
     if (section.blocks.length === 0) {
-      section.blocks.push(buildPlaceholderBlock(section.type, entry));
+      section.blocks.push(buildPlaceholderBlock(section.type, entry, language));
       continue;
     }
 
@@ -218,7 +220,7 @@ export const injectPreviewPlaceholders = (
 
       for (const [key, placeholder] of Object.entries(entry.fields)) {
         if (isEmptyValue(block.fields[key])) {
-          block.fields[key] = toPlaceholderValue(placeholder);
+          block.fields[key] = toPlaceholderValue(placeholder, language);
         }
       }
     }

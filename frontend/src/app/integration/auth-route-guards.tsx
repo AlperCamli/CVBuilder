@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import type { ReactNode } from "react";
 import { useAuth } from "./auth-context";
@@ -21,12 +23,12 @@ const AuthLoadingScreen = () => (
         fontSize: "13px"
       }}
     >
-      Loading session...
-    </div>
+      {t("Loading session...")}</div>
   </div>
 );
 
 export const RequireAuth = ({ children }: { children: ReactNode }) => {
+  useTranslation();
   const { initialized, isAuthenticated } = useAuth();
   const location = useLocation();
 
@@ -50,6 +52,7 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
 };
 
 export const RedirectIfAuthenticated = ({ children }: { children: ReactNode }) => {
+  useTranslation();
   const { initialized, isAuthenticated } = useAuth();
   const location = useLocation();
 

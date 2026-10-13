@@ -76,6 +76,7 @@ export interface ExportDocumentSection {
 }
 
 export interface ExportDocumentModel {
+  language?: string;
   title: string;
   subtitle: string | null;
   contact_line: string | null;
@@ -180,6 +181,7 @@ export const mapPresentationToExportDocument = (
 
   return {
     title,
+    language: presentation.language ?? "en",
     subtitle,
     contact_line: contactItems.length > 0 ? contactItems.join(" • ") : null,
     contact_items: contactItems,

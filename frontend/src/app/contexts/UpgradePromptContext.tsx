@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { UpgradePromptModal } from "../components/UpgradePromptModal";
 
@@ -34,6 +36,7 @@ interface UpgradePromptContextValue {
 const UpgradePromptContext = createContext<UpgradePromptContextValue | undefined>(undefined);
 
 export function UpgradePromptProvider({ children }: { children: ReactNode }) {
+  useTranslation();
   const [state, setState] = useState<UpgradePromptState | null>(null);
 
   const showUpgradePrompt = useCallback(

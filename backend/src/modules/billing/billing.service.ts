@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+import type { RegionalPricingService, PurchasePlan } from "./regional-pricing";
 import {
+  ConflictError,
   BillingConfigurationError,
   BillingPlanValidationError,
   BillingProviderError,
@@ -36,6 +39,7 @@ import type {
 } from "./stripe-gateway";
 
 interface BillingServiceOptions {
+  regionalPricing?: RegionalPricingService;
   provider: "stripe";
   checkoutSuccessUrl: string;
   checkoutCancelUrl: string;
@@ -150,6 +154,19 @@ export class BillingService {
     private readonly options: BillingServiceOptions
   ) {}
 
+  async cancelCheckout(userId: string) { await this.options.regionalPricing?.cancelCheckout(userId); return { cancelled: true }; }
+
+  async getPrices(country: string | null, userId?: string) {
+    if (!this.options.regionalPricing) throw new BillingConfigurationError("Regional pricing is not configured");
+    return this.options.regionalPricing.getPrices(country, userId);
+  }
+
+  private validateReturnUrl(url: string | undefined, fallback: string): string {
+    const resolved = url ?? fallback;
+    if (new URL(resolved).origin !== new URL(fallback).origin) throw new ValidationError("Invalid billing return URL");
+    return resolved;
+  }
+
   async getBillingPlan(userId: string): Promise<BillingPlanResponseData> {
     const snapshot = await this.getSnapshot(userId);
     const trialEligible = await this.isUserTrialEligible(userId);
@@ -236,19 +253,27 @@ export class BillingService {
 
   async createCheckoutSession(
     userId: string,
-    input: CreateCheckoutInput
+    input: CreateCheckoutInput,
+    country: string | null = null
   ): Promise<CreateCheckoutResponseData> {
     const user = await this.requireUser(userId);
     const stripeGateway = this.requireStripeGateway();
     const plan = this.requirePurchasablePlan(input.plan_code);
 
-    if (!plan.stripe_price_id) {
+    const successUrl = this.validateReturnUrl(input.success_url, this.options.checkoutSuccessUrl);
+    const cancelUrl = this.validateReturnUrl(input.cancel_url, this.options.checkoutCancelUrl);
+    const active = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (active && ["active", "trialing"].includes(active.status)) throw new ConflictError("You already have an active subscription. Manage it in the billing portal.");
+    const regional = this.options.regionalPricing ? await this.options.regionalPricing.resolveCheckout(userId, country, input.pricing_quote, plan.code as PurchasePlan) : null;
+    if (!regional && !plan.stripe_price_id) {
       throw new BillingConfigurationError("Stripe price id is missing for requested plan", {
         plan_code: plan.code
       });
     }
 
     const customerId = await this.ensureStripeCustomerId(user);
+    // Also consult Stripe: webhook delivery may lag behind a completed Checkout.
+    if (await stripeGateway.hasBillableSubscription?.(customerId)) throw new ConflictError("You already have a subscription. Manage it in the billing portal.");
 
     // Only grant a free trial when: the plan supports one, trials are enabled,
     // the caller did not explicitly opt out (`with_trial: false`), and the user
@@ -257,28 +282,33 @@ export class BillingService {
     // starts a brand-new trial once the previous one lapses.
     let trialPeriodDays: number | null = null;
 
-    if (
-      plan.trial_supported &&
-      input.with_trial !== false &&
-      (await this.isUserTrialEligible(user.id))
-    ) {
-      trialPeriodDays = this.options.trialPeriodDays;
+    if (plan.trial_supported && input.with_trial !== false) {
+      const eligible = await this.isUserTrialEligible(user.id);
+      if (regional && !eligible) throw new ConflictError("Trial eligibility changed. Review the paid price before continuing.", { reason: "pricing_changed" });
+      if (eligible) trialPeriodDays = this.options.trialPeriodDays;
     }
 
+    const reservation = await this.options.regionalPricing?.reserveCheckout(userId, createHash("sha256").update(JSON.stringify({ price: regional?.priceId, trial: trialPeriodDays, successUrl, cancelUrl })).digest("hex"));
     const checkoutSession = await stripeGateway.createCheckoutSession({
       customer_id: customerId,
-      price_id: plan.stripe_price_id,
-      success_url: input.success_url ?? this.options.checkoutSuccessUrl,
-      cancel_url: input.cancel_url ?? this.options.checkoutCancelUrl,
+      price_id: regional?.priceId ?? plan.stripe_price_id!,
+      currency: regional?.currency,
+      locale: user.locale,
+      idempotency_key: reservation?.nonce,
+      expires_at: reservation ? Math.floor(Date.parse(reservation.expires_at) / 1000) : undefined,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       client_reference_id: user.id,
       mode: "subscription",
       trial_period_days: trialPeriodDays,
       metadata: {
         app_user_id: user.id,
-        plan_code: plan.code
+        plan_code: plan.code,
+        ...(regional ? { billing_market: regional.market, billing_currency: regional.currency } : {})
       }
     });
 
+    if (reservation) await this.options.regionalPricing!.rememberCheckout(userId, reservation.nonce, checkoutSession.id);
     if (!checkoutSession.url) {
       throw new BillingProviderError("Stripe checkout session did not return a URL", {
         checkout_session_id: checkoutSession.id
@@ -286,6 +316,7 @@ export class BillingService {
     }
 
     return {
+      ...(regional ? { currency: regional.currency, amount: regional.amount } : {}),
       checkout_url: checkoutSession.url,
       checkout_session_id: checkoutSession.id,
       plan_code: plan.code,
@@ -318,7 +349,9 @@ export class BillingService {
 
     const portalSession = await stripeGateway.createPortalSession({
       customer_id: customerId,
-      return_url: input.return_url ?? this.options.portalReturnUrl
+      return_url: this.validateReturnUrl(input.return_url, this.options.portalReturnUrl),
+      configuration: await this.options.regionalPricing?.portal(userId),
+      locale: (await this.requireUser(userId)).locale
     });
 
     return {
@@ -513,6 +546,7 @@ export class BillingService {
   }
 
   private resolvePlanCodeFromPrices(priceIds: string[]): PlanCode {
+    for (const id of priceIds) { const regional = this.options.regionalPricing?.planFromPrice(id); if (regional) return regional; }
     const plans = Object.values(this.entitlementsService.getPlanCatalog());
 
     for (const plan of plans) {
@@ -567,6 +601,7 @@ export class BillingService {
     const createdCustomer = await stripeGateway.createCustomer({
       email: user.email,
       name: user.full_name,
+      idempotency_key: `cv-customer-${user.id}-${existingCustomerId ?? "initial"}`,
       metadata: {
         app_user_id: user.id
       }

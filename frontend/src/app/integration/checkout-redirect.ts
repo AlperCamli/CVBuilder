@@ -1,5 +1,7 @@
+import { ApiClientError } from "./api-error";
+import { previouslyDisplayedPrices, rememberDisplayedPrices, formatMoney } from "./regional-pricing";
+import { translate as t } from "../localization/i18n";
 import type { CheckoutTarget } from "../../content/pricing";
-import { PLAN_VALUE_USD } from "../../content/pricing";
 import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 
@@ -13,18 +15,42 @@ export async function startStripeCheckout(
   options?: { withTrial?: boolean; source?: string }
 ): Promise<void> {
   const base = window.location.origin;
-  const response = await api.createBillingCheckout({
+  const prices = await api.getBillingPrices();
+  if (!prices.available || !prices.quote) throw new Error(t("Pricing is temporarily unavailable"));
+  const planPrice = prices.plans.find(item => item.code === plan)!;
+  const displayed = previouslyDisplayedPrices();
+  let withTrial = options?.withTrial;
+  if (displayed && displayed !== JSON.stringify({ market: prices.market, currency: prices.currency, plans: prices.plans })) {
+    rememberDisplayedPrices(prices);
+    if (!window.confirm(t("Pricing changed. Continue with {{price}}?", { price: formatMoney(planPrice.amount, prices.currency) }))) throw new Error(t("Review the current prices before continuing."));
+  }
+  if (plan === "weekly" && withTrial !== false) {
+    const billing = await api.getBillingPlan();
+    if (!billing.trial_eligible) {
+      if (!window.confirm(t("A free trial is not available for this account. Continue with the paid weekly plan at {{price}}?", { price: formatMoney(planPrice.amount, prices.currency) }))) throw new Error(t("Review the current prices before continuing."));
+      withTrial = false;
+    }
+  }
+  const checkoutInput = {
+    pricing_quote: prices.quote,
     plan_code: plan,
     success_url: `${base}/app/pricing?checkout=success`,
     cancel_url: `${base}/app/pricing?checkout=cancel`,
-    ...(plan === "weekly" && options?.withTrial === false ? { with_trial: false } : {})
-  });
+    ...(plan === "weekly" && withTrial === false ? { with_trial: false } : {})
+  };
+  let response;
+  try { response = await api.createBillingCheckout(checkoutInput); }
+  catch (error) {
+    if (!(error instanceof ApiClientError) || error.details?.reason !== "checkout_pending") throw error;
+    await api.cancelBillingCheckout();
+    response = await api.createBillingCheckout(checkoutInput);
+  }
 
   const value =
     response.plan_code === "weekly" && response.trial_applied
       ? 0
-      : PLAN_VALUE_USD[response.plan_code as CheckoutTarget];
-  const currency = value !== undefined ? "USD" : undefined;
+      : (response.amount ?? planPrice.amount) / 100;
+  const currency = (response.currency ?? prices.currency).toUpperCase();
 
   rememberCheckoutAttribution({
     checkout_session_id: response.checkout_session_id,

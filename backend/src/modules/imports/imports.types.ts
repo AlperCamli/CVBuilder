@@ -35,6 +35,7 @@ export interface UpdateImportResultInput {
 }
 
 export interface CreateMasterCvFromImportInput {
+  update_master_cv_id?: string;
   title?: string;
   language?: string;
   template_id?: string | null;

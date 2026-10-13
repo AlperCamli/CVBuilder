@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 
@@ -11,8 +13,9 @@ export type BreadcrumbItem = {
 // route (src/content/seo-meta.mjs) — Google expects marked-up breadcrumbs to
 // be represented on the page.
 export function Breadcrumbs({ items, className }: { items: BreadcrumbItem[]; className?: string }) {
+  useTranslation();
   return (
-    <nav aria-label="Breadcrumb" className={className}>
+    <nav aria-label={t("Breadcrumb")} className={className}>
       <ol
         className="flex flex-wrap items-center gap-y-1"
         style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}

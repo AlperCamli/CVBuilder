@@ -22,6 +22,7 @@ export const coverLetterJobIdParamSchema = z
 
 export const updateCoverLetterContentSchema = z
   .object({
+    language: z.enum(["en", "tr"]).optional(),
     title: z.string().trim().min(1).max(160).optional(),
     content: z.string().max(40000),
     status: z.enum(["draft", "ready", "archived"]).optional()

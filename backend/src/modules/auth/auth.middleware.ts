@@ -1,3 +1,5 @@
+import { withLocale } from "../../shared/localization/request-locale";
+import { normalizeLanguage } from "../../shared/localization/languages";
 import type { NextFunction, Request, Response, RequestHandler } from "express";
 import { UnauthorizedError } from "../../shared/errors/app-error";
 import type { AuthService } from "./auth.service";
@@ -27,10 +29,10 @@ export const createAuthMiddleware = (authService: AuthService): RequestHandler =
 
       // Processing guards and route handlers share this authenticated request.
       // Database/privacy guards still check current state before sensitive work.
-      if (request.auth) { next(); return; }
+      if (request.auth) { withLocale(normalizeLanguage(request.header("accept-language")) ?? request.auth.appUser.locale, next); return; }
 
       request.auth = await authService.authenticate(token);
-      next();
+      withLocale(normalizeLanguage(request.header("accept-language")) ?? request.auth.appUser.locale, next);
     } catch (error) {
       next(error);
     }

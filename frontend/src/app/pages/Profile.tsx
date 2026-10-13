@@ -1,3 +1,7 @@
+import { chooseLocale } from "../localization/i18n";
+import { localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { AccountPrivacyPanel } from "../components/AccountPrivacyPanel";
 import { User, CreditCard, Bell, Globe, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,6 +11,7 @@ import type { BillingPlanResponseData, MeResponseData, SettingsResponseData, Usa
 import { ApiClientError } from "../integration/api-error";
 
 export function Profile() {
+  const { i18n } = useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api, refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -22,7 +27,8 @@ export function Profile() {
 
   const [fullName, setFullName] = useState("");
   const [defaultCvLanguage, setDefaultCvLanguage] = useState("en");
-  const [locale] = useState<"en">("en");
+  const [locale, setLocale] = useState<"en" | "tr">(i18n.language === "tr" ? "tr" : "en");
+  useEffect(() => { setLocale(i18n.language === "tr" ? "tr" : "en"); }, [i18n.language]);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [applicationReminders, setApplicationReminders] = useState(true);
 
@@ -55,7 +61,7 @@ export function Profile() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load profile.");
+        setError(t("Failed to load profile."));
       }
     } finally {
       setLoading(false);
@@ -78,7 +84,6 @@ export function Profile() {
           default_cv_language: defaultCvLanguage
         }),
         api.patchSettings({
-          locale: "en",
           default_cv_language: defaultCvLanguage,
           onboarding_completed: settings?.onboarding_completed ?? true
         })
@@ -90,7 +95,7 @@ export function Profile() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to save profile.");
+        setError(t("Failed to save profile."));
       }
     } finally {
       setSaving(false);
@@ -113,7 +118,7 @@ export function Profile() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open checkout.");
+        setError(t("Failed to open checkout."));
       }
       setBillingBusy(false);
     }
@@ -132,7 +137,7 @@ export function Profile() {
       if (
         err instanceof ApiClientError &&
         err.code === "VALIDATION_ERROR" &&
-        err.message.includes("Start checkout again")
+        err.details?.reason === "provider_customer_not_found"
       ) {
         await openCheckout();
         return;
@@ -141,7 +146,7 @@ export function Profile() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open billing portal.");
+        setError(t("Failed to open billing portal."));
       }
       setBillingBusy(false);
     }
@@ -153,14 +158,12 @@ export function Profile() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          Profile & Settings
-        </h1>
+          {t("Profile & Settings")}</h1>
         <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          Manage your account preferences
-        </p>
+          {t("Manage your account preferences")}</p>
       </div>
 
-      {loading && <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading profile...</p>}
+      {loading && <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Loading profile...")}</p>}
 
       {error && (
         <div
@@ -172,7 +175,7 @@ export function Profile() {
             fontSize: "13px"
           }}
         >
-          {error}
+          {t(error)}
         </div>
       )}
 
@@ -202,18 +205,15 @@ export function Profile() {
               </div>
               <div className="flex-1">
                 <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Account information
-                </h3>
+                  {t("Account information")}</h3>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Update your personal details
-                </p>
+                  {t("Update your personal details")}</p>
               </div>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                  Full name
-                </label>
+                  {t("Full name")}</label>
                 <input
                   type="text"
                   value={fullName}
@@ -228,13 +228,11 @@ export function Profile() {
               </div>
               <div>
                 <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                  Email
-                </label>
+                  {t("Email")}</label>
                 <input
                   type="email"
                   value={meData?.user.email ?? ""}
-                  disabled
-                  className="w-full px-3 py-2 rounded-lg border"
+                    className="w-full px-3 py-2 rounded-lg border"
                   style={{
                     fontSize: "13px",
                     borderColor: "var(--color-border-secondary)",
@@ -255,7 +253,7 @@ export function Profile() {
                 }}
               >
                 {saving && <Loader2 size={14} className="animate-spin" />}
-                {saving ? "Saving..." : "Save changes"}
+                {saving ? t("Saving...") : t("Save changes")}
               </button>
             </div>
           </div>
@@ -270,27 +268,24 @@ export function Profile() {
               </div>
               <div className="flex-1">
                 <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Current plan
-                </h3>
+                  {t("Current plan")}</h3>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Manage your subscription and billing
-                </p>
+                  {t("Manage your subscription and billing")}</p>
               </div>
             </div>
             <div className="flex items-center justify-between p-4 rounded-lg" style={{ background: "var(--color-background-secondary)" }}>
               <div>
                 <p className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                  {planCode.toUpperCase()} Plan
-                </p>
+                  {planCode.toUpperCase()} {" "}{t("Plan")}</p>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                   {usage
                     ? `${usage.remaining.tailored_cv_generations ?? "∞"} customized CV generations remaining this month`
-                    : "Loading usage..."}
+                    : t("Loading usage...")}
                 </p>
                 {planCode !== "free" && meData?.current_plan.current_period_end && (
                   <p style={{ fontSize: "12px", color: meData.current_plan.cancel_at_period_end ? "var(--color-red-600)" : "var(--color-teal-700)", marginTop: "4px" }}>
-                    {meData.current_plan.cancel_at_period_end ? "Expires on " : "Renews on "}
-                    {new Date(meData.current_plan.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                    {meData.current_plan.cancel_at_period_end ? t("Expires on ") : t("Renews on ")}
+                    {new Date(meData.current_plan.current_period_end).toLocaleDateString(localeCode(), { month: "long", day: "numeric", year: "numeric" })}
                   </p>
                 )}
               </div>
@@ -307,7 +302,7 @@ export function Profile() {
                       opacity: billingBusy ? 0.7 : 1
                     }}
                   >
-                    {billingBusy ? "Redirecting..." : "Start weekly plan"}
+                    {billingBusy ? t("Redirecting...") : t("Start weekly plan")}
                   </button>
                 ) : (
                   <button
@@ -321,7 +316,7 @@ export function Profile() {
                       opacity: billingBusy ? 0.7 : 1
                     }}
                   >
-                    {billingBusy ? "Redirecting..." : "Manage billing"}
+                    {billingBusy ? t("Redirecting...") : t("Manage billing")}
                   </button>
                 )}
               </div>
@@ -338,16 +333,14 @@ export function Profile() {
               </div>
               <div className="flex-1">
                 <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Notifications
-                </h3>
+                  {t("Notifications")}</h3>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  UI preferences (local only in Phase 4.5)
-                </p>
+                  {t("UI preferences (local only in Phase 4.5)")}</p>
               </div>
             </div>
             <div className="space-y-3">
               <label className="flex items-center justify-between p-3 rounded-lg cursor-pointer" style={{ background: "var(--color-background-secondary)" }}>
-                <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>Email notifications</span>
+                <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>{t("Email notifications")}</span>
                 <input
                   type="checkbox"
                   checked={emailNotifications}
@@ -356,7 +349,7 @@ export function Profile() {
                 />
               </label>
               <label className="flex items-center justify-between p-3 rounded-lg cursor-pointer" style={{ background: "var(--color-background-secondary)" }}>
-                <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>Application reminders</span>
+                <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>{t("Application reminders")}</span>
                 <input
                   type="checkbox"
                   checked={applicationReminders}
@@ -377,16 +370,15 @@ export function Profile() {
               </div>
               <div className="flex-1">
                 <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Locale & default CV language
-                </h3>
+                  {t("Locale & default CV language")}</h3>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Saved via `/me/settings`
-                </p>
+                  {t("Saved via `/me/settings`")}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <select
                 value={locale}
+                onChange={event => { const value = event.target.value as "en" | "tr"; setLocale(value); chooseLocale(value); }}
                 className="w-full px-3 py-2 rounded-lg border"
                 disabled
                 style={{
@@ -396,13 +388,14 @@ export function Profile() {
                   color: "var(--color-text-secondary)"
                 }}
               >
-                <option value="en">English</option>
+                <option value="en">{t("English")}</option>
+                <option value="tr">{t("Turkish")}</option>
               </select>
 
               <input
                 value={defaultCvLanguage}
                 onChange={(event) => setDefaultCvLanguage(event.target.value)}
-                placeholder="Default CV language (e.g. en)"
+                placeholder={t("Default CV language (e.g. en)")}
                 className="w-full px-3 py-2 rounded-lg border"
                 style={{
                   fontSize: "13px",

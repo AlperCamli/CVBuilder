@@ -40,25 +40,38 @@ export interface CreateStripeCustomerInput {
   email: string;
   name: string | null;
   metadata: Record<string, string>;
+  idempotency_key?: string;
 }
 
 export interface CreateStripeCheckoutInput {
   customer_id: string;
   price_id: string;
+  currency?: string;
   success_url: string;
   cancel_url: string;
   client_reference_id: string;
   metadata: Record<string, string>;
   mode?: "subscription" | "payment";
   trial_period_days?: number | null;
+  locale?: "en" | "tr";
+  idempotency_key?: string;
+  expires_at?: number;
 }
 
 export interface CreateStripePortalInput {
+  configuration?: string;
+  locale?: "en" | "tr";
   customer_id: string;
   return_url: string;
 }
 
+export interface StripePriceSummary { id: string; active: boolean; product_id: string; currency: string; amount: number; interval: string | null; interval_count: number | null }
+
 export interface StripeGateway {
+  hasBillableSubscription?(customerId: string): Promise<boolean>;
+  expireCheckoutSession?(sessionId: string): Promise<void>;
+  retrievePrice?(priceId: string): Promise<StripePriceSummary | null>;
+  retrievePortalConfiguration?(id: string): Promise<{ active: boolean; updates_enabled: boolean; price_ids: string[] }>;
   cancelCustomerSubscriptions?(customerId: string, deadline?: number): Promise<void>;
   createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary>;
   createCheckoutSession(input: CreateStripeCheckoutInput): Promise<StripeCheckoutSessionSummary>;
@@ -149,13 +162,27 @@ export class StripeBillingGateway implements StripeGateway {
     await this.stripe.customers.del(customerId, options());
   }
 
+  async expireCheckoutSession(sessionId: string): Promise<void> { await this.stripe.checkout.sessions.expire(sessionId); }
+
+  async retrievePortalConfiguration(id: string) {
+    const config = await this.stripe.billingPortal.configurations.retrieve(id, {
+      expand: ["features.subscription_update.products"]
+    });
+    return { active: config.active, updates_enabled: config.features.subscription_update.enabled, price_ids: (config.features.subscription_update.products ?? []).flatMap(product => product.prices) };
+  }
+
+  async retrievePrice(priceId: string): Promise<StripePriceSummary | null> {
+    const price = await this.stripe.prices.retrieve(priceId);
+    return { id: price.id, active: price.active, product_id: typeof price.product === "string" ? price.product : price.product.id, currency: price.currency, amount: price.unit_amount ?? 0, interval: price.recurring?.interval ?? null, interval_count: price.recurring?.interval_count ?? null };
+  }
+
   async createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary> {
     try {
       const customer = await this.stripe.customers.create({
         email: input.email,
         name: input.name ?? undefined,
         metadata: input.metadata
-      });
+      }, input.idempotency_key ? { idempotencyKey: input.idempotency_key } : undefined);
 
       return {
         id: customer.id,
@@ -170,12 +197,26 @@ export class StripeBillingGateway implements StripeGateway {
     }
   }
 
+  async hasBillableSubscription(customerId: string): Promise<boolean> {
+    try {
+      for await (const subscription of this.stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 })) {
+        if (["active", "trialing", "past_due", "unpaid", "paused"].includes(subscription.status)) return true;
+      }
+      return false;
+    } catch {
+      throw new BillingProviderError("Could not verify existing subscriptions");
+    }
+  }
+
   async createCheckoutSession(input: CreateStripeCheckoutInput): Promise<StripeCheckoutSessionSummary> {
     try {
       const mode = input.mode ?? "subscription";
 
       const baseParams: Stripe.Checkout.SessionCreateParams = {
         mode,
+        currency: input.currency,
+        locale: input.locale,
+        expires_at: input.expires_at,
         customer: input.customer_id,
         success_url: input.success_url,
         cancel_url: input.cancel_url,
@@ -205,7 +246,7 @@ export class StripeBillingGateway implements StripeGateway {
         };
       }
 
-      const session = await this.stripe.checkout.sessions.create(baseParams);
+      const session = await this.stripe.checkout.sessions.create(baseParams, input.idempotency_key ? { idempotencyKey: input.idempotency_key } : undefined);
 
       return {
         id: session.id,
@@ -224,6 +265,8 @@ export class StripeBillingGateway implements StripeGateway {
   async createPortalSession(input: CreateStripePortalInput): Promise<{ url: string }> {
     try {
       const session = await this.stripe.billingPortal.sessions.create({
+        configuration: input.configuration,
+        locale: input.locale,
         customer: input.customer_id,
         return_url: input.return_url
       });

@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useId, useMemo, useRef } from "react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
@@ -34,6 +36,7 @@ interface AIBlockInstructionBubbleProps {
 export function AIBlockInstructionBubble({
   anchor, instruction, loading, error, onInstructionChange, onRun, onClose
 }: AIBlockInstructionBubbleProps) {
+  useTranslation();
   const inputId = useId();
   const titleId = useId();
   const hintId = useId();
@@ -68,15 +71,14 @@ export function AIBlockInstructionBubble({
         <div className="mb-3 flex items-center justify-between gap-2">
           <p id={titleId} className="flex items-center gap-2 text-sm font-medium">
             <Sparkles size={15} style={{ color: "var(--color-accent-primary)" }} />
-            Improve with AI
-          </p>
-          <button type="button" aria-label="Close AI editing" onClick={onClose} disabled={loading}
+            {t("Improve with AI")}</p>
+          <button type="button" aria-label={t("Close AI editing")} onClick={onClose} disabled={loading}
             className="rounded-md p-1 hover:bg-black/5 focus-visible:ring-2 disabled:opacity-50">
             <X size={16} />
           </button>
         </div>
         <form onSubmit={(event) => { event.preventDefault(); if (canSubmit) onRun("improve", instruction.trim()); }}>
-          <label htmlFor={inputId} className="sr-only">How should AI change this block?</label>
+          <label htmlFor={inputId} className="sr-only">{t("How should AI change this block?")}</label>
           <div className="relative">
             <textarea
               ref={inputRef}
@@ -86,7 +88,7 @@ export function AIBlockInstructionBubble({
               value={instruction}
               disabled={loading}
               aria-describedby={hintId}
-              placeholder="How should this block change? e.g. Focus on my leadership experience"
+              placeholder={t("How should this block change? e.g. Focus on my leadership experience")}
               onChange={(event) => onInstructionChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -97,28 +99,27 @@ export function AIBlockInstructionBubble({
               className="w-full resize-none rounded-xl border p-3 pr-12 text-sm outline-none focus:ring-2 focus:ring-violet-300 disabled:opacity-60"
               style={{ borderColor: "var(--color-border-tertiary)", background: "var(--color-background-secondary)" }}
             />
-            <button type="submit" disabled={!canSubmit} aria-label="Apply AI instruction"
+            <button type="submit" disabled={!canSubmit} aria-label={t("Apply AI instruction")}
               className="absolute bottom-3 right-3 flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-700 focus-visible:ring-2 focus-visible:ring-violet-300 disabled:opacity-40">
               {loading ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={15} />}
             </button>
           </div>
           <p id={hintId} className="mt-1 text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
-            Enter to apply · Shift + Enter for a new line
-          </p>
+            {t("Enter to apply · Shift + Enter for a new line")}</p>
         </form>
-        <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Quick AI edits">
+        <div className="mt-3 flex flex-wrap gap-1.5" aria-label={t("Quick AI edits")}>
           {QUICK_ACTIONS.map((item) => (
             <button key={item.label} type="button" disabled={loading}
               onClick={() => onRun(item.action, item.instruction)}
               className="rounded-full border px-2.5 py-1.5 text-xs transition-colors hover:bg-violet-50 hover:text-violet-700 focus-visible:ring-2 focus-visible:ring-violet-300 disabled:opacity-50"
               style={{ borderColor: "var(--color-border-tertiary)" }}>
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
         </div>
-        {error ? <p role="alert" className="mt-3 text-xs text-red-600">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 text-xs text-red-600">{t(error)}</p> : null}
         <p role="status" className="mt-3 text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
-          {loading ? "Updating this block…" : "Changes apply to this block. Use its version arrows to undo."}
+          {loading ? t("Updating this block…") : t("Changes apply to this block. Use its version arrows to undo.")}
         </p>
       </PopoverContent>
     </Popover>

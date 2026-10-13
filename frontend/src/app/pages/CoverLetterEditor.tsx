@@ -1,3 +1,6 @@
+import { LANGUAGES, localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Save, Download, Sparkles, Loader2, FileText } from "lucide-react";
@@ -14,6 +17,7 @@ interface CoverLetterDraft {
   coverLetterId: string;
   title: string;
   content: string;
+  language?: "en" | "tr";
   updatedAt: string;
 }
 
@@ -22,7 +26,7 @@ const formatDateTime = (value: string | null | undefined): string => {
     return "-";
   }
 
-  return new Date(value).toLocaleString("en-US", {
+  return new Date(value).toLocaleString(localeCode(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -77,6 +81,7 @@ const clearDraft = (coverLetterId: string): void => {
 };
 
 export function CoverLetterEditor() {
+  useTranslation();
   const navigate = useNavigate();
   const { jobId } = useParams();
   const { setSidebarVisible } = useSidebar();
@@ -86,6 +91,7 @@ export function CoverLetterEditor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [letterLanguage, setLetterLanguage] = useState<"en" | "tr">("en");
   const [coverLetter, setCoverLetter] = useState<CoverLetterDetail | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -122,7 +128,7 @@ export function CoverLetterEditor() {
 
   const loadCoverLetter = async () => {
     if (!jobId) {
-      setError("Job id is missing.");
+      setError(t("Job id is missing."));
       setLoading(false);
       return;
     }
@@ -135,6 +141,7 @@ export function CoverLetterEditor() {
     try {
       const detail = await api.upsertCoverLetterByJob(jobId);
       setCoverLetter(detail);
+      setLetterLanguage(detail.language ?? "en");
       setTitle(detail.title);
       setContent(detail.content);
       setLastSavedAt(detail.updated_at);
@@ -143,6 +150,7 @@ export function CoverLetterEditor() {
       if (draft) {
         setTitle(draft.title);
         setContent(draft.content);
+        setLetterLanguage(draft.language ?? detail.language ?? "en");
         setDirty(true);
         setRestoredDraftAt(draft.updatedAt);
       }
@@ -154,7 +162,7 @@ export function CoverLetterEditor() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load cover letter.");
+        setError(t("Failed to load cover letter."));
       }
     } finally {
       setLoading(false);
@@ -175,9 +183,10 @@ export function CoverLetterEditor() {
       coverLetterId: coverLetter.id,
       title,
       content,
+      language: letterLanguage,
       updatedAt: new Date().toISOString()
     });
-  }, [coverLetter?.id, content, dirty, title]);
+  }, [coverLetter?.id, content, dirty, title, letterLanguage]);
 
   const persistCoverLetter = async (trigger: "manual" | "auto"): Promise<boolean> => {
     if (!coverLetter?.id) {
@@ -196,7 +205,8 @@ export function CoverLetterEditor() {
     try {
       const updated = await api.putCoverLetterContent(targetId, {
         title,
-        content
+        content,
+        language: letterLanguage
       });
 
       setCoverLetter(updated);
@@ -211,7 +221,7 @@ export function CoverLetterEditor() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to save cover letter.");
+        setError(t("Failed to save cover letter."));
       }
       return false;
     } finally {
@@ -235,7 +245,7 @@ export function CoverLetterEditor() {
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [autoSaving, coverLetter?.id, content, dirty, loading, saving, title]);
+  }, [autoSaving, coverLetter?.id, content, dirty, loading, saving, title, letterLanguage]);
 
   const handleExport = async (format: "pdf" | "docx") => {
     if (!coverLetter?.id) {
@@ -303,7 +313,7 @@ export function CoverLetterEditor() {
 
   const handleGenerateWithAi = async () => {
     if (!coverLetter?.job?.tailored_cv_id) {
-      setError("A customized CV must be linked to this job to generate a cover letter.");
+      setError(t("A customized CV must be linked to this job to generate a cover letter."));
       return;
     }
 
@@ -313,10 +323,11 @@ export function CoverLetterEditor() {
     try {
       const companyName = coverLetter.job.company_name.trim();
       const generated = await api.postGenerateCoverLetter({
+        language: letterLanguage,
         job_title: coverLetter.job.job_title,
         ...(companyName ? { company_name: companyName } : {}),
-        job_description: coverLetter.job.job_description,
-        tailored_cv_id: coverLetter.job.tailored_cv_id
+        job_description: coverLetter.job.job_description ?? undefined,
+        tailored_cv_id: coverLetter.job.tailored_cv_id ?? undefined
       });
 
       setTitle(generated.title);
@@ -332,7 +343,7 @@ export function CoverLetterEditor() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("AI Generation failed.");
+        setError(t("AI Generation failed."));
       }
     } finally {
       setGenerating(false);
@@ -361,7 +372,7 @@ export function CoverLetterEditor() {
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>Loading cover letter...</p>
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>{t("Loading cover letter...")}</p>
       </div>
     );
   }
@@ -382,8 +393,7 @@ export function CoverLetterEditor() {
               color: "white"
             }}
           >
-            Go to Job Tracker
-          </button>
+            {t("Go to Job Tracker")}</button>
         </div>
       </div>
     );
@@ -391,6 +401,7 @@ export function CoverLetterEditor() {
 
   return (
     <div className="h-screen flex flex-col">
+      <div className="px-6 py-2"><label className="text-sm">{t("Document language")}<select className="ml-3 rounded border px-2 py-1" value={letterLanguage} onChange={event => { setLetterLanguage(event.target.value as "en" | "tr"); markDirty(); }}>{LANGUAGES.map(language => <option key={language.code} value={language.code}>{language.name}</option>)}</select></label></div>
       <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -400,7 +411,7 @@ export function CoverLetterEditor() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-medium" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Cover Letter - {coverLetter.job?.company_name?.trim() || coverLetter.job?.job_title || "Job"}
+                  {t("Cover Letter -")}{" "}{coverLetter.job?.company_name?.trim() || coverLetter.job?.job_title || "Job"}
                 </h2>
                 <span
                   className="px-2 py-0.5 rounded-full"
@@ -431,10 +442,10 @@ export function CoverLetterEditor() {
                 opacity: generating || !coverLetter?.job?.tailored_cv_id ? 0.7 : 1,
                 cursor: generating || !coverLetter?.job?.tailored_cv_id ? "not-allowed" : "pointer"
               }}
-              title={!coverLetter?.job?.tailored_cv_id ? "A customized CV must be linked to the job first." : "Generate with AI"}
+              title={!coverLetter?.job?.tailored_cv_id ? t("A customized CV must be linked to the job first.") : t("Generate with AI")}
             >
               {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {generating ? "Generating..." : "Generate with AI"}
+              {generating ? t("Generating...") : t("Generate with AI")}
             </button>
             <button
               onClick={() => void persistCoverLetter("manual")}
@@ -447,7 +458,7 @@ export function CoverLetterEditor() {
               }}
             >
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              {saving ? "Saving..." : "Save"}
+              {saving ? t("Saving...") : t("Save")}
             </button>
             <div className="relative">
               <button
@@ -462,7 +473,7 @@ export function CoverLetterEditor() {
                 }}
               >
                 {exportingFormat ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                {exportingFormat ? "Exporting..." : "Export"}
+                {exportingFormat ? t("Exporting...") : t("Export")}
               </button>
               {showExportMenu && !exportingFormat && (
                 <>
@@ -480,16 +491,14 @@ export function CoverLetterEditor() {
                       style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
                     >
                       <Download size={14} style={{ color: "var(--color-teal-600)" }} />
-                      Export as PDF
-                    </button>
+                      {t("Export as PDF")}</button>
                     <button
                       onClick={() => { setShowExportMenu(false); void handleExport("docx"); }}
                       className="w-full px-4 py-2 text-left flex items-center gap-2 hover:bg-[var(--color-background-secondary)] transition-colors"
                       style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
                     >
                       <FileText size={14} style={{ color: "var(--color-teal-600)" }} />
-                      Export as DOCX
-                    </button>
+                      {t("Export as DOCX")}</button>
                   </div>
                 </>
               )}
@@ -508,7 +517,7 @@ export function CoverLetterEditor() {
             fontSize: "13px"
           }}
         >
-          {error}
+          {t(error)}
         </div>
       )}
 
@@ -522,7 +531,7 @@ export function CoverLetterEditor() {
             fontSize: "13px"
           }}
         >
-          {exportError}
+          {t(exportError)}
         </div>
       )}
 
@@ -545,7 +554,7 @@ export function CoverLetterEditor() {
                     background: "var(--color-background-primary)",
                     color: "var(--color-text-primary)"
                   }}
-                  placeholder="Cover letter title"
+                  placeholder={t("Cover letter title")}
                 />
               </div>
 
@@ -557,8 +566,7 @@ export function CoverLetterEditor() {
                 }}
               >
                 <p style={{ fontSize: "13px", color: "var(--color-teal-800)", lineHeight: "1.5" }}>
-                  <strong>Autosave enabled.</strong> Edits are saved silently and continuously while you type.
-                </p>
+                  <strong>{t("Autosave enabled.")}</strong> {" "}{t("Edits are saved silently and continuously while you type.")}</p>
               </div>
 
               <textarea
@@ -574,15 +582,14 @@ export function CoverLetterEditor() {
                   color: "var(--color-text-primary)",
                   fontFamily: "inherit"
                 }}
-                placeholder="Start writing your cover letter..."
+                placeholder={t("Start writing your cover letter...")}
               />
             </div>
 
             {exportHistory.length > 0 && (
               <div className="mt-4 p-4 rounded-xl border" style={{ borderColor: "var(--color-border-tertiary)", background: "white" }}>
                 <p className="mb-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Recent exports
-                </p>
+                  {t("Recent exports")}</p>
                 <div className="space-y-2">
                   {exportHistory.slice(0, 5).map((item) => (
                     <div
@@ -592,7 +599,7 @@ export function CoverLetterEditor() {
                     >
                       <div>
                         <p style={{ fontSize: "12px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                          {item.format.toUpperCase()} • {item.status}
+                          {item.format.toUpperCase()} {"•"}{item.status}
                         </p>
                         <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                           {formatDateTime(item.created_at)}
@@ -604,8 +611,7 @@ export function CoverLetterEditor() {
                           className="text-xs underline"
                           style={{ color: "var(--color-teal-700)" }}
                         >
-                          Download
-                        </button>
+                          {t("Download")}</button>
                       ) : null}
                     </div>
                   ))}
@@ -631,8 +637,7 @@ export function CoverLetterEditor() {
               className="uppercase tracking-wider mb-4"
               style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
             >
-              Preview
-            </p>
+              {t("Preview")}</p>
             <div
               className="bg-white shadow-lg"
               style={{

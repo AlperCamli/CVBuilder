@@ -1,3 +1,4 @@
+import { ValidationError } from "../../shared/errors/app-error";
 import { NotFoundError } from "../../shared/errors/app-error";
 import {
   buildCvPreview,
@@ -86,7 +87,8 @@ export class TailoredCvService {
     });
 
     const clonedContent = cloneCvContent(sourceMasterCv.current_content);
-    const language = input.language ?? sourceMasterCv.language;
+    if (input.language && input.language !== sourceMasterCv.language) throw new ValidationError("Choose a master CV in the desired language before tailoring");
+    const language = sourceMasterCv.language;
     clonedContent.language = language;
 
     const createdTailoredCv = await this.tailoredCvRepository.create({
@@ -147,11 +149,7 @@ export class TailoredCvService {
       );
     }
 
-    if (input.language && input.language !== existing.current_content.language) {
-      const nextContent = cloneCvContent(existing.current_content);
-      nextContent.language = input.language;
-      updatePayload.current_content = nextContent;
-    }
+    if (input.language && input.language !== existing.language) throw new ValidationError("Use a master CV in the desired language");
 
     const updated = await this.tailoredCvRepository.updateById(
       session.appUser.id,
@@ -178,6 +176,7 @@ export class TailoredCvService {
   ): Promise<TailoredCvDetail> {
     const existing = await this.requireTailoredCv(session.appUser.id, tailoredCvId);
     const content = normalizeCvContent(input.current_content, existing.language);
+    if (content.language !== existing.language) throw new ValidationError("Use a master CV in the desired language");
 
     const updated = await this.tailoredCvRepository.updateById(session.appUser.id, tailoredCvId, {
       current_content: content,

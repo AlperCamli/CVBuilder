@@ -1,5 +1,7 @@
+import { i18n } from "../localization/i18n";
 import type { ApiResponse } from "./api-types";
 import { ApiClientError } from "./api-error";
+import { getStudioRuntime } from "./studio-runtime";
 
 export interface ApiClient {
   get<TResponse>(path: string, options?: RequestOptions): Promise<TResponse>;
@@ -113,10 +115,17 @@ export const createApiClient = (options: CreateApiClientOptions): ApiClient => {
     body?: TBody,
     requestOptions?: RequestOptions
   ): Promise<TResponse> => {
+    const demo = getStudioRuntime();
+    if (demo) {
+      if (method === "GET") return demo.client.get<TResponse>(path, requestOptions);
+      if (method === "DELETE") return demo.client.delete<TResponse>(path, requestOptions);
+      return demo.client[method.toLowerCase() as "post" | "put" | "patch"]<TResponse, TBody>(path, body, requestOptions);
+    }
     const token = await options.getAccessToken();
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "Accept-Language": i18n.language,
       ...(requestOptions?.headers ?? {})
     };
 

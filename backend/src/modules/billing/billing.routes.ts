@@ -10,6 +10,9 @@ export const createBillingRouter = (
 ): Router => {
   const router = Router();
 
+  router.get("/billing/prices", (req, res, next) => {
+    if (req.header("authorization")) authMiddleware(req, res, next); else next();
+  }, billingController.getPrices);
   router.get("/billing/plan", authMiddleware, billingController.getPlan);
   router.get("/billing/usage", authMiddleware, billingController.getUsage);
   router.get("/billing/entitlements", authMiddleware, billingController.getEntitlements);
@@ -20,6 +23,8 @@ export const createBillingRouter = (
     validate({ body: billingCheckoutSchema }),
     billingController.postCheckout
   );
+
+  router.post("/billing/checkout/cancel", authMiddleware, billingController.postCancelCheckout);
 
   router.post(
     "/billing/portal",

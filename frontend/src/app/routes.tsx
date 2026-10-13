@@ -1,3 +1,4 @@
+import { LanguageChooser } from "./localization/LanguageControls";
 import { PrivacyControls } from "./components/PrivacyControls";
 import { AnalyticsNavigation } from "./components/AnalyticsNavigation";
 import {
@@ -6,12 +7,10 @@ import {
   type ComponentType,
   type LazyExoticComponent,
 } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
-import { Landing } from "./pages/Landing";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
 import { CareerArticle } from "./pages/CareerArticle";
-import { PublicPricing } from "./pages/PublicPricing";
 import { NotFound } from "./pages/NotFound";
 import { RouteSeo } from "./seo/route-seo";
 import { DESIGN_TOOLS_ENABLED } from "./design-tools";
@@ -43,6 +42,9 @@ const OnboardingRoute = lazyRoute(() => import("./pages/PreSignupOnboarding"));
 const OnboardingResumeRoute = lazyRoute(() => import("./pages/OnboardingResume").then(({ OnboardingResume }) => ({ default: OnboardingResume })));
 const MascotStudioRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/MascotStudio"))
+  : null;
+const LanguageStudioRoute = DESIGN_TOOLS_ENABLED
+  ? lazyRoute(() => import("./pages/designs/LanguageStudio"))
   : null;
 const DesignExplorationsRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/DesignRoutes"))
@@ -162,14 +164,26 @@ const ProfileRoute = lazyRoute(() =>
   })),
 );
 
-export function AppRoutes() {
+export function AppRoutes({ guidedJourney }: { guidedJourney?: ComponentType } = {}) {
   return (
     <BrowserRouter>
-      <AnalyticsNavigation />
-      <RouteSeo />
-      <RouteElements />
-      <PrivacyControls />
+      <RouteContents guidedJourney={guidedJourney} />
     </BrowserRouter>
+  );
+}
+
+// Keep the same sibling order and useId tree for prerendering and hydration.
+export function RouteContents({ guidedJourney }: { guidedJourney?: ComponentType } = {}) {
+  const { pathname } = useLocation();
+  const reviewTool = DESIGN_TOOLS_ENABLED && /^\/designs\/guided-journey\/(editor|languages)\/?$/.test(pathname);
+  return (
+    <>
+      {!reviewTool && <LanguageChooser />}
+      {!reviewTool && <AnalyticsNavigation />}
+      <RouteSeo />
+      <RouteElements guidedJourney={guidedJourney} />
+      {!reviewTool && <PrivacyControls />}
+    </>
   );
 }
 
@@ -180,9 +194,11 @@ export function RouteElements({
     <Routes>
       <Route path="/privacy" element={lazyElement(PrivacyNoticeRoute)} />
       <Route path="/cookies" element={lazyElement(PrivacyNoticeRoute)} />
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={lazyElement(guidedJourney)} />
+      <Route path="/tr" element={lazyElement(guidedJourney)} />
+      <Route path="/tr/pricing" element={lazyElement(guidedJourney)} />
       <Route path="/onboarding" element={lazyElement(OnboardingRoute)} />
-      <Route path="/pricing" element={<PublicPricing />} />
+      <Route path="/pricing" element={lazyElement(guidedJourney)} />
       <Route path="/guided-journey" element={lazyElement(guidedJourney)} />
       <Route
         path="/guided-journey/pricing"
@@ -193,6 +209,9 @@ export function RouteElements({
           path="/designs/guided-journey/editor"
           element={lazyElement(MascotStudioRoute)}
         />
+      )}
+      {LanguageStudioRoute && (
+        <Route path="/designs/guided-journey/languages" element={lazyElement(LanguageStudioRoute)} />
       )}
       {TemplateExplorationsRoute && (
         <Route path="/designs/guided-journey/templates/:presentation" element={lazyElement(TemplateExplorationsRoute)} />

@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { Sparkles, Zap, Target, TrendingUp, Loader2, RefreshCw, CheckCircle2 } from "lucide-react";
@@ -8,6 +10,7 @@ import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 
 export function AIImproving() {
+  useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { api } = useAuth();
@@ -79,19 +82,7 @@ export function AIImproving() {
 
               await api.patchImportResult(importId, improved.improved_content);
 
-              try {
-                const existing = await api.listMasterCvs();
-                const targetModule = moduleType ?? "standard";
-                for (const cv of existing) {
-                  if ((cv.module_type ?? "standard") === targetModule) {
-                    await api.deleteMasterCv(cv.id);
-                  }
-                }
-              } catch {
-                // Continue and create a new master CV even if cleanup is partial.
-              }
-
-              const converted = await api.createMasterCvFromImport(importId, {});
+              const converted = await api.createMasterCvFromImport(importId, { language: parsedContent.language, ...(location.state?.updateMasterId ? { update_master_cv_id: location.state.updateMasterId } : {}) });
 
               completeStep("create_cv");
 
@@ -122,7 +113,7 @@ export function AIImproving() {
               } else if (err instanceof Error) {
                 setError(err.message);
               } else {
-                setError("AI improvement failed.");
+                setError(t("AI improvement failed."));
               }
               setIsFinalizing(false);
             }
@@ -154,8 +145,7 @@ export function AIImproving() {
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <h1 style={{ fontSize: "24px", color: "var(--color-text-primary)", fontWeight: 600 }}>
-              AI is improving your CV
-            </h1>
+              {t("AI is improving your CV")}</h1>
             <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
               {currentStepData.sublabel}
             </p>
@@ -169,8 +159,7 @@ export function AIImproving() {
               fontWeight: 600
             }}
           >
-            {Math.round(progress)}%
-          </div>
+            {Math.round(progress)}{"%"}</div>
         </div>
 
         <div
@@ -212,7 +201,7 @@ export function AIImproving() {
                 </div>
                 <div className="min-w-0">
                   <p style={{ fontSize: "14px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                    {step.label}
+                    {t(step.label)}
                   </p>
                 </div>
               </div>
@@ -231,8 +220,7 @@ export function AIImproving() {
             }}
           >
             <Loader2 size={14} className="animate-spin" />
-            Applying improvements and creating your Main CV...
-          </div>
+            {t("Applying improvements and creating your Main CV...")}</div>
         )}
 
         {error && (
@@ -246,7 +234,7 @@ export function AIImproving() {
                 fontSize: "13px"
               }}
             >
-              {error}
+              {t(error)}
             </div>
             <button
               type="button"
@@ -259,8 +247,7 @@ export function AIImproving() {
               }}
             >
               <RefreshCw size={14} />
-              Try again
-            </button>
+              {t("Try again")}</button>
           </div>
         )}
       </div>

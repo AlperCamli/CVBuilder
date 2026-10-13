@@ -27,7 +27,8 @@ export const serializeInputPayload = (payload: Record<string, unknown>): string 
 export const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "cv_parse",
-  "professional_summary"
+  "professional_summary",
+  "cv_translate"
 ]);
 
 // Flows whose outputs are large enough to need the heavy output-token cap.
@@ -35,6 +36,7 @@ export const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "import_improve",
   "cv_parse",
+  "cv_translate",
   "cover_letter_generation"
 ]);
 

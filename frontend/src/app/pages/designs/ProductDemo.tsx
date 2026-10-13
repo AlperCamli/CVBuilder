@@ -1,3 +1,5 @@
+import { translate as t } from "../../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
@@ -36,13 +38,14 @@ export function Mascot({
   className?: string;
   eager?: boolean;
 }) {
+  useTranslation();
   return (
     <img
       className={`v2-mascot ${className}`}
       src="/images/designs/mascot/guide.webp"
       width="1024"
       height="1536"
-      alt="Our turquoise mascot is here to help"
+      alt={t("Our turquoise mascot is here to help")}
       loading={eager ? "eager" : "lazy"}
     />
   );
@@ -57,6 +60,7 @@ function Preview({
   fontScale?: number;
   small?: boolean;
 }) {
+  useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(small ? 0.2 : 0.65);
   useEffect(() => {
@@ -101,6 +105,7 @@ export function DemoDialog({
   onClose: () => void;
   children: ReactNode;
 }) {
+  useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   useEffect(() => {
@@ -118,7 +123,7 @@ export function DemoDialog({
     >
       <div className="pd-dialog-top">
         <h3 id={id}>{title}</h3>
-        <button onClick={onClose} aria-label="Close dialog">
+        <button onClick={onClose} aria-label={t("Close dialog")}>
           <X size={20} />
         </button>
       </div>
@@ -146,6 +151,7 @@ export function ProductDemo({
   onModalChange?: (open: boolean) => void;
   hideCompanionCaption?: boolean;
 }) {
+  useTranslation();
   const [localStep, setLocalStep] = useState(1);
   const step = guidedStep ?? localStep;
   const setStep = (next: number) => {
@@ -207,7 +213,7 @@ export function ProductDemo({
     setMobileView("edit");
     setFormat("PDF");
     setModal(null);
-    setNotice("Sample reset.");
+    setNotice(t("Sample reset."));
     onAction?.("reset");
   };
   const applySample = () => {
@@ -218,7 +224,7 @@ export function ProductDemo({
     );
     onAction?.("keywords");
     setStep(1);
-    setNotice("Your sample choices are reflected in the CV.");
+    setNotice(t("Your sample choices are reflected in the CV."));
   };
   return (
     <div
@@ -228,7 +234,7 @@ export function ProductDemo({
       <div
         className="v2-tour-tabs"
         role="group"
-        aria-label="Product tour steps"
+        aria-label={t("Product tour steps")}
       >
         {["Add the job", "Review & edit", "Style & export"].map(
           (label, index) => (
@@ -241,7 +247,7 @@ export function ProductDemo({
               }}
             >
               <span>{index + 1}</span>
-              {label}
+              {t(label)}
             </button>
           ),
         )}
@@ -254,18 +260,17 @@ export function ProductDemo({
             <i />
           </div>
           <span>
-            jobspecificCV <span>/ Interactive sample</span>
+            {t("jobspecificCV")}{" "}<span>{t("/ Interactive sample")}</span>
           </span>
-          <button onClick={reset} aria-label="Reset product demo">
+          <button onClick={reset} aria-label={t("Reset product demo")}>
             <RotateCcw size={12} />
-            Reset
-          </button>
+            {t("Reset")}</button>
         </div>
         <div className="pd-app-shell">
-          <aside className="pd-sidebar" aria-label="Sample application sidebar">
+          <aside className="pd-sidebar" aria-label={t("Sample application sidebar")}>
             <div className="pd-app-brand">
               <img src="/images/logo.png" width="24" height="24" alt="" />
-              <span>jobspecificCV</span>
+              <span>{t("jobspecificCV")}</span>
             </div>
             <div className="pd-sidebar-items">
               {[
@@ -279,14 +284,14 @@ export function ProductDemo({
                   className={name === "My CVs" ? "is-active" : ""}
                 >
                   <Icon size={15} />
-                  {name}
+                  {t(name)}
                 </span>
               ))}
             </div>
             <div className="pd-sidebar-profile">
-              <span>AM</span>
+              <span>{t("AM")}</span>
               <div>
-                Alex Morgan<small>Sample applicant</small>
+                {t("Alex Morgan")}<small>{t("Sample applicant")}</small>
               </div>
             </div>
           </aside>
@@ -296,11 +301,11 @@ export function ProductDemo({
                 <ChevronLeft size={18} />
                 <div>
                   <strong>
-                    Alex Morgan — Data Analyst <span>Customized CV</span>
+                    {t("Alex Morgan — Data Analyst")}{" "}<span>{t("Customized CV")}</span>
                   </strong>
                   <small>
                     <Check size={11} />
-                    {notice || "Your edits stay in this demo"}
+                    {t(notice || "Your edits stay in this demo")}
                   </small>
                 </div>
               </div>
@@ -312,7 +317,7 @@ export function ProductDemo({
                   }}
                 >
                   <LayoutTemplate size={14} />
-                  <span>Choose template</span>
+                  <span>{t("Choose template")}</span>
                 </button>
                 <button
                   onClick={() => {
@@ -321,27 +326,24 @@ export function ProductDemo({
                   }}
                 >
                   <Download size={14} />
-                  Export
-                </button>
+                  {t("Export")}</button>
               </div>
             </div>
             <div
               className="pd-mobile-view"
               role="group"
-              aria-label="Demo panel"
+              aria-label={t("Demo panel")}
             >
               <button
                 aria-pressed={mobileView === "edit"}
                 onClick={() => setMobileView("edit")}
               >
-                Edit
-              </button>
+                {t("Edit")}</button>
               <button
                 aria-pressed={mobileView === "preview"}
                 onClick={() => setMobileView("preview")}
               >
-                Live preview
-              </button>
+                {t("Live preview")}</button>
             </div>
             <div className={`pd-editor-columns pd-show-${mobileView}`}>
               <div className="pd-edit-panel">
@@ -349,17 +351,16 @@ export function ProductDemo({
                   <div className="pd-job-step">
                     <div className="pd-section-card">
                       <span className="pd-role-badge">
-                        Data Analyst · Example Company
-                      </span>
-                      <h3>Job details</h3>
-                      <label htmlFor={`${fieldId}-job`}>Job description</label>
+                        {t("Data Analyst · Example Company")}</span>
+                      <h3>{t("Job details")}</h3>
+                      <label htmlFor={`${fieldId}-job`}>{t("Job description")}</label>
                       <textarea
                         id={`${fieldId}-job`}
                         readOnly
                         rows={4}
                         value="Prepare weekly reports in Excel, analyze sales performance, and share clear insights with the team. SQL experience is also requested."
                       />
-                      <h4>Choose topics and keywords</h4>
+                      <h4>{t("Choose topics and keywords")}</h4>
                       <div className="pd-keywords">
                         {["Excel", "Sales analysis", "Weekly reporting"].map(
                           (skill) => (
@@ -373,19 +374,17 @@ export function ProductDemo({
                             </button>
                           ),
                         )}
-                        <span>SQL · needs evidence</span>
+                        <span>{t("SQL · needs evidence")}</span>
                       </div>
                       <p className="pd-field-note">
                         <ShieldCheck size={13} />
-                        This sample confirms reporting and sales analysis
-                        experience.
-                      </p>
+                        {t("This sample confirms reporting and sales analysis experience.")}</p>
                       <button
                         className="pd-primary"
                         onClick={applySample}
                         disabled={skills.length === 0}
                       >
-                        Apply sample choices <ArrowRight size={14} />
+                        {t("Apply sample choices")}{" "}<ArrowRight size={14} />
                       </button>
                     </div>
                   </div>
@@ -395,16 +394,15 @@ export function ProductDemo({
                       <div className="pd-section-title">
                         <span>
                           <GripVertical size={13} />
-                          Personal details
-                        </span>
+                          {t("Personal details")}</span>
                         <CheckCircle2 size={14} />
                       </div>
                       <div className="pd-person">
-                        <div className="pd-person-avatar">AM</div>
+                        <div className="pd-person-avatar">{t("AM")}</div>
                         <div>
-                          <strong>Alex Morgan</strong>
-                          <p>Data Analyst</p>
-                          <small>alex@example.com · London, UK</small>
+                          <strong>{t("Alex Morgan")}</strong>
+                          <p>{t("Data Analyst")}</p>
+                          <small>{t("alex@example.com · London, UK")}</small>
                         </div>
                       </div>
                     </div>
@@ -412,21 +410,20 @@ export function ProductDemo({
                       <div className="pd-section-title">
                         <span>
                           <GripVertical size={13} />
-                          Professional Summary
-                        </span>
+                          {t("Professional Summary")}</span>
                         <div>
                           <button
                             className="pd-ai-button"
                             onClick={() => setModal("suggestion")}
                           >
                             <Sparkles size={12} />
-                            <span>Improve with AI</span>
+                            <span>{t("Improve with AI")}</span>
                           </button>
                           <button
                             aria-label={
                               showSummary
-                                ? "Hide summary from CV"
-                                : "Show summary in CV"
+                                ? t("Hide summary from CV")
+                                : t("Show summary in CV")
                             }
                             aria-pressed={!showSummary}
                             onClick={() => setShowSummary(!showSummary)}
@@ -441,13 +438,13 @@ export function ProductDemo({
                       </div>
                       {showSummary && (
                         <textarea
-                          aria-label="Professional summary"
+                          aria-label={t("Professional summary")}
                           value={summary}
                           rows={3}
                           onChange={(event) => {
                             setSummary(event.target.value);
                             onAction?.("edit");
-                            setNotice("Preview updated");
+                            setNotice(t("Preview updated"));
                           }}
                         />
                       )}
@@ -456,23 +453,20 @@ export function ProductDemo({
                       <div className="pd-section-title">
                         <span>
                           <GripVertical size={13} />
-                          Work Experience
-                        </span>
+                          {t("Work Experience")}</span>
                         <ChevronDown size={14} />
                       </div>
                       <div className="pd-experience-title">
-                        <strong>Reporting Assistant</strong>
-                        <span>2023 – Present</span>
+                        <strong>{t("Reporting Assistant")}</strong>
+                        <span>{t("2023 – Present")}</span>
                       </div>
                       <p className="pd-employer">
-                        Example Company · London, UK
-                      </p>
+                        {t("Example Company · London, UK")}</p>
                       <label
                         className="pd-sr-only"
                         htmlFor={`${fieldId}-bullet`}
                       >
-                        Experience description
-                      </label>
+                        {t("Experience description")}</label>
                       <textarea
                         className="pd-highlight-field"
                         id={`${fieldId}-bullet`}
@@ -481,20 +475,18 @@ export function ProductDemo({
                         onChange={(event) => {
                           setBullet(event.target.value);
                           onAction?.("edit");
-                          setNotice("Preview updated");
+                          setNotice(t("Preview updated"));
                         }}
                       />
                       <div className="pd-inline-hint">
                         <Sparkles size={12} />
-                        Tailored to your selected keywords
-                      </div>
+                        {t("Tailored to your selected keywords")}</div>
                     </div>
                     <details className="pd-section-card pd-skills-card">
                       <summary>
                         <span>
                           <GripVertical size={13} />
-                          Skills
-                        </span>
+                          {t("Skills")}</span>
                         <ChevronDown size={14} />
                       </summary>
                       <div className="pd-keywords">
@@ -519,8 +511,8 @@ export function ProductDemo({
                 ) : (
                   <div className="pd-style-step">
                     <div className="pd-style-heading">
-                      <h3>Choose your template</h3>
-                      <p>Same experience. A different presentation.</p>
+                      <h3>{t("Choose your template")}</h3>
+                      <p>{t("Same experience. A different presentation.")}</p>
                     </div>
                     <div className="pd-template-options">
                       {DEMO_TEMPLATES.map((item, index) => (
@@ -551,7 +543,7 @@ export function ProductDemo({
                     <div className="pd-section-card pd-font-control">
                       <label htmlFor={`${fieldId}-font`}>
                         <Settings2 size={15} />
-                        Font size <span>{fontScale.toFixed(2)}×</span>
+                        {t("Font size")}{" "}<span>{fontScale.toFixed(2)}{"×"}</span>
                       </label>
                       <input
                         id={`${fieldId}-font`}
@@ -573,17 +565,16 @@ export function ProductDemo({
                       }}
                     >
                       <Download size={14} />
-                      Export your CV
-                    </button>
+                      {t("Export your CV")}</button>
                   </div>
                 )}
               </div>
               <div className="pd-preview-panel">
                 <div className="pd-preview-label">
                   <span>
-                    PREVIEW · {DEMO_TEMPLATES[template].template_name}
+                    {t("PREVIEW ·")}{" "}{DEMO_TEMPLATES[template].template_name}
                   </span>
-                  <span>Sample CV</span>
+                  <span>{t("Sample CV")}</span>
                 </div>
                 <Preview presentation={presentation} fontScale={fontScale} />
               </div>
@@ -595,42 +586,40 @@ export function ProductDemo({
         <div className="v2-demo-guide">
           <img src="/images/logo.png" width="43" height="43" alt="" />
           <p aria-live="polite">{guide}</p>
-          <span>Fictional sample · No account needed</span>
+          <span>{t("Fictional sample · No account needed")}</span>
         </div>
       )}
       {modal === "suggestion" && (
-        <DemoDialog title="Sample AI suggestion" onClose={() => setModal(null)}>
-          <span className="pd-dialog-label">PROFESSIONAL SUMMARY</span>
+        <DemoDialog title={t("Sample AI suggestion")} onClose={() => setModal(null)}>
+          <span className="pd-dialog-label">{t("PROFESSIONAL SUMMARY")}</span>
           <div className="pd-suggestion-before">
-            <small>CURRENT</small>
+            <small>{t("CURRENT")}</small>
             <p>{summary}</p>
           </div>
           <div className="pd-suggestion-after">
-            <small>SUGGESTED</small>
+            <small>{t("SUGGESTED")}</small>
             <p>{suggestion}</p>
           </div>
           <p className="pd-dialog-note">
             <ShieldCheck size={15} />
-            Review the facts before applying a suggestion.
-          </p>
+            {t("Review the facts before applying a suggestion.")}</p>
           <button
             className="pd-primary"
             onClick={() => {
               setSummary(suggestion);
               onAction?.("edit");
-              setNotice("Sample suggestion applied");
+              setNotice(t("Sample suggestion applied"));
               setModal(null);
             }}
           >
-            Apply this suggestion <Check size={15} />
+            {t("Apply this suggestion")}{" "}<Check size={15} />
           </button>
         </DemoDialog>
       )}
       {modal === "export" && (
-        <DemoDialog title="Export CV" onClose={() => setModal(null)}>
+        <DemoDialog title={t("Export CV")} onClose={() => setModal(null)}>
           <p className="pd-export-intro">
-            Choose a format for your finished CV.
-          </p>
+            {t("Choose a format for your finished CV.")}</p>
           <div className="pd-export-options">
             {["PDF", "DOCX"].map((item) => (
               <button
@@ -641,18 +630,16 @@ export function ProductDemo({
                 <FileText size={23} />
                 <strong>{item}</strong>
                 <small>
-                  {item === "PDF" ? "Ready to send" : "Keep editing in Word"}
+                  {item === "PDF" ? t("Ready to send") : t("Keep editing in Word")}
                 </small>
                 {format === item && <CheckCircle2 size={17} />}
               </button>
             ))}
           </div>
           <p className="pd-dialog-note">
-            This is a sample. Create a free account to tailor and export your
-            own CV.
-          </p>
+            {t("This is a sample. Create a free account to tailor and export your own CV.")}</p>
           <StartLink className="pd-primary">
-            Create your free account <ArrowRight size={15} />
+            {t("Create your free account")}{" "}<ArrowRight size={15} />
           </StartLink>
           {onExplorePlans && (
             <button
@@ -662,7 +649,7 @@ export function ProductDemo({
                 onExplorePlans();
               }}
             >
-              Let my guide explain the plans <ArrowRight size={15} />
+              {t("Let my guide explain the plans")}{" "}<ArrowRight size={15} />
             </button>
           )}
         </DemoDialog>

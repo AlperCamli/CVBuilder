@@ -1,3 +1,5 @@
+import { LANGUAGES, translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { FileText, Upload, CheckCircle, Check } from "lucide-react";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
@@ -15,9 +17,11 @@ import {
 import { ONBOARDING_STEPS } from "../onboarding/onboarding-steps";
 
 export function CreateOrUpload() {
+  useTranslation();
   const navigate = useNavigate();
   const { setSidebarVisible } = useSidebar();
   const { active, currentStep, isStepComplete } = useOnboarding();
+  const [showLanguageChoice, setShowLanguageChoice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig | null>(null);
   const [privacyError, setPrivacyError] = useState(false);
@@ -77,6 +81,10 @@ export function CreateOrUpload() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="max-w-5xl w-full">
+        {showLanguageChoice && <div role="group" aria-label={t("Choose CV language")} className="mb-6 p-5 rounded-xl border bg-white">
+          <h2 className="font-medium mb-3">{t("Choose CV language")}</h2>
+          <div className="flex gap-3">{LANGUAGES.map(language => <button key={language.code} type="button" onClick={() => navigate(`/app/cv/master?language=${language.code}`, { state: { createNew: true, language: language.code } })} className="border rounded-lg px-5 py-3">{language.flag} {language.name}</button>)}</div>
+        </div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Left side - Explanation */}
           <div className="flex flex-col justify-center">
@@ -84,20 +92,16 @@ export function CreateOrUpload() {
               className="font-medium mb-4"
               style={{ fontSize: "28px", lineHeight: "1.2", color: "var(--color-text-primary)" }}
             >
-              Start with your current CV
-            </h1>
+              {t("Start with your current CV")}</h1>
             <p className="mb-8" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-              Upload your CV first, then customize it for a real job and export the finished version.
-              This is the fastest path to seeing how jobspecificCV helps.
-            </p>
+              {t("Upload your CV first, then customize it for a real job and export the finished version. This is the fastest path to seeing how jobspecificCV helps.")}</p>
 
             <div className="space-y-5">
               <h3
                 className="uppercase tracking-wider"
                 style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
               >
-                First application checklist
-              </h3>
+                {t("First application checklist")}</h3>
 
               {ONBOARDING_STEPS.map((step) => {
                 const Icon = step.icon;
@@ -124,10 +128,10 @@ export function CreateOrUpload() {
                         textDecoration: done ? "line-through" : undefined
                       }}
                     >
-                      {step.label}
+                      {t(step.label)}
                     </h4>
                     <p style={{ fontSize: "13px", color: isCurrent ? "var(--color-teal-800)" : "var(--color-text-secondary)" }}>
-                      {step.description}
+                      {t(step.description)}
                     </p>
                   </div>
                 </div>
@@ -139,7 +143,7 @@ export function CreateOrUpload() {
           {/* Right side - Action Cards */}
           <div className="flex flex-col gap-4">
             {privacyConfig ? <AiUploadDisclosure config={privacyConfig} /> :
-              <p role="status">{privacyError ? <>We couldn’t load the AI provider information. <button type="button" onClick={() => setPrivacyAttempt(attempt => attempt + 1)}>Retry</button></> : "Loading AI provider information…"}</p>}
+              <p role="status">{privacyError ? <>{t("We couldn’t load the AI provider information.")}{" "}<button type="button" onClick={() => setPrivacyAttempt(attempt => attempt + 1)}>{t("Retry")}</button></> : t("Loading AI provider information…")}</p>}
             <button
               onClick={handleUploadClick}
               disabled={!privacyConfig}
@@ -157,22 +161,19 @@ export function CreateOrUpload() {
                 <Upload size={24} style={{ color: "var(--color-teal-600)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Upload existing CV
-              </h3>
+                {t("Upload existing CV")}</h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Recommended for first-time users. Upload a PDF or DOCX, review the parsed content, then customize it for a job.
-              </p>
+                {t("Recommended for first-time users. Upload a PDF or DOCX, review the parsed content, then customize it for a job.")}</p>
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} style={{ color: "var(--color-teal-600)" }} />
                 <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Fastest path to a tailored export
-                </span>
+                  {t("Fastest path to a tailored export")}</span>
               </div>
             </button>
 
             <Link
-              to="/app/cv/master"
-              onClick={handleCreateClick}
+              to="#choose-language"
+              onClick={(event) => { event.preventDefault(); handleCreateClick(); setShowLanguageChoice(true); }}
               className="p-6 rounded-xl border group transition-all hover:shadow-lg text-left"
               style={{
                 background: "var(--color-background-primary)",
@@ -186,16 +187,13 @@ export function CreateOrUpload() {
                 <FileText size={24} style={{ color: "var(--color-text-secondary)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Create CV manually
-              </h3>
+                {t("Create CV manually")}</h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.
-              </p>
+                {t("Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.")}</p>
               <div className="flex items-center gap-2">
                 <CheckCircle size={14} style={{ color: "var(--color-text-secondary)" }} />
                 <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Structured editor with live preview
-                </span>
+                  {t("Structured editor with live preview")}</span>
               </div>
             </Link>
             

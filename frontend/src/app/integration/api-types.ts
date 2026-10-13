@@ -442,6 +442,7 @@ export interface PresentationSection {
 
 export interface RenderingPresentation {
   version: "v1";
+  language?: string;
   document_title: string | null;
   theme: PresentationTheme;
   header: PresentationHeader;
@@ -656,7 +657,8 @@ export interface AiRunSummary {
     | "import_improve"
     | "professional_summary"
     | "summary"
-    | "improve";
+    | "improve"
+    | "cv_translate";
   provider: string;
   model_name: string;
   status: "pending" | "completed" | "failed";
@@ -1074,6 +1076,7 @@ export interface CoverLetterSummary {
 }
 
 export interface CoverLetterDetail extends CoverLetterSummary {
+  language?: "en" | "tr";
   content: string;
 }
 
@@ -1134,6 +1137,8 @@ export interface BillingPlanResponseData {
 }
 
 export interface CreateCheckoutResponseData {
+  currency?: string;
+  amount?: number;
   checkout_url: string;
   checkout_session_id: string;
   plan_code: "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";

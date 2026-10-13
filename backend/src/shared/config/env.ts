@@ -56,6 +56,19 @@ const envSchema = z
     STRIPE_WEEKLY_PRICE_ID: z.string().min(1).optional(),
     STRIPE_MONTHLY_PRICE_ID: z.string().min(1).optional(),
     STRIPE_ANNUAL_PRICE_ID: z.string().min(1).optional(),
+    BILLING_GEO_SECRET: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
+    BILLING_QUOTE_SECRET: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
+    BILLING_DEVELOPMENT_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("US"),
+    STRIPE_PRODUCT_ID: optionalApiKey,
+    STRIPE_WEEKLY_PRODUCT_ID: optionalApiKey,
+    STRIPE_MONTHLY_PRODUCT_ID: optionalApiKey,
+    STRIPE_ANNUAL_PRODUCT_ID: optionalApiKey,
+    STRIPE_TRY_WEEKLY_PRICE_ID: optionalApiKey,
+    STRIPE_TRY_MONTHLY_PRICE_ID: optionalApiKey,
+    STRIPE_TRY_ANNUAL_PRICE_ID: optionalApiKey,
+    STRIPE_USD_PORTAL_CONFIGURATION_ID: optionalApiKey,
+    STRIPE_TRY_PORTAL_CONFIGURATION_ID: optionalApiKey,
+    STRIPE_HISTORICAL_PRICES: z.string().default("{}"),
     STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
     STRIPE_LIFETIME_PRICE_ID: z.string().min(1).optional(),
     BILLING_TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).max(90).default(3),
@@ -157,6 +170,19 @@ export interface AppConfig {
     photoUrlTtlSeconds: number;
   };
   billing: {
+    geoSecret?: string | null;
+    quoteSecret?: string | null;
+    developmentCountry?: string;
+    productId?: string | null;
+    weeklyProductId?: string | null;
+    monthlyProductId?: string | null;
+    annualProductId?: string | null;
+    tryWeeklyPriceId?: string | null;
+    tryMonthlyPriceId?: string | null;
+    tryAnnualPriceId?: string | null;
+    usdPortalConfigurationId?: string | null;
+    tryPortalConfigurationId?: string | null;
+    historicalPrices?: Record<string, "weekly" | "monthly" | "annual">;
     provider: "stripe";
     stripeSecretKey: string | null;
     stripeWebhookSecret: string | null;
@@ -278,6 +304,19 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       photoUrlTtlSeconds: parsed.data.CV_PHOTO_URL_TTL_SECONDS
     },
     billing: {
+      geoSecret: parsed.data.BILLING_GEO_SECRET ?? null,
+      quoteSecret: parsed.data.BILLING_QUOTE_SECRET ?? null,
+      developmentCountry: parsed.data.BILLING_DEVELOPMENT_COUNTRY,
+      productId: parsed.data.STRIPE_PRODUCT_ID ?? null,
+      weeklyProductId: parsed.data.STRIPE_WEEKLY_PRODUCT_ID ?? null,
+      monthlyProductId: parsed.data.STRIPE_MONTHLY_PRODUCT_ID ?? null,
+      annualProductId: parsed.data.STRIPE_ANNUAL_PRODUCT_ID ?? null,
+      tryWeeklyPriceId: parsed.data.STRIPE_TRY_WEEKLY_PRICE_ID ?? null,
+      tryMonthlyPriceId: parsed.data.STRIPE_TRY_MONTHLY_PRICE_ID ?? null,
+      tryAnnualPriceId: parsed.data.STRIPE_TRY_ANNUAL_PRICE_ID ?? null,
+      usdPortalConfigurationId: parsed.data.STRIPE_USD_PORTAL_CONFIGURATION_ID ?? null,
+      tryPortalConfigurationId: parsed.data.STRIPE_TRY_PORTAL_CONFIGURATION_ID ?? null,
+      historicalPrices: z.record(z.enum(["weekly", "monthly", "annual"])).parse(JSON.parse(parsed.data.STRIPE_HISTORICAL_PRICES)),
       provider: "stripe",
       stripeSecretKey: parsed.data.STRIPE_SECRET_KEY ?? null,
       stripeWebhookSecret: parsed.data.STRIPE_WEBHOOK_SECRET ?? null,

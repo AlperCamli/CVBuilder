@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { X, Briefcase, GraduationCap, Languages, Award, FileText, Lightbulb, Heart, BookOpen, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -40,6 +42,7 @@ export function AddContentModal({
   existingSections,
   contentTypes: contentTypesOverride
 }: AddContentModalProps) {
+  useTranslation();
   if (!isOpen) return null;
 
   const resolvedContentTypes = contentTypesOverride ?? contentTypes;
@@ -59,8 +62,7 @@ export function AddContentModal({
       >
         <div className="flex items-center justify-between mb-6 flex-shrink-0">
           <h3 className="font-medium" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-            Add Content Section
-          </h3>
+            {t("Add Content Section")}</h3>
           <button onClick={onClose} style={{ color: "var(--color-text-secondary)" }}>
             <X size={20} />
           </button>
@@ -103,10 +105,10 @@ export function AddContentModal({
                   </div>
                   <div className="flex-1">
                     <h4 className="font-medium mb-1" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                      {content.name}
+                      {t(content.name)}
                     </h4>
                     <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: "1.4" }}>
-                      {content.description}
+                      {t(content.description)}
                     </p>
                   </div>
                 </div>
@@ -117,8 +119,7 @@ export function AddContentModal({
 
         {availableContent.length === 0 && (
           <p className="text-center py-8" style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            All content sections have been added
-          </p>
+            {t("All content sections have been added")}</p>
         )}
       </div>
     </div>

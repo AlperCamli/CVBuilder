@@ -1,3 +1,6 @@
+import { localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { FileText, ExternalLink, Target, Plus, MoreVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,7 +25,7 @@ const formatDate = (value: string | null): string => {
   }
 
   try {
-    return new Date(value).toLocaleDateString("en-US", {
+    return new Date(value).toLocaleDateString(localeCode(), {
       month: "short",
       day: "numeric",
       year: "numeric"
@@ -81,7 +84,7 @@ const applyBoardMove = (
       acc[group.status] = group.count;
       return acc;
     },
-    {} as Record<string, number>
+    {} as JobBoardResponse["counts_by_status"]
   );
 
   return { ...board, groups: groupsWithTarget, counts_by_status: countsByStatus };
@@ -111,6 +114,7 @@ const applyJobsSummaryMove = (
 };
 
 const DraggableDashboardJob = ({ job }: { job: any }) => {
+  useTranslation();
   const [{ isDragging }, drag] = useDrag({
     type: "JOB",
     item: { id: job.id, status: job.status },
@@ -156,6 +160,7 @@ const DraggableDashboardJob = ({ job }: { job: any }) => {
 };
 
 const DroppableDashboardColumn = ({ column, group, onDrop }: { column: any, group: any, onDrop: (jobId: string, status: JobStatus) => void }) => {
+  useTranslation();
   const [{ isOver }, drop] = useDrop({
     accept: "JOB",
     drop: (item: { id: string; status: JobStatus }) => {
@@ -200,8 +205,7 @@ const DroppableDashboardColumn = ({ column, group, onDrop }: { column: any, grou
             style={{ borderColor: "var(--color-border-tertiary)" }}
           >
             <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              No applications
-            </p>
+              {t("No applications")}</p>
           </div>
         )}
       </div>
@@ -212,6 +216,7 @@ const DroppableDashboardColumn = ({ column, group, onDrop }: { column: any, grou
 const WELCOME_PROMPT_STORAGE_KEY = "upgrade_welcome_prompt_shown";
 
 export function Dashboard() {
+  useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
   const { showUpgradePrompt } = useUpgradePrompt();
@@ -282,7 +287,7 @@ export function Dashboard() {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Failed to load dashboard.");
+          setError(t("Failed to load dashboard."));
         }
       } finally {
         if (!cancelled) {
@@ -359,9 +364,8 @@ export function Dashboard() {
     return (
       <div className="p-8">
         <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          Dashboard
-        </h1>
-        <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading dashboard...</p>
+          {t("Dashboard")}</h1>
+        <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Loading dashboard...")}</p>
       </div>
     );
   }
@@ -370,8 +374,7 @@ export function Dashboard() {
     return (
       <div className="p-8">
         <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          Dashboard
-        </h1>
+          {t("Dashboard")}</h1>
         <div
           className="mt-4 p-4 rounded-lg border"
           style={{
@@ -381,15 +384,14 @@ export function Dashboard() {
             fontSize: "13px"
           }}
         >
-          {error}
+          {t(error)}
           <button
             type="button"
             onClick={() => window.location.reload()}
             className="ml-3 underline"
             style={{ color: "var(--color-red-700)" }}
           >
-            Retry
-          </button>
+            {t("Retry")}</button>
         </div>
       </div>
     );
@@ -401,11 +403,9 @@ export function Dashboard() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          Dashboard
-        </h1>
+          {t("Dashboard")}</h1>
         <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          Track your CVs and job applications
-        </p>
+          {t("Track your CVs and job applications")}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-8">
@@ -436,8 +436,7 @@ export function Dashboard() {
           className="uppercase tracking-wider mb-3"
           style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
         >
-          Main CV
-        </p>
+          {t("Main CV")}</p>
 
         {!primaryMaster && (
           <div
@@ -448,8 +447,7 @@ export function Dashboard() {
             }}
           >
             <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              You don&apos;t have a main CV yet.
-            </p>
+              {t("You don&apos;t have a main CV yet.")}</p>
             <Link
               to="/app/create"
               className="interactive-button mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
@@ -460,8 +458,7 @@ export function Dashboard() {
               }}
             >
               <Plus size={14} />
-              Create or upload CV
-            </Link>
+              {t("Create or upload CV")}</Link>
           </div>
         )}
 
@@ -486,7 +483,7 @@ export function Dashboard() {
                     {primaryMaster.title}
                   </h3>
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                    Last updated {formatDate(primaryMaster.updated_at)}
+                    {t("Last updated")}{" "}{formatDate(primaryMaster.updated_at)}
                   </p>
                 </div>
               </div>
@@ -494,8 +491,7 @@ export function Dashboard() {
                 className="px-2.5 py-1 rounded-full text-xs font-medium"
                 style={{ background: "var(--color-teal-50)", color: "var(--color-teal-800)" }}
               >
-                Main CV
-              </span>
+                {t("Main CV")}</span>
             </div>
             <div className="flex gap-2">
               <Link
@@ -509,8 +505,7 @@ export function Dashboard() {
                 }}
               >
                 <ExternalLink size={14} />
-                Open
-              </Link>
+                {t("Open")}</Link>
               <Link
                 to={`/app/tailor/${primaryMaster.id}`}
                 data-onboarding="customize-btn"
@@ -523,8 +518,7 @@ export function Dashboard() {
                 }}
               >
                 <Target size={14} />
-                Customize for a job
-              </Link>
+                {t("Customize for a job")}</Link>
             </div>
             <OnboardingCoachMark
               step="customize"
@@ -542,15 +536,13 @@ export function Dashboard() {
             className="uppercase tracking-wider"
             style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
           >
-            Job applications
-          </p>
+            {t("Job applications")}</p>
           <Link
             to="/app/job-tracker"
             className="font-medium"
             style={{ fontSize: "13px", color: "var(--color-teal-600)" }}
           >
-            View all
-          </Link>
+            {t("View all")}</Link>
         </div>
 
         <DndProvider backend={HTML5Backend}>
@@ -578,8 +570,7 @@ export function Dashboard() {
             className="uppercase tracking-wider"
             style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
           >
-            Recent activity
-          </p>
+            {t("Recent activity")}</p>
         </div>
 
         <div
@@ -591,8 +582,7 @@ export function Dashboard() {
         >
           {!activity || activity.activity.length === 0 ? (
             <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              No activity yet.
-            </p>
+              {t("No activity yet.")}</p>
           ) : (
             <div className="space-y-2">
               {activity.activity.slice(0, 8).map((item) => (

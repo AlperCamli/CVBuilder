@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
@@ -5,6 +7,7 @@ import { useAuth } from "../integration/auth-context";
 import { consumePostAuthRedirect } from "../integration/post-auth-redirect";
 
 export function AuthCallback() {
+  useTranslation();
   const navigate = useNavigate();
 
   const { initialized, isAuthenticated, authMessage } = useAuth();
@@ -28,12 +31,11 @@ export function AuthCallback() {
           {initialized && !isAuthenticated
             ? (authMessage ??
               "Your sign-in link couldn't be completed. Please sign in again.")
-            : "Completing sign-in..."}
+            : t("Completing sign-in...")}
         </p>
         {initialized && !isAuthenticated && (
           <Link to="/signin" className="block mt-4 underline">
-            Sign in
-          </Link>
+            {t("Sign in")}</Link>
         )}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { isLanguagePreview, translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { readGuestUpload } from "../integration/guest-import";
@@ -13,6 +15,7 @@ import { clearPendingCheckout, readPendingCheckout } from "../integration/pendin
 // flow straight into Stripe Checkout, so the journey feels like one continuous
 // step instead of "sign up, then go hunt for the upgrade button again".
 export function CheckoutIntentResumer() {
+  useTranslation();
   const { api, isAuthenticated } = useAuth();
   const { pathname } = useLocation();
   const [active, setActive] = useState(false);
@@ -20,6 +23,7 @@ export function CheckoutIntentResumer() {
   const startedRef = useRef(false);
 
   useEffect(() => {
+    if (isLanguagePreview()) return;
     if (!isAuthenticated || startedRef.current || readGuestUpload() || pathname === "/app/onboarding" || pathname === "/app/cv-score") {
       return;
     }
@@ -45,7 +49,7 @@ export function CheckoutIntentResumer() {
         setError(
           err instanceof Error
             ? err.message
-            : "We couldn't open checkout. You can try again from the pricing page."
+            : t("We couldn't open checkout. You can try again from the pricing page.")
         );
       }
     })();
@@ -66,10 +70,9 @@ export function CheckoutIntentResumer() {
         {error ? (
           <>
             <p className="font-medium mb-2" style={{ fontSize: "16px", color: "var(--color-text-primary)" }}>
-              Checkout didn't open
-            </p>
+              {t("Checkout didn't open")}</p>
             <p className="mb-5" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              {error}
+              {t(error)}
             </p>
             <Link
               to="/app/pricing"
@@ -77,15 +80,13 @@ export function CheckoutIntentResumer() {
               className="interactive-button inline-block px-5 py-2.5 rounded-lg font-medium"
               style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
             >
-              Go to pricing
-            </Link>
+              {t("Go to pricing")}</Link>
           </>
         ) : (
           <>
             <Loader2 size={32} className="animate-spin mx-auto mb-4" style={{ color: "var(--color-teal-600)" }} />
             <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-              Taking you to secure checkout…
-            </p>
+              {t("Taking you to secure checkout…")}</p>
           </>
         )}
       </div>

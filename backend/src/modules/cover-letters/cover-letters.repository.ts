@@ -13,12 +13,14 @@ export interface CreateCoverLetterPayload {
   job_id: string;
   tailored_cv_id: string | null;
   title: string;
+  language?: "en" | "tr";
   content: string;
   status: CoverLetterStatus;
   last_exported_at: string | null;
 }
 
 export interface UpdateCoverLetterPayload {
+  language?: "en" | "tr";
   title?: string;
   content?: string;
   status?: CoverLetterStatus;
@@ -72,6 +74,7 @@ const toCoverLetterRecord = (row: Record<string, unknown>): CoverLetterRecord =>
     tailored_cv_id: row.tailored_cv_id ? String(row.tailored_cv_id) : null,
     title: String(row.title),
     content: String(row.content ?? ""),
+    language: row.language === "tr" ? "tr" : "en",
     status: row.status as CoverLetterStatus,
     last_exported_at: (row.last_exported_at as string | null) ?? null,
     created_at: String(row.created_at),

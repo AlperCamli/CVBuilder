@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
@@ -49,6 +51,7 @@ const toOptionalTrimmed = (value: string | undefined, maxLength: number): string
 };
 
 export function TailoringFlow() {
+  useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -79,15 +82,13 @@ export function TailoringFlow() {
       <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
         <div className="max-w-md w-full p-6 rounded-xl border" style={{ borderColor: "var(--color-border-tertiary)", background: "var(--color-background-primary)" }}>
           <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            Customization context was not found. Start again from the Customize page.
-          </p>
+            {t("Customization context was not found. Start again from the Customize page.")}</p>
           <button
             onClick={() => navigate(`/app/tailor/${id ?? "master"}`)}
             className="mt-4 px-4 py-2 rounded-lg font-medium"
             style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "white" }}
           >
-            Back to Customize CV
-          </button>
+            {t("Back to Customize CV")}</button>
         </div>
       </div>
     );
@@ -101,7 +102,7 @@ export function TailoringFlow() {
     try {
       const normalizedJobPostingUrl = toOptionalUrl(jobData.jobPostingUrl);
       if (jobData.jobPostingUrl?.trim() && !normalizedJobPostingUrl) {
-        setError("Job posting URL is invalid. Use a full URL (for example https://...) or leave it empty.");
+        setError(t("Job posting URL is invalid. Use a full URL (for example https://...) or leave it empty."));
         setGenerating(false);
         return;
       }
@@ -127,7 +128,7 @@ export function TailoringFlow() {
               answer_text: answer.slice(0, 4000)
             };
           })
-          .filter((item): item is { question_id: string; answer_text: string } => Boolean(item))
+          .filter((item): item is { question_id: string; question_text: string; answer_text: string } => Boolean(item))
       ];
 
       const draft = await runTailoringFlow<Record<string, unknown>>({
@@ -186,7 +187,7 @@ export function TailoringFlow() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to generate customized CV draft.");
+        setError(t("Failed to generate customized CV draft."));
       }
       setGenerating(false);
       setProgressMessage(null);
@@ -204,7 +205,7 @@ export function TailoringFlow() {
 
   const handleGenerateFollowUps = async () => {
     if (selectedTopics.length + selectedKeywords.length === 0) {
-      setError("Select at least one topic or keyword before continuing.");
+      setError(t("Select at least one topic or keyword before continuing."));
       return;
     }
 
@@ -236,7 +237,7 @@ export function TailoringFlow() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to generate follow-up questions.");
+        setError(t("Failed to generate follow-up questions."));
       }
     } finally {
       setLoadingFollowUps(false);
@@ -262,8 +263,7 @@ export function TailoringFlow() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button onClick={() => navigate(-1)} className="flex items-center gap-2" style={{ color: "var(--color-text-secondary)", fontSize: "13px" }}>
             <ChevronLeft size={16} />
-            Back
-          </button>
+            {t("Back")}</button>
           <div className="flex items-center gap-2">
             {[0, 1].map((step) => (
               <div
@@ -288,7 +288,7 @@ export function TailoringFlow() {
                 fontSize: "13px"
               }}
             >
-              {error}
+              {t(error)}
             </div>
           )}
 
@@ -299,11 +299,9 @@ export function TailoringFlow() {
                   {jobData.company ? `${jobData.role} at ${jobData.company}` : jobData.role}
                 </div>
                 <h2 className="font-medium mb-3" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-                  Choose topics and keywords
-                </h2>
+                  {t("Choose topics and keywords")}</h2>
                 <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Select at least one topic or keyword that should be emphasized in your customized CV.
-                </p>
+                  {t("Select at least one topic or keyword that should be emphasized in your customized CV.")}</p>
               </div>
 
               <div className="space-y-3 mb-6">
@@ -356,8 +354,7 @@ export function TailoringFlow() {
                   className="px-6 py-2.5 rounded-lg font-medium border"
                   style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                 >
-                  Back
-                </button>
+                  {t("Back")}</button>
                 <button
                   onClick={handleNext}
                   disabled={loadingFollowUps}
@@ -365,7 +362,7 @@ export function TailoringFlow() {
                   style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
                 >
                   {loadingFollowUps ? <Loader2 size={14} className="animate-spin" /> : null}
-                  {loadingFollowUps ? "Generating questions..." : "Continue"}
+                  {loadingFollowUps ? t("Generating questions...") : t("Continue")}
                   {!loadingFollowUps ? <ChevronRight size={16} /> : null}
                 </button>
               </div>
@@ -381,11 +378,9 @@ export function TailoringFlow() {
             <div className="p-8 rounded-xl border" style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}>
               <div className="mb-6">
                 <h2 className="font-medium mb-3" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-                  Follow-up context
-                </h2>
+                  {t("Follow-up context")}</h2>
                 <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-                  Answer only the questions that help explain how your selected topics should appear in the CV.
-                </p>
+                  {t("Answer only the questions that help explain how your selected topics should appear in the CV.")}</p>
               </div>
 
               {followUpQuestions.length > 0 && (
@@ -417,7 +412,7 @@ export function TailoringFlow() {
                                   color: isSelected ? "var(--color-teal-800)" : "var(--color-text-secondary)"
                                 }}
                               >
-                                {value === "yes" ? "Yes" : "No"}
+                                {value === "yes" ? t("Yes") : t("No")}
                               </button>
                             );
                           })}
@@ -447,8 +442,7 @@ export function TailoringFlow() {
                   style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
                 >
                   <ChevronLeft size={16} />
-                  Back
-                </button>
+                  {t("Back")}</button>
                 <button
                   onClick={handleNext}
                   disabled={generating}
@@ -461,7 +455,7 @@ export function TailoringFlow() {
                   }}
                 >
                   {generating ? <Loader2 size={14} className="animate-spin" /> : null}
-                  {generating ? "Generating customized CV..." : "Generate customized CV"}
+                  {generating ? t("Generating customized CV...") : t("Generate customized CV")}
                 </button>
               </div>
               {generating && progressMessage ? (

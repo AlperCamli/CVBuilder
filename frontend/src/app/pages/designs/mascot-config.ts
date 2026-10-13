@@ -298,7 +298,7 @@ export function parseMascotConfig(value: unknown): MascotConfig {
     result.stops[id] = {
       ...(id === "plans"
         ? {
-            anchor: pick(
+            anchor: pick<"outer" | "pro-card">(
               s.anchor,
               ["outer", "pro-card"],
               stops.plans ? "outer" : (d.anchor ?? "pro-card"),
@@ -346,7 +346,7 @@ export function parseMascotConfig(value: unknown): MascotConfig {
     returnDistance: [120, 600],
   } as const;
   for (const key of Object.keys(ranges) as (keyof typeof ranges)[])
-    result.motion[key] = num(motion[key], result.motion[key], ...ranges[key]);
+    result.motion[key] = num(motion[key], result.motion[key], ranges[key][0], ranges[key][1]);
   result.motion.repeatReactions = bool(
     motion.repeatReactions,
     result.motion.repeatReactions,

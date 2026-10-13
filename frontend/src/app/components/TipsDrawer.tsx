@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { X as XIcon, Lightbulb } from "lucide-react";
 
 interface Tip {
@@ -118,6 +120,7 @@ const tipsData: Record<string, Tip[]> = {
 };
 
 export function TipsDrawer({ isOpen, onClose, sectionType }: TipsDrawerProps) {
+  useTranslation();
   const tips = tipsData[sectionType] || [];
 
   if (!isOpen || tips.length === 0) return null;
@@ -146,8 +149,7 @@ export function TipsDrawer({ isOpen, onClose, sectionType }: TipsDrawerProps) {
               <Lightbulb size={20} style={{ color: "var(--color-teal-600)" }} />
             </div>
             <h2 className="font-medium" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-              Tips & Best Practices
-            </h2>
+              {t("Tips & Best Practices")}</h2>
           </div>
           <button
             onClick={onClose}
@@ -195,8 +197,7 @@ export function TipsDrawer({ isOpen, onClose, sectionType }: TipsDrawerProps) {
                   }}
                 >
                   <div className="font-medium mb-1" style={{ color: "var(--color-text-primary)" }}>
-                    Example:
-                  </div>
+                    {t("Example:")}</div>
                   {tip.example}
                 </div>
               )}

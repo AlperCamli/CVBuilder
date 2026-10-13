@@ -37,3 +37,5 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-consent.sql"
 
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/privacy-restore.sql"
+
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/localization-billing.sql"

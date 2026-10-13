@@ -1,3 +1,6 @@
+import { localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { MoreVertical, Plus, Info, X, Sparkles, FileText, Mail, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -49,7 +52,7 @@ const statusBadgeStyle = (status: JobStatus): { background: string; color: strin
 };
 
 const formatDate = (value: string): string =>
-  new Date(value).toLocaleDateString("en-US", {
+  new Date(value).toLocaleDateString(localeCode(), {
     month: "short",
     day: "numeric",
     year: "numeric"
@@ -60,7 +63,7 @@ const formatDateTime = (value: string | null): string => {
     return "-";
   }
 
-  return new Date(value).toLocaleString("en-US", {
+  return new Date(value).toLocaleString(localeCode(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -174,6 +177,7 @@ const DraggableJobCard = ({
   onOpenTailoredCv: (job: Job) => void;
   onOpenCoverLetter: (job: Job) => void;
 }) => {
+  useTranslation();
   const [{ isDragging }, drag] = useDrag({
     type: "JOB",
     item: { id: job.id, status: job.status },
@@ -199,7 +203,7 @@ const DraggableJobCard = ({
         <div className="flex items-center gap-1 mb-2">
           <div className="px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: "var(--color-teal-600)", color: "white" }}>
             <Sparkles size={10} />
-            <span style={{ fontSize: "10px", fontWeight: 600 }}>NEW</span>
+            <span style={{ fontSize: "10px", fontWeight: 600 }}>{t("NEW")}</span>
           </div>
         </div>
       )}
@@ -242,7 +246,7 @@ const DraggableJobCard = ({
         >
           <span className="inline-flex items-center gap-1">
             <FileText size={12} />
-            {job.tailoredCvId ? "View Customized CV" : "Create a Customized CV for this job"}
+            {job.tailoredCvId ? t("View Customized CV") : t("Create a Customized CV for this job")}
           </span>
         </button>
 
@@ -265,7 +269,7 @@ const DraggableJobCard = ({
         >
           <span className="inline-flex items-center gap-1">
             {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
-            {job.coverLetterId ? "View Cover Letter" : "Create Cover Letter"}
+            {job.coverLetterId ? t("View Cover Letter") : t("Create Cover Letter")}
           </span>
         </button>
       </div>
@@ -306,6 +310,7 @@ const DroppableColumn = ({
   onOpenTailoredCv: (job: Job) => void;
   onOpenCoverLetter: (job: Job) => void;
 }) => {
+  useTranslation();
   const [{ isOver }, drop] = useDrop({
     accept: "JOB",
     drop: (item: { id: string; status: JobStatus }) => {
@@ -341,7 +346,7 @@ const DroppableColumn = ({
 
       {jobs.length === 0 && (
         <div className="p-4 rounded-lg border-2 border-dashed text-center" style={{ borderColor: "var(--color-border-tertiary)" }}>
-          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{isOver ? "Drop here" : "No applications"}</p>
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{isOver ? t("Drop here") : t("No applications")}</p>
         </div>
       )}
     </div>
@@ -349,6 +354,7 @@ const DroppableColumn = ({
 };
 
 export function JobTracker() {
+  useTranslation();
   const { setSidebarVisible } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
@@ -413,7 +419,7 @@ export function JobTracker() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load job board.");
+        setError(t("Failed to load job board."));
       }
     } finally {
       setLoading(false);
@@ -476,7 +482,7 @@ export function JobTracker() {
 
     if (Object.keys(failed).length > 0) {
       setPendingStatusByJob((prev) => ({ ...failed, ...prev }));
-      setError("Some status updates failed. Retrying in background.");
+      setError(t("Some status updates failed. Retrying in background."));
     } else {
       setLastStatusSavedAt(new Date().toISOString());
     }
@@ -530,7 +536,7 @@ export function JobTracker() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load job details.");
+        setError(t("Failed to load job details."));
       }
     } finally {
       setDetailLoading(false);
@@ -566,7 +572,7 @@ export function JobTracker() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open customized CV flow.");
+        setError(t("Failed to open customized CV flow."));
       }
     } finally {
       setActionLoadingJobId(null);
@@ -596,7 +602,7 @@ export function JobTracker() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open cover letter.");
+        setError(t("Failed to open cover letter."));
       }
     } finally {
       setActionLoadingJobId(null);
@@ -626,11 +632,9 @@ export function JobTracker() {
             <Info size={20} style={{ color: "var(--color-teal-600)", flexShrink: 0, marginTop: "2px" }} />
             <div className="flex-1">
               <h4 className="font-medium mb-1" style={{ fontSize: "14px", color: "var(--color-teal-800)" }}>
-                Customized CV created!
-              </h4>
+                {t("Customized CV created!")}</h4>
               <p style={{ fontSize: "13px", color: "var(--color-teal-800)", lineHeight: "1.5" }}>
-                Your job entry is now tracked here. Drag cards between columns to keep statuses updated.
-              </p>
+                {t("Your job entry is now tracked here. Drag cards between columns to keep statuses updated.")}</p>
             </div>
             <button onClick={() => setShowInstructions(false)} style={{ color: "var(--color-teal-600)" }}>
               <X size={18} />
@@ -648,23 +652,21 @@ export function JobTracker() {
               fontSize: "13px"
             }}
           >
-            {error}
+            {t(error)}
             <button
               type="button"
               className="ml-3 underline"
               style={{ color: "var(--color-red-700)" }}
               onClick={() => void loadBoard()}
             >
-              Retry
-            </button>
+              {t("Retry")}</button>
           </div>
         )}
 
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <h1 className="font-medium" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-              Job Applications
-            </h1>
+              {t("Job Applications")}</h1>
             <button
               className="px-4 py-2 rounded-lg font-medium flex items-center gap-2"
               style={{
@@ -675,24 +677,22 @@ export function JobTracker() {
                 cursor: "not-allowed"
               }}
               disabled
-              title="New jobs are created from Customized CV flow in this phase"
+              title={t("New jobs are created from Customized CV flow in this phase")}
             >
               <Plus size={16} />
-              Add application
-            </button>
+              {t("Add application")}</button>
           </div>
           <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-            Track your job applications and their status. Drag and drop cards between columns to update status.
-          </p>
+            {t("Track your job applications and their status. Drag and drop cards between columns to update status.")}</p>
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-            Total tracked jobs: {board?.total ?? 0}
+            {t("Total tracked jobs:")}{" "}{board?.total ?? 0}
           </p>
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "2px" }}>
             {saveStatusText}
           </p>
         </div>
 
-        {loading && <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading board...</p>}
+        {loading && <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Loading board...")}</p>}
 
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -750,24 +750,23 @@ export function JobTracker() {
         >
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>Job details</DialogTitle>
+              <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>{t("Job details")}</DialogTitle>
               <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                Current job record and status history from backend.
-              </DialogDescription>
+                {t("Current job record and status history from backend.")}</DialogDescription>
             </DialogHeader>
 
             {detailLoading ? (
-              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading details...</p>
+              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Loading details...")}</p>
             ) : jobDetail ? (
               <div className="space-y-3">
                 <div className="p-3 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
                   <p style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>{jobDetail.job.job_title}</p>
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{jobDetail.job.company_name}</p>
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "6px" }}>
-                    Status: {statusToLabel[jobDetail.job.status]}
+                    {t("Status:")}{" "}{statusToLabel[jobDetail.job.status]}
                   </p>
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                    Last status change: {formatDate(jobDetail.status_last_changed_at)}
+                    {t("Last status change:")}{" "}{formatDate(jobDetail.status_last_changed_at)}
                   </p>
                 </div>
 
@@ -779,16 +778,15 @@ export function JobTracker() {
 
                 <div className="pt-1">
                   <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginBottom: "6px" }}>
-                    Status history
-                  </p>
+                    {t("Status history")}</p>
                   <div className="space-y-2 max-h-[180px] overflow-auto pr-1">
                     {!jobHistory || jobHistory.history.length === 0 ? (
-                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>No history yet.</p>
+                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t("No history yet.")}</p>
                     ) : (
                       jobHistory.history.map((entry) => (
                         <div key={entry.id} className="p-2 rounded-lg border" style={{ borderColor: "var(--color-border-tertiary)" }}>
                           <p style={{ fontSize: "12px", color: "var(--color-text-primary)" }}>
-                            {entry.from_status ? statusToLabel[entry.from_status] : "N/A"} {"->"} {statusToLabel[entry.to_status]}
+                            {entry.from_status ? statusToLabel[entry.from_status] : t("N/A")} {"->"} {statusToLabel[entry.to_status]}
                           </p>
                           <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{formatDate(entry.changed_at)}</p>
                         </div>
@@ -798,7 +796,7 @@ export function JobTracker() {
                 </div>
               </div>
             ) : (
-              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Job detail is not available.</p>
+              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Job detail is not available.")}</p>
             )}
           </DialogContent>
         </Dialog>

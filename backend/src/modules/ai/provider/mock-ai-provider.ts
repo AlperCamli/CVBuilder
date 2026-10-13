@@ -599,6 +599,9 @@ export class MockAiProvider implements AiProvider {
   }
 
   async generate(request: AiProviderRequest): Promise<AiProviderResult> {
+    if (request.flow_type === "cv_translate") {
+      return { provider: this.providerName, model_name: request.model_name, output_payload: { translations: request.input_payload.texts } };
+    }
     let outputPayload: Record<string, unknown>;
 
     switch (request.flow_type) {

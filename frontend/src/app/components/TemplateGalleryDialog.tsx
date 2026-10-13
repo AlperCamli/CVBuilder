@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
 import {
@@ -63,6 +65,7 @@ export function TemplateGalleryDialog({
   spacingScale,
   layoutScale
 }: TemplateGalleryDialogProps) {
+  useTranslation();
   const loadingIds = new Set(loadingTemplateIds);
   const [visibleCount, setVisibleCount] = useState(TEMPLATE_BATCH_SIZE);
   const sortedTemplates = useMemo(
@@ -155,11 +158,9 @@ export function TemplateGalleryDialog({
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-            Choose a Template
-          </DialogTitle>
+            {t("Choose a Template")}</DialogTitle>
           <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            Pick a template and apply it instantly to your CV.
-          </DialogDescription>
+            {t("Pick a template and apply it instantly to your CV.")}</DialogDescription>
         </DialogHeader>
 
         <div
@@ -196,8 +197,7 @@ export function TemplateGalleryDialog({
                         style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
                       >
                         <Loader2 size={14} className="animate-spin" />
-                        Loading preview...
-                      </div>
+                        {t("Loading preview...")}</div>
                     ) : (
                       <div
                         style={{
@@ -259,7 +259,7 @@ export function TemplateGalleryDialog({
                         color: isSelected ? "var(--color-teal-700)" : "var(--color-text-primary)"
                       }}
                     >
-                      {isSelected ? "Selected" : "Select"}
+                      {isSelected ? t("Selected") : t("Select")}
                     </button>
                   </div>
                 </div>
@@ -278,8 +278,7 @@ export function TemplateGalleryDialog({
                     color: "var(--color-text-primary)"
                   }}
                 >
-                  Load more templates
-                </button>
+                  {t("Load more templates")}</button>
               </div>
             ) : null}
           </div>

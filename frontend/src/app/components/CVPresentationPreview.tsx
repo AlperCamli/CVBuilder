@@ -926,7 +926,7 @@ export function CVPresentationPreview({
   };
 
   return (
-    <div style={{ ...rootScaleStyle, position: "relative" }}>
+    <div lang={presentation?.language ?? "en"} style={{ ...rootScaleStyle, position: "relative" }}>
       <div
         aria-hidden
         style={{

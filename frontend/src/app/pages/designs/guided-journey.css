@@ -887,3 +887,20 @@
     aspect-ratio: 1.5;
   }
 }
+
+/* Keep the language control and navigation reachable on narrow phones. */
+@media (max-width: 600px) {
+  .cv-guided-journey .cv-header { gap: 8px; }
+  .cv-guided-journey .cv-nav-actions { gap: 8px; }
+  .cv-guided-journey .cv-nav-actions select { max-width: 102px; padding-inline: 4px; font-size: 12px; }
+  .cv-guided-journey .cv-nav-actions .cv-button { white-space: nowrap; }
+  .cv-guided-journey .cv-nav-actions .cv-button svg { display: none; }
+  .cv-guided-journey .cv-menu-toggle { flex-shrink: 0; }
+}
+@media (max-width: 420px) {
+  .cv-guided-journey .cv-brand-icon { display: none; }
+  .cv-guided-journey .cv-wordmark { font-size: 17px; }
+}
+@media (max-width: 360px) {
+  .cv-guided-journey .cv-nav-actions .cv-button { display: none; }
+}

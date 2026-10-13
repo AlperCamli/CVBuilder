@@ -365,7 +365,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         heading: HeadingLevel.HEADING_2,
         children: [
           new TextRun({
-            text: isRuledHeading ? section.title.toUpperCase() : section.title,
+            text: isRuledHeading ? section.title.toLocaleUpperCase(documentModel.language?.toLowerCase().startsWith("tr") ? "tr" : "en") : section.title,
             color: headingColor,
             font: boldDocumentFont,
             bold: true,

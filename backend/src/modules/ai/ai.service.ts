@@ -1,3 +1,7 @@
+import { ValidationError } from "../../shared/errors/app-error";
+import { translationTexts, applyTranslation } from "./cv-translation";
+import { languagePolicy, normalizeLanguage, detectCvLanguage } from "../../shared/localization/languages";
+import { feedbackLanguage } from "../../shared/localization/request-locale";
 import type { PrivacyService } from "../privacy/privacy.service";
 import { personalizationGuidance } from "../guest-imports/personalization";
 import { reviewTailoring } from "../cv-review/cv-review";
@@ -751,6 +755,67 @@ export class AiService {
     private readonly privacy?: PrivacyService
   ) {}
 
+  async startTranslation(session: SessionContext, masterId: string, language: "en" | "tr") {
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+    await this.privacy?.assertAi(session.appUser.id);
+    const source = await this.requireMasterCv(session.appUser.id, masterId);
+    if (source.module_type !== "standard" || normalizeLanguage(source.language) === language) throw new ValidationError("Choose another language for a standard CV");
+    const existing = (await this.masterCvRepository.listByUser(session.appUser.id)).find(cv => cv.module_type === "standard" && normalizeLanguage(cv.language) === language);
+    if (existing) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
+    const prompt = await this.resolvePromptForFlow({ flow_type: "cv_translate", action_type: null, user_prompt: "Translate the supplied CV texts into the requested language." });
+    const run = await this.aiRepository.createRun({ user_id: session.appUser.id, master_cv_id: masterId, flow_type: "cv_translate", provider: this.aiProvider.providerName, model_name: prompt.model_name, progress_stage: "queued", input_payload: { source, target_language: language, feedback_language: session.appUser.locale } });
+    return { ai_run_id: run.id, status: run.status };
+  }
+
+  async getTranslation(session: SessionContext, masterId: string, runId: string) {
+    const run = await this.aiRepository.findRunById(session.appUser.id, runId);
+    if (!run || run.flow_type !== "cv_translate" || run.master_cv_id !== masterId) throw new NotFoundError("Translation was not found");
+    return run;
+  }
+
+  async executeTranslation(session: SessionContext, masterId: string, runId: string) {
+    const run = await this.getTranslation(session, masterId, runId);
+    if (run.status !== "pending" || run.progress_stage !== "queued") return run;
+    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+    const claimed = await this.aiRepository.claimRunForExecution(session.appUser.id, runId);
+    if (!claimed) return this.getTranslation(session, masterId, runId);
+    try {
+      const source = claimed.input_payload.source as unknown as MasterCvRecord;
+      const language = claimed.input_payload.target_language as "en" | "tr";
+      const prompt = await this.resolvePromptForFlow({ flow_type: "cv_translate", action_type: null, user_prompt: "Translate every provided text into target_language." });
+      const executed = await this.executeRunFlow({ user_id: session.appUser.id, ai_run_id: runId, flow_type: "cv_translate", prompt, input_payload: { target_language: language, texts: translationTexts(source.current_content) } });
+      const output = executed.output_payload as { translations: Array<{ path: string; text: string }> };
+      const content = applyTranslation(source.current_content, output.translations, language);
+      if (this.aiRepository.completeTranslationRun) {
+        await this.privacy?.assertAi(session.appUser.id);
+        const entitlements = await this.billingService.getBillingEntitlements(session.appUser.id);
+        await this.updateRunStage(session.appUser.id, runId, "persisting_result");
+        const completed = await this.aiRepository.completeTranslationRun(session.appUser.id, runId, { current_content: content, target_language: language }, entitlements.limits.ai_actions, executed.token_usage);
+        return completed ?? this.getTranslation(session, masterId, runId);
+      }
+      const { run: completed, claimed_completion } = await this.tryCompleteRun(session.appUser.id, runId, { current_content: content, target_language: language }, executed.token_usage);
+      if (claimed_completion) await this.billingService.recordAiActionUsage(session.appUser.id);
+      return completed;
+    } catch (error) {
+      await this.failRunWithDiagnostics(session.appUser.id, runId, error);
+      throw error;
+    }
+  }
+
+  async applyTranslationRun(session: SessionContext, masterId: string, runId: string) {
+    await this.privacy?.assertAi(session.appUser.id);
+    const run = await this.getTranslation(session, masterId, runId);
+    if (run.status !== "completed" || !run.output_payload) throw new ConflictError("Translation is not ready");
+    const source = run.input_payload.source as unknown as MasterCvRecord;
+    const content = (run.output_payload as unknown as { current_content: MasterCvRecord["current_content"] }).current_content;
+    const language = run.input_payload.target_language as "en" | "tr";
+    const existing = (await this.masterCvRepository.listByUser(session.appUser.id)).find(cv => cv.module_type === "standard" && normalizeLanguage(cv.language) === language);
+    if (existing) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
+    // Recheck the source still belongs to this account and has not been deleted.
+    await this.requireMasterCv(session.appUser.id, masterId);
+    return this.masterCvRepository.create({ user_id: session.appUser.id, title: `${source.title} (${language === "tr" ? "Türkçe" : "English"})`, language, template_id: source.template_id, module_type: "standard", current_content: content, summary_text: buildCvSummaryText(content), source_type: source.source_type });
+  }
+
   async startTailoringRun(
     session: SessionContext,
     input: TailoringRunStartInput
@@ -1259,6 +1324,7 @@ export class AiService {
         user_id: options.user_id,
         prompt_profile: options.prompt_profile ?? null,
         input_payload: {
+          language: options.content.language,
           cv_body: aliasContext.model_content
         },
         user_prompt: "Write a professional summary from the sanitized CV body."
@@ -1284,6 +1350,7 @@ export class AiService {
         user_id: options.user_id,
         prompt_profile: options.prompt_profile ?? null,
         input_payload: {
+          language: options.content.language,
           action_type: "improve",
           block: fallbackBlock,
           user_instruction: options.improvement_guidance.join("\n"),
@@ -1319,6 +1386,7 @@ export class AiService {
       user_id: options.user_id,
       prompt_profile: options.prompt_profile ?? null,
       input_payload: {
+        language: options.content.language,
         action_type: options.task.action_type,
         block: currentBlock.block,
         user_instruction: options.improvement_guidance.join("\n"),
@@ -2582,6 +2650,11 @@ export class AiService {
     const revision = typeof owner === "string" ? await this.privacy?.assertAi(owner) : undefined;
     if (typeof owner !== "string") await options.assert_permission!();
     const definition = AI_FLOW_REGISTRY[options.flow_type];
+    const contextRun = await this.aiRepository.findRunById?.(owner, options.ai_run_id);
+    const target = contextRun?.master_cv_id && typeof owner === "string" ? await this.masterCvRepository.findById(owner, contextRun.master_cv_id)
+      : contextRun?.tailored_cv_id && typeof owner === "string" ? await this.tailoredCvRepository.findById(owner, contextRun.tailored_cv_id) : null;
+    const languageContext = { document_language: normalizeLanguage(options.input_payload.target_language ?? options.input_payload.language ?? target?.language ?? (options.input_payload.parsed_content as any)?.language ?? (options.input_payload.master_content as any)?.language ?? (typeof options.input_payload.raw_text === "string" ? detectCvLanguage(options.input_payload.raw_text) : null)) ?? "en", feedback_language: feedbackLanguage() };
+    const localizedPayload = { ...options.input_payload, language_context: languageContext };
 
     await this.updateRunStage(owner, options.ai_run_id, "building_prompt");
     await this.updateRunStage(owner, options.ai_run_id, "calling_model");
@@ -2605,11 +2678,11 @@ export class AiService {
         prompt: {
           prompt_key: options.prompt.prompt_key,
           prompt_version: options.prompt.prompt_version,
-          system_prompt: options.prompt.system_prompt,
+          system_prompt: `${options.prompt.system_prompt}\n${languagePolicy(localizedPayload)}`,
           user_prompt: options.prompt.user_prompt
         },
         output_schema: definition.output_schema,
-        input_payload: options.input_payload,
+        input_payload: localizedPayload,
         onUsage: recordUsage,
         onStage: async () => {
           await this.updateRunStage(owner, options.ai_run_id, "parsing_output");
@@ -3309,6 +3382,7 @@ export class AiService {
       applied_at: null
     });
 
+    if (input.language && input.language !== masterCv.language) throw new ValidationError("Choose a master CV in the desired language before tailoring");
     const clonedContent = cloneCvContent(masterCv.current_content);
     clonedContent.language = input.language ?? masterCv.language;
 

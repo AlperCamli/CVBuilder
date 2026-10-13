@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { extractPdfText } from "./helpers/pdf-text";
 import { PDFDocument, PDFDict, PDFName, PDFString } from "pdf-lib";
 import { generatePdfDocument, normalizePdfText } from "../src/modules/exports/generators/pdf-generator";
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
@@ -25,6 +26,7 @@ const collectLinkUris = (pdf: PDFDocument): string[] => {
 describe("pdf generator", () => {
   it("preserves unicode characters and generates parseable PDF", async () => {
     const model: ExportDocumentModel = {
+      language: "tr",
       title: "Alper Çamlı",
       subtitle: "Bilgisayar Mühendisliği Öğrencisi",
       contact_line: "alper@example.com • +90 555 123 45 67 • İstanbul, Türkiye",
@@ -42,6 +44,7 @@ describe("pdf generator", () => {
       theme: {
         layout: "modern-clean",
         mode: "classic-single-column",
+        section_heading_style: "ruled",
         heading_color_hex: "#111827",
         accent_color_hex: "#0f5ea6",
         body_color_hex: "#1f2937",
@@ -55,7 +58,7 @@ describe("pdf generator", () => {
       sections: [
         {
           type: "experience",
-          title: "Work Experience",
+          title: "İş Deneyimi",
           inline_text: null,
           blocks: [
             {
@@ -76,6 +79,9 @@ describe("pdf generator", () => {
 
     const unicodeLine = "Alper Çamlı İstanbul Kıdemli Geliştirici Şükrü Işık";
     expect(normalizePdfText(unicodeLine)).toBe(unicodeLine);
+    const extracted = await extractPdfText(bytes);
+    expect(extracted).toContain("İŞ DENEYİMİ");
+    expect(extracted).toContain("Alper Çamlı");
   });
 
   it("embeds a circle-clipped and a square photo without throwing", async () => {

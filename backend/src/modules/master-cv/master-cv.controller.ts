@@ -15,6 +15,13 @@ const requireSession = (request: Request) => {
 export class MasterCvController {
   constructor(private readonly masterCvService: MasterCvService) {}
 
+  getDocumentRevisions = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.masterCvService.listDocumentRevisions(requireSession(request), request.params.masterCvId));
+  });
+  restoreDocumentRevision = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.masterCvService.restoreDocumentRevision(requireSession(request), request.params.masterCvId, request.params.revisionId));
+  });
+
   listMasterCvs = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.masterCvService.listMasterCvs(requireSession(request));
     sendSuccess(response, data);

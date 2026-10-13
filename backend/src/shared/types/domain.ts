@@ -119,7 +119,8 @@ export type AiFlowType =
   | "summary"
   | "improve"
   | "cv_parse"
-  | "cover_letter_generation";
+  | "cover_letter_generation"
+  | "cv_translate";
 
 export type AiRunStatus = "pending" | "completed" | "failed";
 
@@ -273,6 +274,7 @@ export interface ExportRecord {
 export type CoverLetterStatus = "draft" | "ready" | "archived";
 
 export interface CoverLetterRecord {
+  language?: "en" | "tr";
   id: string;
   user_id: string;
   job_id: string;

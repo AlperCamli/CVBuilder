@@ -1,511 +1,268 @@
+import { MasterRevisionDialog } from "../components/MasterRevisionDialog";
 import { Link, useNavigate } from "react-router";
-import { FileText, ExternalLink, Target, Download, MoreVertical, Trash2, Copy, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FileText, Plus, Download, Trash2, Languages } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
-import type { MasterCvSummary, TailoredCvSummary } from "../integration/api-types";
-import { ApiClientError } from "../integration/api-error";
-import { buildTailoredExportFilename, triggerBlobDownload } from "../integration/export-filenames";
+import type {
+  MasterCvSummary,
+  TailoredCvSummary,
+} from "../integration/api-types";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from "../components/ui/alert-dialog";
-
-const formatDate = (value: string): string =>
-  new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
+  buildTailoredExportFilename,
+  triggerBlobDownload,
+} from "../integration/export-filenames";
+import { TranslationDialog } from "../components/TranslationDialog";
+import { localeCode, translate as t } from "../localization/i18n";
 
 export function Resumes() {
+  useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
   const navigate = useNavigate();
-  const [masterCvs, setMasterCvs] = useState<MasterCvSummary[]>([]);
-  const [tailoredCvs, setTailoredCvs] = useState<TailoredCvSummary[]>([]);
+  const [masters, setMasters] = useState<MasterCvSummary[]>([]);
+  const [tailored, setTailored] = useState<TailoredCvSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exportingId, setExportingId] = useState<string | null>(null);
-  const [busyMasterId, setBusyMasterId] = useState<string | null>(null);
-  const [busyTailoredId, setBusyTailoredId] = useState<string | null>(null);
-  const [showNewCvDialog, setShowNewCvDialog] = useState(false);
-
+  const [busy, setBusy] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [translating, setTranslating] = useState<MasterCvSummary | null>(null);
   const load = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const [masters, tailored] = await Promise.all([api.listMasterCvs(), api.listTailoredCvs()]);
-      setMasterCvs(masters);
-      setTailoredCvs(tailored);
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.message);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to load CVs.");
-      }
+      const [masterRows, tailoredRows] = await Promise.all([
+        api.listMasterCvs(),
+        api.listTailoredCvs(),
+      ]);
+      setMasters(masterRows);
+      setTailored(tailoredRows);
+    } catch (error) {
+      setError(
+        error instanceof Error ? t(error.message) : t("Failed to load CVs."),
+      );
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     setSidebarVisible(true);
-  }, [setSidebarVisible]);
-
-  useEffect(() => {
     void load();
-  }, []);
-
-  const primaryMaster = masterCvs[0] ?? null;
-
-  const removeMasterCv = async (masterCvId: string): Promise<boolean> => {
-    setBusyMasterId(masterCvId);
-    try {
-      await api.deleteMasterCv(masterCvId);
-      // Immediately remove from local state to prevent stale UI
-      setMasterCvs((prev) => prev.filter((cv) => cv.id !== masterCvId));
-      setTailoredCvs((prev) => prev.filter((cv) => cv.master_cv_id !== masterCvId));
-      await load();
-      return true;
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to delete main CV.");
-      }
-      return false;
-    } finally {
-      setBusyMasterId(null);
-    }
-  };
-
-  const exportTailoredCv = async (tailoredCv: TailoredCvSummary) => {
-    setExportingId(tailoredCv.id);
-    const filename = buildTailoredExportFilename(
-      primaryMaster?.title,
-      tailoredCv.title,
-      tailoredCv.job?.company_name ?? null
-    );
-
-    try {
-      const result = await api.createPdfExport(tailoredCv.id);
-      const downloadUrl = result.download?.download_url;
-
-      if (downloadUrl) {
-        await triggerBlobDownload(downloadUrl, filename);
-      } else {
-        const fallback = await api.getExportDownload(result.export.id);
-        await triggerBlobDownload(fallback.download_url, filename);
-      }
-      await load();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Export failed.");
-      }
-    } finally {
-      setExportingId(null);
-    }
-  };
-
-  const duplicateMaster = async (masterCvId: string) => {
-    setBusyMasterId(masterCvId);
-    try {
-      await api.duplicateMasterCv(masterCvId);
-      await load();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to duplicate main CV.");
-      }
-    } finally {
-      setBusyMasterId(null);
-    }
-  };
-
-  const deleteMaster = async (masterCvId: string) => {
-    const confirmed = window.confirm("Delete this main CV? This action can be reversed only from backups.");
-    if (!confirmed) {
+  }, [api]);
+  const remove = async (id: string, kind: "master" | "tailored") => {
+    if (
+      !window.confirm(
+        t(
+          kind === "master"
+            ? "Delete this main CV and its associated customized versions?"
+            : "Delete this customized CV?",
+        ),
+      )
+    )
       return;
-    }
-
-    await removeMasterCv(masterCvId);
-  };
-
-  const startNewCvFlow = async () => {
-    if (!primaryMaster) {
-      navigate("/app/create");
-      return;
-    }
-    setShowNewCvDialog(true);
-  };
-
-  const confirmNewCvFlow = async () => {
-    if (!primaryMaster) {
-      setShowNewCvDialog(false);
-      navigate("/app/create");
-      return;
-    }
-
-    const deleted = await removeMasterCv(primaryMaster.id);
-    if (deleted) {
-      setShowNewCvDialog(false);
-      navigate("/app/create");
-    }
-  };
-
-  const deleteTailored = async (tailoredCvId: string) => {
-    const confirmed = window.confirm("Delete this customized CV?");
-    if (!confirmed) {
-      return;
-    }
-
-    setBusyTailoredId(tailoredCvId);
+    setBusy(id);
     try {
-      await api.deleteTailoredCv(tailoredCvId);
+      if (kind === "master") await api.deleteMasterCv(id);
+      else await api.deleteTailoredCv(id);
       await load();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to delete customized CV.");
-      }
+    } catch (error) {
+      setError(
+        error instanceof Error ? t(error.message) : t("Could not delete CV."),
+      );
     } finally {
-      setBusyTailoredId(null);
+      setBusy(null);
     }
   };
-
+  const exportCv = async (cv: TailoredCvSummary) => {
+    setBusy(cv.id);
+    try {
+      const result = await api.createPdfExport(cv.id);
+      const download =
+        result.download?.download_url ??
+        (await api.getExportDownload(result.export.id)).download_url;
+      const source = masters.find((master) => master.id === cv.master_cv_id);
+      await triggerBlobDownload(
+        download,
+        buildTailoredExportFilename(
+          source?.title,
+          cv.title,
+          cv.job?.company_name,
+        ),
+      );
+    } catch (error) {
+      setError(error instanceof Error ? t(error.message) : t("Export failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const languageName = (language: string) =>
+    language.startsWith("tr")
+      ? "Türkçe"
+      : language.startsWith("en")
+        ? "English"
+        : language;
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
+    <div className="p-4 sm:p-8">
+      <div className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-            My CVs
-          </h1>
-          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-            Manage your main CV and customized versions
+          <h1 className="text-2xl font-medium">{t("My CVs")}</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            {t(
+              "One main CV per language, with customized versions for each application.",
+            )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void startNewCvFlow()}
-          disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors"
-          style={{
-            fontSize: "13px",
-            background: "var(--color-teal-600)",
-            color: "var(--color-teal-50)",
-            opacity: primaryMaster && busyMasterId === primaryMaster.id ? 0.6 : 1
-          }}
+        <Link
+          to="/app/create"
+          className="inline-flex items-center gap-2 rounded-lg bg-teal-700 text-white px-4 py-2 text-sm"
         >
-          <Plus size={14} />
-          New CV
-        </button>
+          <Plus size={16} />
+          {t("New CV")}
+        </Link>
       </div>
-
       {error && (
-        <div
-          className="mb-6 p-4 rounded-lg border"
-          style={{
-            borderColor: "var(--color-red-200)",
-            background: "var(--color-red-50)",
-            color: "var(--color-red-700)",
-            fontSize: "13px"
-          }}
-        >
-          {error}
-          <button
-            type="button"
-            className="ml-3 underline"
-            style={{ color: "var(--color-red-700)" }}
-            onClick={() => void load()}
-          >
-            Retry
-          </button>
+        <p role="alert" className="text-red-700 mb-4">
+          {t(error)}
+        </p>
+      )}
+      {loading ? (
+        <p role="status">{t("Loading…")}</p>
+      ) : masters.length === 0 ? (
+        <p>{t("Create or upload CV")}</p>
+      ) : (
+        <div className="space-y-8">
+          {masters.map((master) => (
+            <section key={master.id}>
+              <div className="rounded-xl border border-slate-200 p-5 bg-white">
+                <div className="flex justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="font-medium text-lg">{master.title}</h2>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {t("Main CV")} ·{" "}
+                      <span lang={master.language}>
+                        {languageName(master.language)}
+                      </span>{" "}
+                      ·{" "}
+                      {new Date(master.updated_at).toLocaleDateString(
+                        localeCode(),
+                      )}
+                    </p>
+                  </div>
+                  <FileText size={24} className="text-teal-700" />
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <Link
+                    className="rounded-lg bg-teal-700 text-white px-4 py-2"
+                    to={`/app/cv/${master.id}`}
+                    state={{ cvKind: "master", masterCvId: master.id }}
+                  >
+                    {t("Open")}
+                  </Link>
+                  <Link
+                    className="rounded-lg border px-4 py-2"
+                    to={`/app/tailor/${master.id}`}
+                  >
+                    {t("Customize for a job")}
+                  </Link>
+                  {master.module_type === "standard" && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-4 py-2 inline-flex gap-2 items-center"
+                      onClick={() => setTranslating(master)}
+                    >
+                      <Languages size={15} />
+                      {t(
+                        master.language.startsWith("tr")
+                          ? "Translate to English"
+                          : "Translate to Turkish",
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="rounded-lg border px-4 py-2"
+                    onClick={() => setHistoryId(master.id)}
+                  >
+                    {t("Revisions")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === master.id}
+                    className="rounded-lg border px-4 py-2 text-red-700"
+                    onClick={() => void remove(master.id, "master")}
+                  >
+                    <Trash2 size={15} aria-label={t("Delete")} />
+                  </button>
+                </div>
+              </div>
+              <h3 className="text-sm font-medium mt-4 mb-2">
+                {t("Customized CVs")}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {tailored
+                  .filter((cv) => cv.master_cv_id === master.id)
+                  .map((cv) => (
+                    <article key={cv.id} className="border rounded-xl p-4">
+                      <h4 className="font-medium">
+                        {cv.job?.job_title || cv.title}
+                      </h4>
+                      <p className="text-sm text-slate-600 mb-3">
+                        {cv.job?.company_name} · {languageName(cv.language)}
+                      </p>
+                      <div className="flex gap-3 text-sm">
+                        <Link
+                          className="text-teal-800 underline"
+                          to={`/app/cv/${cv.id}`}
+                          state={{ cvKind: "tailored" }}
+                        >
+                          {t("Open")}
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={busy === cv.id}
+                          onClick={() => void exportCv(cv)}
+                          className="inline-flex gap-1 items-center"
+                        >
+                          <Download size={14} />
+                          {t("Download")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy === cv.id}
+                          onClick={() => void remove(cv.id, "tailored")}
+                          className="text-red-700"
+                        >
+                          {t("Delete")}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
-
-      {loading && (
-        <div style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading CVs...</div>
+      {historyId && (
+        <MasterRevisionDialog
+          masterId={historyId}
+          onClose={() => setHistoryId(null)}
+          onRestored={() => {
+            setHistoryId(null);
+            void load();
+          }}
+        />
       )}
-
-      {!loading && (
-        <>
-          <div className="mb-8">
-            <p
-              className="uppercase tracking-wider mb-3"
-              style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
-            >
-              Main CV
-            </p>
-
-            {!primaryMaster && (
-              <div
-                className="p-5 rounded-xl border"
-                style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}
-              >
-                <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                  You don&apos;t have a main CV yet.
-                </p>
-                <Link
-                  to="/app/create"
-                  className="interactive-button inline-flex mt-3 px-4 py-2 rounded-lg font-medium"
-                  style={{
-                    fontSize: "13px",
-                    background: "var(--color-teal-600)",
-                    color: "var(--color-teal-50)"
-                  }}
-                >
-                  Create or upload
-                </Link>
-              </div>
-            )}
-
-            {primaryMaster && (
-              <div
-                className="p-5 rounded-xl border"
-                style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="w-12 h-16 rounded border flex items-center justify-center flex-shrink-0"
-                      style={{ background: "var(--color-slate-50)", borderColor: "var(--color-border-secondary)" }}
-                    >
-                      <FileText size={20} style={{ color: "var(--color-text-secondary)" }} />
-                    </div>
-                    <div>
-                      <h3 className="font-medium mb-1" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                        {primaryMaster.title}
-                      </h3>
-                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        Last updated {formatDate(primaryMaster.updated_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className="px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={{ background: "var(--color-teal-50)", color: "var(--color-teal-800)" }}
-                  >
-                    Main CV
-                  </span>
-                </div>
-
-                <div className="flex gap-2 flex-wrap">
-                  <Link
-                    to={`/app/cv/${primaryMaster.id}`}
-                    state={{ cvKind: "master", masterCvId: primaryMaster.id }}
-                    className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                    style={{
-                      fontSize: "13px",
-                      background: "var(--color-teal-600)",
-                      color: "var(--color-teal-50)"
-                    }}
-                  >
-                    <ExternalLink size={14} />
-                    Open
-                  </Link>
-                  <Link
-                    to={`/app/tailor/${primaryMaster.id}`}
-                    className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
-                    style={{
-                      fontSize: "13px",
-                      background: "var(--color-teal-50)",
-                      color: "var(--color-teal-800)",
-                      borderColor: "var(--color-teal-200)"
-                    }}
-                  >
-                    <Target size={14} />
-                    Customize for a job
-                  </Link>
-                  <button
-                    onClick={() => void duplicateMaster(primaryMaster.id)}
-                    disabled={busyMasterId === primaryMaster.id}
-                    className="px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
-                    style={{
-                      fontSize: "13px",
-                      borderColor: "var(--color-border-secondary)",
-                      color: "var(--color-text-secondary)",
-                      opacity: busyMasterId === primaryMaster.id ? 0.6 : 1
-                    }}
-                  >
-                    <Copy size={14} />
-                    Duplicate
-                  </button>
-                  <button
-                    onClick={() => void deleteMaster(primaryMaster.id)}
-                    disabled={busyMasterId === primaryMaster.id}
-                    className="px-4 py-2 rounded-lg font-medium transition-colors border flex items-center gap-2"
-                    style={{
-                      fontSize: "13px",
-                      borderColor: "var(--color-red-200)",
-                      color: "var(--color-red-700)",
-                      opacity: busyMasterId === primaryMaster.id ? 0.6 : 1
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    Delete
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <p
-              className="uppercase tracking-wider mb-3"
-              style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
-            >
-              Customized CVs ({tailoredCvs.length})
-            </p>
-
-            {tailoredCvs.length === 0 && (
-              <div
-                className="p-8 rounded-xl border-2 border-dashed"
-                style={{ borderColor: "var(--color-border-tertiary)" }}
-              >
-                <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                  No customized CVs yet. Create one from your main CV.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {tailoredCvs.map((cv) => (
-                <div
-                  key={cv.id}
-                  className="p-4 rounded-xl border"
-                  style={{ background: "var(--color-background-primary)", borderColor: "var(--color-border-tertiary)" }}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div
-                        className="w-10 h-14 rounded border flex items-center justify-center flex-shrink-0"
-                        style={{ background: "var(--color-slate-50)", borderColor: "var(--color-border-secondary)" }}
-                      >
-                        <FileText size={16} style={{ color: "var(--color-text-secondary)" }} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-1">
-                          <div>
-                            <h3 className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                              {cv.job?.job_title || cv.title}
-                            </h3>
-                            <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                              {cv.job?.company_name || "Unlinked job"}
-                            </p>
-                          </div>
-                          <button style={{ color: "var(--color-text-secondary)" }}>
-                            <MoreVertical size={16} />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-3 mt-3 mb-3">
-                          <span
-                            className="px-2 py-0.5 rounded-full text-xs"
-                            style={{
-                              background: "var(--color-teal-50)",
-                              color: "var(--color-teal-800)"
-                            }}
-                          >
-                            {cv.status}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                            Last edited {formatDate(cv.updated_at)}
-                          </span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Link
-                            to={`/app/cv/${cv.id}`}
-                            state={{ cvKind: "tailored" }}
-                            className="interactive-button px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
-                            style={{
-                              fontSize: "12px",
-                              background: "var(--color-teal-600)",
-                              color: "var(--color-teal-50)"
-                            }}
-                          >
-                            <ExternalLink size={12} />
-                            Open
-                          </Link>
-                          <button
-                            onClick={() => void exportTailoredCv(cv)}
-                            disabled={exportingId === cv.id}
-                            className="px-3 py-1.5 rounded-lg font-medium transition-colors border flex items-center gap-1.5"
-                            style={{
-                              fontSize: "12px",
-                              borderColor: "var(--color-border-secondary)",
-                              color: "var(--color-text-secondary)",
-                              opacity: exportingId === cv.id ? 0.6 : 1
-                            }}
-                          >
-                            <Download size={12} />
-                            {exportingId === cv.id ? "Exporting..." : "Export PDF"}
-                          </button>
-                          <button
-                            onClick={() => void deleteTailored(cv.id)}
-                            disabled={busyTailoredId === cv.id}
-                            className="px-3 py-1.5 rounded-lg font-medium transition-colors border flex items-center gap-1.5"
-                            style={{
-                              fontSize: "12px",
-                              borderColor: "var(--color-red-200)",
-                              color: "var(--color-red-700)",
-                              opacity: busyTailoredId === cv.id ? 0.6 : 1
-                            }}
-                          >
-                            <Trash2 size={12} />
-                            {busyTailoredId === cv.id ? "Deleting..." : "Delete"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
+      {translating && (
+        <TranslationDialog
+          source={translating}
+          onClose={() => setTranslating(null)}
+          onCreated={(id) => {
+            setTranslating(null);
+            navigate(`/app/cv/${id}`, {
+              state: { cvKind: "master", masterCvId: id },
+            });
+          }}
+        />
       )}
-
-      <AlertDialog open={showNewCvDialog} onOpenChange={setShowNewCvDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Add a new CV</AlertDialogTitle>
-            <AlertDialogDescription>
-              To add a new CV you should first Delete your existing Main CV.
-              <br />
-              Are you sure you want to delete your CV?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void confirmNewCvFlow();
-              }}
-              disabled={Boolean(primaryMaster && busyMasterId === primaryMaster.id)}
-              className="bg-[var(--color-red-600)] text-[var(--color-red-50)] hover:bg-[var(--color-red-700)]"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

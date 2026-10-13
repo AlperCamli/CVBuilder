@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
@@ -30,6 +31,12 @@ export const createAiRouter = (
   // via UX polling, even when the underlying AI runs succeeded.
   const inferenceGuard: RequestHandler[] = [authMiddleware, aiRateLimiter];
   const readGuard: RequestHandler[] = [authMiddleware];
+
+  const translationParams = z.object({ masterCvId: z.string().uuid(), aiRunId: z.string().uuid() }).strict();
+  router.post("/master-cvs/:masterCvId/translations", ...inferenceGuard, validate({ params: masterCvAiHistoryParamsSchema, body: z.object({ target_language: z.enum(["en", "tr"]) }).strict() }), aiController.postTranslationStart);
+  router.post("/master-cvs/:masterCvId/translations/:aiRunId/execute", ...inferenceGuard, validate({ params: translationParams }), aiController.postTranslationExecute);
+  router.get("/master-cvs/:masterCvId/translations/:aiRunId", ...readGuard, validate({ params: translationParams }), aiController.getTranslation);
+  router.post("/master-cvs/:masterCvId/translations/:aiRunId/apply", ...readGuard, validate({ params: translationParams }), aiController.postTranslationApply);
 
   router.post(
     "/ai/tailoring-runs/start",

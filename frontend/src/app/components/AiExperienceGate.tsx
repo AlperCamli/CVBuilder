@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { useAuth } from "../integration/auth-context";
@@ -5,6 +7,7 @@ import { choices, getPrivacyConfig, notifyAiChoiceChanged, privacyApi, type Pref
 import "./privacy.css";
 
 export function AiExperienceGate({ children }: { children: ReactNode }) {
+  useTranslation();
   const { me } = useAuth();
   const userId = me?.user.id;
   const { pathname } = useLocation();
@@ -20,7 +23,7 @@ export function AiExperienceGate({ children }: { children: ReactNode }) {
     let active = true;
     const load = () => Promise.all([getPrivacyConfig(), privacyApi.get<Preferences>("/me/privacy")]).then(([config, preferences]) => {
       if (active) { setState({ config, preferences }); setError(""); }
-    }).catch(() => { if (active) { setState(null); setError("We couldn't check your AI choice. Please try again."); } });
+    }).catch(() => { if (active) { setState(null); setError(t("We couldn't check your AI choice. Please try again.")); } });
     setState(null);
     void load();
     const refresh = () => { void load(); };
@@ -36,20 +39,20 @@ export function AiExperienceGate({ children }: { children: ReactNode }) {
       const preferences = await privacyApi.patch<Preferences>("/me/privacy", choices(true));
       setState(previous => previous ? { ...previous, preferences } : null);
       notifyAiChoiceChanged();
-    } catch (err) { setError(err instanceof Error ? err.message : "Please try again."); }
+    } catch (err) { setError(err instanceof Error ? err.message : t("Please try again.")); }
     finally { setBusy(false); }
   }
   return <section className="privacy-document" aria-labelledby="ai-resume-heading">
-    <h1 id="ai-resume-heading">{!state && !error ? "Checking your AI choice…" : "Enable AI to continue"}</h1>
-    <p>JobSpecificCV uses AI to analyze and improve your CV. Relevant CV text, task instructions and applicable guidance are sent to {state?.config.ai_provider ?? "the configured AI provider"}.</p>
-    <p>You can enable it now, even if you declined earlier. You can withdraw permission again in your privacy settings.</p>
-    {state && !state.config.ai_enabled && <p role="status">AI processing is temporarily unavailable. You can still manage your privacy choices, download your data or delete your account.</p>}
-    {error && <p role="alert">{error}</p>}
+    <h1 id="ai-resume-heading">{!state && !error ? t("Checking your AI choice…") : t("Enable AI to continue")}</h1>
+    <p>{t("JobSpecificCV uses AI to analyze and improve your CV. Relevant CV text, task instructions and applicable guidance are sent to")}{" "}{state?.config.ai_provider ?? "the configured AI provider"}{"."}</p>
+    <p>{t("You can enable it now, even if you declined earlier. You can withdraw permission again in your privacy settings.")}</p>
+    {state && !state.config.ai_enabled && <p role="status">{t("AI processing is temporarily unavailable. You can still manage your privacy choices, download your data or delete your account.")}</p>}
+    {error && <p role="alert">{t(error)}</p>}
     <div className="privacy-actions">
-      <button type="button" disabled={busy || !state?.config.ai_enabled} onClick={() => void enable()}>Enable AI & continue</button>
-      <button type="button" disabled={busy} onClick={() => setRetry(value => value + 1)}>Check again</button>
-      <Link to="/app/profile">Privacy & account settings</Link>
-      <Link to="/privacy">Privacy notice</Link>
+      <button type="button" disabled={busy || !state?.config.ai_enabled} onClick={() => void enable()}>{t("Enable AI & continue")}</button>
+      <button type="button" disabled={busy} onClick={() => setRetry(value => value + 1)}>{t("Check again")}</button>
+      <Link to="/app/profile">{t("Privacy & account settings")}</Link>
+      <Link to="/privacy">{t("Privacy notice")}</Link>
     </div>
   </section>;
 }

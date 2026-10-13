@@ -1,4 +1,6 @@
 import { type ReactNode } from "react";
+import { useLocation } from "react-router";
+import { LanguageSwitcher } from "../localization/LanguageControls";
 import { Toaster } from "sonner";
 import { AuthProvider } from "../integration/auth-context";
 import { RedirectIfAuthenticated } from "../integration/auth-route-guards";
@@ -10,8 +12,10 @@ import { SignIn } from "../pages/SignIn";
 import { SignUp } from "../pages/SignUp";
 
 function AuthFrame({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
   return (
     <AuthProvider>
+      {pathname !== "/auth/callback" && <div className="absolute top-4 right-4 z-20"><LanguageSwitcher /></div>}
       {children}
       <Toaster richColors position="top-right" />
     </AuthProvider>

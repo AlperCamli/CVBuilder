@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { ApiClientError } from "../integration/api-error";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -13,6 +15,7 @@ import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
 
 export function OnboardingResume() {
+  useTranslation();
   const navigate = useNavigate();
   const { refreshMe } = useAuth();
   const [guest] = useState(readGuestUpload);
@@ -82,7 +85,7 @@ export function OnboardingResume() {
           setError(
             err instanceof Error
               ? err.message
-              : "We couldn't save your CV. Please try again.",
+              : t("We couldn't save your CV. Please try again."),
           );
       }
     };
@@ -98,32 +101,29 @@ export function OnboardingResume() {
     <div className="max-w-lg mx-auto px-6 py-16 text-center">
       <h1 className="text-2xl font-semibold mb-3">
         {!guest
-          ? "Upload your CV to get started"
+          ? t("Upload your CV to get started")
           : error
-            ? "Let's finish saving your CV"
-            : "Preparing your CV score"}
+            ? t("Let's finish saving your CV")
+            : t("Preparing your CV score")}
       </h1>
       {!guest ? (
         <p>
-          This upload has expired or isn't available on this device.{" "}
+          {t("This upload has expired or isn't available on this device.")}{" "}
           <Link to="/onboarding" className="underline">
-            Upload your CV
-          </Link>
+            {t("Upload your CV")}</Link>
         </p>
       ) : error ? (
         <>
           <p role="alert" className="mb-5">
-            {error}
+            {t(error)}
           </p>
           <button
             className="interactive-button px-5 py-3 rounded-lg bg-teal-600 text-white"
             onClick={() => setRetry((value) => value + 1)}
           >
-            Try again
-          </button>
+            {t("Try again")}</button>
           <Link to="/onboarding" className="block mt-4 underline">
-            Return to your upload
-          </Link>
+            {t("Return to your upload")}</Link>
         </>
       ) : (
         <>
@@ -132,9 +132,7 @@ export function OnboardingResume() {
             className="animate-spin mx-auto my-6 text-teal-600"
           />
           <p role="status">
-            Your account is ready. We're finishing the analysis and saving your
-            CV.
-          </p>
+            {t("Your account is ready. We're finishing the analysis and saving your CV.")}</p>
         </>
       )}
     </div>

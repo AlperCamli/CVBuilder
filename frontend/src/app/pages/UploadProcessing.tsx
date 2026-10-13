@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { FileText, CheckCircle, Loader2 } from "lucide-react";
@@ -18,6 +20,7 @@ const steps: UploadStep[] = [
 ];
 
 export function UploadProcessing() {
+  useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const file = location.state?.file as File | undefined;
@@ -123,7 +126,7 @@ export function UploadProcessing() {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Upload failed.");
+          setError(t("Upload failed."));
         }
       }
     };
@@ -152,8 +155,7 @@ export function UploadProcessing() {
           </div>
 
           <h2 className="font-medium mb-2" style={{ fontSize: "20px", color: "var(--color-text-primary)" }}>
-            Processing your CV
-          </h2>
+            {t("Processing your CV")}</h2>
           <p className="mb-8" style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
             {fileName}
           </p>
@@ -168,15 +170,14 @@ export function UploadProcessing() {
                 fontSize: "13px"
               }}
             >
-              {error}
+              {t(error)}
               <button
                 type="button"
                 className="ml-3 underline"
                 style={{ color: "var(--color-red-700)" }}
                 onClick={() => navigate("/app/create")}
               >
-                Back
-              </button>
+                {t("Back")}</button>
             </div>
           )}
 
@@ -191,8 +192,7 @@ export function UploadProcessing() {
               />
             </div>
             <p className="mt-2" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              {Math.round(progress)}% complete
-            </p>
+              {Math.round(progress)}{t("% complete")}</p>
           </div>
 
           <div className="space-y-3">
@@ -216,7 +216,7 @@ export function UploadProcessing() {
                     fontWeight: index === currentStep ? 500 : 400
                   }}
                 >
-                  {step.label}
+                  {t(step.label)}
                 </span>
               </div>
             ))}

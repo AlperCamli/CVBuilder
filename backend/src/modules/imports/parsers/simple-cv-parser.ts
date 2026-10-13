@@ -1,3 +1,4 @@
+import { detectCvLanguage } from "../../../shared/localization/languages";
 import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import JSZip from "jszip";
@@ -65,13 +66,13 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     type: "summary",
     title: "Summary",
-    aliases: ["summary", "profile", "professional summary", "objective", "about", "about me"],
+    aliases: ["profesyonel özet", "özet", "hakkımda", "kariyer hedefi", "summary", "profile", "professional summary", "objective", "about", "about me"],
     keywords: ["summary", "profile", "objective", "about"]
   },
   {
     type: "experience",
     title: "Experience",
-    aliases: [
+    aliases: ["iş deneyimi", "deneyim", "iş tecrübesi", "mesleki deneyim",
       "experience",
       "experiences",
       "experiences and programs",
@@ -90,43 +91,43 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     type: "education",
     title: "Education",
-    aliases: ["education", "academic background", "academics", "education background"],
+    aliases: ["eğitim", "eğitim bilgileri", "öğrenim", "education", "academic background", "academics", "education background"],
     keywords: ["education", "university", "college", "bachelor", "master", "phd"]
   },
   {
     type: "skills",
     title: "Skills",
-    aliases: ["skills", "technical skills", "core skills", "competencies", "technologies"],
+    aliases: ["beceriler", "yetkinlikler", "teknik beceriler", "skills", "technical skills", "core skills", "competencies", "technologies"],
     keywords: ["skills", "competencies", "technology", "tech stack", "tools"]
   },
   {
     type: "languages",
     title: "Languages",
-    aliases: ["languages", "language skills", "language"],
+    aliases: ["diller", "yabancı diller", "dil bilgisi", "languages", "language skills", "language"],
     keywords: ["language", "languages", "english", "native", "fluent", "proficient"]
   },
   {
     type: "certifications",
     title: "Certifications",
-    aliases: ["certifications", "certificates", "licenses"],
+    aliases: ["sertifikalar", "sertifikalar ve belgeler", "certifications", "certificates", "licenses"],
     keywords: ["certification", "certificate", "licensed", "credential"]
   },
   {
     type: "courses",
     title: "Courses",
-    aliases: ["courses", "coursework", "trainings", "training"],
+    aliases: ["kurslar", "eğitimler", "courses", "coursework", "trainings", "training"],
     keywords: ["course", "training", "bootcamp"]
   },
   {
     type: "projects",
     title: "Projects",
-    aliases: ["projects", "project experience", "selected projects"],
+    aliases: ["projeler", "projects", "project experience", "selected projects"],
     keywords: ["project", "portfolio", "github", "repo"]
   },
   {
     type: "volunteer",
     title: "Volunteer",
-    aliases: [
+    aliases: ["gönüllülük", "gönüllü çalışmalar",
       "volunteer",
       "volunteering",
       "volunteer experience",
@@ -142,19 +143,19 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     type: "awards",
     title: "Awards",
-    aliases: ["awards", "honors", "achievements"],
+    aliases: ["ödüller", "awards", "honors", "achievements"],
     keywords: ["award", "honor", "achievement"]
   },
   {
     type: "publications",
     title: "Publications",
-    aliases: ["publications", "research publications", "papers"],
+    aliases: ["yayınlar", "publications", "research publications", "papers"],
     keywords: ["publication", "paper", "journal", "conference", "doi"]
   },
   {
     type: "references",
     title: "References",
-    aliases: ["references", "referees"],
+    aliases: ["referanslar", "references", "referees"],
     keywords: ["reference", "referee"]
   }
 ];
@@ -291,7 +292,7 @@ const isPdfOcrEnabled = (): boolean => {
 const getPdfOcrLanguages = (): string => {
   const rawValue = process.env.PDF_OCR_LANGUAGES;
   if (!rawValue || rawValue.trim().length === 0) {
-    return "eng";
+    return "eng+tur";
   }
 
   return rawValue.trim();
@@ -2448,13 +2449,15 @@ const toStructuredContent = (
 };
 
 const toStructuredContentInternal = (text: string): CvContent => {
-  const language = "en" as const;
+  const language = detectCvLanguage(text) ?? "en";
   const normalizedText = normalizeEmailSpacing(text);
   const lines = foldWrappedLines(toLines(normalizedText));
 
   const { buckets, headingCount } = segmentByHeadings(lines);
 
   const metadata = {
+    detected_language: detectCvLanguage(text),
+    needs_language_confirmation: !detectCvLanguage(text),
     full_name: extractName(lines) ?? "",
     headline: "",
     email: extractEmail(normalizedText, lines) ?? "",

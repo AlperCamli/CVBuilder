@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { isLanguagePreview, translate as t } from "../localization/i18n";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import content from "../../content/career-advice-content.json";
@@ -99,6 +101,9 @@ export function getHeadMetaForPath(pathname: string): HeadMeta | null {
   if (path === "/designs/guided-journey/editor") {
     return {title: "Companion Studio | JobSpecificCV", robots: "noindex, nofollow", description: "Configure the companion’s movement, dialogue, and reactions."};
   }
+  if (path === "/designs/guided-journey/languages") {
+    return { title: "Language Studio | JobSpecificCV", robots: "noindex, nofollow", description: "Edit language catalogs and preview interface translations." };
+  }
 
   if (path === "/designs" || /^\/designs\/(journey|studio|editorial|companion|canvas|momentum|guided-journey)(\/pricing)?$/.test(path)) {
     const direction = path.split("/")[2];
@@ -173,14 +178,20 @@ function applyHeadMeta(meta: HeadMeta) {
 }
 
 export function RouteSeo() {
+  const { i18n } = useTranslation();
   const { pathname } = useLocation();
 
   useEffect(() => {
+    const route = SEO_ROUTES.get(normalizePath(pathname));
+    document.documentElement.lang = pathname.startsWith("/career-advice") ? "en" : isLanguagePreview() ? i18n.language : route?.language ?? i18n.language;
+    document.head.querySelectorAll('link[data-locale-alternate="true"]').forEach(link => link.remove());
+    for (const [language, url] of Object.entries(route?.alternates ?? {})) { const link = document.createElement("link"); link.rel = "alternate"; link.hreflang = language; link.href = url; link.dataset.localeAlternate = "true"; document.head.appendChild(link); }
     const meta = getHeadMetaForPath(pathname);
     if (meta) {
-      applyHeadMeta(meta);
+      const title = !route && !pathname.startsWith("/designs") ? meta.title.replace(/^[^|]+/, value => t(value.trim()) + (value.endsWith(" ") ? " " : "")) : meta.title;
+      applyHeadMeta({ ...meta, title });
     }
-  }, [pathname]);
+  }, [pathname, i18n.language]);
 
   return null;
 }

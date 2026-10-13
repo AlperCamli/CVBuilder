@@ -1,18 +1,18 @@
+import { i18n } from "./app/localization/i18n";
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router";
-import { RouteElements } from "./app/routes";
-import { PrivacyControls } from "./app/components/PrivacyControls";
+import { RouteContents } from "./app/routes";
 
 export async function renderRoute(path: string): Promise<string> {
-  // Load the public alternative before synchronous static rendering. The same
+  // Load the primary public journey before synchronous static rendering. The same
   // Suspense boundary remains in the route tree for matching client hydration.
-  const guidedJourney = /^\/guided-journey(?:\/pricing)?(?:[?#]|$)/.test(path)
+  await i18n.changeLanguage(/^\/tr(?:\/|$)/.test(path) ? "tr" : "en");
+  const guidedJourney = /^(?:\/|\/pricing|\/tr|\/tr\/pricing|\/guided-journey(?:\/pricing)?)(?:[?#]|$)/.test(path)
     ? (await import("./app/pages/GuidedJourneyPage")).default
     : undefined;
   return renderToString(
     <StaticRouter location={path}>
-      <RouteElements guidedJourney={guidedJourney} />
-      <PrivacyControls />
+      <RouteContents guidedJourney={guidedJourney} />
     </StaticRouter>,
   );
 }

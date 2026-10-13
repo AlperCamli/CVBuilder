@@ -464,6 +464,7 @@ export default function MascotStudio() {
           </div>
         </div>
         <div className="ms-header-actions">
+          <Link to="/designs/guided-journey/languages">Language Studio →</Link>
           <span className="ms-save-state">
             <span className={saved ? "is-saved" : ""} />
             {saved ? "Draft saved locally" : "Saving draft…"}

@@ -24,6 +24,25 @@ const createRenderingService = (): RenderingService => {
 };
 
 describe("rendering service", () => {
+  it("renders Turkish default headings and date metadata while preserving custom headings", async () => {
+    const result = await createRenderingService().buildRendering({
+      cv_kind: "master",
+      current_content: {
+        version: "v1", language: "tr", metadata: { full_name: "Çağrı Işık" },
+        sections: [
+          { id: "work", type: "experience", title: "Section 9", order: 0, meta: {}, blocks: [{ id: "job", type: "experience", order: 0, visibility: "visible", meta: {}, fields: { title: "Analist", company: "Company Ltd", start_date: "Jan 2020", location: "İstanbul", description: "20 rapor hazırladım." } }] },
+          { id: "custom", type: "summary", title: "My custom heading", order: 1, meta: {}, blocks: [{ id: "text", type: "summary", order: 0, visibility: "visible", meta: {}, fields: { text: "Ekip çalışmalarını yönetiyorum." } }] }
+        ]
+      }
+    });
+    const work = result.presentation.sections.find(section => section.id === "work")!;
+    expect(work.title).toBe("İş Deneyimi");
+    expect(work.items[0].date_range).toBe("Oca 2020 - Devam ediyor");
+    expect(work.items[0].metadata_line).toContain("Oca 2020 - Devam ediyor");
+    expect(work.items[0].metadata_line).toContain("İstanbul");
+    expect(result.presentation.header.name).toBe("Çağrı Işık");
+    expect(result.presentation.sections.find(section => section.id === "custom")?.title).toBe("My custom heading");
+  });
   it("does not include boolean scalar fields in rendered plain text", async () => {
     const service = createRenderingService();
 

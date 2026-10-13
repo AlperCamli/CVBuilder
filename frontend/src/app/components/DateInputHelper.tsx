@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { CalendarDays, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Calendar } from "./ui/calendar";
@@ -155,6 +157,7 @@ const monthFromParts = (parts: DateParts): Date => {
 };
 
 export function DateInputHelper({ value, placeholder, disabled = false, onChange }: DateInputHelperProps) {
+  useTranslation();
   const initialParts = useMemo(() => parseDateParts(value || ""), [value]);
   const [open, setOpen] = useState(false);
   const [parts, setParts] = useState<DateParts>(initialParts);
@@ -258,7 +261,7 @@ export function DateInputHelper({ value, placeholder, disabled = false, onChange
                 background: "var(--color-background-primary)"
               }}
             >
-              <option value="">Day</option>
+              <option value="">{t("Day")}</option>
               {dayOptions.map((day) => (
                 <option key={day} value={day}>
                   {day}
@@ -282,7 +285,7 @@ export function DateInputHelper({ value, placeholder, disabled = false, onChange
                 background: "var(--color-background-primary)"
               }}
             >
-              <option value="">Month</option>
+              <option value="">{t("Month")}</option>
               {monthNamesLong.map((month, index) => (
                 <option key={month} value={index + 1}>
                   {month}
@@ -306,7 +309,7 @@ export function DateInputHelper({ value, placeholder, disabled = false, onChange
                 background: "var(--color-background-primary)"
               }}
             >
-              <option value="">Year</option>
+              <option value="">{t("Year")}</option>
               {yearOptions.map((year) => (
                 <option key={year} value={year}>
                   {year}
@@ -347,8 +350,7 @@ export function DateInputHelper({ value, placeholder, disabled = false, onChange
                 color: "var(--color-text-secondary)"
               }}
             >
-              Clear
-            </button>
+              {t("Clear")}</button>
             <button
               type="button"
               onClick={() => {
@@ -367,8 +369,7 @@ export function DateInputHelper({ value, placeholder, disabled = false, onChange
                 color: "var(--color-text-secondary)"
               }}
             >
-              Today
-            </button>
+              {t("Today")}</button>
           </div>
         </div>
       </PopoverContent>

@@ -1,3 +1,4 @@
+import { translate as t } from "../localization/i18n";
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router";
 import { PublicHeader } from "../components/PublicHeader";
@@ -34,7 +35,7 @@ export function PublicPricing() {
         onClick: () => choosePlan("weekly")
       };
     }
-    return { label: `Choose ${card.name.toLowerCase()}`, onClick: () => choosePlan(card.code) };
+    return { label: `Choose ${card.name.toLowerCase()}`, onClick: () => choosePlan(card.code as CheckoutTarget) };
   };
 
   return (
@@ -144,7 +145,7 @@ export function PublicPricing() {
                     cursor: "pointer"
                   }}
                 >
-                  {cta.label}
+                  {t(cta.label)}
                 </button>
               </div>
             );

@@ -1,3 +1,5 @@
+import { translate as t } from "../../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import { Link } from "react-router";
@@ -51,6 +53,7 @@ export function MascotRail({
   openRequest: number;
   onTrial: () => void;
 }) {
+  useTranslation();
   const configRef = useRef(config);
   const inspectRef = useRef(inspect);
   useEffect(() => {
@@ -653,7 +656,7 @@ export function MascotRail({
         data-typing={typing && !desktop}
         data-suspended={suspended}
         data-dragging={dragReaction === "dragging"}
-        aria-label="Your CV companion"
+        aria-label={t("Your CV companion")}
         data-idle={config.motion.bob > 0}
         style={
           {
@@ -665,12 +668,12 @@ export function MascotRail({
         <button
           className={`gj-rail-character gj-pose-${pose}`}
           aria-label={
-            visible ? "Say hello to your mascot" : "Open mascot guidance"
+            visible ? t("Say hello to your mascot") : t("Open mascot guidance")
           }
           aria-controls={bubbleId}
           aria-expanded={visible}
           aria-describedby={`${bubbleId}-move-help`}
-          title="Drag me out of the way"
+          title={t("Drag me out of the way")}
           onClick={() => {
             if (visible) setGreeting(true);
             setDismissed(false);
@@ -693,9 +696,7 @@ export function MascotRail({
           </span>
         </button>
         <span id={`${bubbleId}-move-help`} className="gj-move-help">
-          Drag to move me, or use arrow keys while focused. I’ll stay here until
-          you scroll to another section. Press Escape to return me to the tour.
-        </span>
+          {t("Drag to move me, or use arrow keys while focused. I’ll stay here until you scroll to another section. Press Escape to return me to the tour.")}</span>
       </aside>
       <div
         ref={bubble}
@@ -712,13 +713,13 @@ export function MascotRail({
             setDismissed(true);
             setExpanded(false);
           }}
-          aria-label="Dismiss mascot message"
+          aria-label={t("Dismiss mascot message")}
         >
           <X size={13} />
         </button>
-        <p aria-live="polite">{dialogue.text}</p>
-        {action(dialogue.action, dialogue.label)}
-        {action(dialogue.secondaryAction, dialogue.secondaryLabel, true)}
+        <p aria-live="polite">{t(dialogue.text)}</p>
+        {action(dialogue.action, t(dialogue.label))}
+        {action(dialogue.secondaryAction, t(dialogue.secondaryLabel), true)}
       </div>
     </>
   );

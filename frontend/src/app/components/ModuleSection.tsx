@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles } from "lucide-react";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
@@ -62,6 +64,7 @@ export function ModuleSection({
   onAIAssist,
   getAiVersionNavigator
 }: ModuleSectionProps) {
+  useTranslation();
   const items = Array.isArray(data?.items) ? data.items : [];
 
   const updateItemField = (index: number, key: string, value: unknown) => {
@@ -119,7 +122,7 @@ export function ModuleSection({
             checked={value === true || value === "true"}
             onChange={(e) => updateItemField(index, field.key, e.target.checked)}
           />
-          {field.label}
+          {t(field.label)}
         </label>
       );
     }
@@ -128,7 +131,7 @@ export function ModuleSection({
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            {field.label}
+            {t(field.label)}
             {field.required ? " *" : ""}
           </label>
           <select
@@ -137,7 +140,7 @@ export function ModuleSection({
             className="w-full px-2 py-1.5 rounded border"
             style={inputStyle}
           >
-            <option value="">Select...</option>
+            <option value="">{t("Select...")}</option>
             {(field.options ?? []).map((option) => (
               <option key={option} value={option}>
                 {titleizeOption(option)}
@@ -152,7 +155,7 @@ export function ModuleSection({
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            {field.label}
+            {t(field.label)}
             {field.required ? " *" : ""}
           </label>
           <DateInputHelper
@@ -168,9 +171,8 @@ export function ModuleSection({
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            {field.label}
-            {field.required ? " *" : ""} (one per line)
-          </label>
+            {t(field.label)}
+            {field.required ? " *" : ""} {" "}{t("(one per line)")}</label>
           <BulletTextarea
             rows={3}
             placeholder={field.placeholder ?? field.label}
@@ -199,7 +201,7 @@ export function ModuleSection({
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            {field.label}
+            {t(field.label)}
             {field.required ? " *" : ""}
           </label>
           <BulletTextarea
@@ -217,7 +219,7 @@ export function ModuleSection({
     return (
       <div key={field.key}>
         <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-          {field.label}
+          {t(field.label)}
           {field.required ? " *" : ""}
         </label>
         <input
@@ -285,8 +287,7 @@ export function ModuleSection({
                         }}
                       >
                         <Sparkles size={12} />
-                        Improve with AI
-                      </button>
+                        {t("Improve with AI")}</button>
                       <AIVersionNavigator
                         state={getAiVersionNavigator?.(
                           typeof item.blockId === "string" ? item.blockId : undefined
@@ -313,7 +314,7 @@ export function ModuleSection({
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add entry</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{t("Add entry")}</span>
           </button>
         </div>
       )}

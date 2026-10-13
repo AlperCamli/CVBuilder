@@ -61,7 +61,7 @@ export const WEB_APPLICATION_JSON_LD = {
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   description:
-    "An AI-assisted CV builder for creating ATS-friendly CVs tailored to specific job descriptions from a single master CV.",
+    "An AI-assisted CV builder for creating ATS-friendly CVs tailored to specific job descriptions from a master CV in your chosen language.",
   featureList: [
     "AI-powered CV tailoring for specific job descriptions",
     "ATS-friendly resume generation",
@@ -72,32 +72,7 @@ export const WEB_APPLICATION_JSON_LD = {
     "CV scoring and improvement suggestions",
     "Job application tracker",
   ],
-  offers: [
-    {
-      "@type": "Offer",
-      name: "Free",
-      price: "0",
-      priceCurrency: "USD",
-      availability: "https://schema.org/InStock",
-    },
-    ...[
-      ["Weekly Pro", "4.99", "P1W"],
-      ["Monthly Pro", "14.99", "P1M"],
-      ["Annual Pro", "99.90", "P1Y"],
-    ].map(([name, price, billingDuration]) => ({
-      "@type": "Offer",
-      name,
-      price,
-      priceCurrency: "USD",
-      availability: "https://schema.org/InStock",
-      priceSpecification: {
-        "@type": "UnitPriceSpecification",
-        price,
-        priceCurrency: "USD",
-        billingDuration,
-      },
-    })),
-  ],
+
 };
 
 // Shared with the visible guided page so its structured FAQ cannot drift.
@@ -108,7 +83,7 @@ export const GUIDED_JOURNEY_FAQ_ITEMS = [
   },
   {
     question: "How is the Pro trial different?",
-    answer: "Eligible new subscribers can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at $4.99 per week unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
+    answer: "Eligible new subscribers can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at the displayed regional Weekly price unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
   },
   {
     question: "Can I review the changes?",
@@ -116,23 +91,31 @@ export const GUIDED_JOURNEY_FAQ_ITEMS = [
   },
 ];
 
-function guidedJourneyRoute(pricing) {
-  const path = pricing ? "/guided-journey/pricing" : "/guided-journey";
-  const title = pricing
+export const GUIDED_JOURNEY_FAQ_ITEMS_TR = [
+  { question: "Kart olmadan başlayabilir miyim?", answer: "Evet. Ücretsiz plan ayda 3 işe özel özgeçmiş, 5 dışa aktarma ve 20 yapay zekâ işlemi içerir. Her hakkın ayrı bir sınırı vardır. Kredi kartı gerekmez." },
+  { question: "Pro denemesi nasıl farklı?", answer: "Uygun yeni aboneler Haftalık Pro’yu 3 gün ücretsiz deneyebilir. Ödeme sırasında kart gerekir. Deneme bitmeden iptal edilmezse gösterilen bölgesel Haftalık fiyatla yenilenir. Deneme Aylık plana uygulanmaz. Uygunluk ve koşullar ödeme sırasında doğrulanır." },
+  { question: "Değişiklikleri inceleyebilir miyim?", answer: "Her zaman. Uygun anahtar kelimeleri seçin, önerileri inceleyin ve dışa aktarmadan önce özgeçmişinizi düzenleyin. Deneyiminiz her zaman temel alınır." }
+];
+
+function guidedJourneyRoute(pricing, locale = "en", primary = false) {
+  const path = primary ? (locale === "tr" ? (pricing ? "/tr/pricing" : "/tr") : (pricing ? "/pricing" : "/")) : (pricing ? "/guided-journey/pricing" : "/guided-journey");
+  const title = locale === "tr" ? (pricing ? "Fiyatlandırma | jobspecificCV" : "İşe Özel Özgeçmişinizi Dakikalar İçinde Hazırlayın | jobspecificCV") : pricing
     ? "Guided Journey Pricing | jobspecificCV"
     : "Tailor Your CV in Minutes — Guided Journey | jobspecificCV";
-  const description = pricing
-    ? "Compare Weekly, Monthly, and Annual Pro by weekly equivalent. Monthly is $14.99 billed monthly. Start Free or explore the eligible 3-day Weekly trial."
+  const description = locale === "tr" ? (pricing ? "Ücretsiz başlayın veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "Özgeçmişinizi yükleyin, iş ilanına göre uyarlayın ve her değişikliği inceleyin. Türkçe veya İngilizce özgeçmiş oluşturun.") : pricing
+    ? "Compare Weekly, Monthly, and Annual Pro with regional billing totals. Start Free or explore the eligible 3-day Weekly trial."
     : "Try the interactive CV demo with a friendly guide. Tailor your CV to a job description, review every change, and start free.";
   return {
     path,
-    snapshot: pricing ? "guided-journey-pricing" : "guided-journey",
+    language: locale,
+    alternates: primary ? { en: absoluteUrl(pricing ? "/pricing" : "/"), tr: absoluteUrl(pricing ? "/tr/pricing" : "/tr"), "x-default": absoluteUrl(pricing ? "/pricing" : "/") } : undefined,
+    snapshot: primary ? `${locale}-${pricing ? "pricing" : "landing"}` : pricing ? "guided-journey-pricing" : "guided-journey",
     clientEntry: "src/app/pages/GuidedJourneyPage.tsx",
     title,
     description,
     canonical: absoluteUrl(path),
     // The existing homepage and pricing remain the primary indexed pages.
-    robots: "noindex, follow",
+    robots: primary ? "index, follow" : "noindex, follow",
     ogType: "website",
     ogTitle: title,
     ogDescription: description,
@@ -142,13 +125,13 @@ function guidedJourneyRoute(pricing) {
     twitterDescription: description,
     twitterImage: OG_IMAGE,
     twitterImageAlt: DEFAULT_IMAGE_ALT,
-    lastmod: "2026-10-04",
-    includeInSitemap: false,
+    lastmod: "2026-10-12",
+    includeInSitemap: primary,
     changefreq: "monthly",
     priority: "0.7",
     jsonLd: [
       WEB_APPLICATION_JSON_LD,
-      faqPageJsonLd(GUIDED_JOURNEY_FAQ_ITEMS),
+      faqPageJsonLd(locale === "tr" ? GUIDED_JOURNEY_FAQ_ITEMS_TR : GUIDED_JOURNEY_FAQ_ITEMS),
       breadcrumbJsonLd([
         { name: "Home", path: "/" },
         { name: "Guided Journey", path: "/guided-journey" },
@@ -340,61 +323,10 @@ function articleRoute(content, article) {
 // frontend/prerendered/. `content` is the parsed career-advice-content.json.
 export function buildSeoRoutes(content) {
   return [
-    {
-      path: "/",
-      snapshot: "landing",
-      title: "Tailor Your CV to Any Job Description in Minutes | jobspecificCV",
-      description:
-        "Upload your CV, paste a job description, and create a cleaner, ATS-friendly CV focused on the role in front of you.",
-      canonical: absoluteUrl("/"),
-      ogType: "website",
-      ogTitle: "Tailor Your CV to Any Job Description in Minutes",
-      ogDescription:
-        "Upload your CV, paste a job description, and export an ATS-friendly version focused on the role.",
-      ogImage: OG_IMAGE,
-      twitterTitle: "Tailor Your CV to Any Job Description in Minutes",
-      twitterDescription: "Create an ATS-friendly CV tailored to a specific job description.",
-      twitterImage: OG_IMAGE,
-      lastmod: "2026-10-04",
-      includeInSitemap: true,
-      changefreq: "weekly",
-      priority: "1.0",
-      jsonLd: [
-        WEB_APPLICATION_JSON_LD,
-        ORGANIZATION_JSON_LD,
-        faqPageJsonLd(LANDING_FAQ_ITEMS),
-      ],
-    },
-    {
-      path: "/pricing",
-      snapshot: "pricing",
-      title: "Pricing | jobspecificCV",
-      description:
-        "Start free or choose Weekly, Monthly, or Annual Pro. Compare weekly equivalents with full billing totals. Eligible new subscribers can try Weekly Pro free for 3 days.",
-      canonical: absoluteUrl("/pricing"),
-      ogType: "website",
-      ogTitle: "jobspecificCV Pricing — Free, Weekly, Monthly, and Annual Pro",
-      ogDescription:
-        "Start free, or choose Pro at $4.99 weekly, $14.99 monthly, or $99.90 annually. Eligible new subscribers can try Weekly Pro free for 3 days.",
-      ogImage: OG_IMAGE,
-      ogImageAlt: DEFAULT_IMAGE_ALT,
-      twitterTitle: "jobspecificCV Pricing",
-      twitterDescription:
-        "Compare Free, Weekly, Monthly, and Annual Pro. The eligible 3-day trial applies to Weekly Pro.",
-      twitterImage: OG_IMAGE,
-      twitterImageAlt: DEFAULT_IMAGE_ALT,
-      lastmod: "2026-10-04",
-      includeInSitemap: true,
-      changefreq: "monthly",
-      priority: "0.9",
-      jsonLd: [
-        WEB_APPLICATION_JSON_LD,
-        breadcrumbJsonLd([
-          { name: "Home", path: "/" },
-          { name: "Pricing", path: "/pricing" },
-        ]),
-      ],
-    },
+    guidedJourneyRoute(false, "en", true),
+    guidedJourneyRoute(true, "en", true),
+    guidedJourneyRoute(false, "tr", true),
+    guidedJourneyRoute(true, "tr", true),
     guidedJourneyRoute(false),
     guidedJourneyRoute(true),
     {

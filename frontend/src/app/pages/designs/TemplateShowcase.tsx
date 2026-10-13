@@ -1,3 +1,5 @@
+import { translate as t } from "../../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, ArrowRight, Check, Expand, FileText } from "lucide-react";
 import {
@@ -29,6 +31,7 @@ function Paper({
   template: ShowcaseTemplate;
   eager?: boolean;
 }) {
+  useTranslation();
   return (
     <img
       className="ts-paper"
@@ -43,6 +46,7 @@ function Paper({
 }
 
 function Swatch({ template }: { template: ShowcaseTemplate }) {
+  useTranslation();
   return (
     <span className="ts-swatch" style={palette(template)} aria-hidden="true">
       <i />
@@ -58,6 +62,7 @@ export function TemplateShowcase({
   direction: ShowcaseDirection;
   onOverlayChange: (open: boolean) => void;
 }) {
+  useTranslation();
   const [selected, setSelected] = useState(0);
   const [preview, setPreview] = useState<number | null>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -79,13 +84,13 @@ export function TemplateShowcase({
   };
   const controls = (
     <div className="ts-arrows">
-      <button onClick={() => advance(-1)} aria-label="Previous template">
+      <button onClick={() => advance(-1)} aria-label={t("Previous template")}>
         <ArrowLeft size={19} />
       </button>
       <span aria-live="polite" aria-atomic="true">
-        {String(selected + 1).padStart(2, "0")} <span>/ 07</span>
+        {String(selected + 1).padStart(2, "0")} <span>{"/ 07"}</span>
       </span>
-      <button onClick={() => advance(1)} aria-label="Next template">
+      <button onClick={() => advance(1)} aria-label={t("Next template")}>
         <ArrowRight size={19} />
       </button>
     </div>
@@ -103,18 +108,15 @@ export function TemplateShowcase({
             <>
               <header className="ts-section-heading">
                 <div>
-                  <Eyebrow>A GOOD FIRST IMPRESSION</Eyebrow>
+                  <Eyebrow>{t("A GOOD FIRST IMPRESSION")}</Eyebrow>
                   <h2 id="ts-heading">
-                    Your experience.
-                    <br />
-                    <em>Your kind of style.</em>
+                    {t("Your experience.")}<br />
+                    <em>{t("Your kind of style.")}</em>
                   </h2>
                 </div>
                 <p>
-                  Find a look that feels like you.
-                  <br />
-                  Make it yours in the editor.
-                </p>
+                  {t("Find a look that feels like you.")}<br />
+                  {t("Make it yours in the editor.")}</p>
               </header>
               <div className="ts-collection-grid">
                 {templates.map((template, index) => (
@@ -128,13 +130,12 @@ export function TemplateShowcase({
                     <span className="ts-card-stage">
                       <Paper template={template} />
                       <span className="ts-expand">
-                        <Expand size={15} /> Take a closer look
-                      </span>
+                        <Expand size={15} /> {" "}{t("Take a closer look")}</span>
                     </span>
                     <span className="ts-card-label">
                       <span>
                         <strong>{template.name}</strong>
-                        <small>{template.color}</small>
+                        <small>{t(template.color)}</small>
                       </span>
                       <Swatch template={template} />
                     </span>
@@ -145,15 +146,13 @@ export function TemplateShowcase({
                     <FileText size={27} strokeWidth={1.4} />
                   </span>
                   <h3>
-                    The next one
-                    <br />
-                    could be yours.
-                  </h3>
-                  <p>Your story. A fresh start.</p>
+                    {t("The next one")}<br />
+                    {t("could be yours.")}</h3>
+                  <p>{t("Your story. A fresh start.")}</p>
                   <StartLink className="cv-text-link">
-                    Create my CV <ArrowRight size={17} />
+                    {t("Create my CV")}{" "}<ArrowRight size={17} />
                   </StartLink>
-                  <small>Free to start. No card required.</small>
+                  <small>{t("Free to start. No card required.")}</small>
                 </div>
               </div>
             </>
@@ -163,8 +162,8 @@ export function TemplateShowcase({
             <div className="ts-spotlight-layout">
               <div className="ts-spotlight-stage" style={palette(current)}>
                 <span className="ts-stage-caption">
-                  <span>THE TEMPLATE COLLECTION</span>
-                  <span>0{selected + 1} / 07</span>
+                  <span>{t("THE TEMPLATE COLLECTION")}</span>
+                  <span>{"0"}{selected + 1} {"/ 07"}</span>
                 </span>
                 <button
                   className="ts-spotlight-paper"
@@ -173,30 +172,26 @@ export function TemplateShowcase({
                 >
                   <Paper template={current} eager />
                   <span className="ts-expand">
-                    <Expand size={15} /> View full size
-                  </span>
+                    <Expand size={15} /> {" "}{t("View full size")}</span>
                 </button>
                 <div className="ts-stage-footer">
-                  <span>{current.color}</span>
+                  <span>{t(current.color)}</span>
                   {controls}
                 </div>
               </div>
               <div className="ts-spotlight-copy">
-                <Eyebrow>SAME STORY. A NEW PERSPECTIVE.</Eyebrow>
+                <Eyebrow>{t("SAME STORY. A NEW PERSPECTIVE.")}</Eyebrow>
                 <h2 id="ts-heading">
-                  Find your
-                  <br />
-                  <em>signature style.</em>
+                  {t("Find your")}<br />
+                  <em>{t("signature style.")}</em>
                 </h2>
                 <p>
-                  A little color or quietly classic.
-                  <br />
-                  Your CV should feel like you.
-                </p>
+                  {t("A little color or quietly classic.")}<br />
+                  {t("Your CV should feel like you.")}</p>
                 <div
                   className="ts-picker"
                   role="group"
-                  aria-label="Choose a template to preview"
+                  aria-label={t("Choose a template to preview")}
                 >
                   {templates.map((template, index) => (
                     <button
@@ -216,14 +211,13 @@ export function TemplateShowcase({
                   aria-atomic="true"
                 >
                   <strong>{current.name}</strong>
-                  <p>{current.detail}</p>
+                  <p>{t(current.detail)}</p>
                 </div>
                 <StartLink>
-                  Create my CV <ArrowRight size={17} />
+                  {t("Create my CV")}{" "}<ArrowRight size={17} />
                 </StartLink>
                 <small className="ts-free-note">
-                  Free to start. Make it yours in the editor.
-                </small>
+                  {t("Free to start. Make it yours in the editor.")}</small>
               </div>
             </div>
           )}
@@ -231,21 +225,19 @@ export function TemplateShowcase({
           {direction === "lookbook" && (
             <>
               <header className="ts-section-heading ts-centered">
-                <Eyebrow>DRESSED FOR YOUR NEXT CHAPTER</Eyebrow>
+                <Eyebrow>{t("DRESSED FOR YOUR NEXT CHAPTER")}</Eyebrow>
                 <h2 id="ts-heading">
-                  Good on paper.
-                  <br />
-                  <em>Even better when it’s yours.</em>
+                  {t("Good on paper.")}<br />
+                  <em>{t("Even better when it’s yours.")}</em>
                 </h2>
                 <p>
-                  Seven different looks. Your experience at the heart of each.
-                </p>
+                  {t("Seven different looks. Your experience at the heart of each.")}</p>
               </header>
               <div
                 className="ts-deck"
                 role="region"
                 aria-roledescription="carousel"
-                aria-label="CV template lookbook"
+                aria-label={t("CV template lookbook")}
                 tabIndex={0}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -319,14 +311,14 @@ export function TemplateShowcase({
               <div className="ts-lookbook-caption">
                 <div aria-live="polite" aria-atomic="true">
                   <h3>{current.name}</h3>
-                  <p>{current.detail}</p>
+                  <p>{t(current.detail)}</p>
                 </div>
                 {controls}
               </div>
               <div
                 className="ts-lookbook-picker"
                 role="group"
-                aria-label="Choose a lookbook template"
+                aria-label={t("Choose a lookbook template")}
               >
                 {templates.map((template, index) => (
                   <button
@@ -341,16 +333,14 @@ export function TemplateShowcase({
               </div>
               <div className="ts-lookbook-cta">
                 <StartLink>
-                  Make it yours <ArrowRight size={17} />
+                  {t("Make it yours")}{" "}<ArrowRight size={17} />
                 </StartLink>
-                <span>Free to start. Choose your style in the editor.</span>
+                <span>{t("Free to start. Choose your style in the editor.")}</span>
               </div>
             </>
           )}
           <p className="ts-sample-note">
-            Real templates. Fictional details. Your experience takes their
-            place.
-          </p>
+            {t("Real templates. Fictional details. Your experience takes their place.")}</p>
         </div>
       </section>
       <Dialog
@@ -369,8 +359,7 @@ export function TemplateShowcase({
           <DialogHeader>
             <DialogTitle>{templates[preview ?? selected].name}</DialogTitle>
             <DialogDescription>
-              {templates[preview ?? selected].color} · Fictional sample CV
-            </DialogDescription>
+              {templates[preview ?? selected].color} {" "}{t("· Fictional sample CV")}</DialogDescription>
           </DialogHeader>
           <div
             className="ts-preview-body"
@@ -379,9 +368,9 @@ export function TemplateShowcase({
             {preview !== null && <Paper template={templates[preview]} eager />}
           </div>
           <div className="ts-preview-footer">
-            <span>Choose your template in the CV editor.</span>
+            <span>{t("Choose your template in the CV editor.")}</span>
             <StartLink className="ts-modal-cta">
-              Start free <ArrowRight size={16} />
+              {t("Start free")}{" "}<ArrowRight size={16} />
             </StartLink>
           </div>
         </DialogContent>

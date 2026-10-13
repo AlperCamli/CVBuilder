@@ -15,6 +15,19 @@ const requireSession = (request: Request) => {
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
+  postTranslationStart = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.aiService.startTranslation(requireSession(request), request.params.masterCvId, request.body.target_language), { statusCode: 202 });
+  });
+  postTranslationExecute = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.aiService.executeTranslation(requireSession(request), request.params.masterCvId, request.params.aiRunId));
+  });
+  getTranslation = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.aiService.getTranslation(requireSession(request), request.params.masterCvId, request.params.aiRunId));
+  });
+  postTranslationApply = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.aiService.applyTranslationRun(requireSession(request), request.params.masterCvId, request.params.aiRunId), { statusCode: 201 });
+  });
+
   postTailoringRunStart = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.aiService.startTailoringRun(requireSession(request), request.body);
     sendSuccess(response, data);

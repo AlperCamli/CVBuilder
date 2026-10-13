@@ -1,3 +1,7 @@
+import { publicPath } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "../localization/LanguageControls";
 import { Outlet, Link, useLocation } from "react-router";
 import {
   FileText,
@@ -17,6 +21,7 @@ import { useAuth } from "../integration/auth-context";
 import { AiExperienceGate } from "./AiExperienceGate";
 
 export function Layout() {
+  useTranslation();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { sidebarVisible, toggleSidebar } = useSidebar();
@@ -59,7 +64,7 @@ export function Layout() {
         }}
       >
         <div style={{ width: "220px", height: "100%", display: "flex", flexDirection: "column" }}>
-          <Link to="/" className="flex items-center gap-2 p-6">
+          <Link to={publicPath("/")} className="flex items-center gap-2 p-6">
             <img
               src="/images/logo.png"
               alt=""
@@ -69,8 +74,7 @@ export function Layout() {
               className="w-6 h-6 rounded-lg object-contain shrink-0"
             />
             <span className="font-medium" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-              jobspecificCV
-            </span>
+              {t("jobspecificCV")}</span>
           </Link>
 
           <nav className="flex-1 px-3">
@@ -91,13 +95,14 @@ export function Layout() {
                   >
                     <Icon size={14} />
                     <span className="font-medium" style={{ fontSize: "13px" }}>
-                      {item.label}
+                      {t(item.label)}
                     </span>
                   </Link>
                 );
               })}
             </div>
           </nav>
+          <div className="px-4 py-3"><LanguageSwitcher /></div>
 
           <div className="p-3 border-t" style={{ borderColor: "var(--color-border-tertiary)" }}>
             <div className="mb-2 px-2.5 py-1.5" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
@@ -112,8 +117,7 @@ export function Layout() {
             >
               <LogOut size={14} />
               <span className="font-medium" style={{ fontSize: "13px" }}>
-                Sign out
-              </span>
+                {t("Sign out")}</span>
             </button>
           </div>
         </div>
@@ -142,7 +146,7 @@ export function Layout() {
             left: sidebarVisible ? "200px" : "16px",
             color: "var(--color-text-secondary)"
           }}
-          title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+          title={sidebarVisible ? t("Hide sidebar") : t("Show sidebar")}
         >
           {sidebarVisible ? <PanelLeftClose size={18} /> : <PanelLeft size={18} />}
         </button>
@@ -159,15 +163,14 @@ export function Layout() {
               fontSize: "13px"
             }}
           >
-            <span>{authMessage}</span>
+            <span>{t(authMessage)}</span>
             <button
               type="button"
               onClick={clearAuthMessage}
               className="ml-4 underline"
               style={{ color: "var(--color-red-700)" }}
             >
-              Dismiss
-            </button>
+              {t("Dismiss")}</button>
           </div>
         )}
         <AiExperienceGate><Outlet /></AiExperienceGate>

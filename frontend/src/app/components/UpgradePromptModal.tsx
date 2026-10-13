@@ -1,3 +1,7 @@
+import { useRegionalPricing } from "../integration/regional-pricing";
+import { PricingAvailability } from "./PricingAvailability";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Check, Loader2, Sparkles, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -8,7 +12,8 @@ import { startStripeCheckout } from "../integration/checkout-redirect";
 import {
   PAID_PLAN_CARDS,
   WEEKLY_PRICE,
-  type CheckoutTarget
+  type CheckoutTarget,
+  type PlanCard
 } from "../../content/pricing";
 import {
   trackPostExportPaywallDismissed,
@@ -77,23 +82,23 @@ const limitReachedCopy = (feature: string | undefined): { title: string; pitch: 
     case "ai_action":
       return {
         title: "You've hit your monthly AI limit",
-        pitch: `Unlock unlimited AI improvements and rewrites. Plans start at ${WEEKLY_PRICE}/week.`
+        pitch: `Unlock unlimited AI improvements and rewrites. See your regional prices below.`
       };
     case "export_pdf":
     case "export_docx":
       return {
         title: "You've hit your monthly export limit",
-        pitch: `Unlock unlimited PDF and DOCX exports. Plans start at ${WEEKLY_PRICE}/week.`
+        pitch: `Unlock unlimited PDF and DOCX exports. See your regional prices below.`
       };
     case "tailored_cv_generation":
       return {
         title: "You've hit your job-specific CV limit",
-        pitch: `Create unlimited tailored CVs for every application. Plans start at ${WEEKLY_PRICE}/week.`
+        pitch: `Create unlimited tailored CVs for every application. See your regional prices below.`
       };
     default:
       return {
         title: "You've hit your Free plan limit",
-        pitch: `Go unlimited. Plans start at ${WEEKLY_PRICE}/week.`
+        pitch: `Go unlimited. See your regional prices below.`
       };
   }
 };
@@ -152,6 +157,8 @@ const getCopy = (
 };
 
 export function UpgradePromptModal({ open, variant, options, onClose }: UpgradePromptModalProps) {
+  const regional = useRegionalPricing();
+  useTranslation();
   const { api, isAuthenticated } = useAuth();
   const { completeStep } = useOnboarding();
   const navigate = useNavigate();
@@ -261,7 +268,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     try {
       await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}` });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open checkout.");
+      setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusy(null);
     }
   };
@@ -292,7 +299,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
           >
             <Sparkles size={12} />
             <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em" }}>
-              {copy.eyebrow}
+              {t(copy.eyebrow)}
             </span>
           </div>
 
@@ -301,12 +308,12 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
               className="font-semibold mb-2"
               style={{ fontSize: isPostExport ? "24px" : "22px", lineHeight: "1.3", color: "var(--color-text-primary)" }}
             >
-              {copy.title}
+              {t(copy.title)}
             </h2>
           </DialogTitle>
           <DialogDescription asChild>
             <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-              {copy.body}
+              {t(copy.body)}
             </p>
           </DialogDescription>
         </div>
@@ -323,14 +330,13 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                   }}
                 >
                   <p className="font-medium mb-3" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                    Application checklist
-                  </p>
+                    {t("Application checklist")}</p>
                   <ul className="space-y-2.5">
                     {POST_EXPORT_CHECKLIST.map((feature) => (
                       <li key={feature} className="flex items-start gap-2.5">
                         <Check size={15} className="mt-0.5 flex-shrink-0" style={{ color: "var(--color-teal-600)" }} />
                         <span style={{ fontSize: "12px", color: "var(--color-text-primary)", lineHeight: "1.5" }}>
-                          {feature}
+                          {t(feature)}
                         </span>
                       </li>
                     ))}
@@ -338,7 +344,8 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {PAID_PLAN_CARDS.map((card) => {
+                  <PricingAvailability {...regional} />
+                  {regional.cards.filter((card): card is PlanCard & { code: CheckoutTarget } => card.code !== "free").map((card) => {
                     const isBusy = busy === card.code;
                     const badge = postExportPlanBadge(card, trialEligible);
                     const isEmphasized = card.code === "weekly" || card.highlighted;
@@ -348,7 +355,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                         key={card.code}
                         type="button"
                         onClick={() => void startCheckout(card.code)}
-                        disabled={busy !== null}
+                        disabled={busy !== null || !regional.ready}
                         className="w-full p-4 rounded-lg border-2 flex items-center justify-between gap-4 text-left transition-colors"
                         style={{
                           borderColor: isEmphasized ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
@@ -402,8 +409,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                               {card.weeklyPrice}
                             </span>
                             <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                              /week
-                            </span>
+                              {t("/week")}</span>
                           </div>
                           <p
                             className="font-medium"
@@ -413,7 +419,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                               marginTop: "5px"
                             }}
                           >
-                            {card.code === "weekly" && trialEligible ? "Start trial" : `Choose ${card.name}`}
+                            {card.code === "weekly" && trialEligible ? t("Start trial") : t("Choose {{plan}}", { plan: card.name })}
                           </p>
                         </div>
                       </button>
@@ -432,7 +438,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                     fontSize: "12px"
                   }}
                 >
-                  {error}
+                  {t(error)}
                 </div>
               )}
             </>
@@ -442,7 +448,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                 {UNLIMITED_FEATURES.map((feature) => (
                   <li key={feature} className="flex items-start gap-2.5">
                     <Check size={16} className="mt-0.5 flex-shrink-0" style={{ color: "var(--color-teal-600)" }} />
-                    <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>{feature}</span>
+                    <span style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>{t(feature)}</span>
                   </li>
                 ))}
               </ul>
@@ -457,7 +463,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                     fontSize: "12px"
                   }}
                 >
-                  {error}
+                  {t(error)}
                 </div>
               )}
 
@@ -474,7 +480,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                     color: "var(--color-teal-800)"
                   }}
                 >
-                  {options.nextStep.label}
+                  {t(options.nextStep.label)}
                   <ArrowRight size={14} />
                 </button>
               )}
@@ -482,7 +488,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
               <button
                 type="button"
                 onClick={() => void startCheckout("weekly")}
-                disabled={busy !== null}
+                disabled={busy !== null || !regional.ready}
                 className="w-full px-5 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                 style={{
                   fontSize: "13px",
@@ -493,7 +499,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                 }}
               >
                 {busy === "weekly" ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                {copy.ctaPrimary}
+                {t(copy.ctaPrimary)}
               </button>
             </>
           )}
@@ -505,8 +511,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
               className="font-medium transition-colors"
               style={{ fontSize: "12px", color: "var(--color-teal-600)" }}
             >
-              Compare plans
-            </button>
+              {t("Compare plans")}</button>
             <button
               type="button"
               onClick={() => {
@@ -518,7 +523,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
               className="font-medium transition-colors"
               style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
             >
-              {copy.dismiss}
+              {t(copy.dismiss)}
             </button>
           </div>
         </div>

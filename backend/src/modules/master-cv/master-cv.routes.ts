@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { MasterCvController } from "./master-cv.controller";
@@ -19,6 +20,8 @@ export const createMasterCvRouter = (
   const router = Router();
 
   router.get("/master-cvs", authMiddleware, masterCvController.listMasterCvs);
+  router.get("/master-cvs/:masterCvId/revisions", authMiddleware, validate({ params: masterCvIdParamSchema }), masterCvController.getDocumentRevisions);
+  router.post("/master-cvs/:masterCvId/revisions/:revisionId/restore", authMiddleware, validate({ params: z.object({ masterCvId: z.string().uuid(), revisionId: z.string().uuid() }).strict() }), masterCvController.restoreDocumentRevision);
   router.post(
     "/master-cvs",
     authMiddleware,

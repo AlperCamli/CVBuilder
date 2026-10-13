@@ -1,3 +1,6 @@
+import { localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { FileText, Plus, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -16,13 +19,14 @@ interface JobCard {
 }
 
 const formatDate = (value: string): string =>
-  new Date(value).toLocaleDateString("en-US", {
+  new Date(value).toLocaleDateString(localeCode(), {
     month: "short",
     day: "numeric",
     year: "numeric"
   });
 
 export function CoverLetters() {
+  useTranslation();
   const { setSidebarVisible } = useSidebar();
   const navigate = useNavigate();
   const { api } = useAuth();
@@ -55,7 +59,7 @@ export function CoverLetters() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load jobs.");
+        setError(t("Failed to load jobs."));
       }
     } finally {
       setLoading(false);
@@ -103,7 +107,7 @@ export function CoverLetters() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to open cover letter.");
+        setError(t("Failed to open cover letter."));
       }
     } finally {
       setProcessingJobId(null);
@@ -114,11 +118,9 @@ export function CoverLetters() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="font-medium mb-1" style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
-          Cover Letters
-        </h1>
+          {t("Cover Letters")}</h1>
         <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-          Create and manage cover letters for your job applications
-        </p>
+          {t("Create and manage cover letters for your job applications")}</p>
       </div>
 
       {error && (
@@ -131,21 +133,20 @@ export function CoverLetters() {
             fontSize: "13px"
           }}
         >
-          {error}
+          {t(error)}
           <button
             type="button"
             className="ml-3 underline"
             style={{ color: "var(--color-red-700)" }}
             onClick={() => void loadJobs()}
           >
-            Retry
-          </button>
+            {t("Retry")}</button>
         </div>
       )}
 
       <div className="max-w-4xl">
         {loading && (
-          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>Loading jobs...</p>
+          <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>{t("Loading jobs...")}</p>
         )}
 
         {!loading && (
@@ -179,7 +180,7 @@ export function CoverLetters() {
                             }}
                           >
                             <CheckCircle2 size={12} />
-                            <span style={{ fontSize: "11px", fontWeight: 500 }}>Created</span>
+                            <span style={{ fontSize: "11px", fontWeight: 500 }}>{t("Created")}</span>
                           </div>
                         )}
                       </div>
@@ -215,7 +216,7 @@ export function CoverLetters() {
                           }}
                         >
                           <Loader2 size={14} className="animate-spin" />
-                          {jobCard.hasCoverLetter ? "Opening..." : "Creating..."}
+                          {jobCard.hasCoverLetter ? t("Opening...") : t("Creating...")}
                         </button>
                       ) : jobCard.hasCoverLetter ? (
                         <button
@@ -229,8 +230,7 @@ export function CoverLetters() {
                           }}
                         >
                           <Mail size={14} />
-                          View Cover Letter
-                        </button>
+                          {t("View Cover Letter")}</button>
                       ) : (
                         <button
                           onClick={() => void openCoverLetter(job)}
@@ -242,8 +242,7 @@ export function CoverLetters() {
                           }}
                         >
                           <Plus size={14} />
-                          Create Cover Letter
-                        </button>
+                          {t("Create Cover Letter")}</button>
                       )}
                     </div>
                   </div>
@@ -266,14 +265,12 @@ export function CoverLetters() {
                 <FileText size={32} style={{ color: "var(--color-text-secondary)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                No jobs with customized CV yet
-              </h3>
+                {t("No jobs with customized CV yet")}</h3>
               <p
                 className="mb-6 max-w-md mx-auto"
                 style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}
               >
-                Create a customized CV for a job first, then generate and manage its cover letter here.
-              </p>
+                {t("Create a customized CV for a job first, then generate and manage its cover letter here.")}</p>
             </div>
           </div>
         )}

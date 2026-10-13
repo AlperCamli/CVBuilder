@@ -1,3 +1,4 @@
+import { normalizeLanguage, SECTION_TITLES_TR } from "../../shared/localization/languages";
 import { SIGNATURE_TEMPLATE_PROFILES } from "./signature-template-profiles";
 import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
@@ -108,6 +109,7 @@ export interface PresentationSection {
 
 export interface RenderingPresentation {
   version: "v1";
+  language?: string;
   document_title: string | null;
   theme: PresentationTheme;
   header: PresentationHeader;
@@ -1467,7 +1469,9 @@ const mapSection = (
   moduleType?: string | null
 ): PresentationSection | null => {
   const type = section.type;
-  const title = getSectionTitle(type, moduleType);
+  const rawTitle = section.title?.trim();
+  const defaultTitle = !rawTitle || /^section[ _-]?\d+$/i.test(rawTitle) || rawTitle.toLowerCase() === type.replace(/_/g, " ").toLowerCase();
+  const title = defaultTitle ? getSectionTitle(type, moduleType) : rawTitle;
   const normalizedType = type.toLowerCase();
 
   if (normalizedType === "header") {
@@ -1919,10 +1923,23 @@ export const mapRenderingPayloadToPresentation = (
     .sort((a, b) => a.order - b.order)
     .map((section) => mapSection(section, skillsDisplay, moduleType))
     .filter((section): section is PresentationSection => section !== null);
+  if (normalizeLanguage(rendering.document.language) === "tr" && moduleType !== "medical_uk") {
+    for (const section of sections) {
+      const raw = rendering.sections.find(item => item.id === section.id);
+      if (!raw?.title || /^section[ _-]?\d+$/i.test(raw.title) || raw.title === SECTION_TITLE_OVERRIDES[section.type] || raw.title === getSectionTitle(section.type, moduleType) || raw.title.toLowerCase() === section.type.replace(/_/g, " ").toLowerCase()) section.title = SECTION_TITLES_TR[section.type] ?? section.title;
+      for (const item of section.items) {
+        if (!item.date_range) continue;
+        const previousRange = item.date_range;
+        item.date_range = item.date_range.replace(/\bPresent\b/gi, "Devam ediyor").replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g, month => ({Jan:"Oca",Feb:"Şub",Mar:"Mar",Apr:"Nis",May:"May",Jun:"Haz",Jul:"Tem",Aug:"Ağu",Sep:"Eyl",Oct:"Eki",Nov:"Kas",Dec:"Ara"}[month]!));
+        if (item.metadata_line) item.metadata_line = item.metadata_line.replace(previousRange, item.date_range);
+      }
+    }
+  }
 
   return {
     version: "v1",
     document_title: normalizeLine(rendering.document.title) ?? null,
+    language: rendering.document.language,
     theme,
     header,
     sections

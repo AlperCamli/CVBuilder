@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import {
   GripVertical,
   Eye,
@@ -47,6 +49,7 @@ interface HeaderSectionProps {
 }
 
 export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: HeaderSectionProps) {
+  useTranslation();
   const { api } = useAuth();
   const [showSocialModal, setShowSocialModal] = useState(false);
   const [newSocialType, setNewSocialType] = useState("");
@@ -206,8 +209,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
             size={14} 
             style={{ color: "var(--color-text-secondary)", cursor: "not-allowed", opacity: 0.3 }} 
           />
-          Header
-        </h3>
+          {t("Header")}</h3>
         <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
           {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
@@ -221,7 +223,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                 <div className="relative">
                   <img
                     src={photoUrl}
-                    alt="Profile"
+                    alt={t("Profile")}
                     className="w-16 h-16 object-cover"
                     style={{ borderRadius: photoShape === "square" ? "8px" : "999px" }}
                   />
@@ -255,16 +257,15 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
               )}
               <div className="flex-1">
                 <p style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                  Profile Photo
-                </p>
+                  {t("Profile Photo")}</p>
                 <p style={{ fontSize: "12px", color: photoError ? "var(--color-danger)" : "var(--color-text-secondary)" }}>
                   {photoError
                     ? photoError
                     : photoUploading
-                      ? "Uploading…"
+                      ? t("Uploading…")
                       : photoUrl
-                        ? "Click X to remove"
-                        : "PNG or JPEG, up to 5 MB"}
+                        ? t("Click X to remove")
+                        : t("PNG or JPEG, up to 5 MB")}
                 </p>
               </div>
             </div>
@@ -272,8 +273,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div>
                 <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
-                  Position
-                </p>
+                  {t("Position")}</p>
                 <div className="flex items-center gap-1">
                   {([
                     { position: "left", Icon: AlignLeft, label: "Left" },
@@ -305,8 +305,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
 
               <div>
                 <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
-                  Frame
-                </p>
+                  {t("Frame")}</p>
                 <div className="flex items-center gap-1">
                   {([
                     { shape: "circle", Icon: Circle, label: "Circle" },
@@ -339,7 +338,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
 
           <input
             type="text"
-            placeholder="Full name"
+            placeholder={t("Full name")}
             value={data.name || ""}
             onChange={(e) => onChange({ ...data, name: e.target.value })}
             className="w-full px-3 py-2 rounded-lg border"
@@ -351,7 +350,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
           />
           <input
             type="text"
-            placeholder="Job title"
+            placeholder={t("Job title")}
             value={data.title || ""}
             onChange={(e) => onChange({ ...data, title: e.target.value })}
             className="w-full px-3 py-2 rounded-lg border"
@@ -364,7 +363,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
           <div className="grid grid-cols-2 gap-2">
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t("Email")}
               value={data.email || ""}
               onChange={(e) => onChange({ ...data, email: e.target.value })}
               className="px-3 py-2 rounded-lg border"
@@ -376,7 +375,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
             />
             <input
               type="tel"
-              placeholder="Phone"
+              placeholder={t("Phone")}
               value={data.phone || ""}
               onChange={(e) => onChange({ ...data, phone: e.target.value })}
               className="px-3 py-2 rounded-lg border"
@@ -389,7 +388,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
           </div>
           <input
             type="text"
-            placeholder="Location (optional)"
+            placeholder={t("Location (optional)")}
             value={data.location || ""}
             onChange={(e) => onChange({ ...data, location: e.target.value })}
             className="w-full px-3 py-2 rounded-lg border"
@@ -404,8 +403,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                Portfolio Links
-              </label>
+                {t("Portfolio Links")}</label>
               <button
                 onClick={() => setShowSocialModal(true)}
                 className="p-1.5 rounded-lg hover:bg-[var(--color-background-secondary)] transition-colors"
@@ -442,7 +440,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                         >
                           {socialPlatforms.map((item) => (
                             <option key={item.type} value={item.type}>
-                              {item.label}
+                              {t(item.label)}
                             </option>
                           ))}
                         </select>
@@ -478,8 +476,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
             <div className="fixed inset-0 bg-black/20 flex items-center justify-center p-4 z-50" onClick={() => setShowSocialModal(false)}>
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg" onClick={(e) => e.stopPropagation()}>
                 <h3 className="font-medium mb-4" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
-                  Add Portfolio Link
-                </h3>
+                  {t("Add Portfolio Link")}</h3>
                 <div className="space-y-3">
                   <select
                     value={newSocialType}
@@ -491,7 +488,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                       background: "var(--color-background-primary)",
                     }}
                   >
-                    <option value="">Select platform</option>
+                    <option value="">{t("Select platform")}</option>
                     {socialPlatforms.map((platform) => (
                       <option key={platform.type} value={platform.type}>
                         {platform.label}
@@ -500,7 +497,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                   </select>
                   <input
                     type="url"
-                    placeholder="URL"
+                    placeholder={t("URL")}
                     value={newSocialUrl}
                     onChange={(e) => setNewSocialUrl(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border"
@@ -522,8 +519,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                         cursor: newSocialType && newSocialUrl ? "pointer" : "not-allowed",
                       }}
                     >
-                      Add Link
-                    </button>
+                      {t("Add Link")}</button>
                     <button
                       onClick={() => {
                         setShowSocialModal(false);
@@ -536,8 +532,7 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                         borderColor: "var(--color-border-tertiary)",
                       }}
                     >
-                      Cancel
-                    </button>
+                      {t("Cancel")}</button>
                   </div>
                 </div>
               </div>
@@ -567,6 +562,7 @@ export interface AiVersionNavigatorState {
 }
 
 export function AIVersionNavigator({ state }: { state: AiVersionNavigatorState | undefined }) {
+  useTranslation();
   if (!state || state.total <= 1) {
     return null;
   }
@@ -588,17 +584,17 @@ export function AIVersionNavigator({ state }: { state: AiVersionNavigatorState |
         disabled={!canPrev}
         className="p-0.5 rounded"
         style={{ opacity: canPrev ? 1 : 0.35 }}
-        aria-label="Previous AI version"
+        aria-label={t("Previous AI version")}
       >
         <ChevronLeft size={12} />
       </button>
-      <span>{state.current + 1} / {state.total}</span>
+      <span>{state.current + 1} {"/"}{state.total}</span>
       <button
         onClick={state.onNext}
         disabled={!canNext}
         className="p-0.5 rounded"
         style={{ opacity: canNext ? 1 : 0.35 }}
-        aria-label="Next AI version"
+        aria-label={t("Next AI version")}
       >
         <ChevronRight size={12} />
       </button>
@@ -615,6 +611,7 @@ export function SummarySection({
   onAIAssist,
   aiVersionNavigator
 }: SummarySectionProps) {
+  useTranslation();
   return (
     <div
       className="p-4 rounded-xl border"
@@ -627,8 +624,7 @@ export function SummarySection({
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Professional Summary
-        </h3>
+          {t("Professional Summary")}</h3>
         <div className="flex items-center gap-2">
           <AIVersionNavigator state={aiVersionNavigator} />
           <button
@@ -641,8 +637,7 @@ export function SummarySection({
             }}
           >
             <Sparkles size={12} />
-            Improve with AI
-          </button>
+            {t("Improve with AI")}</button>
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -654,7 +649,7 @@ export function SummarySection({
       {!isHidden && (
         <textarea
           rows={4}
-          placeholder="Write your professional summary..."
+          placeholder={t("Write your professional summary...")}
           value={data.text || ""}
           onChange={(e) => onChange({ ...data, text: e.target.value })}
           className="w-full px-3 py-2 rounded-lg border resize-none"
@@ -693,6 +688,7 @@ function ExperienceItem({
   onAIAssist,
   aiVersionNavigator
 }: ExperienceItemProps) {
+  useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -745,7 +741,7 @@ function ExperienceItem({
                 {item.role || "Untitled Position"} {item.company && `at ${item.company}`}
               </div>
               <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                {item.startDate || "Start Date"} - {item.currentRole ? "Present" : (item.endDate || "End Date")}
+                {item.startDate || "Start Date"} {"-"}{item.currentRole ? t("Present") : (item.endDate || "End Date")}
               </div>
             </div>
           )}
@@ -765,7 +761,7 @@ function ExperienceItem({
           <div className="grid grid-cols-2 gap-2">
             <input
               type="text"
-              placeholder="Company"
+              placeholder={t("Company")}
               value={item.company}
               onChange={(e) => updateItem(index, { ...item, company: e.target.value })}
               className="px-2 py-1.5 rounded border"
@@ -776,7 +772,7 @@ function ExperienceItem({
             />
             <input
               type="text"
-              placeholder="Role"
+              placeholder={t("Role")}
               value={item.role}
               onChange={(e) => updateItem(index, { ...item, role: e.target.value })}
               className="px-2 py-1.5 rounded border"
@@ -788,7 +784,7 @@ function ExperienceItem({
           </div>
           <input
             type="text"
-            placeholder="Country"
+            placeholder={t("Country")}
             value={item.country || ""}
             onChange={(e) => updateItem(index, { ...item, country: e.target.value })}
             className="w-full px-2 py-1.5 rounded border"
@@ -800,12 +796,12 @@ function ExperienceItem({
           <div className="grid grid-cols-2 gap-2">
             <DateInputHelper
               value={item.startDate || ""}
-              placeholder="Start Date (e.g. Jan 2020)"
+              placeholder={t("Start Date (e.g. Jan 2020)")}
               onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
             <DateInputHelper
               value={item.endDate || ""}
-              placeholder="End Date (e.g. Dec 2023)"
+              placeholder={t("End Date (e.g. Dec 2023)")}
               disabled={item.currentRole}
               onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
@@ -831,12 +827,11 @@ function ExperienceItem({
               }}
             />
             <span style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              I currently work here
-            </span>
+              {t("I currently work here")}</span>
           </label>
           <BulletTextarea
             rows={3}
-            placeholder="Responsibilities, Achievements, Technologies/Tools…"
+            placeholder={t("Responsibilities, Achievements, Technologies/Tools…")}
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
@@ -857,8 +852,7 @@ function ExperienceItem({
               }}
             >
               <Sparkles size={12} />
-              Improve with AI
-            </button>
+              {t("Improve with AI")}</button>
             <AIVersionNavigator state={aiVersionNavigator} />
           </div>
         </div>
@@ -886,6 +880,7 @@ export function ExperienceSection({
   onAIAssist,
   getAiVersionNavigator
 }: ExperienceSectionProps) {
+  useTranslation();
   const items = data.items || [];
 
   const addItem = () => {
@@ -937,8 +932,7 @@ export function ExperienceSection({
       <div className="flex items-start justify-between mb-4">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Work Experience
-        </h3>
+          {t("Work Experience")}</h3>
         <div className="flex items-center gap-2">
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -972,7 +966,7 @@ export function ExperienceSection({
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add position</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{t("Add position")}</span>
           </button>
         </div>
       )}
@@ -1012,6 +1006,7 @@ const DEGREE_SUGGESTIONS = [
 ] as const;
 
 function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: EducationItemProps) {
+  useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -1065,7 +1060,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
                 {item.degree || "Degree"} {item.fieldOfStudy && `in ${item.fieldOfStudy}`}
               </div>
               <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                {item.institution || "Institution"} • {item.startDate || "Start"} - {item.expectedGraduation ? "Expected" : (item.endDate || "End")}
+                {item.institution || "Institution"} {"•"}{item.startDate || "Start"} {"-"}{item.expectedGraduation ? t("Expected") : (item.endDate || "End")}
               </div>
             </div>
           )}
@@ -1084,7 +1079,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
         <div className="space-y-2 pl-8">
           <input
             type="text"
-            placeholder="Institution"
+            placeholder={t("Institution")}
             value={item.institution}
             onChange={(e) => updateItem(index, { ...item, institution: e.target.value })}
             className="w-full px-2 py-1.5 rounded border"
@@ -1098,7 +1093,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
               <input
                 type="text"
                 list={degreeDatalistId}
-                placeholder="Degree"
+                placeholder={t("Degree")}
                 value={item.degree || ""}
                 onChange={(e) => updateItem(index, { ...item, degree: e.target.value })}
                 className="w-full px-2 py-1.5 rounded border"
@@ -1115,7 +1110,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
             </div>
             <input
               type="text"
-              placeholder="Field of Study / Major *"
+              placeholder={t("Field of Study / Major *")}
               value={item.fieldOfStudy || ""}
               onChange={(e) => updateItem(index, { ...item, fieldOfStudy: e.target.value })}
               className="px-2 py-1.5 rounded border"
@@ -1127,7 +1122,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
           </div>
           <input
             type="text"
-            placeholder="GPA *"
+            placeholder={t("GPA *")}
             value={item.gpa || ""}
             onChange={(e) => updateItem(index, { ...item, gpa: e.target.value })}
             className="w-full px-2 py-1.5 rounded border"
@@ -1139,12 +1134,12 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
           <div className="grid grid-cols-2 gap-2">
             <DateInputHelper
               value={item.startDate || ""}
-              placeholder="Start Date (e.g. 2015)"
+              placeholder={t("Start Date (e.g. 2015)")}
               onChange={(nextValue) => updateItem(index, { ...item, startDate: nextValue })}
             />
             <DateInputHelper
               value={item.endDate || ""}
-              placeholder={item.expectedGraduation ? "Expected Graduation" : "End Date (e.g. 2019)"}
+              placeholder={item.expectedGraduation ? t("Expected Graduation") : t("End Date (e.g. 2019)")}
               onChange={(nextValue) => updateItem(index, { ...item, endDate: nextValue })}
             />
           </div>
@@ -1160,8 +1155,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
                 }}
               />
               <span style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Expected Graduation
-              </span>
+                {t("Expected Graduation")}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -1174,13 +1168,12 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
                 }}
               />
               <span style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Exchange Program
-              </span>
+                {t("Exchange Program")}</span>
             </label>
           </div>
           <BulletTextarea
             rows={2}
-            placeholder="Additional details (optional)"
+            placeholder={t("Additional details (optional)")}
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
             className="w-full px-2 py-1.5 rounded border resize-none"
@@ -1205,6 +1198,7 @@ export function EducationSection({
   onAIAssist,
   aiVersionNavigator
 }: EducationSectionProps) {
+  useTranslation();
   const items = data.items || [];
 
   const addItem = () => {
@@ -1256,8 +1250,7 @@ export function EducationSection({
       <div className="flex items-start justify-between mb-4">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Education
-        </h3>
+          {t("Education")}</h3>
         <div className="flex items-center gap-2">
           <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
@@ -1271,8 +1264,7 @@ export function EducationSection({
               }}
             >
               <Sparkles size={12} />
-              Improve with AI
-            </button>
+              {t("Improve with AI")}</button>
           )}
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1304,7 +1296,7 @@ export function EducationSection({
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add education</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{t("Add education")}</span>
           </button>
         </div>
       )}
@@ -1333,6 +1325,7 @@ export function SkillsSection({
   aiVersionNavigator,
   suggestionPoolPanel
 }: SkillsSectionProps) {
+  useTranslation();
   const skills = data.skills || [];
 
   const addSkill = (skill: string) => {
@@ -1365,8 +1358,7 @@ export function SkillsSection({
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Skills
-        </h3>
+          {t("Skills")}</h3>
         <div className="flex items-center gap-2">
           <AIVersionNavigator state={aiVersionNavigator} />
           {onAIAssist && (
@@ -1380,8 +1372,7 @@ export function SkillsSection({
               }}
             >
               <Sparkles size={12} />
-              Suggest skills
-            </button>
+              {t("Suggest skills")}</button>
           )}
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1407,14 +1398,13 @@ export function SkillsSection({
               >
                 {skill}
                 <button onClick={() => removeSkill(index)} style={{ color: "var(--color-text-secondary)" }}>
-                  ×
-                </button>
+                  {"×"}</button>
               </span>
             ))}
           </div>
           <input
             type="text"
-            placeholder="Type a skill and press Enter"
+            placeholder={t("Type a skill and press Enter")}
             onKeyPress={handleKeyPress}
             className="w-full px-3 py-2 rounded-lg border"
             style={{
@@ -1450,6 +1440,7 @@ interface LanguageItemProps {
 }
 
 function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem, proficiencyLevels }: LanguageItemProps) {
+  useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -1522,7 +1513,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
           <div className="grid grid-cols-2 gap-2">
             <input
               type="text"
-              placeholder="Language"
+              placeholder={t("Language")}
               value={item.language}
               onChange={(e) => updateItem(index, { ...item, language: e.target.value })}
               className="px-2 py-1.5 rounded border"
@@ -1541,7 +1532,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
                 background: "var(--color-background-primary)",
               }}
             >
-              <option value="">Select proficiency</option>
+              <option value="">{t("Select proficiency")}</option>
               {proficiencyLevels.map(level => (
                 <option key={level} value={level}>{level}</option>
               ))}
@@ -1549,7 +1540,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
           </div>
           <input
             type="text"
-            placeholder="Certificate/Score (optional, e.g. IELTS 7.5, TOEFL 105)"
+            placeholder={t("Certificate/Score (optional, e.g. IELTS 7.5, TOEFL 105)")}
             value={item.certificate || ""}
             onChange={(e) => updateItem(index, { ...item, certificate: e.target.value })}
             className="w-full px-2 py-1.5 rounded border"
@@ -1560,7 +1551,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
           />
           <textarea
             rows={2}
-            placeholder="Notes (optional)"
+            placeholder={t("Notes (optional)")}
             value={item.notes || ""}
             onChange={(e) => updateItem(index, { ...item, notes: e.target.value })}
             className="w-full px-2 py-1.5 rounded border resize-none"
@@ -1577,6 +1568,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
 }
 
 export function LanguageSection({ data, isHidden, onToggleVisibility, onRemove, onChange }: LanguageSectionProps) {
+  useTranslation();
   const items = data.items || [];
 
   const proficiencyLevels = [
@@ -1637,8 +1629,7 @@ export function LanguageSection({ data, isHidden, onToggleVisibility, onRemove, 
       <div className="flex items-start justify-between mb-4">
         <h3 className="font-medium flex items-center gap-2" style={{ fontSize: "15px", color: "var(--color-text-primary)" }}>
           <GripVertical size={14} style={{ color: "var(--color-text-secondary)", cursor: "grab" }} />
-          Languages
-        </h3>
+          {t("Languages")}</h3>
         <div className="flex items-center gap-2">
           <button onClick={onToggleVisibility} style={{ color: "var(--color-text-secondary)" }}>
             {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -1671,7 +1662,7 @@ export function LanguageSection({ data, isHidden, onToggleVisibility, onRemove, 
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add language</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{t("Add language")}</span>
           </button>
         </div>
       )}
@@ -1690,6 +1681,7 @@ interface GenericSectionProps {
 }
 
 export function GenericSection({ title, data, isHidden, onToggleVisibility, onRemove, onChange }: GenericSectionProps) {
+  useTranslation();
   const items = data.items || [];
 
   const addItem = () => {
@@ -1756,7 +1748,7 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                     <>
                       <input
                         type="text"
-                        placeholder="Title"
+                        placeholder={t("Title")}
                         value={item.title}
                         onChange={(e) => updateItem(index, { ...item, title: e.target.value })}
                         className="w-full px-2 py-1.5 rounded border"
@@ -1767,7 +1759,7 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                       />
                       <input
                         type="text"
-                        placeholder="Subtitle (optional)"
+                        placeholder={t("Subtitle (optional)")}
                         value={item.subtitle}
                         onChange={(e) => updateItem(index, { ...item, subtitle: e.target.value })}
                         className="w-full px-2 py-1.5 rounded border"
@@ -1778,12 +1770,12 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                       />
                       <DateInputHelper
                         value={item.dates || ""}
-                        placeholder="Dates (optional)"
+                        placeholder={t("Dates (optional)")}
                         onChange={(nextValue) => updateItem(index, { ...item, dates: nextValue })}
                       />
                       <BulletTextarea
                         rows={2}
-                        placeholder="Description (optional)"
+                        placeholder={t("Description (optional)")}
                         value={item.description || ""}
                         onValueChange={(next) => updateItem(index, { ...item, description: next })}
                         className="w-full px-2 py-1.5 rounded border resize-none"
@@ -1814,7 +1806,7 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
             style={{ borderColor: "var(--color-border-tertiary)", color: "var(--color-teal-600)" }}
           >
             <Plus size={14} />
-            <span style={{ fontSize: "13px", fontWeight: 500 }}>Add item</span>
+            <span style={{ fontSize: "13px", fontWeight: 500 }}>{t("Add item")}</span>
           </button>
         </div>
       )}

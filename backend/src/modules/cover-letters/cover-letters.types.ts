@@ -28,11 +28,13 @@ export interface CoverLetterSummary {
 }
 
 export interface CoverLetterDetail extends CoverLetterSummary {
+  language?: "en" | "tr";
   content: string;
 }
 
 export interface UpdateCoverLetterContentInput {
   title?: string;
+  language?: "en" | "tr";
   content: string;
   status?: CoverLetterStatus;
 }

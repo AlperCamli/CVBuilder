@@ -1,3 +1,4 @@
+import { localeMiddleware } from "../shared/localization/request-locale";
 import cors from "cors";
 import express, { Router, type Express } from "express";
 import helmet from "helmet";
@@ -84,6 +85,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
   app.use(createRequestLogger(logger));
   app.use("/api/v1/billing/webhooks", express.raw({ type: "application/json" }));
   app.use(express.json());
+  app.use(localeMiddleware);
 
   const allowedOrigins = new Set<string>([
     config.frontendAppUrl,
@@ -105,7 +107,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
       },
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Guest-Token"]
+      allowedHeaders: ["Content-Type", "Authorization", "X-Guest-Token", "Accept-Language"]
     })
   );
 

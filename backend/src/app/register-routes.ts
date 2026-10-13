@@ -59,7 +59,7 @@ export const registerV1Routes = (
   const renderingController = new RenderingController(services.renderingService, services.cvPhotosService);
   const cvPhotosController = new CvPhotosController(services.cvPhotosService);
   const exportsController = new ExportsController(services.exportsService);
-  const billingController = new BillingController(services.billingService);
+  const billingController = new BillingController(services.billingService, config);
 
   router.use(createSystemRouter(systemController));
   if (services.privacyService) {

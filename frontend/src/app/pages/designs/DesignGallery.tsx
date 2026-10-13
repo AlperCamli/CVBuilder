@@ -65,6 +65,7 @@ export function DesignGallery() {
               <Link to="/designs/guided-journey/pricing">
                 Pricing <ArrowUpRight size={15} />
               </Link>
+              <Link to="/designs/guided-journey/languages">Language Studio <ArrowUpRight size={15} /></Link>
             </div>
           </div>
           <img

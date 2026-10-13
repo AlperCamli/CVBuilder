@@ -42,6 +42,7 @@ export interface BillingSnapshot {
 }
 
 export interface CreateCheckoutInput {
+  pricing_quote?: string;
   plan_code: string;
   success_url?: string;
   cancel_url?: string;
@@ -51,6 +52,8 @@ export interface CreateCheckoutInput {
 }
 
 export interface CreateCheckoutResponseData {
+  currency?: string;
+  amount?: number;
   checkout_url: string;
   checkout_session_id: string;
   plan_code: PlanCode;

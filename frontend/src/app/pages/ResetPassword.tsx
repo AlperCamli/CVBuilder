@@ -1,3 +1,6 @@
+import { publicPath } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ArrowLeft, Eye, EyeOff, Loader2, Lock } from "lucide-react";
@@ -11,6 +14,7 @@ type RecoveryStatus = "checking" | "ready" | "invalid";
 const RESET_SUCCESS_MESSAGE = "Password updated successfully. Please sign in with your new password.";
 
 export function ResetPassword() {
+  useTranslation();
   const navigate = useNavigate();
   const { updatePassword, signOut } = useAuth();
 
@@ -169,8 +173,7 @@ export function ResetPassword() {
             style={{ color: "var(--color-teal-600)" }}
           />
           <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-            Validating reset link...
-          </p>
+            {t("Validating reset link...")}</p>
         </div>
       </div>
     );
@@ -190,8 +193,7 @@ export function ResetPassword() {
             className="font-semibold mb-3"
             style={{ fontSize: "24px", color: "var(--color-text-primary)" }}
           >
-            Reset link unavailable
-          </h1>
+            {t("Reset link unavailable")}</h1>
           <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
             {statusMessage ||
               "This password reset link is invalid or has expired. Request a new reset link."}
@@ -202,8 +204,7 @@ export function ResetPassword() {
             style={{ fontSize: "14px", color: "var(--color-teal-600)" }}
           >
             <ArrowLeft size={16} />
-            Request new reset link
-          </Link>
+            {t("Request new reset link")}</Link>
         </div>
       </div>
     );
@@ -212,7 +213,7 @@ export function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center gap-2 mb-12">
+        <Link to={publicPath("/")} className="flex items-center gap-2 mb-12">
           <img
             src="/images/logo.png"
             alt=""
@@ -225,8 +226,7 @@ export function ResetPassword() {
             className="font-semibold"
             style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
           >
-            ResumÃ©
-          </span>
+            {t("ResumÃ©")}</span>
         </Link>
 
         <div
@@ -239,19 +239,16 @@ export function ResetPassword() {
             style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
           >
             <ArrowLeft size={16} />
-            Back to sign in
-          </Link>
+            {t("Back to sign in")}</Link>
 
           <div className="mb-8">
             <h1
               className="font-semibold mb-2"
               style={{ fontSize: "28px", color: "var(--color-text-primary)" }}
             >
-              Set a new password
-            </h1>
+              {t("Set a new password")}</h1>
             <p style={{ fontSize: "15px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
-              Enter your new password below to finish recovering your account.
-            </p>
+              {t("Enter your new password below to finish recovering your account.")}</p>
           </div>
 
           {submitError && (
@@ -271,8 +268,7 @@ export function ResetPassword() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="password" className="block mb-2 font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                New password
-              </label>
+                {t("New password")}</label>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
@@ -280,7 +276,7 @@ export function ResetPassword() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create a strong password"
+                  placeholder={t("Create a strong password")}
                   required
                   minLength={8}
                   className="w-full pl-10 pr-12 py-2.5 rounded-lg border"
@@ -306,8 +302,7 @@ export function ResetPassword() {
 
             <div>
               <label htmlFor="confirmPassword" className="block mb-2 font-medium" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                Confirm new password
-              </label>
+                {t("Confirm new password")}</label>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
@@ -315,7 +310,7 @@ export function ResetPassword() {
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter your new password"
+                  placeholder={t("Re-enter your new password")}
                   required
                   minLength={8}
                   className="w-full pl-10 pr-12 py-2.5 rounded-lg border"
@@ -338,8 +333,7 @@ export function ResetPassword() {
                 </button>
               </div>
               <p className="mt-1.5" style={{ fontSize: "12px", color: "var(--color-text-tertiary)" }}>
-                Must be at least 8 characters.
-              </p>
+                {t("Must be at least 8 characters.")}</p>
             </div>
 
             <button
@@ -353,7 +347,7 @@ export function ResetPassword() {
                 cursor: canSubmit ? "pointer" : "not-allowed"
               }}
             >
-              {isSubmitting ? "Updating..." : "Update password"}
+              {isSubmitting ? t("Updating...") : t("Update password")}
             </button>
           </form>
         </div>

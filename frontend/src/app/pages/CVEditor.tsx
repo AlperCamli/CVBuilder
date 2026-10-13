@@ -1,3 +1,6 @@
+import { documentLocale, localeCode } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import {
@@ -115,7 +118,7 @@ const formatDateTime = (value: string | null | undefined): string => {
     return "-";
   }
 
-  return new Date(value).toLocaleString("en-US", {
+  return new Date(value).toLocaleString(localeCode(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -347,6 +350,7 @@ const clearDraft = (cvKind: "master" | "tailored", cvId: string): void => {
 };
 
 const DraggableSection = ({ section, index, moveSection, highlighted, children }: any) => {
+  useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   const [{ isDragging }, drag] = useDrag({
@@ -468,6 +472,7 @@ interface CVEditorProps {
 }
 
 export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) {
+  useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -825,15 +830,26 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
         if (!targetMasterId) {
           const masters = await api.listMasterCvs();
-          targetMasterId = forcedModuleType
-            ? masters.find((master) => master.module_type === forcedModuleType)?.id
-            : masters[0]?.id;
+          if (forcedModuleType) targetMasterId = masters.find(master => master.module_type === forcedModuleType)?.id;
+          else {
+            const requested = new URLSearchParams(location.search).get("language");
+            const standard = masters.filter(master => master.module_type === "standard");
+            const matching = requested ? standard.filter(master => documentLocale(master.language) === requested) : standard;
+            if (matching.length > 1) { navigate("/app/resumes", { replace: true }); return; }
+            targetMasterId = matching.length === 1 ? matching[0].id : undefined;
+          }
         }
 
         if (!targetMasterId) {
+          const requestedLanguage = new URLSearchParams(location.search).get("language");
+          if (!forcedModuleType && requestedLanguage !== "en" && requestedLanguage !== "tr") {
+            const masters = await api.listMasterCvs();
+            navigate(masters.some(master => master.module_type === "standard") ? "/app/resumes" : "/app/create", { replace: true });
+            return;
+          }
           const created = await api.createMasterCv({
             title: forcedTitle ?? "My Main CV",
-            language: "en",
+            language: forcedModuleType ? "en" : new URLSearchParams(location.search).get("language")!,
             ...(forcedModuleType ? { module_type: forcedModuleType } : {})
           });
           hydrateFromMaster(created);
@@ -887,7 +903,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to load CV.");
+        setError(t("Failed to load CV."));
       }
     } finally {
       setLoading(false);
@@ -1098,7 +1114,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to save CV.");
+        setError(t("Failed to save CV."));
       }
       return false;
     } finally {
@@ -1435,7 +1451,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         window.localStorage.getItem(MASTER_EXPORT_GUIDE_FLAG) !== "true"
       ) {
         window.localStorage.setItem(MASTER_EXPORT_GUIDE_FLAG, "true");
-        toast.success("Now let's customize this CV for a job!");
+        toast.success(t("Now let's customize this CV for a job!"));
         navigate(`/app/tailor/${cvId}`);
       } else {
         void armPostExportReturnPrompt();
@@ -1576,7 +1592,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const openSkillsPool = async (sectionId: string, blockId?: string) => {
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
-      setError("Skills section could not be resolved.");
+      setError(t("Skills section could not be resolved."));
       return;
     }
 
@@ -1784,7 +1800,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     if (aiRunningRef.current) return;
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
-      setError("Section could not be resolved for AI action.");
+      setError(t("Section could not be resolved for AI action."));
       return;
     }
 
@@ -1803,7 +1819,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
     const resolvedBlockId = resolveCanonicalAiBlockId(targetSection, resolvedBlockReference);
     if (!resolvedBlockId) {
-      setError("No block is available for AI action in this section. Save and try again.");
+      setError(t("No block is available for AI action in this section. Save and try again."));
       return;
     }
 
@@ -1908,7 +1924,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       highlightAiUpdatedBlock(blockId);
       await loadAiData(cvKind, cvId);
       setShowAIPopup(false);
-      toast.success("Block updated with AI.");
+      toast.success(t("Block updated with AI."));
     } catch (err) {
       if (isEntitlementExceeded(err)) {
         setShowAIPopup(false);
@@ -2197,8 +2213,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           return (
             <VolunteerSection
               {...commonProps}
-              title={moduleType === "medical_uk" ? "Extracurricular Activities" : undefined}
-              addButtonLabel={moduleType === "medical_uk" ? "Add extracurricular activity" : undefined}
+              title={moduleType === "medical_uk" ? t("Extracurricular Activities") : undefined}
+              addButtonLabel={moduleType === "medical_uk" ? t("Add extracurricular activity") : undefined}
             />
           );
         case "awards":
@@ -2296,11 +2312,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         <div className="flex items-start justify-between gap-2">
           <div>
             <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              Suggested skills{suggestedSkills.length > 0 ? ` (${suggestedSkills.length})` : ""}
+              {t("Suggested skills")}{suggestedSkills.length > 0 ? ` (${suggestedSkills.length})` : ""}
             </p>
             <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              Click a suggestion to add it to your Skills section.
-            </p>
+              {t("Click a suggestion to add it to your Skills section.")}</p>
           </div>
           <div className="flex items-center gap-2">
             {suggestedSkills.length > 1 && (
@@ -2318,8 +2333,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 }}
               >
                 <Plus size={12} />
-                Add all
-              </Button>
+                {t("Add all")}</Button>
             )}
             <Button
               type="button"
@@ -2352,8 +2366,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 setShowSkillsPoolDialog(false);
                 setSkillsPoolError(null);
               }}
-              aria-label="Collapse skills pool"
-              title="Collapse skills pool"
+              aria-label={t("Collapse skills pool")}
+              title={t("Collapse skills pool")}
               className="h-7 w-7 p-0"
               style={{
                 fontSize: "11px",
@@ -2384,7 +2398,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         {(skillsPoolLoading || skillsPoolRefreshing) && (
           <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
             <Loader2 size={14} className="animate-spin" />
-            {skillsPoolLoading ? "Generating skills pool..." : "Refreshing skills pool..."}
+            {skillsPoolLoading ? t("Generating skills pool...") : t("Refreshing skills pool...")}
           </div>
         )}
 
@@ -2413,8 +2427,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         ) : (
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
             {sectionPool.items.length > 0
-              ? "All suggestions are already in your list. Refresh the pool for more."
-              : "No skills in the pool yet."}
+              ? t("All suggestions are already in your list. Refresh the pool for more.")
+              : t("No skills in the pool yet.")}
           </p>
         )}
       </div>
@@ -2425,7 +2439,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center" style={{ background: "var(--color-background-secondary)" }}>
-        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>Loading CV editor...</p>
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>{t("Loading CV editor...")}</p>
       </div>
     );
   }
@@ -2455,7 +2469,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       color: "var(--color-teal-800)"
                     }}
                   >
-                    {cvKind === "master" ? "Main CV" : "Customized CV"}
+                    {cvKind === "master" ? t("Main CV") : t("Customized CV")}
                   </span>
                 </div>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
@@ -2466,7 +2480,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {error && (
-                <span style={{ fontSize: "12px", color: "var(--color-red-700)" }}>{error}</span>
+                <span style={{ fontSize: "12px", color: "var(--color-red-700)" }}>{t(error)}</span>
               )}
 
               <button
@@ -2476,7 +2490,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
               >
                 {saving || autoSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? "Saving..." : autoSaving ? "Autosaving..." : "Save"}
+                {saving ? t("Saving...") : autoSaving ? t("Autosaving...") : t("Save")}
               </button>
 
               <button
@@ -2491,7 +2505,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 }}
                 title={`Selected template: ${selectedTemplateName}`}
               >
-                Choose template: {selectedTemplateName}
+                {t("Choose template:")}{" "}{selectedTemplateName}
               </button>
 
               <HoverCard openDelay={120} closeDelay={150}>
@@ -2506,11 +2520,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       color: "var(--color-text-primary)",
                       fontSize: "12px"
                     }}
-                    title="Adjust font, spacing and layout"
+                    title={t("Adjust font, spacing and layout")}
                   >
-                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>Font</span>
-                    <span>{fontScale.toFixed(2)}x</span>
-                    <span style={{ color: "var(--color-text-secondary)" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{t("Font")}</span>
+                    <span>{fontScale.toFixed(2)}{"x"}</span>
+                    <span style={{ color: "var(--color-text-secondary)" }}>{"·"}</span>
                     <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                       {pageCount} {pageCount === 1 ? "page" : "pages"}
                     </span>
@@ -2526,11 +2540,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                          Font size
-                        </label>
+                          {t("Font size")}</label>
                         <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                          {fontScale.toFixed(2)}x
-                        </span>
+                          {fontScale.toFixed(2)}{"x"}</span>
                       </div>
                       <input
                         type="range"
@@ -2551,11 +2563,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                          Spacing
-                        </label>
+                          {t("Spacing")}</label>
                         <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                          {spacingScale.toFixed(2)}x
-                        </span>
+                          {spacingScale.toFixed(2)}{"x"}</span>
                       </div>
                       <input
                         type="range"
@@ -2572,18 +2582,15 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
                       />
                       <p style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-                        Vertical gap between sections and entries.
-                      </p>
+                        {t("Vertical gap between sections and entries.")}</p>
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                          Layout
-                        </label>
+                          {t("Layout")}</label>
                         <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                          {layoutScale.toFixed(2)}x
-                        </span>
+                          {layoutScale.toFixed(2)}{"x"}</span>
                       </div>
                       <input
                         type="range"
@@ -2600,13 +2607,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         style={{ accentColor: "var(--color-teal-600)", width: "100%" }}
                       />
                       <p style={{ fontSize: "10px", color: "var(--color-text-secondary)", marginTop: "4px" }}>
-                        Page padding and overall density.
-                      </p>
+                        {t("Page padding and overall density.")}</p>
                     </div>
 
                     <div className="pt-2 border-t flex items-center justify-between" style={{ borderColor: "var(--color-border-tertiary)" }}>
                       <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                        Preview length: {pageCount} {pageCount === 1 ? "page" : "pages"}
+                        {t("Preview length:")}{" "}{pageCount} {pageCount === 1 ? "page" : "pages"}
                       </span>
                       <button
                         type="button"
@@ -2618,8 +2624,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         }}
                         style={{ fontSize: "11px", color: "var(--color-teal-600)" }}
                       >
-                        Reset
-                      </button>
+                        {t("Reset")}</button>
                     </div>
                   </div>
                 </HoverCardContent>
@@ -2652,8 +2657,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                   }}
                 >
                   <Target size={14} />
-                  Customize for a job
-                </button>
+                  {t("Customize for a job")}</button>
               )}
 
               <button
@@ -2670,12 +2674,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 }}
               >
                 <Lightbulb size={14} />
-                Tips
-              </button>
+                {t("Tips")}</button>
 
               {cvKind === "tailored" && tailoringReview ? (
                 <button type="button" onClick={() => setShowTailoringReview(true)} className="px-3 py-1.5 rounded-lg border text-sm font-medium" style={{ borderColor: "var(--color-teal-200)", color: "var(--color-teal-700)", background: "var(--color-teal-50)" }}>
-                  Tailoring review · {tailoringReview.after.score ?? "Unavailable"}{tailoringReview.after.score !== null ? "/100" : ""}
+                  {t("Tailoring review ·")}{" "}{tailoringReview.after.score ?? "Unavailable"}{tailoringReview.after.score !== null ? "/100" : ""}
                 </button>
               ) : null}
 
@@ -2691,8 +2694,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                   }}
                 >
                   <History size={14} />
-                  Revisions
-                </button>
+                  {t("Revisions")}</button>
               )}
 
               <button
@@ -2707,8 +2709,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 }}
               >
                 <Download size={14} />
-                Export
-              </button>
+                {t("Export")}</button>
             </div>
           </div>
         </div>
@@ -2716,8 +2717,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         <Dialog open={showTailoringReview} onOpenChange={setShowTailoringReview}>
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>What tailoring changed</DialogTitle>
-              <DialogDescription>Your CV before and after tailoring, evaluated against the same job description.</DialogDescription>
+              <DialogTitle>{t("What tailoring changed")}</DialogTitle>
+              <DialogDescription>{t("Your CV before and after tailoring, evaluated against the same job description.")}</DialogDescription>
             </DialogHeader>
             {tailoringReview ? <TailoringReviewPanel review={tailoringReview} /> : null}
           </DialogContent>
@@ -2739,7 +2740,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 }}
               >
                 <Plus size={16} />
-                <span style={{ fontSize: "14px", fontWeight: 500 }}>Add Content</span>
+                <span style={{ fontSize: "14px", fontWeight: 500 }}>{t("Add Content")}</span>
               </button>
             </div>
           </div>
@@ -2758,7 +2759,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             <div>
               <div className="flex items-center justify-between mb-4">
                 <p className="uppercase tracking-wider" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
-                  Preview {renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
+                  {t("Preview")}{" "}{renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
                 </p>
                 <div className="flex items-center gap-2">
                   <span
@@ -2770,7 +2771,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       color: pageCount === 1 ? "var(--color-teal-800)" : "var(--color-text-secondary)",
                       border: pageCount === 1 ? "none" : "1px solid var(--color-border-tertiary)"
                     }}
-                    title={pageCount === 1 ? "Fits on one page" : `Will export as ${pageCount} pages`}
+                    title={pageCount === 1 ? t("Fits on one page") : `Will export as ${pageCount} pages`}
                   >
                     {pageCount} {pageCount === 1 ? "page" : "pages"}
                   </span>
@@ -2800,8 +2801,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                     }}
                   >
                     <Loader2 size={14} className="animate-spin" />
-                    Preparing preview...
-                  </div>
+                    {t("Preparing preview...")}</div>
                 ) : null}
               </div>
             </div>
@@ -2909,11 +2909,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Export CV
-              </DialogTitle>
+                {t("Export CV")}</DialogTitle>
               <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                Generate PDF or DOCX exports and download from history.
-              </DialogDescription>
+                {t("Generate PDF or DOCX exports and download from history.")}</DialogDescription>
             </DialogHeader>
 
             {exportError && (
@@ -2921,7 +2919,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 className="p-3 rounded-lg border"
                 style={{ borderColor: "var(--color-red-200)", background: "var(--color-red-50)", color: "var(--color-red-700)", fontSize: "12px" }}
               >
-                {exportError}
+                {t(exportError)}
               </div>
             )}
 
@@ -2933,10 +2931,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat ? 0.7 : 1 }}
               >
                 <div style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                  PDF
-                </div>
+                  {t("PDF")}</div>
                 <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                  {exportingFormat === "pdf" ? "Generating..." : "Best for applications"}
+                  {exportingFormat === "pdf" ? t("Generating...") : t("Best for applications")}
                 </div>
               </button>
 
@@ -2947,10 +2944,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 style={{ borderColor: "var(--color-border-tertiary)", opacity: exportingFormat ? 0.7 : 1 }}
               >
                 <div style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                  DOCX
-                </div>
+                  {t("DOCX")}</div>
                 <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                  {exportingFormat === "docx" ? "Generating..." : "Editable format"}
+                  {exportingFormat === "docx" ? t("Generating...") : t("Editable format")}
                 </div>
               </button>
             </div>
@@ -2958,8 +2954,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             <div className="pt-2 border-t" style={{ borderColor: "var(--color-border-tertiary)" }}>
               <div className="flex items-center justify-between mb-2">
                 <h4 style={{ fontSize: "13px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                  Export history
-                </h4>
+                  {t("Export history")}</h4>
                 <button
                   onClick={() => {
                     if (cvId) {
@@ -2972,13 +2967,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                   }}
                   style={{ fontSize: "11px", color: "var(--color-teal-600)" }}
                 >
-                  Refresh
-                </button>
+                  {t("Refresh")}</button>
               </div>
 
               <div className="space-y-2 max-h-[180px] overflow-auto pr-1">
                 {exportHistory.length === 0 && (
-                  <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>No exports yet.</p>
+                  <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t("No exports yet.")}</p>
                 )}
 
                 {exportHistory.map((item) => (
@@ -2986,7 +2980,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                     <div className="flex items-center justify-between">
                       <div>
                         <p style={{ fontSize: "12px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                          {item.format.toUpperCase()} • {item.status}
+                          {item.format.toUpperCase()} {"•"}{item.status}
                         </p>
                         <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                           {formatDateTime(item.created_at)}
@@ -2998,8 +2992,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                           className="px-2 py-1 rounded border"
                           style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                         >
-                          Download
-                        </button>
+                          {t("Download")}</button>
                       ) : null}
                     </div>
                     {item.status === "failed" && item.error_message ? (
@@ -3016,7 +3009,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               style={{ fontSize: "12px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
             >
               <Target size={14} />
-              {cvKind === "tailored" ? "Go to Job Tracker" : "Customize this CV"}
+              {cvKind === "tailored" ? t("Go to Job Tracker") : t("Customize this CV")}
             </button>
           </DialogContent>
         </Dialog>
@@ -3025,18 +3018,15 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Block Revision History
-              </DialogTitle>
+                {t("Block Revision History")}</DialogTitle>
               <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
-                Restore prior versions and compare recent changes.
-              </DialogDescription>
+                {t("Restore prior versions and compare recent changes.")}</DialogDescription>
             </DialogHeader>
 
             {revisionLoading ? (
               <div className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                 <Loader2 size={14} className="animate-spin" />
-                Loading revisions...
-              </div>
+                {t("Loading revisions...")}</div>
             ) : (
               <>
                 <div className="flex items-center justify-between">
@@ -3045,15 +3035,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                     className="px-3 py-1 rounded-lg border inline-flex items-center gap-1"
                     style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                   >
-                    <RefreshCw size={12} /> Refresh
-                  </button>
+                    <RefreshCw size={12} /> {" "}{t("Refresh")}</button>
                   <button
                     onClick={() => void compareLatestRevisions()}
                     className="px-3 py-1 rounded-lg border"
                     style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                   >
-                    Compare latest two
-                  </button>
+                    {t("Compare latest two")}</button>
                 </div>
 
                 {revisionCompareText && (
@@ -3065,8 +3053,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 <div className="space-y-2 max-h-[250px] overflow-auto pr-1">
                   {revisions.length === 0 && (
                     <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                      No revisions found yet.
-                    </p>
+                      {t("No revisions found yet.")}</p>
                   )}
 
                   {revisions
@@ -3076,10 +3063,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <p style={{ fontSize: "12px", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                              {revision.block_type} • #{revision.revision_number}
+                              {revision.block_type} {"• #"}{revision.revision_number}
                             </p>
                             <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-                              {revision.change_source} • {formatDateTime(revision.created_at)}
+                              {revision.change_source} {"•"}{formatDateTime(revision.created_at)}
                             </p>
                           </div>
                           <button
@@ -3087,8 +3074,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                             className="px-2 py-1 rounded border"
                             style={{ fontSize: "11px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
                           >
-                            Restore
-                          </button>
+                            {t("Restore")}</button>
                         </div>
                       </div>
                     ))}

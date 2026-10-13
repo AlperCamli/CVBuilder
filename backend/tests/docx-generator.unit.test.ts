@@ -4,11 +4,12 @@ import { generateDocxDocument } from "../src/modules/exports/generators/docx-gen
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
 
 describe("docx generator", () => {
-  it("generates a DOCX with embedded LaTeX-inspired catalog fonts", async () => {
+  it.each(["en", "tr"])("generates a %s DOCX with embedded fonts and correctly cased Unicode headings", async language => {
     const widePngDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";
     const model: ExportDocumentModel = {
-      title: "Ada Lovelace",
+      language,
+      title: language === "tr" ? "Çağrı Işık" : "Ada Lovelace",
       subtitle: "Research Scientist",
       contact_line: "ada@example.com • London, UK",
       contact_items: ["ada@example.com", "London, UK"],
@@ -36,7 +37,7 @@ describe("docx generator", () => {
       sections: [
         {
           type: "publications",
-          title: "Publications",
+          title: language === "tr" ? "İş Deneyimi" : "Publications",
           inline_text: null,
           blocks: [
             {
@@ -62,5 +63,8 @@ describe("docx generator", () => {
     expect(fontTable).toContain("Latin Modern Roman");
     expect(fontTable).toContain("Latin Modern Roman Bold");
     expect(embeddedFonts).toHaveLength(2);
+    const xml = await zip.file("word/document.xml")?.async("string");
+    expect(xml).toContain(language === "tr" ? "İŞ DENEYİMİ" : "PUBLICATIONS");
+    expect(xml).toContain(model.title);
   });
 });

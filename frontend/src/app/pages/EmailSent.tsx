@@ -1,9 +1,12 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { Mail, ArrowLeft, RefreshCw } from "lucide-react";
 import { supabase } from "../integration/supabase-client";
 
 export function EmailSent() {
+  useTranslation();
   const location = useLocation();
   const email = (location.state as { email?: string })?.email ?? "";
   const [resending, setResending] = useState(false);
@@ -44,7 +47,7 @@ export function EmailSent() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to resend email.");
+        setError(t("Failed to resend email."));
       }
     } finally {
       setResending(false);
@@ -73,11 +76,9 @@ export function EmailSent() {
         </div>
 
         <h1 style={{ fontSize: "24px", color: "var(--color-text-primary)", fontWeight: 600 }}>
-          Check your email
-        </h1>
+          {t("Check your email")}</h1>
         <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", marginTop: "6px", lineHeight: "1.6" }}>
-          We sent a verification link to:
-        </p>
+          {t("We sent a verification link to:")}</p>
         {email && (
           <p style={{ fontSize: "14px", color: "var(--color-teal-700)", marginTop: "6px", fontWeight: 600 }}>
             {email}
@@ -85,8 +86,7 @@ export function EmailSent() {
         )}
 
         <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginTop: "16px", lineHeight: "1.6" }}>
-          Open the email and click the verification link. If it is not in your inbox, check your spam folder.
-        </p>
+          {t("Open the email and click the verification link. If it is not in your inbox, check your spam folder.")}</p>
 
         {error && (
           <div
@@ -98,7 +98,7 @@ export function EmailSent() {
               fontSize: "13px"
             }}
           >
-            {error}
+            {t(error)}
           </div>
         )}
 
@@ -112,8 +112,7 @@ export function EmailSent() {
               fontSize: "13px"
             }}
           >
-            Verification email resent successfully.
-          </div>
+            {t("Verification email resent successfully.")}</div>
         )}
 
         <button
@@ -130,10 +129,10 @@ export function EmailSent() {
         >
           <RefreshCw size={14} className={resending ? "animate-spin" : ""} />
           {resending
-            ? "Resending..."
+            ? t("Resending...")
             : cooldown > 0
               ? `Resend email (${cooldown}s)`
-              : "Resend verification email"}
+              : t("Resend verification email")}
         </button>
 
         <Link
@@ -142,8 +141,7 @@ export function EmailSent() {
           style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
         >
           <ArrowLeft size={14} />
-          Back to sign in
-        </Link>
+          {t("Back to sign in")}</Link>
       </div>
     </div>
   );

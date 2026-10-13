@@ -1,3 +1,6 @@
+import { publicPath } from "../localization/i18n";
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
@@ -6,6 +9,7 @@ import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
 export function ForgotPassword() {
+  useTranslation();
   const { requestPasswordReset } = useAuth();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +41,7 @@ export function ForgotPassword() {
       <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
         <div className="w-full max-w-md">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 mb-12">
+          <Link to={publicPath("/")} className="flex items-center gap-2 mb-12">
             <img
               src="/images/logo.png"
               alt=""
@@ -50,8 +54,7 @@ export function ForgotPassword() {
               className="font-semibold" 
               style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
             >
-              jobspecificCV
-            </span>
+              {t("jobspecificCV")}</span>
           </Link>
 
           {/* Success Message */}
@@ -70,27 +73,23 @@ export function ForgotPassword() {
               className="font-semibold mb-3" 
               style={{ fontSize: "24px", color: "var(--color-text-primary)" }}
             >
-              Check your email
-            </h1>
+              {t("Check your email")}</h1>
             
             <p className="mb-6" style={{ fontSize: "15px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
-              We've sent a password reset link to <strong>{email}</strong>. 
-              Click the link in the email to reset your password.
-            </p>
+              {t("We've sent a password reset link to")}{" "}<strong>{email}</strong>{t(". Click the link in the email to reset your password.")}</p>
 
             <div 
               className="p-4 rounded-lg mb-6"
               style={{ background: "var(--color-background-secondary)" }}
             >
               <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: "1.5" }}>
-                Didn't receive the email? Check your spam folder or{" "}
+                {t("Didn't receive the email? Check your spam folder or")}{" "}
                 <button
                   onClick={() => setIsSubmitted(false)}
                   className="font-medium"
                   style={{ color: "var(--color-teal-600)" }}
                 >
-                  try again
-                </button>
+                  {t("try again")}</button>
               </p>
             </div>
 
@@ -100,8 +99,7 @@ export function ForgotPassword() {
               style={{ fontSize: "14px", color: "var(--color-teal-600)" }}
             >
               <ArrowLeft size={16} />
-              Back to sign in
-            </Link>
+              {t("Back to sign in")}</Link>
           </div>
         </div>
       </div>
@@ -112,7 +110,7 @@ export function ForgotPassword() {
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="w-full max-w-md">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 mb-12">
+        <Link to={publicPath("/")} className="flex items-center gap-2 mb-12">
           <img
             src="/images/logo.png"
             alt=""
@@ -125,8 +123,7 @@ export function ForgotPassword() {
             className="font-semibold" 
             style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
           >
-            jobspecificCV
-          </span>
+            {t("jobspecificCV")}</span>
         </Link>
 
         {/* Form Card */}
@@ -141,8 +138,7 @@ export function ForgotPassword() {
             style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
           >
             <ArrowLeft size={16} />
-            Back to sign in
-          </Link>
+            {t("Back to sign in")}</Link>
 
           {/* Header */}
           <div className="mb-8">
@@ -150,11 +146,9 @@ export function ForgotPassword() {
               className="font-semibold mb-2" 
               style={{ fontSize: "28px", color: "var(--color-text-primary)" }}
             >
-              Forgot password?
-            </h1>
+              {t("Forgot password?")}</h1>
             <p style={{ fontSize: "15px", color: "var(--color-text-secondary)", lineHeight: "1.6" }}>
-              No worries, we'll send you reset instructions to your email address.
-            </p>
+              {t("No worries, we'll send you reset instructions to your email address.")}</p>
           </div>
 
           {/* Reset Form */}
@@ -169,9 +163,7 @@ export function ForgotPassword() {
                   fontSize: "13px"
                 }}
               >
-                Missing frontend Supabase env vars. Set `VITE_SUPABASE_URL` and
-                `VITE_SUPABASE_ANON_KEY`.
-              </div>
+                {t("Missing frontend Supabase env vars. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.")}</div>
             )}
 
             {errorMessage && (
@@ -184,7 +176,7 @@ export function ForgotPassword() {
                   fontSize: "13px"
                 }}
               >
-                {errorMessage}
+                {t(errorMessage)}
               </div>
             )}
 
@@ -195,8 +187,7 @@ export function ForgotPassword() {
                 className="block mb-2 font-medium"
                 style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
               >
-                Email address
-              </label>
+                {t("Email address")}</label>
               <div className="relative">
                 <Mail 
                   size={16} 
@@ -208,7 +199,7 @@ export function ForgotPassword() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t("you@example.com")}
                   required
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg border transition-colors"
                   style={{
@@ -242,7 +233,7 @@ export function ForgotPassword() {
                 opacity: isLoading || !hasSupabaseConfig ? 0.75 : 1
               }}
             >
-              {isLoading ? "Sending..." : "Send reset link"}
+              {isLoading ? t("Sending...") : t("Send reset link")}
             </button>
           </form>
         </div>

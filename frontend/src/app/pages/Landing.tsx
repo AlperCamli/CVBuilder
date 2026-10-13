@@ -94,7 +94,7 @@ function VideoFrame({
         return;
       }
 
-      const timeoutId = window.setTimeout(loadVideo, 300);
+      const timeoutId = globalThis.setTimeout(loadVideo, 300);
       cancelIdleLoad = () => window.clearTimeout(timeoutId);
     };
 

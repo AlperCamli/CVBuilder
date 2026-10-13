@@ -1,3 +1,7 @@
+import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import fontkit from "@pdf-lib/fontkit";
 import {
   AlignmentType,
   Document,
@@ -5,7 +9,7 @@ import {
   Paragraph,
   TextRun
 } from "docx";
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, rgb, type PDFFont } from "pdf-lib";
 import {
   ExportGenerationFailedError,
   ExportNotReadyError,
@@ -52,28 +56,7 @@ const truncateErrorMessage = (value: string, maxLength = 500): string => {
   return `${normalized.slice(0, maxLength - 3)}...`;
 };
 
-const toPdfSafeText = (value: string): string => {
-  if (!value) {
-    return "";
-  }
-
-  return value
-    .replace(/İ/g, "I")
-    .replace(/ı/g, "i")
-    .replace(/Ş/g, "S")
-    .replace(/ş/g, "s")
-    .replace(/Ğ/g, "G")
-    .replace(/ğ/g, "g")
-    .replace(/Ü/g, "U")
-    .replace(/ü/g, "u")
-    .replace(/Ö/g, "O")
-    .replace(/ö/g, "o")
-    .replace(/Ç/g, "C")
-    .replace(/ç/g, "c")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
-};
+const toPdfSafeText = (value: string): string => value.normalize("NFC").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
 
 const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number): string[] => {
   const normalized = toPdfSafeText(text).replace(/\s+/g, " ").trim();
@@ -124,14 +107,21 @@ const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines;
 };
 
-const generateCoverLetterPdf = async (title: string, content: string): Promise<Uint8Array> => {
+export const generateCoverLetterPdf = async (title: string, content: string): Promise<Uint8Array> => {
   const PAGE_WIDTH = 595.28;
   const PAGE_HEIGHT = 841.89;
   const MARGIN = 48;
 
   const pdf = await PDFDocument.create();
-  const regularFont = await pdf.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+  pdf.registerFontkit(fontkit);
+  const fontBytes = (name: string) => {
+    for (const root of [resolve(process.cwd(), "assets/fonts"), resolve(process.cwd(), "backend/assets/fonts")]) {
+      try { return readFileSync(resolve(root, name)); } catch { /* try packaged location */ }
+    }
+    throw new ExportGenerationFailedError("Unicode font is unavailable");
+  };
+  const regularFont = await pdf.embedFont(fontBytes("NotoSans-Regular.ttf"), { subset: true });
+  const boldFont = await pdf.embedFont(fontBytes("NotoSans-Bold.ttf"), { subset: true });
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   let cursorY = PAGE_HEIGHT - MARGIN;
@@ -250,7 +240,8 @@ const generateCoverLetterDocx = async (title: string, content: string): Promise<
   return new Uint8Array(buffer);
 };
 
-const createInitialContent = (job: JobRecord | JobWithTailoredRecord): string => {
+const createInitialContent = (job: JobRecord | JobWithTailoredRecord, language = "en"): string => {
+  if (language === "tr") return `Sayın İşe Alım Yetkilisi,\n\n${job.company_name ? job.company_name + " şirketindeki " : ""}${job.job_title} pozisyonuna başvurmak istiyorum. Deneyim ve becerilerimin bu göreve nasıl katkı sağlayacağını paylaşmaktan memnuniyet duyarım.\n\n[İlgili deneyiminizi ve başarılarınızı buraya ekleyin.]\n\nBaşvurumu değerlendirdiğiniz için teşekkür ederim. Görüşme fırsatını sabırsızlıkla bekliyorum.\n\nSaygılarımla,\n[Adınız Soyadınız]`;
   const companyName = job.company_name.trim();
   const positionPhrase = companyName
     ? `${job.job_title} position at ${companyName}`
@@ -299,7 +290,8 @@ export class CoverLettersService {
     private readonly coverLettersRepository: CoverLettersRepository,
     private readonly jobsRepository: JobsRepository,
     private readonly filesService: FilesService,
-    private readonly billingService: BillingService
+    private readonly billingService: BillingService,
+    private readonly tailoredCvRepository?: TailoredCvRepository
   ) {}
 
   async listCoverLetters(session: SessionContext): Promise<{ items: CoverLetterSummary[] }> {
@@ -341,12 +333,15 @@ export class CoverLettersService {
       });
     }
 
+    const associatedCv = job.tailored_cv_id ? await this.tailoredCvRepository?.findById(userId, job.tailored_cv_id) : null;
+    const language = associatedCv?.language === "tr" ? "tr" : "en";
     const created = await this.coverLettersRepository.create({
       user_id: userId,
       job_id: job.id,
       tailored_cv_id: job.tailored_cv_id,
-      title: createInitialTitle(job),
-      content: createInitialContent(job),
+      title: language === "tr" ? `Ön Yazı - ${job.company_name || job.job_title}` : createInitialTitle(job),
+      language,
+      content: createInitialContent(job, language),
       status: "draft",
       last_exported_at: null
     });
@@ -378,6 +373,7 @@ export class CoverLettersService {
     const updated = await this.coverLettersRepository.updateById(userId, coverLetterId, {
       title: input.title,
       content: input.content,
+      language: input.language,
       status: input.status
     });
 
@@ -680,7 +676,8 @@ export class CoverLettersService {
   ): CoverLetterDetail {
     return {
       ...this.toSummary(row, job),
-      content: row.content
+      content: row.content,
+      language: row.language ?? "en"
     };
   }
 

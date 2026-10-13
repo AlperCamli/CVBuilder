@@ -1,3 +1,6 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
+import { chooseLocale, i18n, readLocale, pendingLocale, clearPendingLocale } from "../localization/i18n";
 import {
   createContext,
   useCallback,
@@ -16,12 +19,13 @@ import { BackendApi } from "./backend-api";
 import { ensureSupabaseConfigured, integrationConfig } from "./config";
 import { supabase } from "./supabase-client";
 import { ACCOUNT_READY_EVENT } from "./privacy";
+import { getStudioRuntime } from "./studio-runtime";
 
 interface SignUpResult {
   needsEmailVerification: boolean;
 }
 
-interface AuthContextValue {
+export interface AuthContextValue {
   session: Session | null;
   me: MeResponseData | null;
   api: BackendApi;
@@ -39,15 +43,24 @@ interface AuthContextValue {
   clearAuthMessage: () => void;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const DemoProvider = getStudioRuntime()?.AuthProvider;
+  return DemoProvider ? <DemoProvider>{children}</DemoProvider> : <AccountAuthProvider>{children}</AccountAuthProvider>;
+};
+
+const AccountAuthProvider = ({ children }: { children: ReactNode }) => {
+  useTranslation();
   const [session, setSession] = useState<Session | null>(null);
   const [me, setMe] = useState<MeResponseData | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [loadingMe, setLoadingMe] = useState(false);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const unauthorizedHandledRef = useRef(false);
+  const localeSyncRef = useRef<Promise<void>>(Promise.resolve());
+  const localeSyncCountRef = useRef(0);
+  const localeRevisionRef = useRef(0);
 
   const handleUnauthorized = useCallback((error: ApiClientError) => {
     if (unauthorizedHandledRef.current) {
@@ -76,6 +89,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return new BackendApi(apiClient);
   }, [handleUnauthorized]);
 
+  const syncLocale = useCallback((locale: "en" | "tr") => {
+    localeSyncCountRef.current++;
+    const work = localeSyncRef.current.catch(() => {}).then(async () => {
+      await api.patchSettings({ locale });
+      const result = await supabase.auth.updateUser({ data: { locale } });
+      if (result.error) throw result.error;
+      // A newer switch may have been queued while this request was running.
+      if (pendingLocale() === locale) clearPendingLocale();
+    }).finally(() => { localeSyncCountRef.current--; });
+    localeSyncRef.current = work;
+    return work;
+  }, [api]);
+
   const refreshMe = useCallback(async (): Promise<MeResponseData | null> => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -84,9 +110,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setLoadingMe(true);
+    const localeRevision = localeRevisionRef.current;
+    const wasSyncingLocale = localeSyncCountRef.current > 0;
     try {
       const meResponse = await api.getMe();
+      const locale = pendingLocale();
+      if (locale) {
+        try {
+          await syncLocale(locale);
+          meResponse.user = { ...meResponse.user, locale: readLocale() ?? locale };
+        } catch { setAuthMessage(t("Could not save language preference. Please retry.")); }
+      } else if (!wasSyncingLocale && localeSyncCountRef.current === 0 && localeRevision === localeRevisionRef.current) chooseLocale(meResponse.user.locale, false);
       setMe(meResponse);
+
       window.dispatchEvent(new Event(ACCOUNT_READY_EVENT));
       return meResponse;
     } catch (error) {
@@ -97,7 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error instanceof Error) {
         setAuthMessage(error.message);
       } else {
-        setAuthMessage("Failed to load account context.");
+        setAuthMessage(t("Failed to load account context."));
       }
 
       setMe(null);
@@ -105,7 +141,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoadingMe(false);
     }
-  }, [api]);
+  }, [api, syncLocale]);
+
+  useEffect(() => {
+    const persist = () => {
+      const locale = pendingLocale();
+      if (!locale) return;
+      localeRevisionRef.current++;
+      if (session) void syncLocale(locale).catch(() => setAuthMessage(t("Could not save language preference. Please retry.")));
+    };
+    window.addEventListener("cv-locale-changed", persist);
+    return () => window.removeEventListener("cv-locale-changed", persist);
+  }, [syncLocale, session]);
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<void> => {
@@ -137,6 +184,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
+            locale: i18n.language,
             full_name: fullName
           }
         }

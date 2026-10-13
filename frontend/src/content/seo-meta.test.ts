@@ -9,31 +9,26 @@ import {
 const routes = buildSeoRoutes({ categories: [], articles: [] });
 
 describe("public and guided journey SEO", () => {
-  it("describes the real full-period charges, not weekly equivalents or retired plans", () => {
-    const offers = WEB_APPLICATION_JSON_LD.offers as any[];
-    expect(offers.map((offer) => offer.name)).toEqual([
-      "Free",
-      "Weekly Pro",
-      "Monthly Pro",
-      "Annual Pro",
-    ]);
-    for (const [index, code, duration] of [
-      [1, "weekly", "P1W"],
-      [2, "monthly", "P1M"],
-      [3, "annual", "P1Y"],
-    ] as const) {
-      expect(Number(offers[index].price)).toBe(PLAN_VALUE_USD[code]);
-      expect(offers[index].priceSpecification.billingDuration).toBe(duration);
-      expect(offers[index].priceSpecification.price).toBe(offers[index].price);
-    }
+  it("does not advertise fixed prices before the visitor's server-resolved market is known", () => {
+    expect(WEB_APPLICATION_JSON_LD.offers).toBeUndefined();
   });
   it("keeps primary pages indexed while correcting the Weekly trial descriptions", () => {
     const home = routes.find((route) => route.path === "/")!;
     const pricing = routes.find((route) => route.path === "/pricing")!;
     expect(home.includeInSitemap).toBe(true);
     expect(pricing.includeInSitemap).toBe(true);
-    expect(pricing.description).toContain("Weekly Pro free for 3 days");
+    expect(pricing.description).toContain("regional billing totals");
     expect(JSON.stringify(pricing)).not.toMatch(/Lifetime|\"price\":\"10\"/);
+  });
+  it("indexes Turkish routes with reciprocal language links and shared guided assets", () => {
+    for (const path of ["/tr", "/tr/pricing"]) {
+      const route = routes.find(route => route.path === path)!;
+      expect(route.language).toBe("tr");
+      expect(route.includeInSitemap).toBe(true);
+      expect(route.alternates?.tr).toBe(route.canonical);
+      expect(route.alternates?.en).toContain(path.endsWith("pricing") ? "/pricing" : "/");
+      expect(route.clientEntry).toBe("src/app/pages/GuidedJourneyPage.tsx");
+    }
   });
   it.each(["/guided-journey", "/guided-journey/pricing"])(
     "prerenders %s as a non-indexed public alternative",

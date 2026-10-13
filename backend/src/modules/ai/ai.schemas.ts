@@ -111,6 +111,7 @@ export const aiImportImproveSchema = z
 
 export const aiCoverLetterGenerationSchema = z
   .object({
+    language: z.enum(["en", "tr"]).optional(),
     job_title: z.string().trim().min(1).max(160),
     company_name: z.string().trim().max(160).optional(),
     job_description: z.string().trim().max(40000).optional(),

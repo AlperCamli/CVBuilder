@@ -1,3 +1,5 @@
+import { translate as t } from "../localization/i18n";
+import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, Target, Loader2 } from "lucide-react";
@@ -22,6 +24,7 @@ interface TailorCvLocationState {
 }
 
 export function TailorCV() {
+  useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
@@ -31,6 +34,7 @@ export function TailorCV() {
   const state = (location.state ?? {}) as TailorCvLocationState;
   const prefillJob = state.prefillJob;
 
+  const [masterOptions, setMasterOptions] = useState<import("../integration/api-types").MasterCvSummary[]>([]);
   const [masterCvId, setMasterCvId] = useState<string | null>(null);
   const [masterCvTitle, setMasterCvTitle] = useState<string>("Main CV");
   const [formData, setFormData] = useState({
@@ -57,7 +61,10 @@ export function TailorCV() {
       try {
         if (!id || id === "master") {
           const masters = await api.listMasterCvs();
-          const primary = masters[0];
+          const candidates = masters.filter(master => master.module_type === "standard");
+          setMasterOptions(candidates);
+          if (candidates.length > 1) { setMasterCvId(null); return; }
+          const primary = candidates[0];
           if (!primary) {
             throw new Error("Create a main CV first before customizing.");
           }
@@ -82,7 +89,7 @@ export function TailorCV() {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("Failed to load source main CV.");
+          setError(t("Failed to load source main CV."));
         }
       } finally {
         if (!cancelled) {
@@ -175,7 +182,7 @@ export function TailorCV() {
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to analyze job description.");
+        setError(t("Failed to analyze job description."));
       }
     } finally {
       setProgressMessage(null);
@@ -203,6 +210,7 @@ export function TailorCV() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-background-secondary)" }}>
       <div className="max-w-5xl w-full">
+        {masterOptions.length > 1 && <label className="block mb-5 text-sm font-medium">{t("Choose a source CV")}<select className="ml-3 rounded-lg border px-4 py-2" value={masterCvId ?? ""} onChange={event => { const master = masterOptions.find(item=>item.id===event.target.value); setMasterCvId(master?.id ?? null); setMasterCvTitle(master?.title ?? ""); }}><option value="">{t("Choose a source CV")}</option>{masterOptions.map(master=><option key={master.id} value={master.id}>{master.title} · {master.language === "tr" ? "Türkçe" : "English"}</option>)}</select></label>}
         <div className="mb-6">
           <button
             onClick={() => navigate("/app")}
@@ -210,8 +218,7 @@ export function TailorCV() {
             style={{ color: "var(--color-text-secondary)", fontSize: "13px" }}
           >
             <ChevronLeft size={16} />
-            Back to dashboard
-          </button>
+            {t("Back to dashboard")}</button>
         </div>
 
         {error && (
@@ -224,7 +231,7 @@ export function TailorCV() {
               fontSize: "13px"
             }}
           >
-            {error}
+            {t(error)}
           </div>
         )}
 
@@ -235,18 +242,16 @@ export function TailorCV() {
                 <Target size={20} style={{ color: "var(--color-teal-600)" }} />
               </div>
               <h1 className="font-medium" style={{ fontSize: "28px", lineHeight: "1.2", color: "var(--color-text-primary)" }}>
-                Customize your CV for this role
-              </h1>
+                {t("Customize your CV for this role")}</h1>
             </div>
 
             <p className="mb-8" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
-              Source: <strong>{loadingMaster ? "Loading..." : masterCvTitle}</strong>
+              {t("Source:")}{" "}<strong>{loadingMaster ? t("Loading...") : masterCvTitle}</strong>
             </p>
 
             <div className="space-y-4">
               <h3 className="uppercase tracking-wider" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
-                What happens next
-              </h3>
+                {t("What happens next")}</h3>
               {["AI analyzes the job description", "Follow-up questions are generated", "Customized CV draft is created", "You review every AI change before applying"].map((item) => (
                 <div key={item} className="flex items-start gap-3">
                   <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: "var(--color-teal-600)" }} />
@@ -266,17 +271,15 @@ export function TailorCV() {
               }}
             >
               <h2 className="font-medium mb-6" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                Job details
-              </h2>
+                {t("Job details")}</h2>
 
               <div className="space-y-4">
                 <div>
                   <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                    Role
-                  </label>
+                    {t("Role")}</label>
                   <input
                     type="text"
-                    placeholder="e.g. Senior Product Designer"
+                    placeholder={t("e.g. Senior Product Designer")}
                     className="w-full px-3 py-2 rounded-lg border"
                     style={{
                       fontSize: "13px",
@@ -290,11 +293,10 @@ export function TailorCV() {
 
                 <div>
                   <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                    Company name (optional)
-                  </label>
+                    {t("Company name (optional)")}</label>
                   <input
                     type="text"
-                    placeholder="e.g. TechStart Inc"
+                    placeholder={t("e.g. TechStart Inc")}
                     className="w-full px-3 py-2 rounded-lg border"
                     style={{
                       fontSize: "13px",
@@ -308,11 +310,10 @@ export function TailorCV() {
 
                 <div>
                   <label className="block mb-2" style={{ fontSize: "12px", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                    Job description
-                  </label>
+                    {t("Job description")}</label>
                   <textarea
                     rows={10}
-                    placeholder="Paste the full job description here..."
+                    placeholder={t("Paste the full job description here...")}
                     className="w-full px-3 py-2 rounded-lg border resize-none"
                     style={{
                       fontSize: "13px",
@@ -329,7 +330,7 @@ export function TailorCV() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input
                     type="url"
-                    placeholder="Job posting URL (optional)"
+                    placeholder={t("Job posting URL (optional)")}
                     value={formData.jobPostingUrl}
                     onChange={(e) => setFormData({ ...formData, jobPostingUrl: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border"
@@ -337,7 +338,7 @@ export function TailorCV() {
                   />
                   <input
                     type="text"
-                    placeholder="Location (optional)"
+                    placeholder={t("Location (optional)")}
                     value={formData.locationText}
                     onChange={(e) => setFormData({ ...formData, locationText: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border"
@@ -363,7 +364,7 @@ export function TailorCV() {
                 }}
               >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
-                {submitting ? "Analyzing..." : "Analyze job & continue"}
+                {submitting ? t("Analyzing...") : t("Analyze job & continue")}
               </button>
               {submitting && progressMessage ? (
                 <p className="mt-3" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
