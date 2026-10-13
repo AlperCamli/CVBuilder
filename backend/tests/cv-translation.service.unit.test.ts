@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AiProviderError, ForbiddenError } from "../src/shared/errors/app-error";
 import { randomUUID } from "node:crypto";
 import { AiService } from "../src/modules/ai/ai.service";
+import { RenderingService } from "../src/modules/rendering/rendering.service";
 import type { MasterCvRecord, AiRunRecord } from "../src/shared/types/domain";
 import type { SessionContext } from "../src/modules/ai/ai.types";
 import type { AiProviderResult } from "../src/modules/ai/provider/ai-provider";
@@ -176,6 +177,46 @@ describe("block translation orchestration", () => {
 });
 
 describe("translation HTTP contract", () => {
+  it("previews the completed snapshot with its original template, layout and signed photo without creating or charging again", async () => {
+    const [{ default: express }, { default: request }, { createAiRouter }, { AiController }, { createErrorHandler }] = await Promise.all([
+      import("express"), import("supertest"), import("../src/modules/ai/ai.routes"), import("../src/modules/ai/ai.controller"), import("../src/shared/middleware/error-handler"),
+    ]);
+    const f = fixture();
+    const templateId = randomUUID();
+    f.master.template_id = templateId;
+    Object.assign(f.master.current_content.metadata, { font_scale: "0.85", spacing_scale: 0.8, layout_scale: 1.1, photo: randomUUID() });
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    const stored = await f.repository.findRunById(f.session.appUser.id, start.ai_run_id);
+    stored.input_payload = structuredClone(stored.input_payload);
+    const templates = { resolveTemplateForRendering: vi.fn(async () => ({ resolution: "selected", template: { id: templateId, name: "Minimal Professional", slug: "minimal-professional", status: "inactive", preview_config: null, export_config: null } })) };
+    const photos = { resolveSignedUrl: vi.fn(async () => "https://example.invalid/signed-photo") };
+    const app = express();
+    app.use(createAiRouter(new AiController(f.service, new RenderingService(templates as any), photos as any), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
+    app.use(createErrorHandler({ appEnv: "test" } as any));
+    const path = `/master-cvs/${f.master.id}/translations/${start.ai_run_id}/preview`;
+    await request(app).get(path).expect(409);
+    await f.service.executeTranslation(f.session, f.master.id, start.ai_run_id);
+    f.master.template_id = randomUUID();
+    f.master.current_content.metadata.font_scale = 1.15;
+    const { body } = await request(app).get(path).expect(200);
+    expect(templates.resolveTemplateForRendering).toHaveBeenCalledWith({ template_id: templateId, allow_inactive_selected: true });
+    expect(body.data.current_content.metadata).toMatchObject({ font_scale: "0.85", spacing_scale: 0.8, layout_scale: 1.1 });
+    expect(body.data.presentation.theme.tokens.font_family).toContain("Noto Sans");
+    expect(body.data.presentation.sections[0].items[0].body).toContain("20 rapor");
+    expect(body.data.presentation.header.photo).toBe("https://example.invalid/signed-photo");
+    expect(photos.resolveSignedUrl).toHaveBeenCalledWith(f.session.appUser.id, stored.input_payload.source.current_content.metadata.photo);
+    await request(app).get(path).expect(200);
+    expect(f.provider.generate).toHaveBeenCalledTimes(1);
+    expect(f.billing.recordAiActionUsage).toHaveBeenCalledTimes(1);
+    expect(f.masterRepository.create).not.toHaveBeenCalled();
+    await request(app).get(`/master-cvs/${randomUUID()}/translations/${start.ai_run_id}/preview`).expect(404);
+    const owner = f.session.appUser.id;
+    f.session.appUser.id = randomUUID();
+    await request(app).get(path).expect(404);
+    f.session.appUser.id = owner;
+    f.master.is_deleted = true;
+    await request(app).get(path).expect(404);
+  });
   it("lists catalog languages, accepts admin-enabled languages and executes review/apply through the real controller", async () => {
     const [{ default: express }, { default: request }, { createAiRouter }, { AiController }, { createErrorHandler }] = await Promise.all([
       import("express"), import("supertest"), import("../src/modules/ai/ai.routes"), import("../src/modules/ai/ai.controller"), import("../src/shared/middleware/error-handler"),
@@ -185,7 +226,7 @@ describe("translation HTTP contract", () => {
     f.provider.generate.mockImplementation(async input => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: input.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analytiker" : "20 Berichte erstellt." })) } }));
     const app = express();
     app.use(express.json());
-    app.use(createAiRouter(new AiController(f.service), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
+    app.use(createAiRouter(new AiController(f.service, {} as any, {} as any), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
     app.use(createErrorHandler({ appEnv: "test" } as any));
     expect((await request(app).get("/cv-languages").expect(200)).body.data.languages[0].code).toBe("de");
     await request(app).post(`/master-cvs/${f.master.id}/translations`).send({ target_language: "fr" }).expect(400);
@@ -366,7 +407,7 @@ describe("reviewable numerical validation failures", () => {
     f.provider.generate.mockImplementation(async input => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: input.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analist" : "200 rapor hazırladı." })) } }));
     const app = express();
     app.use(express.json());
-    app.use(createAiRouter(new AiController(f.service), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
+    app.use(createAiRouter(new AiController(f.service, {} as any, {} as any), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
     app.use(createErrorHandler({ appEnv: "test" } as any));
     const start = await f.service.startTranslation(f.session, f.master.id, "tr");
     const response = await request(app).post(`/master-cvs/${f.master.id}/translations/${start.ai_run_id}/execute`).expect(200);

@@ -507,6 +507,7 @@ Soft-delete the `files` row and best-effort delete the storage object. Response 
 - `POST /master-cvs/:masterCvId/translations`: `{ target_language: string }`; validates the target against the catalog and returns `{ ai_run_id, status }` with HTTP 202.
 - `POST /master-cvs/:masterCvId/translations/:aiRunId/execute`: runs content blocks with bounded concurrency and up to two automatic retries per failed block. Successful output includes `current_content`, `target_language`, `target_direction`, and `translated_blocks`.
 - `GET /master-cvs/:masterCvId/translations/:aiRunId`: polls the owned run's status and result.
+- `GET /master-cvs/:masterCvId/translations/:aiRunId/preview`: renders a completed owned translation with its saved source template and display metadata. Returns the standard rendering preview response, resolving managed photos to signed URLs. Pending/failed runs return 409; inaccessible runs/sources return 404. Preview does not invoke AI, create a CV or consume another action.
 - `POST /master-cvs/:masterCvId/translations/:aiRunId/apply`: creates the independent master (HTTP 201), after review and another language/ownership/conflict check.
 
 Invalid or disabled targets return 400. An existing target-language master returns 409 with `reason: master_language_exists` and `existing_master_cv_id`. Ordinary users cannot write the catalog. See [CV translation](cv-translation.md) for admin publishing, field selection, validation and billing.

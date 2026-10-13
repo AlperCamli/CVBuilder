@@ -3,6 +3,8 @@ import { UnauthorizedError } from "../../shared/errors/app-error";
 import { sendSuccess } from "../../shared/http/response";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import type { AiService } from "./ai.service";
+import type { RenderingService } from "../rendering/rendering.service";
+import type { CvPhotosService } from "../cv-photos/cv-photos.service";
 
 const requireSession = (request: Request) => {
   if (!request.auth) {
@@ -13,7 +15,11 @@ const requireSession = (request: Request) => {
 };
 
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly renderingService: RenderingService,
+    private readonly cvPhotosService: CvPhotosService
+  ) {}
 
   getCvLanguages = asyncHandler(async (_request: Request, response: Response) => {
     sendSuccess(response, await this.aiService.listTranslationLanguages());
@@ -27,6 +33,13 @@ export class AiController {
   });
   getTranslation = asyncHandler(async (request: Request, response: Response) => {
     sendSuccess(response, await this.aiService.getTranslation(requireSession(request), request.params.masterCvId, request.params.aiRunId));
+  });
+  getTranslationPreview = asyncHandler(async (request: Request, response: Response) => {
+    const session = requireSession(request);
+    const input = await this.aiService.getTranslationPreviewInput(session, request.params.masterCvId, request.params.aiRunId);
+    const data = await this.renderingService.buildRendering(input);
+    data.presentation.header.photo = await this.cvPhotosService.resolveSignedUrl(session.appUser.id, data.presentation.header.photo);
+    sendSuccess(response, data);
   });
   postTranslationApply = asyncHandler(async (request: Request, response: Response) => {
     sendSuccess(response, await this.aiService.applyTranslationRun(requireSession(request), request.params.masterCvId, request.params.aiRunId), { statusCode: 201 });

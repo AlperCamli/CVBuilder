@@ -1408,5 +1408,8 @@
   "Numbers in original": "Orijinal metindeki sayılar",
   "Numbers in translation": "Çevirideki sayılar",
   "No numbers found": "Sayı bulunamadı",
-  "No text returned": "Metin döndürülmedi"
+  "No text returned": "Metin döndürülmedi",
+  "Failed to load CV preview": "CV önizlemesi yüklenemedi",
+  "Loading CV preview…": "CV önizlemesi yükleniyor…",
+  "Translated CV preview": "Çevrilen CV önizlemesi"
 }

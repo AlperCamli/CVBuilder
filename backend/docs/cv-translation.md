@@ -30,6 +30,10 @@ Section titles are keyed by canonical section type, not English source text. Sta
 
 Provider timeouts and pending-run watchdog mechanisms remain unchanged. Automatic retries retain successful blocks in memory for the current execution; starting a new translation run still starts fresh. This is request-bound processing, not a durable background job. A provider response still requires factual and language review by the user; schema validation cannot prove semantic accuracy or preservation of every proper name within free text.
 
+## Preview
+
+Successful translation review renders the full paginated CV with the same `CVPresentationPreview` component as the editor. The authenticated translation preview endpoint uses the run's saved source template (including a selected template retired since creation), translated content, and unchanged font/spacing/layout metadata. Managed photos are resolved for the owning user. A subsequent edit to the source does not change this review. The preview scales visually to fit smaller screens; pagination measures layout heights independently of that display scaling. Longer translated text may increase the page count. Preview loading failures can be retried without redoing translation or consuming another AI action. Creating the translated master remains a separate action after review.
+
 ## Verification
 
 Run backend/frontend tests and typechecks. `npm --prefix backend run test:privacy-sql` applies every migration to temporary PostgreSQL and verifies catalog access, disabled-language rejection, regional uniqueness, existing-document edits, translation atomic completion and quotas.
@@ -41,4 +45,4 @@ node frontend/scripts/verify-cv-translation.mjs
 node frontend/scripts/verify-language-studio.mjs
 ```
 
-Set `LANGUAGE_STUDIO_URL` if the server uses another port. The translation browser check uses isolated demo data and fixture API contracts; it exercises admin heading export and the actual language-selection/review/apply dialog. Backend HTTP tests exercise the real controller/routes/service with an in-memory provider. No test calls paid AI or publishes a live catalog. Real-provider quality and hosted deployment checks require the configured environment.
+Set `LANGUAGE_STUDIO_URL` if the server uses another port. The translation browser check uses isolated demo data and fixture API contracts; it exercises admin heading export, language selection, rendered multi-page review with custom typography and mobile pagination, preview-only retries, failed-number comparisons, and apply. Backend HTTP tests exercise the real controller/routes/service and renderer with an in-memory provider, including preview ownership, saved template/settings, photo signing and usage. No test calls paid AI or publishes a live catalog. Real-provider quality and hosted deployment checks require the configured environment.

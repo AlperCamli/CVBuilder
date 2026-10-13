@@ -787,7 +787,9 @@ export function CVPresentationPreview({
     const measureAll = () => {
       const next = new Map<string, number>();
       refs.forEach((el, key) => {
-        next.set(key, el.getBoundingClientRect().height);
+        // Paginate using layout dimensions, independent of display scaling in
+        // smaller preview containers (getBoundingClientRect includes transforms).
+        next.set(key, el.offsetHeight);
       });
 
       let changed = next.size !== heightsRef.current.size;

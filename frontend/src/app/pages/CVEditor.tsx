@@ -33,6 +33,7 @@ import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble
 import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
+import { resolveScaleFromMetadata } from "../integration/cv-display-settings";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
 import { useOnboarding } from "../contexts/OnboardingContext";
@@ -145,27 +146,6 @@ const clampInRange = (value: number, min: number, max: number): number =>
 const clampFontScale = (value: number): number => clampInRange(value, FONT_SCALE_MIN, FONT_SCALE_MAX);
 const clampSpacingScale = (value: number): number => clampInRange(value, SPACING_SCALE_MIN, SPACING_SCALE_MAX);
 const clampLayoutScale = (value: number): number => clampInRange(value, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX);
-
-const resolveScaleFromMetadata = (
-  content: CvContent | null | undefined,
-  key: string,
-  clamp: (value: number) => number
-): number => {
-  const rawValue = (content?.metadata as Record<string, unknown> | undefined)?.[key];
-
-  if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-    return clamp(rawValue);
-  }
-
-  if (typeof rawValue === "string") {
-    const parsed = Number.parseFloat(rawValue);
-    if (Number.isFinite(parsed)) {
-      return clamp(parsed);
-    }
-  }
-
-  return 1;
-};
 
 const resolveFontScaleFromContent = (content: CvContent | null | undefined): number =>
   resolveScaleFromMetadata(content, "font_scale", clampFontScale);

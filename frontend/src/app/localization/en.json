@@ -1474,5 +1474,8 @@
   "Numbers in original": "Numbers in original",
   "Numbers in translation": "Numbers in translation",
   "No numbers found": "No numbers found",
-  "No text returned": "No text returned"
+  "No text returned": "No text returned",
+  "Failed to load CV preview": "Failed to load CV preview",
+  "Loading CV preview…": "Loading CV preview…",
+  "Translated CV preview": "Translated CV preview"
 }

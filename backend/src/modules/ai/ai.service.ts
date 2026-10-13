@@ -5,6 +5,7 @@ import { builtInCvLanguages, cvLanguageSchema, documentLanguageKey, type CvLangu
 import { languagePolicy, normalizeDocumentLanguage, detectCvLanguage } from "../../shared/localization/languages";
 import { feedbackLanguage } from "../../shared/localization/request-locale";
 import type { PrivacyService } from "../privacy/privacy.service";
+import type { BuildRenderingInput } from "../rendering/rendering.types";
 import { personalizationGuidance } from "../guest-imports/personalization";
 import { reviewTailoring } from "../cv-review/cv-review";
 import { randomUUID } from "node:crypto";
@@ -786,6 +787,20 @@ export class AiService {
     const run = await this.aiRepository.findRunById(session.appUser.id, runId);
     if (!run || run.flow_type !== "cv_translate" || run.master_cv_id !== masterId) throw new NotFoundError("Translation was not found");
     return run;
+  }
+
+  async getTranslationPreviewInput(session: SessionContext, masterId: string, runId: string): Promise<BuildRenderingInput> {
+    const run = await this.getTranslation(session, masterId, runId);
+    if (run.status !== "completed" || !run.output_payload?.current_content) throw new ConflictError("Translation is not ready");
+    await this.requireMasterCv(session.appUser.id, masterId);
+    const source = run.input_payload.source as unknown as MasterCvRecord;
+    return {
+      cv_kind: "master",
+      current_content: run.output_payload.current_content,
+      template_id: source.template_id,
+      language: String(run.input_payload.target_language),
+      allow_inactive_selected_template: true,
+    };
   }
 
   async executeTranslation(session: SessionContext, masterId: string, runId: string) {

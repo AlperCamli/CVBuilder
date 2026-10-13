@@ -320,6 +320,7 @@ export class BackendApi {
   startTranslation(masterId: string, target_language: string): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language }); }
   executeTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/execute`); }
   getTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}`); }
+  getTranslationPreview(masterId: string, runId: string): Promise<RenderingPreviewResponse> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}/preview`); }
   applyTranslation(masterId: string, runId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/apply`); }
 
   getSettings(): Promise<{ settings: SettingsResponseData }> {

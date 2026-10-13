@@ -5,6 +5,7 @@ import type { CvLanguage, TranslationRun } from "../integration/backend-api";
 import type { MasterCvSummary } from "../integration/api-types";
 import { translate as t } from "../localization/i18n";
 import { ApiClientError } from "../integration/api-error";
+import { TranslationCvPreview } from "./TranslationCvPreview";
 
 export function TranslationDialog({
   source,
@@ -151,31 +152,7 @@ export function TranslationDialog({
         </div>
       )}
       {run?.status === "completed" && run.output_payload?.current_content && (
-        <div
-          className="overflow-y-auto max-h-[50vh] border rounded-xl p-4 mb-4"
-          lang={target}
-          dir={run.output_payload.target_direction ?? languages.find(language => language.code === target)?.direction}
-        >
-          {run.output_payload.current_content.sections.map((section) => (
-            <section key={section.id} className="mb-4">
-              <h3 className="font-semibold">{section.title}</h3>
-              {section.blocks.map((block) => (
-                <p key={block.id} className="whitespace-pre-wrap text-sm mt-2">
-                  {Object.values(block.fields)
-                    .map((value) =>
-                      Array.isArray(value)
-                        ? value.join(" · ")
-                        : typeof value === "string"
-                          ? value
-                          : "",
-                    )
-                    .filter(Boolean)
-                    .join("\n")}
-                </p>
-              ))}
-            </section>
-          ))}
-        </div>
+        <TranslationCvPreview key={run.id} masterId={source.id} runId={run.id} direction={run.output_payload.target_direction ?? languages.find(language => language.code === target)?.direction} />
       )}
       <div className="flex gap-3 justify-end mt-4">
         <button
