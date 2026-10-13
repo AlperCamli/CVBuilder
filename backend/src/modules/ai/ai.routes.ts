@@ -35,11 +35,11 @@ export const createAiRouter = (
   router.get("/cv-languages", ...readGuard, aiController.getCvLanguages);
 
   const translationParams = z.object({ masterCvId: z.string().uuid(), aiRunId: z.string().uuid() }).strict();
-  router.post("/master-cvs/:masterCvId/translations", ...inferenceGuard, validate({ params: masterCvAiHistoryParamsSchema, body: z.object({ target_language: z.string().trim().min(2).max(16) }).strict() }), aiController.postTranslationStart);
+  router.post("/master-cvs/:masterCvId/translations", ...inferenceGuard, validate({ params: masterCvAiHistoryParamsSchema, body: z.object({ target_language: z.string().trim().min(2).max(16), replace_master_cv_id: z.string().uuid().optional() }).strict() }), aiController.postTranslationStart);
   router.post("/master-cvs/:masterCvId/translations/:aiRunId/execute", ...inferenceGuard, validate({ params: translationParams }), aiController.postTranslationExecute);
   router.get("/master-cvs/:masterCvId/translations/:aiRunId", ...readGuard, validate({ params: translationParams }), aiController.getTranslation);
   router.get("/master-cvs/:masterCvId/translations/:aiRunId/preview", ...readGuard, validate({ params: translationParams }), aiController.getTranslationPreview);
-  router.post("/master-cvs/:masterCvId/translations/:aiRunId/apply", ...readGuard, validate({ params: translationParams }), aiController.postTranslationApply);
+  router.post("/master-cvs/:masterCvId/translations/:aiRunId/apply", ...readGuard, validate({ params: translationParams, body: z.object({ replace_master_cv_id: z.string().uuid().optional() }).strict().default({}) }), aiController.postTranslationApply);
 
   router.post(
     "/ai/tailoring-runs/start",

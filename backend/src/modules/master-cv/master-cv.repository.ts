@@ -30,6 +30,7 @@ export interface MasterCvRepository {
   findById(userId: string, masterCvId: string): Promise<MasterCvRecord | null>;
   findAnyById(userId: string, masterCvId: string): Promise<MasterCvRecord | null>;
   replaceFromImport?(userId: string, masterId: string, importId: string, content: CvContent, summary: string | null): Promise<MasterCvRecord>;
+  replaceFromTranslation?(userId: string, masterId: string, runId: string, summary: string | null): Promise<MasterCvRecord>;
   create(payload: CreateMasterCvPayload): Promise<MasterCvRecord>;
   updateById(userId: string, masterCvId: string, payload: MasterCvUpdatePayload): Promise<MasterCvRecord | null>;
   softDelete(userId: string, masterCvId: string): Promise<boolean>;
@@ -165,6 +166,12 @@ export class SupabaseMasterCvRepository implements MasterCvRepository {
   async replaceFromImport(userId: string, masterId: string, importId: string, content: CvContent, summary: string | null): Promise<MasterCvRecord> {
     const { data, error } = await this.supabaseClient.rpc("replace_master_from_import", { p_user_id: userId, p_master_id: masterId, p_import_id: importId, p_content: toDbContent(content), p_summary: summary }).single();
     if (error) throw new ConflictError("Could not update the existing master CV", { reason: error.message });
+    return toMasterCvRecord(data as Record<string, unknown>);
+  }
+
+  async replaceFromTranslation(userId: string, masterId: string, runId: string, summary: string | null): Promise<MasterCvRecord> {
+    const { data, error } = await this.supabaseClient.rpc("replace_master_from_translation", { p_user_id: userId, p_master_id: masterId, p_run_id: runId, p_summary: summary }).single();
+    if (error) throw new ConflictError("Could not replace the existing master CV");
     return toMasterCvRecord(data as Record<string, unknown>);
   }
 

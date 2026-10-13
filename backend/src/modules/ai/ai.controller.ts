@@ -26,7 +26,7 @@ export class AiController {
   });
 
   postTranslationStart = asyncHandler(async (request: Request, response: Response) => {
-    sendSuccess(response, await this.aiService.startTranslation(requireSession(request), request.params.masterCvId, request.body.target_language), { statusCode: 202 });
+    sendSuccess(response, await this.aiService.startTranslation(requireSession(request), request.params.masterCvId, request.body.target_language, request.body.replace_master_cv_id), { statusCode: 202 });
   });
   postTranslationExecute = asyncHandler(async (request: Request, response: Response) => {
     sendSuccess(response, await this.aiService.executeTranslation(requireSession(request), request.params.masterCvId, request.params.aiRunId));
@@ -42,7 +42,7 @@ export class AiController {
     sendSuccess(response, data);
   });
   postTranslationApply = asyncHandler(async (request: Request, response: Response) => {
-    sendSuccess(response, await this.aiService.applyTranslationRun(requireSession(request), request.params.masterCvId, request.params.aiRunId), { statusCode: 201 });
+    sendSuccess(response, await this.aiService.applyTranslationRun(requireSession(request), request.params.masterCvId, request.params.aiRunId, request.body?.replace_master_cv_id), { statusCode: 201 });
   });
 
   postTailoringRunStart = asyncHandler(async (request: Request, response: Response) => {

@@ -45,25 +45,24 @@ export function TranslationDialog({
     return () => { active = false; };
   }, [api, source.language]);
   const handleError = (error: unknown) => {
+    if (error instanceof ApiClientError && error.details?.reason === "master_language_exists" && typeof error.details.existing_master_cv_id === "string") {
+      setExistingId(error.details.existing_master_cv_id);
+      setError(null);
+      return;
+    }
     setError(
       error instanceof Error
         ? t(error.message)
         : t("Translation failed. Please retry."),
     );
-    if (
-      error instanceof ApiClientError &&
-      typeof error.details?.existing_master_cv_id === "string"
-    )
-      setExistingId(error.details.existing_master_cv_id);
   };
   const start = async () => {
     if (!languages.some(language => language.code === target)) return;
     setBusy(true);
     setError(null);
-    setExistingId(null);
     setRun(null);
     try {
-      const started = await api.startTranslation(source.id, target);
+      const started = await api.startTranslation(source.id, target, existingId ?? undefined);
       setRun(await api.getTranslation(source.id, started.ai_run_id));
       setRun(await api.executeTranslation(source.id, started.ai_run_id));
     } catch (error) {
@@ -85,8 +84,9 @@ export function TranslationDialog({
   const apply = async () => {
     if (!run || run.status !== "completed") return;
     setBusy(true);
+    setError(null);
     try {
-      const created = await api.applyTranslation(source.id, run.id);
+      const created = await api.applyTranslation(source.id, run.id, existingId ?? undefined);
       onCreated(created.id);
     } catch (error) {
       handleError(error);
@@ -108,7 +108,7 @@ export function TranslationDialog({
       </h2>
       <p className="text-sm text-slate-600 mb-4">
         {t(
-          "Your original CV stays unchanged. The translated master is an independent copy and uses one AI action.",
+          "Your original CV stays unchanged. Review the translated CV before saving it. Translation uses one AI action.",
         )}
       </p>
       <label className="block text-sm font-medium mb-4" htmlFor="translation-language">
@@ -121,6 +121,12 @@ export function TranslationDialog({
         </select>
       </label>
       {!loadingLanguages && !languages.length && !error && <p role="status">{t("No other CV languages are available.")}</p>}
+      {existingId && (
+        <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-4 text-sm text-amber-950">
+          <p className="font-semibold mb-1">{t("A master CV already exists in this language")}</p>
+          <p>{t("Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.", { language: languages.find(language => language.code === target)?.name ?? target })}</p>
+        </div>
+      )}
       {failureMessage && (
         <p role="alert" className="text-red-700 mb-3">
           {failureMessage}
@@ -154,7 +160,7 @@ export function TranslationDialog({
       {run?.status === "completed" && run.output_payload?.current_content && (
         <TranslationCvPreview key={run.id} masterId={source.id} runId={run.id} direction={run.output_payload.target_direction ?? languages.find(language => language.code === target)?.direction} />
       )}
-      <div className="flex gap-3 justify-end mt-4">
+      <div className="flex flex-wrap gap-3 justify-end mt-4">
         <button
           type="button"
           disabled={busy}
@@ -163,22 +169,24 @@ export function TranslationDialog({
         >
           {t("Cancel")}
         </button>
-        {existingId ? (
+        {existingId && (
           <button
             type="button"
+            disabled={busy}
             onClick={() => onCreated(existingId)}
-            className="bg-teal-700 text-white rounded-lg px-4 py-2"
+            className="border rounded-lg px-4 py-2"
           >
             {t("Open existing master")}
           </button>
-        ) : run?.status === "completed" ? (
+        )}
+        {run?.status === "completed" ? (
           <button
             type="button"
             disabled={busy}
             onClick={() => void apply()}
             className="bg-teal-700 text-white rounded-lg px-4 py-2"
           >
-            {t("Create translated master")}
+            {t(existingId ? "Replace existing CV" : "Create translated master")}
           </button>
         ) : (
           <button
@@ -187,7 +195,7 @@ export function TranslationDialog({
             onClick={() => void start()}
             className="bg-teal-700 text-white rounded-lg px-4 py-2"
           >
-            {t("Translate")}
+            {t(existingId ? "Translate and review" : "Translate")}
           </button>
         )}
       </div>

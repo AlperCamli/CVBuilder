@@ -65,6 +65,8 @@ try {
     // Use the module URL loaded by the app, including Vite's HMR version.
     const apiModuleUrl = performance.getEntriesByType("resource").map(entry => entry.name).find(name => new URL(name).pathname === "/src/app/integration/backend-api.ts");
     const { BackendApi } = await import(apiModuleUrl ?? "/src/app/integration/backend-api.ts");
+    const errorModuleUrl = performance.getEntriesByType("resource").map(entry => entry.name).find(name => new URL(name).pathname === "/src/app/integration/api-error.ts");
+    const { ApiClientError } = await import(errorModuleUrl ?? "/src/app/integration/api-error.ts");
     const getCvLanguages = BackendApi.prototype.getCvLanguages;
     BackendApi.prototype.getCvLanguages = function () {
       this.client.get = runtime.client.get;
@@ -73,8 +75,14 @@ try {
     runtime.client.post = async (path, body) => {
       if (path.includes("/translations")) {
         window.translationCalls.push({ path, body });
+        if ((path.endsWith("/translations") || path.endsWith("/apply")) && window.translationExistingId && body?.replace_master_cv_id !== window.translationExistingId) {
+          throw new ApiClientError({ status: 409, code: "CONFLICT", message: "A master CV already exists in this language", details: { reason: "master_language_exists", existing_master_cv_id: window.translationExistingId } });
+        }
         if (path.endsWith("/translations")) return { ai_run_id: "fixture-run" };
-        if (path.endsWith("/apply")) return { id: "demo-master-en" };
+        if (path.endsWith("/apply")) {
+          if (window.translationExistingId) window.existingCvText = "Translated master";
+          return { id: "demo-master-en" };
+        }
         return { id: "fixture-run", status: window.translationFixture?.status ?? "completed", output_payload: window.translationFixture?.output ?? output };
       }
       return post(path, body);
@@ -131,6 +139,26 @@ try {
   await page.setViewport({ width: 1440, height: 1100 });
   await page.select('.ls-preview-toolbar label:nth-of-type(2) select', "1280");
   await click(frame, "Cancel");
+  // The existing target survives a completed translation that is cancelled.
+  await frame.evaluate(() => { window.translationExistingId = "demo-master-de"; window.existingCvText = "Original master"; });
+  await click(frame, "Translate");
+  await frame.waitForSelector("#translation-language option[value=de]");
+  await frame.select("#translation-language", "de");
+  await click(frame, "Translate");
+  await frame.waitForFunction(() => document.querySelector('dialog[open]')?.textContent.includes("Until then, it stays unchanged."));
+  assert.equal(await frame.$eval('dialog[open]', element => element.textContent.includes("Deutsch")), true);
+  await click(frame, "Translate and review");
+  await frame.waitForSelector(`${previewSelector} .shadow-lg`);
+  assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");
+  assert.equal((await frame.evaluate(() => window.translationCalls)).findLast(call => call.path.endsWith("/translations")).body.replace_master_cv_id, "demo-master-de");
+  await page.setViewport({ width: 390, height: 844 });
+  await page.select('.ls-preview-toolbar label:nth-of-type(2) select', "390");
+  await frame.waitForFunction(() => document.querySelector('dialog[open]').scrollWidth <= document.querySelector('dialog[open]').clientWidth);
+  await page.screenshot({ path: join(artifacts, "translation-replace-warning-mobile.png"), fullPage: true });
+  await click(frame, "Cancel");
+  assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");
+  await page.setViewport({ width: 1440, height: 1100 });
+  await page.select('.ls-preview-toolbar label:nth-of-type(2) select', "1280");
   await frame.evaluate(() => {
     window.translationFixture = { status: "failed", output: { target_language: "de", target_direction: "ltr", validation_issues: [{ path: "sections/0/blocks/0/fields/description", section_title: "Work Experience", block_title: "Analyst", field_label: "Description", original_text: "Delivered 20 reports.", translated_text: "200 Berichte erstellt.", original_numbers: ["20"], translated_numbers: ["200"] }] } };
   });
@@ -138,6 +166,7 @@ try {
   await frame.waitForSelector("#translation-language option[value=de]");
   await frame.select("#translation-language", "de");
   await click(frame, "Translate");
+  await click(frame, "Translate and review");
   await frame.waitForSelector('[aria-label="Translation comparison"]');
   assert.equal(await frame.$$eval('dialog[open] [role="alert"]', alerts => alerts.length), 1);
   const comparison = await frame.$eval('[aria-label="Translation comparison"]', element => element.textContent);
@@ -146,21 +175,40 @@ try {
   assert.match(comparison, /Work Experience/);
   assert.match(comparison, /No AI action was charged/);
   assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Create translated master")), false);
+  assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Replace existing CV")), false);
+  assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");
   await page.screenshot({ path: join(artifacts, "number-comparison.png"), fullPage: true });
   await page.setViewport({ width: 390, height: 844 });
   await page.select('.ls-preview-toolbar label:nth-of-type(2) select', "390");
   await page.screenshot({ path: join(artifacts, "number-comparison-mobile.png"), fullPage: true });
   await frame.evaluate(() => { window.translationFixture = null; });
-  await click(frame, "Translate");
+  await click(frame, "Translate and review");
   await frame.waitForFunction(() => document.querySelector("dialog[open]")?.textContent.includes("Berufserfahrung"));
   assert.equal(await frame.$('[aria-label="Translation comparison"]'), null);
+  // A newly created target during review requires confirmation without retranslation.
+  await click(frame, "Cancel");
+  await frame.evaluate(() => { window.translationExistingId = null; });
+  await click(frame, "Translate");
+  await frame.waitForSelector("#translation-language option[value=de]");
+  await frame.select("#translation-language", "de");
+  await click(frame, "Translate");
+  await frame.waitForSelector(`${previewSelector} .shadow-lg`);
+  await frame.evaluate(() => { window.translationExistingId = "demo-master-de"; });
+  const executions = await frame.evaluate(() => window.translationCalls.filter(call => call.path.endsWith("/execute")).length);
   await click(frame, "Create translated master");
+  await frame.waitForFunction(() => [...document.querySelectorAll('dialog[open] button')].some(button => button.textContent.trim() === "Replace existing CV"));
+  assert.notEqual(await frame.$(`${previewSelector} .shadow-lg`), null);
+  assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");
+  await click(frame, "Replace existing CV");
   await frame.waitForFunction(() => location.pathname === "/app/cv/demo-master-en");
   assert.equal((await frame.evaluate(() => window.translationCalls)).at(-1).path.endsWith("/apply"), true);
+  assert.equal((await frame.evaluate(() => window.translationCalls)).at(-1).body.replace_master_cv_id, "demo-master-de");
+  assert.equal(await frame.evaluate(() => window.existingCvText), "Translated master");
+  assert.equal(await frame.evaluate(() => window.translationCalls.filter(call => call.path.endsWith("/execute")).length), executions);
   await page.setViewport({ width: 390, height: 844 });
   await page.screenshot({ path: join(artifacts, "mobile.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log(`CV language editing/export, rendered translation preview/layout/mobile/retry, apply and numerical failure browser checks passed: ${artifacts}`);
+  console.log(`CV language editing/export, rendered preview, replacement confirmation/cancel/failure/race, mobile and retry browser checks passed: ${artifacts}`);
 } catch (error) {
   await page.screenshot({ path: join(artifacts, "failure.png"), fullPage: true });
   console.error(`Failure artifacts: ${artifacts}; browser errors: ${JSON.stringify(errors)}`);

@@ -317,11 +317,11 @@ export class BackendApi {
   restoreMasterDocumentRevision(masterId: string, revisionId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/revisions/${revisionId}/restore`); }
   getBillingPrices(): Promise<BillingPrices> { return this.client.get<BillingPrices>("/billing/prices"); }
   getCvLanguages(): Promise<{ languages: CvLanguage[] }> { return this.client.get("/cv-languages"); }
-  startTranslation(masterId: string, target_language: string): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language }); }
+  startTranslation(masterId: string, target_language: string, replaceMasterId?: string): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language, ...(replaceMasterId ? { replace_master_cv_id: replaceMasterId } : {}) }); }
   executeTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/execute`); }
   getTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}`); }
   getTranslationPreview(masterId: string, runId: string): Promise<RenderingPreviewResponse> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}/preview`); }
-  applyTranslation(masterId: string, runId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/apply`); }
+  applyTranslation(masterId: string, runId: string, replaceMasterId?: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/apply`, replaceMasterId ? { replace_master_cv_id: replaceMasterId } : {}); }
 
   getSettings(): Promise<{ settings: SettingsResponseData }> {
     return this.client.get<{ settings: SettingsResponseData }>("/me/settings");

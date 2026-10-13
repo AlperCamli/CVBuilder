@@ -40,3 +40,4 @@ done
 
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/localization-billing.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cv-languages.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/translation-replacement.sql"

@@ -1411,5 +1411,10 @@
   "No text returned": "Metin döndürülmedi",
   "Failed to load CV preview": "CV önizlemesi yüklenemedi",
   "Loading CV preview…": "CV önizlemesi yükleniyor…",
-  "Translated CV preview": "Çevrilen CV önizlemesi"
+  "Translated CV preview": "Çevrilen CV önizlemesi",
+  "Your original CV stays unchanged. Review the translated CV before saving it. Translation uses one AI action.": "Orijinal CV’niz değişmeden kalır. Kaydetmeden önce çevrilen CV’yi gözden geçirin. Çeviri bir yapay zeka işlemi kullanır.",
+  "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.": "{{language}} dilindeki mevcut CV’nizin içeriği, yalnızca çeviri başarıyla tamamlandıktan ve Mevcut CV’yi değiştir seçeneğine bastıktan sonra değiştirilecektir. O zamana kadar mevcut CV’niz değişmeden kalır.",
+  "Replace existing CV": "Mevcut CV’yi değiştir",
+  "Translate and review": "Çevir ve gözden geçir",
+  "Could not replace the existing master CV": "Mevcut ana CV değiştirilemedi"
 }

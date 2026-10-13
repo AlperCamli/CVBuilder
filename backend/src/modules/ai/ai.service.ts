@@ -769,7 +769,7 @@ export class AiService {
     return language;
   }
 
-  async startTranslation(session: SessionContext, masterId: string, requestedLanguage: string) {
+  async startTranslation(session: SessionContext, masterId: string, requestedLanguage: string, replaceMasterId?: string) {
     const target = await this.requireTranslationLanguage(requestedLanguage);
     const language = target.code;
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
@@ -777,9 +777,9 @@ export class AiService {
     const source = await this.requireMasterCv(session.appUser.id, masterId);
     if (source.module_type !== "standard" || documentLanguageKey(source.language) === language) throw new ValidationError("Choose another language for a standard CV");
     const existing = (await this.masterCvRepository.listByUser(session.appUser.id)).find(cv => cv.module_type === "standard" && documentLanguageKey(cv.language) === language);
-    if (existing) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
+    if (existing && existing.id !== replaceMasterId) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
     const prompt = await this.resolvePromptForFlow({ flow_type: "cv_translate", action_type: null, user_prompt: "Translate the supplied CV texts into the requested language." });
-    const run = await this.aiRepository.createRun({ user_id: session.appUser.id, master_cv_id: masterId, flow_type: "cv_translate", provider: this.aiProvider.providerName, model_name: prompt.model_name, progress_stage: "queued", input_payload: { source, target_language: language, target_catalog: target, prompt, feedback_language: session.appUser.locale } });
+    const run = await this.aiRepository.createRun({ user_id: session.appUser.id, master_cv_id: masterId, flow_type: "cv_translate", provider: this.aiProvider.providerName, model_name: prompt.model_name, progress_stage: "queued", input_payload: { source, target_language: language, target_catalog: target, prompt, feedback_language: session.appUser.locale, replace_master_cv_id: existing?.id ?? null } });
     return { ai_run_id: run.id, status: run.status };
   }
 
@@ -895,10 +895,13 @@ export class AiService {
     }
   }
 
-  async applyTranslationRun(session: SessionContext, masterId: string, runId: string) {
+  async applyTranslationRun(session: SessionContext, masterId: string, runId: string, replaceMasterId?: string) {
     await this.privacy?.assertAi(session.appUser.id);
     const run = await this.getTranslation(session, masterId, runId);
-    if (run.status !== "completed" || !run.output_payload) throw new ConflictError("Translation is not ready");
+    if (run.status !== "completed" || !run.output_payload?.current_content) throw new ConflictError("Translation is not ready");
+    if (typeof run.output_payload.applied_master_cv_id === "string") {
+      return this.requireMasterCv(session.appUser.id, run.output_payload.applied_master_cv_id);
+    }
     const source = run.input_payload.source as unknown as MasterCvRecord;
     const content = (run.output_payload as unknown as { current_content: MasterCvRecord["current_content"] }).current_content;
     const target = await this.requireTranslationLanguage(String(run.input_payload.target_language));
@@ -906,9 +909,13 @@ export class AiService {
     const language = target.code;
     if (content.language !== language) throw new ValidationError("Translation language does not match its result");
     const existing = (await this.masterCvRepository.listByUser(session.appUser.id)).find(cv => cv.module_type === "standard" && documentLanguageKey(cv.language) === language);
-    if (existing) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
+    if (existing && existing.id !== replaceMasterId) throw new ConflictError("A master CV already exists in this language", { reason: "master_language_exists", existing_master_cv_id: existing.id });
     // Recheck the source still belongs to this account and has not been deleted.
     await this.requireMasterCv(session.appUser.id, masterId);
+    if (existing) {
+      if (!this.masterCvRepository.replaceFromTranslation) throw new InternalServerError("Could not replace the existing master CV");
+      return this.masterCvRepository.replaceFromTranslation(session.appUser.id, existing.id, runId, buildCvSummaryText(content));
+    }
     return this.masterCvRepository.create({ user_id: session.appUser.id, title: `${source.title} (${catalog.name})`, language, template_id: source.template_id, module_type: "standard", current_content: content, summary_text: buildCvSummaryText(content), source_type: source.source_type });
   }
 

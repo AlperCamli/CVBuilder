@@ -26,7 +26,14 @@ function fixture() {
   const masterRepository = {
     findById: vi.fn(async (owner, id) => masters.find(row => row.user_id === owner && row.id === id && !row.is_deleted) ?? null),
     listByUser: vi.fn(async owner => masters.filter(row => row.user_id === owner && !row.is_deleted)),
-    create: vi.fn(async payload => { const created = { ...payload, id: randomUUID(), is_deleted: false, created_at: master.created_at, updated_at: master.updated_at }; masters.push(created); return created; })
+    create: vi.fn(async payload => { const created = { ...payload, id: randomUUID(), is_deleted: false, created_at: master.created_at, updated_at: master.updated_at }; masters.push(created); return created; }),
+    replaceFromTranslation: vi.fn(async (owner: string, id: string, runId: string, summary: string | null) => {
+      const target = masters.find(row => row.user_id === owner && row.id === id && !row.is_deleted)!;
+      const run = runs.get(runId);
+      Object.assign(target, { current_content: structuredClone(run.output_payload.current_content), template_id: run.input_payload.source.template_id, source_type: run.input_payload.source.source_type, summary_text: summary });
+      run.output_payload.applied_master_cv_id = id;
+      return target;
+    })
   };
   const provider = {
     providerName: "fixture", resolveModelName: () => "fixture-model",
@@ -177,6 +184,80 @@ describe("block translation orchestration", () => {
 });
 
 describe("translation HTTP contract", () => {
+  it("requires an explicit target confirmation at start and apply, and never replaces before successful review", async () => {
+    const [{ default: express }, { default: request }, { createAiRouter }, { AiController }, { createErrorHandler }] = await Promise.all([
+      import("express"), import("supertest"), import("../src/modules/ai/ai.routes"), import("../src/modules/ai/ai.controller"), import("../src/shared/middleware/error-handler"),
+    ]);
+    const f = fixture();
+    const target = { ...structuredClone(f.master), id: randomUUID(), language: "tr", title: "My existing Turkish CV", current_content: { ...structuredClone(f.master.current_content), language: "tr" } };
+    f.masters.push(target);
+    const before = structuredClone(target);
+    const app = express();
+    app.use(express.json());
+    app.use(createAiRouter(new AiController(f.service, {} as any, {} as any), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
+    app.use(createErrorHandler({ appEnv: "test" } as any));
+    const path = `/master-cvs/${f.master.id}/translations`;
+    const conflict = await request(app).post(path).send({ target_language: "tr" }).expect(409);
+    expect(conflict.body.error.details.existing_master_cv_id).toBe(target.id);
+    await request(app).post(path).send({ target_language: "tr", replace_master_cv_id: f.master.id }).expect(409);
+    await request(app).post(path).send({ target_language: "tr", replace_master_cv_id: "invalid-id" }).expect(400);
+    expect(f.repository.createRun).not.toHaveBeenCalled();
+    const started = await request(app).post(path).send({ target_language: "tr", replace_master_cv_id: target.id }).expect(202);
+    const runPath = `${path}/${started.body.data.ai_run_id}`;
+    await request(app).post(`${runPath}/apply`).send({ replace_master_cv_id: target.id }).expect(409);
+    expect(target).toEqual(before);
+    await request(app).post(`${runPath}/execute`).expect(200);
+    expect(target).toEqual(before);
+    expect(f.masterRepository.replaceFromTranslation).not.toHaveBeenCalled();
+    await request(app).post(`${runPath}/apply`).expect(409);
+    await request(app).post(`${runPath}/apply`).send({ replace_master_cv_id: randomUUID() }).expect(409);
+    expect(target).toEqual(before);
+    const applied = await request(app).post(`${runPath}/apply`).send({ replace_master_cv_id: target.id }).expect(201);
+    expect(applied.body.data.id).toBe(target.id);
+    expect(applied.body.data.title).toBe(before.title);
+    expect(applied.body.data.current_content.sections[0].blocks[0].fields.description).toBe("20 rapor hazırladı.");
+    target.current_content.metadata.headline = "A later manual edit";
+    await request(app).post(`${runPath}/apply`).send({ replace_master_cv_id: target.id }).expect(201);
+    expect(target.current_content.metadata.headline).toBe("A later manual edit");
+    expect(f.masterRepository.replaceFromTranslation).toHaveBeenCalledTimes(1);
+    expect(f.masterRepository.create).not.toHaveBeenCalled();
+    expect(f.master.current_content.language).toBe("en");
+    expect(f.billing.recordAiActionUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an existing target when translation or replacement persistence fails", async () => {
+    const f = fixture();
+    const target = { ...structuredClone(f.master), id: randomUUID(), language: "tr", current_content: { ...structuredClone(f.master.current_content), language: "tr" } };
+    f.masters.push(target);
+    const before = structuredClone(target);
+    const failed = await f.service.startTranslation(f.session, f.master.id, "tr", target.id);
+    f.repository.completeRun.mockRejectedValueOnce(new Error("Database unavailable"));
+    await expect(f.service.executeTranslation(f.session, f.master.id, failed.ai_run_id)).rejects.toThrow("Database unavailable");
+    await expect(f.service.applyTranslationRun(f.session, f.master.id, failed.ai_run_id, target.id)).rejects.toThrow("Translation is not ready");
+    expect(f.masterRepository.replaceFromTranslation).not.toHaveBeenCalled();
+    expect(target).toEqual(before);
+    const ready = await f.service.startTranslation(f.session, f.master.id, "tr", target.id);
+    await f.service.executeTranslation(f.session, f.master.id, ready.ai_run_id);
+    f.masterRepository.replaceFromTranslation.mockRejectedValueOnce(new Error("Replacement unavailable"));
+    await expect(f.service.applyTranslationRun(f.session, f.master.id, ready.ai_run_id, target.id)).rejects.toThrow("Replacement unavailable");
+    expect(target).toEqual(before);
+    expect(f.masterRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("rechecks a target that appears or changes after translation started", async () => {
+    const f = fixture();
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    await f.service.executeTranslation(f.session, f.master.id, start.ai_run_id);
+    const target = { ...structuredClone(f.master), id: randomUUID(), language: "tr", current_content: { ...structuredClone(f.master.current_content), language: "tr" } };
+    f.masters.push(target);
+    await expect(f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id)).rejects.toMatchObject({ details: { existing_master_cv_id: target.id } });
+    const staleId = target.id;
+    target.id = randomUUID();
+    await expect(f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id, staleId)).rejects.toMatchObject({ details: { existing_master_cv_id: target.id } });
+    expect(f.masterRepository.replaceFromTranslation).not.toHaveBeenCalled();
+    await f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id, target.id);
+    expect(f.masterRepository.replaceFromTranslation).toHaveBeenCalledWith(f.session.appUser.id, target.id, start.ai_run_id, expect.any(String));
+  });
   it("previews the completed snapshot with its original template, layout and signed photo without creating or charging again", async () => {
     const [{ default: express }, { default: request }, { createAiRouter }, { AiController }, { createErrorHandler }] = await Promise.all([
       import("express"), import("supertest"), import("../src/modules/ai/ai.routes"), import("../src/modules/ai/ai.controller"), import("../src/shared/middleware/error-handler"),

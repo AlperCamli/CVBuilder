@@ -1477,5 +1477,10 @@
   "No text returned": "No text returned",
   "Failed to load CV preview": "Failed to load CV preview",
   "Loading CV preview…": "Loading CV preview…",
-  "Translated CV preview": "Translated CV preview"
+  "Translated CV preview": "Translated CV preview",
+  "Your original CV stays unchanged. Review the translated CV before saving it. Translation uses one AI action.": "Your original CV stays unchanged. Review the translated CV before saving it. Translation uses one AI action.",
+  "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.": "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.",
+  "Replace existing CV": "Replace existing CV",
+  "Translate and review": "Translate and review",
+  "Could not replace the existing master CV": "Could not replace the existing master CV"
 }
