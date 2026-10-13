@@ -25,6 +25,10 @@ export function TranslationDialog({
   const [languages, setLanguages] = useState<CvLanguage[]>([]);
   const [loadingLanguages, setLoadingLanguages] = useState(true);
   const [target, setTarget] = useState("");
+  const issues = run?.output_payload?.validation_issues ?? [];
+  const failureMessage = error ?? (run?.status === "failed"
+    ? issues.length ? t("Some numbers could not be verified. Review the affected text below.") : t("Translation failed. Please retry.")
+    : null);
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
@@ -60,8 +64,7 @@ export function TranslationDialog({
     try {
       const started = await api.startTranslation(source.id, target);
       setRun(await api.getTranslation(source.id, started.ai_run_id));
-      await api.executeTranslation(source.id, started.ai_run_id);
-      setRun(await api.getTranslation(source.id, started.ai_run_id));
+      setRun(await api.executeTranslation(source.id, started.ai_run_id));
     } catch (error) {
       handleError(error);
     } finally {
@@ -117,18 +120,37 @@ export function TranslationDialog({
         </select>
       </label>
       {!loadingLanguages && !languages.length && !error && <p role="status">{t("No other CV languages are available.")}</p>}
-      {error && (
+      {failureMessage && (
         <p role="alert" className="text-red-700 mb-3">
-          {t(error)}
+          {failureMessage}
         </p>
       )}
       {run?.status === "pending" && (
         <p role="status">{t("Translating your CV…")}</p>
       )}
-      {run?.status === "failed" && (
-        <p role="alert">{t("Translation failed. Please retry.")}</p>
+      {issues.length > 0 && (
+        <div className="overflow-y-auto max-h-[45vh] space-y-4" aria-label={t("Translation comparison")}>
+          <p className="text-sm text-slate-600">{t("This attempt wasn't saved to a CV. No AI action was charged.")}</p>
+          {issues.map((issue, index) => (
+            <section key={`${issue.path}:${index}`} className="border rounded-xl p-4">
+              <h3 className="font-semibold mb-3">{[issue.section_title, issue.block_title, t(issue.field_label ?? "Content")].filter(Boolean).join(" · ")}</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div lang={source.language}>
+                  <h4 className="text-sm font-medium mb-1">{t("Original text")}</h4>
+                  <p className="whitespace-pre-wrap break-words text-sm">{issue.original_text}</p>
+                  <p className="text-sm mt-2"><strong>{t("Numbers in original")}:</strong> {issue.original_numbers.join(" · ") || t("No numbers found")}</p>
+                </div>
+                <div lang={target} dir={run?.output_payload?.target_direction}>
+                  <h4 className="text-sm font-medium mb-1">{t("Attempted translation")}</h4>
+                  <p className="whitespace-pre-wrap break-words text-sm">{issue.translated_text || t("No text returned")}</p>
+                  <p className="text-sm mt-2"><strong>{t("Numbers in translation")}:</strong> {issue.translated_numbers.join(" · ") || t("No numbers found")}</p>
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
       )}
-      {run?.status === "completed" && run.output_payload && (
+      {run?.status === "completed" && run.output_payload?.current_content && (
         <div
           className="overflow-y-auto max-h-[50vh] border rounded-xl p-4 mb-4"
           lang={target}

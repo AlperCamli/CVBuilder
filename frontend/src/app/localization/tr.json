@@ -1399,5 +1399,14 @@
   "Loading CV languages…": "Özgeçmiş dilleri yükleniyor…",
   "No other CV languages are available.": "Başka bir özgeçmiş dili mevcut değil.",
   "Failed to load CV languages": "Özgeçmiş dilleri yüklenemedi",
-  "Choose an available CV language": "Mevcut bir özgeçmiş dili seçin"
+  "Choose an available CV language": "Mevcut bir özgeçmiş dili seçin",
+  "Some numbers could not be verified. Review the affected text below.": "Bazı sayılar doğrulanamadı. Aşağıdaki ilgili metinleri karşılaştırın.",
+  "This attempt wasn't saved to a CV. No AI action was charged.": "Bu çeviri bir özgeçmişe kaydedilmedi. Yapay zekâ işlem hakkı kullanılmadı.",
+  "Translation comparison": "Çeviri karşılaştırması",
+  "Original text": "Orijinal metin",
+  "Attempted translation": "Çeviri denemesi",
+  "Numbers in original": "Orijinal metindeki sayılar",
+  "Numbers in translation": "Çevirideki sayılar",
+  "No numbers found": "Sayı bulunamadı",
+  "No text returned": "Metin döndürülmedi"
 }

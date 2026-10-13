@@ -51,12 +51,14 @@ try {
     const output = { current_content: { version: "v1", language: "de", metadata: { full_name: "Deniz Yılmaz" }, sections: [{ id: "exp", type: "experience", title: "Berufserfahrung", order: 0, meta: {}, blocks: [{ id: "job", type: "experience", order: 0, visibility: "visible", meta: {}, fields: { role: "Analytiker", description: "20 Berichte erstellt." } }] }] }, target_language: "de", target_direction: "ltr" };
     runtime.client.get = async path => {
       if (path === "/cv-languages") return { languages: [{ code: "en", name: "English", direction: "ltr", section_titles: {} }, { code: "de", name: "Deutsch", direction: "ltr", section_titles: { experience: "Berufserfahrung" } }] };
-      if (path.includes("/translations/")) return { id: "fixture-run", status: "completed", output_payload: output, progress_stage: "completed", error_message: null };
+      if (path.includes("/translations/")) return { id: "fixture-run", status: window.translationFixture?.status ?? "completed", output_payload: window.translationFixture?.output ?? output, progress_stage: window.translationFixture?.status ?? "completed", error_message: null };
       return get(path);
     };
     // The analytics decorator retains the original get function. Replace it on
     // the existing API instance when the dialog loads its catalog.
-    const { BackendApi } = await import("/src/app/integration/backend-api.ts");
+    // Use the module URL loaded by the app, including Vite's HMR version.
+    const apiModuleUrl = performance.getEntriesByType("resource").map(entry => entry.name).find(name => new URL(name).pathname === "/src/app/integration/backend-api.ts");
+    const { BackendApi } = await import(apiModuleUrl ?? "/src/app/integration/backend-api.ts");
     const getCvLanguages = BackendApi.prototype.getCvLanguages;
     BackendApi.prototype.getCvLanguages = function () {
       this.client.get = runtime.client.get;
@@ -67,7 +69,7 @@ try {
         window.translationCalls.push({ path, body });
         if (path.endsWith("/translations")) return { ai_run_id: "fixture-run" };
         if (path.endsWith("/apply")) return { id: "demo-master-en" };
-        return { id: "fixture-run", status: "completed", output_payload: output };
+        return { id: "fixture-run", status: window.translationFixture?.status ?? "completed", output_payload: window.translationFixture?.output ?? output };
       }
       return post(path, body);
     };
@@ -85,13 +87,37 @@ try {
   assert.equal((await frame.evaluate(() => window.translationCalls))[0].body.target_language, "de");
   assert.equal(await frame.$eval("#translation-language", select => select.disabled), true);
   await page.screenshot({ path: join(artifacts, "translation-review.png"), fullPage: true });
+  await click(frame, "Cancel");
+  await frame.evaluate(() => {
+    window.translationFixture = { status: "failed", output: { target_language: "de", target_direction: "ltr", validation_issues: [{ path: "sections/0/blocks/0/fields/description", section_title: "Work Experience", block_title: "Analyst", field_label: "Description", original_text: "Delivered 20 reports.", translated_text: "200 Berichte erstellt.", original_numbers: ["20"], translated_numbers: ["200"] }] } };
+  });
+  await click(frame, "Translate");
+  await frame.waitForSelector("#translation-language option[value=de]");
+  await frame.select("#translation-language", "de");
+  await click(frame, "Translate");
+  await frame.waitForSelector('[aria-label="Translation comparison"]');
+  assert.equal(await frame.$$eval('dialog[open] [role="alert"]', alerts => alerts.length), 1);
+  const comparison = await frame.$eval('[aria-label="Translation comparison"]', element => element.textContent);
+  assert.match(comparison, /Delivered 20 reports/);
+  assert.match(comparison, /200 Berichte erstellt/);
+  assert.match(comparison, /Work Experience/);
+  assert.match(comparison, /No AI action was charged/);
+  assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Create translated master")), false);
+  await page.screenshot({ path: join(artifacts, "number-comparison.png"), fullPage: true });
+  await page.setViewport({ width: 390, height: 844 });
+  await page.select('.ls-preview-toolbar label:nth-of-type(2) select', "390");
+  await page.screenshot({ path: join(artifacts, "number-comparison-mobile.png"), fullPage: true });
+  await frame.evaluate(() => { window.translationFixture = null; });
+  await click(frame, "Translate");
+  await frame.waitForFunction(() => document.querySelector("dialog[open]")?.textContent.includes("Berufserfahrung"));
+  assert.equal(await frame.$('[aria-label="Translation comparison"]'), null);
   await click(frame, "Create translated master");
   await frame.waitForFunction(() => location.pathname === "/app/cv/demo-master-en");
   assert.equal((await frame.evaluate(() => window.translationCalls)).at(-1).path.endsWith("/apply"), true);
   await page.setViewport({ width: 390, height: 844 });
   await page.screenshot({ path: join(artifacts, "mobile.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log(`CV language editing/export and translation selection/review/apply browser checks passed: ${artifacts}`);
+  console.log(`CV language editing/export, translation review/apply and numerical failure comparison/retry browser checks passed: ${artifacts}`);
 } catch (error) {
   await page.screenshot({ path: join(artifacts, "failure.png"), fullPage: true });
   console.error(`Failure artifacts: ${artifacts}; browser errors: ${JSON.stringify(errors)}`);

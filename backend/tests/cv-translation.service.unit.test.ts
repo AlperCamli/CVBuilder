@@ -20,7 +20,7 @@ function fixture() {
     updateRunProgressStage: vi.fn(async (_owner, id, stage) => { const run = runs.get(id); run.progress_stage = stage; return run; }),
     recordRunUsage: vi.fn(async () => {}),
     completeRun: vi.fn(async (_owner, id, output) => { const run = runs.get(id); Object.assign(run, { output_payload: output, status: "completed", progress_stage: "completed" }); return run; }),
-    failRun: vi.fn(async (_owner, id, error) => { const run = runs.get(id); Object.assign(run, { status: "failed", progress_stage: "failed", error_message: error }); return run; })
+    failRun: vi.fn(async (_owner, id, error, _debug?: unknown, output?: Record<string, unknown>) => { const run = runs.get(id); Object.assign(run, { status: "failed", progress_stage: "failed", error_message: error, ...(output ? { output_payload: output } : {}) }); return run; })
   };
   const masterRepository = {
     findById: vi.fn(async (owner, id) => masters.find(row => row.user_id === owner && row.id === id && !row.is_deleted) ?? null),
@@ -29,7 +29,7 @@ function fixture() {
   };
   const provider = {
     providerName: "fixture", resolveModelName: () => "fixture-model",
-    generate: vi.fn(async (request: any): Promise<AiProviderResult> => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: request.input_payload.texts.map((item: any) => ({ path: item.path, text: ({ "Work Experience": "İş Deneyimi", Analyst: "Analist", "Delivered 20 reports.": "20 rapor hazırladı." } as Record<string, string>)[item.text] ?? item.text })) } }))
+    generate: vi.fn(async (request: any): Promise<AiProviderResult> => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: request.input_payload.texts.map((item: any) => ({ path: item.path, text: item.text === "Analyst" ? "Analist" : item.text.replace(/^Delivered (.+) reports\.$/, "$1 rapor hazırladı.") })) } }))
   };
   const billing = { assertActionAllowed: vi.fn(async () => {}), recordAiActionUsage: vi.fn(async () => {}) };
   const resolver = { resolve: vi.fn(async input => ({ ...input.fallback, user_prompt_template: null })) };
@@ -253,7 +253,7 @@ describe("automatic translation block retries", () => {
       if (f.provider.generate.mock.calls.length === 1) {
         const output = problem === "missing text" ? { translations: [] }
           : problem === "malformed JSON" ? { unexpected: "wrong shape" }
-          : { translations: request.input_payload.texts.map((item: any) => ({ ...item, text: problem === "changed numbers" ? item.text.replace("20", "200") : `Professional experience and education skills${item.text.includes("20") ? " 20" : ""}` })) };
+          : { translations: request.input_payload.texts.map((item: any) => ({ ...item, text: problem === "changed numbers" ? item.text.replace("[[CV_NUMBER_A]]", "200") : `Professional experience and education skills${item.text.match(/\[\[CV_NUMBER_[A-Z]+\]\]/g)?.join(" ") ?? ""}` })) };
         return { ...result, usage, output_payload: output };
       }
       return { ...result, usage };
@@ -313,6 +313,65 @@ describe("automatic translation block retries", () => {
     await vi.runAllTimersAsync();
     await failure;
     expect(f.provider.generate).toHaveBeenCalledTimes(1);
+    expect(f.billing.recordAiActionUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe("reviewable numerical validation failures", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("retains a comparison after three failed attempts without creating or charging a CV", async () => {
+    const f = fixture();
+    f.provider.generate.mockImplementation(async request => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: request.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analist" : "200 rapor hazırladı." })) } }));
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    const execution = f.service.executeTranslation(f.session, f.master.id, start.ai_run_id);
+    await vi.runAllTimersAsync();
+    const result = await execution;
+    expect(f.provider.generate).toHaveBeenCalledTimes(3);
+    expect(f.provider.generate.mock.calls[0][0].input_payload.texts[1].text).toContain("[[CV_NUMBER_A]]");
+    expect(result).toMatchObject({ status: "failed", output_payload: { target_language: "tr", validation_issues: [{ section_title: "Work Experience", block_title: "Analyst", field_label: "Description", original_text: "Delivered 20 reports.", translated_text: "200 rapor hazırladı.", original_numbers: ["20"], translated_numbers: ["200"] }] } });
+    expect(result.output_payload).not.toHaveProperty("current_content");
+    const polled = await f.service.getTranslation(f.session, f.master.id, start.ai_run_id);
+    expect(polled.output_payload).toEqual(result.output_payload);
+    expect(f.billing.recordAiActionUsage).not.toHaveBeenCalled();
+    expect(f.masterRepository.create).not.toHaveBeenCalled();
+    await expect(f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id)).rejects.toThrow("Translation is not ready");
+    await expect(f.service.getTranslation({ ...f.session, appUser: { ...f.session.appUser, id: randomUUID() } }, f.master.id, start.ai_run_id)).rejects.toThrow("Translation was not found");
+  });
+
+  it("does not retain attempted text when AI permission is withdrawn before failure is persisted", async () => {
+    const f = fixture();
+    const privacy = { assertAi: vi.fn(async () => 1), assertAiUnchanged: vi.fn(async () => {}) };
+    (f.service as any).privacy = privacy;
+    f.provider.generate.mockImplementation(async input => {
+      if (f.provider.generate.mock.calls.length === 3) privacy.assertAi.mockRejectedValue(new ForbiddenError("AI processing withdrawn"));
+      return { provider: "fixture", model_name: "fixture-model", output_payload: { translations: input.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analist" : "200 rapor hazırladı." })) } };
+    });
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    const failure = expect(f.service.executeTranslation(f.session, f.master.id, start.ai_run_id)).rejects.toThrow("AI processing withdrawn");
+    await vi.runAllTimersAsync();
+    await failure;
+    expect((await f.service.getTranslation(f.session, f.master.id, start.ai_run_id)).output_payload).toBeNull();
+    expect(f.repository.failRun.mock.calls.at(-1)?.[4]).toBeUndefined();
+    expect(f.billing.recordAiActionUsage).not.toHaveBeenCalled();
+  });
+
+  it("returns a failed result with HTTP 200 rather than blaming the user's request with HTTP 400", async () => {
+    vi.useRealTimers();
+    const [{ default: express }, { default: request }, { createAiRouter }, { AiController }, { createErrorHandler }] = await Promise.all([
+      import("express"), import("supertest"), import("../src/modules/ai/ai.routes"), import("../src/modules/ai/ai.controller"), import("../src/shared/middleware/error-handler"),
+    ]);
+    const f = fixture();
+    f.provider.generate.mockImplementation(async input => ({ provider: "fixture", model_name: "fixture-model", output_payload: { translations: input.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analist" : "200 rapor hazırladı." })) } }));
+    const app = express();
+    app.use(express.json());
+    app.use(createAiRouter(new AiController(f.service), (req, _res, next) => { req.auth = f.session; next(); }, (_req, _res, next) => next()));
+    app.use(createErrorHandler({ appEnv: "test" } as any));
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    const response = await request(app).post(`/master-cvs/${f.master.id}/translations/${start.ai_run_id}/execute`).expect(200);
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ status: "failed", output_payload: { validation_issues: [{ original_numbers: ["20"], translated_numbers: ["200"] }] } });
     expect(f.billing.recordAiActionUsage).not.toHaveBeenCalled();
   });
 });

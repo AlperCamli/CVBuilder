@@ -46,3 +46,17 @@ describe("AI usage owner isolation", () => {
     expect(db.queries[0].filters).toEqual([["id", "run"], ["user_id", "owner"]]);
   });
 });
+
+describe("failed translation comparison storage", () => {
+  it("writes reviewable output atomically with an owned, pending failure and omits it from debug logs", async () => {
+    const db = database([{data: {id: "run", status: "failed", output_payload: {validation_issues: []}}}]);
+    const output = {validation_issues: [{original_text: "Private original", translated_text: "Private candidate"}]};
+    await db.repository.failRun("owner", "run", "Numbers could not be verified", null, output);
+    expect(db.queries[0]).toMatchObject({table: "ai_runs", patch: {status: "failed", output_payload: output, debug_payload: null}, filters: [["id", "run"], ["user_id", "owner"], ["status", "pending"]]});
+  });
+  it("preserves the existing failure contract for other flows", async () => {
+    const db = database([{data: {id: "run", status: "failed"}}]);
+    await db.repository.failRun("owner", "run", "Provider unavailable");
+    expect(db.queries[0].patch).not.toHaveProperty("output_payload");
+  });
+});

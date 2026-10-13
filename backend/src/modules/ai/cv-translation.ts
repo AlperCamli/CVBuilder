@@ -9,6 +9,74 @@ export const translationOutputSchema = z.object({
 }).strict();
 export type TranslationText = { path: string; text: string };
 export type TranslationBlock = { section_type: string; block_type: string; texts: TranslationText[] };
+export interface TranslationNumberIssue {
+  path: string;
+  original_text: string;
+  translated_text: string;
+  original_numbers: string[];
+  translated_numbers: string[];
+  section_title?: string;
+  block_title?: string;
+  field_label?: string;
+}
+export const NUMBER_VERIFICATION_MESSAGE = "Some numbers could not be verified. Review the affected text below.";
+export class TranslationNumberError extends ValidationError {
+  constructor(public readonly issues: TranslationNumberIssue[]) {
+    super(NUMBER_VERIFICATION_MESSAGE, { reason: "translation_numbers_unverified" });
+  }
+}
+const numberTokens = (text: string) => text.match(/\d+(?:[.,]\d+)*/g) ?? [];
+
+/** The model translates wording; the backend retains the actual numeric literals. */
+export function protectTranslationNumbers(expected: TranslationText[]) {
+  const replacements = new Map<string, Array<{ marker: string; number: string }>>();
+  const prefixes = new Map<string, string>();
+  const markerId = (index: number): string => {
+    let id = "";
+    for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) id = String.fromCharCode(65 + (n - 1) % 26) + id;
+    return id;
+  };
+  const texts = expected.map(item => {
+    let prefix = "[[CV_NUMBER_";
+    while (item.text.includes(prefix)) prefix += "X";
+    prefixes.set(item.path, prefix);
+    const entries: Array<{ marker: string; number: string }> = [];
+    const text = item.text.replace(/\d+(?:[.,]\d+)*/g, number => {
+      const marker = `${prefix}${markerId(entries.length)}]]`;
+      entries.push({ marker, number });
+      return marker;
+    });
+    replacements.set(item.path, entries);
+    return { path: item.path, text };
+  });
+  return {
+    texts,
+    restore(translated: TranslationText[]): TranslationText[] {
+      return translated.map(item => {
+        let text = item.text;
+        for (const entry of replacements.get(item.path) ?? []) text = text.split(entry.marker).join(entry.number);
+        const prefix = prefixes.get(item.path);
+        if (prefix) {
+          const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          // Unknown markers cannot appear as implementation details in the preview.
+          text = text.replace(new RegExp(`${escaped}[A-Z]+\\]\\]`, "g"), "?");
+        }
+        return { path: item.path, text };
+      });
+    },
+  };
+}
+
+export function describeTranslationNumberIssues(source: CvContent, issues: TranslationNumberIssue[]): TranslationNumberIssue[] {
+  const labels: Record<string, string> = { text: "Summary", description: "Description", role: "Job Title", job_title: "Job Title", degree: "Degree", skills: "Skills", notes: "Notes", title: "Title" };
+  return issues.map(issue => {
+    const parts = pathParts(issue.path);
+    const section = source.sections[Number(parts[1])];
+    const block = section?.blocks[Number(parts[3])];
+    const title = block && ["role", "job_title", "title", "name", "degree"].map(key => block.fields[key]).find(value => typeof value === "string" && value.trim());
+    return { ...issue, section_title: section?.title ?? section?.type, block_title: typeof title === "string" ? title : undefined, field_label: labels[parts[5]] ?? "Content" };
+  });
+}
 const headerTypes = new Set(["header", "contact", "contact_info", "personal_info"]);
 export const isTranslationHeader = (type: string) => headerTypes.has(type.trim().toLowerCase());
 const narrativeFields = new Set([
@@ -55,18 +123,20 @@ export function validateTranslationTexts(expected: TranslationText[], translated
   if (map.size !== translated.length || map.size !== expected.length || expected.some(item => !map.get(item.path)?.trim())) {
     throw new ValidationError("AI returned an incomplete translation");
   }
+  const issues: TranslationNumberIssue[] = [];
   for (const item of expected) {
     const text = map.get(item.path)!;
     // Compare numeric facts as a multiset: word order can change with language.
-    const numbers = (value: string) => (value.match(/\d+(?:[.,]\d+)*/g) ?? []).sort();
+    const numbers = (value: string) => [...numberTokens(value)].sort();
     if (JSON.stringify(numbers(item.text)) !== JSON.stringify(numbers(text))) {
-      throw new ValidationError("Translation changed a numerical fact");
+      issues.push({ path: item.path, original_text: item.text, translated_text: text, original_numbers: numberTokens(item.text), translated_numbers: numberTokens(text) });
     }
     const links = (value: string) => (value.match(/https?:\/\/[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi) ?? []).sort();
     if (JSON.stringify(links(item.text)) !== JSON.stringify(links(text))) {
       throw new ValidationError("Translation changed a link or email address");
     }
   }
+  if (issues.length) throw new TranslationNumberError(issues);
 }
 
 export function validateTranslationLanguage(translated: TranslationText[], language: string): void {

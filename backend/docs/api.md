@@ -510,3 +510,5 @@ Soft-delete the `files` row and best-effort delete the storage object. Response 
 - `POST /master-cvs/:masterCvId/translations/:aiRunId/apply`: creates the independent master (HTTP 201), after review and another language/ownership/conflict check.
 
 Invalid or disabled targets return 400. An existing target-language master returns 409 with `reason: master_language_exists` and `existing_master_cv_id`. Ordinary users cannot write the catalog. See [CV translation](cv-translation.md) for admin publishing, field selection, validation and billing.
+
+Numerical translation validation failures return HTTP 200 with `status: failed` and `output_payload.validation_issues`, rather than treating the submitted request as invalid. Each issue contains original/attempted text, both number lists, and section/block/field labels. Failed output has no `current_content` and cannot be applied.

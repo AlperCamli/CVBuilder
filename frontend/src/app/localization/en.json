@@ -1465,5 +1465,14 @@
   "Loading CV languages…": "Loading CV languages…",
   "No other CV languages are available.": "No other CV languages are available.",
   "Failed to load CV languages": "Failed to load CV languages",
-  "Choose an available CV language": "Choose an available CV language"
+  "Choose an available CV language": "Choose an available CV language",
+  "Some numbers could not be verified. Review the affected text below.": "Some numbers could not be verified. Review the affected text below.",
+  "This attempt wasn't saved to a CV. No AI action was charged.": "This attempt wasn't saved to a CV. No AI action was charged.",
+  "Translation comparison": "Translation comparison",
+  "Original text": "Original text",
+  "Attempted translation": "Attempted translation",
+  "Numbers in original": "Numbers in original",
+  "Numbers in translation": "Numbers in translation",
+  "No numbers found": "No numbers found",
+  "No text returned": "No text returned"
 }

@@ -67,7 +67,8 @@ export interface AiRepository {
     userId: AiRunOwner,
     runId: string,
     errorMessage: string,
-    debugPayload?: Record<string, unknown> | null
+    debugPayload?: Record<string, unknown> | null,
+    outputPayload?: Record<string, unknown>
   ): Promise<AiRunRecord | null>;
   findRunById(userId: AiRunOwner, runId: string): Promise<AiRunRecord | null>;
   updateRunProgressStage(
@@ -285,7 +286,8 @@ export class SupabaseAiRepository implements AiRepository {
     userId: AiRunOwner,
     runId: string,
     errorMessage: string,
-    debugPayload?: Record<string, unknown> | null
+    debugPayload?: Record<string, unknown> | null,
+    outputPayload?: Record<string, unknown>
   ): Promise<AiRunRecord | null> {
     const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
@@ -294,6 +296,7 @@ export class SupabaseAiRepository implements AiRepository {
         progress_stage: "failed",
         error_message: errorMessage,
         debug_payload: debugPayload ?? null,
+        ...(outputPayload ? { output_payload: outputPayload } : {}),
         completed_at: new Date().toISOString()
       })
       .eq("id", runId), userId)

@@ -836,6 +836,11 @@ export class BackendApi {
 }
 
 export interface CvLanguage { code: string; name: string; direction: "ltr" | "rtl"; section_titles: Record<string, string>; }
-export interface TranslationRun { id: string; status: "pending" | "completed" | "failed"; progress_stage: string; error_message: string | null; output_payload: { current_content: CvContent; target_language?: string; target_direction?: "ltr" | "rtl"; translated_blocks?: number } | null; }
+export interface TranslationNumberIssue {
+  path: string; original_text: string; translated_text: string;
+  original_numbers: string[]; translated_numbers: string[];
+  section_title?: string; block_title?: string; field_label?: string;
+}
+export interface TranslationRun { id: string; status: "pending" | "completed" | "failed"; progress_stage: string; error_message: string | null; output_payload: { current_content?: CvContent; target_language?: string; target_direction?: "ltr" | "rtl"; translated_blocks?: number; validation_issues?: TranslationNumberIssue[] } | null; }
 
 export interface MasterDocumentRevision { id: string; revision_number: number; created_at: string; content_snapshot: CvContent; }
