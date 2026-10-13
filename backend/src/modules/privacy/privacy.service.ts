@@ -16,6 +16,7 @@ const withinBudget = (deadline: number) => { if (Date.now() >= deadline - 500) t
 type StoredObject = { bucket: string; path: string };
 type Job = { id: string; subject_user_id: string; auth_user_id: string | null; kind: "deletion" | "export"; status: string; step: string; manifest: Record<string, unknown>; storage_path: string | null; expires_at: string | null; attempts: number };
 function check(error: { message?: string } | null) {
+  if (error?.message === "privacy_subject_unavailable") throw new NotFoundError("Upload or account is no longer available.");
   if (error) throw new InternalServerError("Privacy operation could not be completed. Please try again.");
 }
 

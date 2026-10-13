@@ -82,7 +82,7 @@ export function AIImproving() {
 
               await api.patchImportResult(importId, improved.improved_content);
 
-              const converted = await api.createMasterCvFromImport(importId, { language: parsedContent.language, ...(location.state?.updateMasterId ? { update_master_cv_id: location.state.updateMasterId } : {}) });
+              const converted = await api.createMasterCvFromImport(importId, { language: parsedContent.language });
 
               completeStep("create_cv");
 

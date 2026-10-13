@@ -1,7 +1,8 @@
+import { ConflictError } from "../src/shared/errors/app-error";
 import { trackedAiService } from "./helpers/tracked-ai-service";
 import { reviewCv } from "../src/modules/cv-review/cv-review";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ImportsService } from "../src/modules/imports/imports.service";
 import { AiPromptResolver } from "../src/modules/ai/prompts/prompt-resolver";
 import {
@@ -504,6 +505,40 @@ const createPromptResolver = (): AiPromptResolver => {
 };
 
 describe("imports service integration checks", () => {
+  it("automatically updates the latest same-language master while preserving other languages and older duplicates", async () => {
+    const userId = randomUUID();
+    const imports = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("CV")), "text/plain", "cv.txt");
+    const content: CvContent = { version: "v1", language: "tr", metadata: {}, sections: [] };
+    await imports.updateImport(userId, imports.importId, { status: "reviewed", parsed_content: content });
+    const masters = new InMemoryMasterCvRepository();
+    const create = (language: string, module_type = "standard") => masters.create({user_id: userId, title: language, language, module_type, template_id: null, current_content: {...content, language}, summary_text: null, source_type: "import"});
+    const older = await create("tr"); older.updated_at = "2026-01-01T00:00:00Z";
+    const target = await create("tr-TR"); target.updated_at = "2026-02-01T00:00:00Z";
+    const english = await create("en"); english.updated_at = "2026-03-01T00:00:00Z";
+    const medical = await create("tr", "uk_medical"); medical.updated_at = "2026-04-01T00:00:00Z";
+    const replace = vi.fn(async (_user: string, id: string, _import: string, value: CvContent) => ({...target, id, current_content: value}));
+    const repository: MasterCvRepository = {...masters, listByUser: masters.listByUser.bind(masters), findById: masters.findById.bind(masters), findAnyById: masters.findAnyById.bind(masters), create: masters.create.bind(masters), updateById: masters.updateById.bind(masters), softDelete: masters.softDelete.bind(masters), replaceFromImport: replace};
+    const result = await new ImportsService(imports, repository, new SimpleCvParser()).createMasterCvFromImport(buildSession(userId), imports.importId, {});
+    expect(result.master_cv.id).toBe(target.id);
+    expect(result.import.target_master_cv_id).toBe(target.id);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect((await masters.listByUser(userId)).map(cv => cv.id)).toEqual([older.id, target.id, english.id, medical.id]);
+  });
+  it("resolves a same-language creation race through the existing revision-preserving replacement", async () => {
+    const userId = randomUUID();
+    const imports = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("CV")), "text/plain", "cv.txt");
+    const content: CvContent = { version: "v1", language: "en", metadata: {}, sections: [] };
+    await imports.updateImport(userId, imports.importId, {status: "reviewed", parsed_content: content});
+    const masters = new InMemoryMasterCvRepository();
+    const target = await masters.create({user_id: userId, title: "CV", language: "en", module_type: "standard", template_id: null, current_content: content, summary_text: null, source_type: "import"});
+    const list = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([target]);
+    const replace = vi.fn(async () => target);
+    const repository = {listByUser: list, create: vi.fn(async () => {throw new ConflictError("A master CV already exists in this language", {reason: "master_language_exists"});}), replaceFromImport: replace} as unknown as MasterCvRepository;
+    const result = await new ImportsService(imports, repository, new SimpleCvParser()).createMasterCvFromImport(buildSession(userId), imports.importId, {});
+    expect(result.master_cv.id).toBe(target.id);
+    expect(replace).toHaveBeenCalledWith(userId, target.id, imports.importId, expect.objectContaining({language: "en"}), null);
+  });
+
   it("reuses the onboarding score but invalidates it when reviewed content changes", async () => {
     const userId = randomUUID();
     const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("raw text")), "text/plain", "cv.txt");

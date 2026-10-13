@@ -1,4 +1,4 @@
-import { detectCvLanguage } from "../../shared/localization/languages";
+import { detectCvLanguage, normalizeLanguage } from "../../shared/localization/languages";
 import type { PrivacyService } from "../privacy/privacy.service";
 import { privacyConfig } from "../privacy/privacy.config";
 import { reviewCv } from "../cv-review/cv-review";
@@ -391,9 +391,31 @@ export class ImportsService {
       source_type: "import"
     };
 
-    const createdMasterCv = input.update_master_cv_id
-      ? await this.masterCvRepository.replaceFromImport!(session.appUser.id, input.update_master_cv_id, importId, currentContent, payload.summary_text)
-      : await this.masterCvRepository.create(payload);
+    // Resolve the target on the server. Older duplicate masters remain intact;
+    // re-uploads consistently update the most recently edited matching master.
+    const findReplacement = async () => (await this.masterCvRepository.listByUser(session.appUser.id))
+      .filter(cv => !cv.is_deleted && (cv.module_type ?? "standard") === payload.module_type &&
+        (normalizeLanguage(cv.language) ?? cv.language) === (normalizeLanguage(language) ?? language))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))[0];
+    const replacementId = input.update_master_cv_id ?? (await findReplacement())?.id;
+    const replace = (id: string) => {
+      if (!this.masterCvRepository.replaceFromImport) throw new ConflictError("Could not update the existing master CV");
+      return this.masterCvRepository.replaceFromImport(session.appUser.id, id, importId, currentContent, payload.summary_text);
+    };
+    let createdMasterCv: MasterCvRecord;
+    if (replacementId) {
+      createdMasterCv = await replace(replacementId);
+    } else {
+      try {
+        createdMasterCv = await this.masterCvRepository.create(payload);
+      } catch (error) {
+        // The atomic language guard may see a master created after our lookup.
+        if (!(error instanceof ConflictError) || error.details?.reason !== "master_language_exists") throw error;
+        const concurrentMaster = await findReplacement();
+        if (!concurrentMaster) throw error;
+        createdMasterCv = await replace(concurrentMaster.id);
+      }
+    }
 
     const updatedImport = await this.importsRepository.updateImport(session.appUser.id, importId, {
       target_master_cv_id: createdMasterCv.id,

@@ -1,3 +1,4 @@
+import {ApiClientError} from "./api-error";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 const state = vi.hoisted(() => ({session: null as unknown, guest: null as unknown, updateGuest: vi.fn()}));
 vi.mock("./supabase-client", () => ({supabase: {auth: {getSession: async () => ({data: {session: state.session}})}}}));
@@ -15,6 +16,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("browser consent database association", () => {
+  it("completes account consent sync when a simultaneous claim makes the guest unavailable", async () => {
+    saveAnalyticsChoice(true, {notify: false});
+    state.session = {access_token: "fixture"}; state.guest = {id: "claimed-guest"};
+    state.updateGuest.mockRejectedValue(new ApiClientError({status: 404, code: "NOT_FOUND", message: "Upload or account is no longer available."}));
+    await expect(syncBrowserChoice()).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("associates an existing browser choice after account creation without reading or changing AI permission", async () => {
     saveAnalyticsChoice(true, {notify: false}); state.session = {access_token: "fixture"};
     await syncBrowserChoice();

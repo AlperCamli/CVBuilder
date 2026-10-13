@@ -29,6 +29,21 @@ function jwt(sub: string, method: string, timestamp: number, iat = Date.now() / 
   return `header.${Buffer.from(JSON.stringify({ sub, iat, amr: [{ method, timestamp }] })).toString("base64url")}.signature`;
 }
 describe("privacy release and permissions", () => {
+  it.each([undefined, false])("returns 404 when a guest is claimed between authorization and the privacy write (AI choice %s)", async (ai_processing) => {
+    approved();
+    const rpc = vi.fn(async () => ({error: {message: "privacy_subject_unavailable", code: "P0001"}}));
+    const service = new PrivacyService({rpc} as any, null, {error: vi.fn()});
+    await expect(service.record(null, randomUUID(), {notice_version: NOTICE_VERSION, analytics: false, ai_processing}))
+      .rejects.toMatchObject({statusCode: 404});
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+  it("does not hide unexpected database failures as an expired guest", async () => {
+    approved();
+    const service = new PrivacyService({rpc: async () => ({error: {message: "unexpected_database_error"}})} as any, null, {error: vi.fn()});
+    await expect(service.record(null, randomUUID(), {notice_version: NOTICE_VERSION, analytics: false}))
+      .rejects.toMatchObject({statusCode: 500});
+  });
+
   it("accepts analytics-only updates and records them without AI reads or changes", async () => {
     approved();
     vi.stubEnv("PRIVACY_PROCESSORS_JSON", JSON.stringify([processor("supabase"), processor("vercel"), processor("openai"), processor("google-analytics")]));

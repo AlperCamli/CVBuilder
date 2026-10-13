@@ -1,4 +1,4 @@
-import { LANGUAGES, documentLocale, translate as t } from "../localization/i18n";
+import { LANGUAGES, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { personalizedGuidance } from "../onboarding/pre-signup-questions";
 import { useEffect, useState } from "react";
@@ -33,8 +33,6 @@ export function CVScore() {
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cvLanguage, setCvLanguage] = useState<string>("");
-  const [availableMasters, setAvailableMasters] = useState<import("../integration/api-types").MasterCvSummary[]>([]);
-  const [updateMasterId, setUpdateMasterId] = useState<string>("");
   const [parsedContent, setParsedContent] = useState<CvContent | null>(null);
   const [moduleType, setModuleType] = useState<string | undefined>(
     location.state?.moduleType as string | undefined,
@@ -62,7 +60,6 @@ export function CVScore() {
         setReview(result.review ?? null);
         setParsedContent(result.parsed_content);
         setCvLanguage(result.parsed_content?.metadata.needs_language_confirmation ? "" : result.parsed_content?.language ?? "");
-        setAvailableMasters(await api.listMasterCvs());
         setModuleType(result.module_type);
       } catch (err) {
         if (cancelled) {
@@ -122,16 +119,12 @@ export function CVScore() {
       }
     }
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
-    const matching = availableMasters.filter(cv => documentLocale(cv.language) === cvLanguage && (cv.module_type ?? "standard") === (moduleType ?? "standard"));
-    const updateId = matching.length === 1 ? matching[0].id : matching.find(cv => cv.id === updateMasterId)?.id;
-    if (matching.length > 1 && !updateId) { setError(t("Choose the existing master to update.")); return; }
-    if (updateId && !window.confirm(t("Update the existing master with this upload? Its previous content will be saved as a revision; customized CVs will be preserved."))) return;
 
     setConverting(true);
 
     try {
       await api.patchImportResult(importId, { ...contentToSave, language: cvLanguage });
-      const converted = await api.createMasterCvFromImport(importId, { language: cvLanguage, ...(updateId ? { update_master_cv_id: updateId } : {}) });
+      const converted = await api.createMasterCvFromImport(importId, { language: cvLanguage });
 
       completeStep("create_cv");
 
@@ -169,10 +162,6 @@ export function CVScore() {
 
   const handleImproveWithAI = () => {
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
-    const matching = availableMasters.filter(cv => documentLocale(cv.language) === cvLanguage && (cv.module_type ?? "standard") === (moduleType ?? "standard"));
-    const updateId = matching.length === 1 ? matching[0].id : matching.find(cv => cv.id === updateMasterId)?.id;
-    if (matching.length > 1 && !updateId) { setError(t("Choose the existing master to update.")); return; }
-    if (updateId && !window.confirm(t("Update the existing master with this upload? Its previous content will be saved as a revision; customized CVs will be preserved."))) return;
     if (!parsedContent || !importId || parseNeedsManualReview) {
       return;
     }
@@ -181,7 +170,6 @@ export function CVScore() {
       state: {
         importId,
         parsedContent: parsedContent ? { ...parsedContent, language: cvLanguage } : parsedContent,
-        updateMasterId: updateId,
         improvements,
         moduleType,
         source: "onboarding_upload",
@@ -224,12 +212,11 @@ export function CVScore() {
         {parsedContent && <details className="mb-5 p-4 bg-white border rounded-xl"><summary className="cursor-pointer text-sm font-medium">{t("Review parsed content")}</summary><div className="max-h-96 overflow-y-auto mt-4" lang={cvLanguage || parsedContent.language}>{parsedContent.sections.map(section => <section className="mb-4" key={section.id}><h3 className="font-medium">{section.title}</h3>{section.blocks.map(block => <p key={block.id} className="text-sm whitespace-pre-wrap mt-1">{Object.values(block.fields).map(value => typeof value === "string" ? value : Array.isArray(value) ? value.filter(item=>typeof item==="string").join(" · ") : "").filter(Boolean).join("\n")}</p>)}</section>)}</div></details>}
         {parsedContent && moduleType !== "medical_uk" && <div className="mb-5 p-4 bg-white border rounded-xl">
           <label className="text-sm font-medium">{t("Source CV language")}
-            <select value={cvLanguage} onChange={event => { setCvLanguage(event.target.value); setUpdateMasterId(""); }} className="ml-3 border rounded-lg px-3 py-2">
+            <select value={cvLanguage} onChange={event => { setCvLanguage(event.target.value); }} className="ml-3 border rounded-lg px-3 py-2">
               <option value="">{t("Choose CV language")}</option>{LANGUAGES.map(language => <option key={language.code} value={language.code}>{language.name}</option>)}
             </select>
           </label>
           <p className="text-sm text-gray-500 mt-2">{t("Confirm the language already used in this upload. To translate it, save it first and choose Translate in My CVs.")}</p>
-          {availableMasters.filter(cv => documentLocale(cv.language) === cvLanguage && cv.module_type === "standard").length > 1 && <label className="block mt-3 text-sm">{t("Update existing master")}<select value={updateMasterId} onChange={event => setUpdateMasterId(event.target.value)} className="ml-3 border rounded-lg px-3 py-2"><option value="">{t("Choose the existing master to update.")}</option>{availableMasters.filter(cv=>documentLocale(cv.language)===cvLanguage&&cv.module_type==="standard").map(cv=><option key={cv.id} value={cv.id}>{cv.title}</option>)}</select></label>}
         </div>}
 
         <div
