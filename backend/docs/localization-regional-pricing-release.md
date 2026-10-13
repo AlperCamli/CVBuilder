@@ -48,7 +48,7 @@ Translation creates an AI run first and uses the existing execute/poll mechanism
 
 Every AI call appends a language policy after its configured/fallback prompt: CV content follows document language, while questions/explanations follow interface language. Canonical JSON keys/action identifiers stay English. Cover letters keep their own language, defaulting to their linked CV; existing letters default to English. PDF letters embed Unicode Noto Sans. Turkish review omits unsupported English wording checks and removes that dimension from score normalization.
 
-To add another language, extend backend `shared/localization/languages.ts`, frontend `app/localization/i18n.ts` and catalogs, detector/parser aliases, OCR configuration, localized SEO routes, and the supported-language database guard. New billing markets require a server catalog entry, prices, portal configuration, and database market constraint; they are independent of language additions.
+CV translation now uses a separate admin-managed document catalog and parallel block requests; see [CV translation](cv-translation.md). For additional interface locales and import detection, extend backend `shared/localization/languages.ts`, frontend `app/localization/i18n.ts` and catalogs, detector/parser aliases, OCR configuration, localized SEO routes, and the supported-language database guard. New billing markets require a server catalog entry, prices, portal configuration, and database market constraint; they are independent of language additions.
 
 ## Verification and release checks
 

@@ -341,3 +341,7 @@ where profile = 'phase3-v1'
 ```
 
 Prompt changes are picked up by `AiPromptResolver` cache after TTL (30s) or process restart.
+
+## CV translation
+
+Translation uses per-block parallel requests and admin-managed section headings. See [CV translation](cv-translation.md) for its catalog, immutable fields, validation, billing and review/apply contract.

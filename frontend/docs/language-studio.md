@@ -30,9 +30,15 @@ Changes and review marks are saved in this browser's local storage. The preview 
 
 Click **+**, enter a language code such as `de`, `fr`, `ar` or `pt-BR`, its display name, and left-to-right/right-to-left direction. A new language begins with empty translations and English preview fallback. It can be edited, previewed and exported immediately without registering it in the live app.
 
-Enabling that language for real users is a separate release change: add its catalog and metadata to the central registry in `i18n.ts`, expand account/auth locale validation and email localization, add localized public routes/SEO/prerendering, and audit code using explicit English/Turkish branches. Adding a document language also requires backend AI, review and export support. The editor does not automatically enable unsupported document languages or change regional pricing.
+Enabling that language for real users is a separate release change: add its catalog and metadata to the central registry in `i18n.ts`, expand account/auth locale validation and email localization, add localized public routes/SEO/prerendering, and audit code using explicit English/Turkish branches. CV translation languages can be enabled separately through the CV settings and protected catalog import below. New scripts still require font/shaping/export checks. Interface activation and regional pricing remain separate.
 
-This tool edits interface catalogs. User-authored CV content, AI-generated narrative, career-advice articles, Stripe amounts and backend authentication-email templates retain their own sources.
+## Configure CV document languages
+
+Choose **CV languages & headings** to enable the selected language for CV translation and edit its standard CV section headings. These settings are independent of interface text. English and Turkish begin enabled; new languages begin disabled. Every heading must be filled before an enabled language can be exported. For example, change Turkish Work Experience to `Deneyimler` here without changing its interface label.
+
+**Export CV languages** produces `cv-languages.json`. Apply the CV catalog migration and publish this file using the backend's protected `languages:import` command; browser-local changes do not publish themselves. **Export workspace** includes CV settings and preserves undo/import behavior. See [CV translation](../../backend/docs/cv-translation.md) for the administrator import procedure and validation.
+
+This tool edits interface catalogs and CV language configuration. User-authored CV content, AI-generated narrative, career-advice articles, Stripe amounts and backend authentication-email templates retain their own sources.
 
 ## Verification
 

@@ -49,6 +49,20 @@ describe("OpenAiAiProvider", () => {
     chatCompletionsCreateMock.mockReset();
   });
 
+  it("makes one attempt without model fallback when block retries are managed by the caller", async () => {
+    const provider = new OpenAiAiProvider("gpt-model", "test-key", {
+      maxAttempts: 3, heavyModelName: "gpt-model", lightModelName: "fallback-model", retryDelayMs: [0, 0],
+    });
+    const error = Object.assign(new Error("Unavailable"), { status: 503 });
+    chatCompletionsCreateMock.mockRejectedValue(error);
+    await expect(provider.generate({
+      flow_type: "cv_translate", model_name: "gpt-model", single_attempt: true,
+      prompt: { prompt_key: "cv-translate", prompt_version: "v1", system_prompt: "Translate", user_prompt: "Translate the block" },
+      output_schema: followUpQuestionsOutputSchema, input_payload: {},
+    })).rejects.toMatchObject({ details: { provider_status: 503 } });
+    expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
+  });
+
   it("sends system/user messages with json_schema response format and returns parsed payload", async () => {
     const provider = new OpenAiAiProvider("gpt-5.6-terra", "openai-key");
     chatCompletionsCreateMock.mockResolvedValue(successResponse);

@@ -98,3 +98,20 @@ describe("Language Studio catalogs", () => {
     expect(parseWorkspace(workspace).languages[0].reviewed).toEqual(["Save"]);
   });
 });
+
+describe("CV document language configuration", () => {
+  it("migrates old workspaces and preserves CV headings through import and export", () => {
+    const workspace = initialWorkspace();
+    for (const language of workspace.languages) delete language.cvDocument;
+    const imported = parseWorkspace(workspace);
+    expect(imported.languages[1].cvDocument).toMatchObject({ enabled: true, sectionTitles: { experience: "İş Deneyimi" } });
+    imported.languages[1].cvDocument!.sectionTitles.experience = "Deneyimler";
+    expect(parseWorkspace(JSON.parse(JSON.stringify(imported)))).toEqual(imported);
+  });
+  it("rejects unsafe section keys and invalid CV settings", () => {
+    const language = createLanguage("tr", "Türkçe");
+    for (const cvDocument of [{ enabled: "yes", sectionTitles: {} }, { enabled: true, sectionTitles: JSON.parse('{"__proto__":"X"}') }, { enabled: true, sectionTitles: { experience: "x".repeat(161) } }]) {
+      expect(() => importLanguageFile(JSON.stringify({ ...language, cvDocument }), language)).toThrow();
+    }
+  });
+});

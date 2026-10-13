@@ -572,6 +572,10 @@ export function createDemoStore(
           [...letters.values()][0]?.content ??
           "Demo cover letter",
       };
+    if (path === "/cv-languages") return { languages: [
+      { code: "en", name: "English", direction: "ltr", section_titles: {} },
+      { code: "tr", name: "Türkçe", direction: "ltr", section_titles: {} },
+    ] };
     if (path === "/templates")
       return {
         templates: DEMO_TEMPLATES.map((theme, i) => ({

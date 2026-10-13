@@ -56,6 +56,20 @@ describe("GeminiAiProvider", () => {
     generateContentMock.mockReset();
   });
 
+  it("makes one attempt without model fallback when block retries are managed by the caller", async () => {
+    const provider = new GeminiAiProvider("gemini-model", "test-key", {
+      maxAttempts: 3, heavyModelName: "gemini-model", lightModelName: "fallback-model", retryDelayMs: [0, 0],
+    });
+    const error = Object.assign(new Error("Unavailable"), { status: 503 });
+    generateContentMock.mockRejectedValue(error);
+    await expect(provider.generate({
+      flow_type: "cv_translate", model_name: "gemini-model", single_attempt: true,
+      prompt: { prompt_key: "cv-translate", prompt_version: "v1", system_prompt: "Translate", user_prompt: "Translate the block" },
+      output_schema: followUpQuestionsOutputSchema, input_payload: {},
+    })).rejects.toMatchObject({ details: { provider_status: 503 } });
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+  });
+
   it("uses the bounded block-instruction guard and escaped payload with DB-style prompts", async () => {
     const provider = new GeminiAiProvider("model", "gemini-key");
     generateContentMock.mockResolvedValue({ text: JSON.stringify({ suggested_block: { fields: { text: "Edited summary" } } }) });

@@ -170,11 +170,7 @@ export function Resumes() {
                       onClick={() => setTranslating(master)}
                     >
                       <Languages size={15} />
-                      {t(
-                        master.language.startsWith("tr")
-                          ? "Translate to English"
-                          : "Translate to Turkish",
-                      )}
+                      {t("Translate")}
                     </button>
                   )}
                   <button

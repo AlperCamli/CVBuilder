@@ -17,7 +17,8 @@
     "stripe:listen": "stripe listen --forward-to localhost:4000/api/v1/billing/webhooks",
     "stripe:regional-portals": "tsx scripts/configure-regional-portals.ts",
     "test:privacy-sql": "bash scripts/verify-privacy-sql.sh",
-    "privacy:check": "tsx scripts/check-privacy-readiness.ts"
+    "privacy:check": "tsx scripts/check-privacy-readiness.ts",
+    "languages:import": "tsx scripts/import-cv-languages.ts"
   },
   "engines": {
     "node": ">=20.0.0"

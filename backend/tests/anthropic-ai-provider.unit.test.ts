@@ -63,6 +63,20 @@ describe("AnthropicAiProvider", () => {
     messagesCreateMock.mockReset();
   });
 
+  it("makes one attempt without model fallback when block retries are managed by the caller", async () => {
+    const provider = new AnthropicAiProvider("claude-model", "test-key", {
+      maxAttempts: 3, heavyModelName: "claude-model", lightModelName: "fallback-model", retryDelayMs: [0, 0],
+    });
+    const error = Object.assign(new Error("Unavailable"), { status: 503 });
+    messagesCreateMock.mockRejectedValue(error);
+    await expect(provider.generate({
+      flow_type: "cv_translate", model_name: "claude-model", single_attempt: true,
+      prompt: { prompt_key: "cv-translate", prompt_version: "v1", system_prompt: "Translate", user_prompt: "Translate the block" },
+      output_schema: followUpQuestionsOutputSchema, input_payload: {},
+    })).rejects.toMatchObject({ details: { provider_status: 503 } });
+    expect(messagesCreateMock).toHaveBeenCalledTimes(1);
+  });
+
   it("strips unsupported schema constraints and closes objects for structured outputs", () => {
     const rawSchema = {
       type: "object",

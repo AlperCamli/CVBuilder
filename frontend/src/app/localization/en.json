@@ -1460,5 +1460,10 @@
   "Demo mode: this action is unavailable.": "Demo mode: this action is unavailable.",
   "Demo mode: external links and downloads are disabled.": "Demo mode: external links and downloads are disabled.",
   "Demo mode: Google sign-in is disabled.": "Demo mode: Google sign-in is disabled.",
-  "This is a demo account. No session is signed in.": "This is a demo account. No session is signed in."
+  "This is a demo account. No session is signed in.": "This is a demo account. No session is signed in.",
+  "Translate into": "Translate into",
+  "Loading CV languages…": "Loading CV languages…",
+  "No other CV languages are available.": "No other CV languages are available.",
+  "Failed to load CV languages": "Failed to load CV languages",
+  "Choose an available CV language": "Choose an available CV language"
 }

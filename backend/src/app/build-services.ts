@@ -1,4 +1,5 @@
 import { RegionalPricingService } from "../modules/billing/regional-pricing";
+import { SupabaseCvLanguagesRepository } from "../modules/cv-languages/cv-languages.repository";
 import { PrivacyService } from "../modules/privacy/privacy.service";
 import { GuestImportsService } from "../modules/guest-imports/guest-imports.service";
 import { SupabaseGuestImportsRepository, type GuestImportsRepository } from "../modules/guest-imports/guest-imports.repository";
@@ -260,7 +261,7 @@ export const buildDefaultServices = (
     photoMaxBytes: config.cvAssets.photoMaxBytes,
     photoUrlTtlSeconds: config.cvAssets.photoUrlTtlSeconds
   });
-  const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService);
+  const masterCvService = new MasterCvService(masterCvRepository, templatesService, renderingService, new SupabaseCvLanguagesRepository(supabaseClients.serviceRoleClient));
   const jobsService = new JobsService(jobsRepository);
   const coverLettersService = new CoverLettersService(
     coverLettersRepository,
@@ -288,7 +289,8 @@ export const buildDefaultServices = (
     templatesService,
     aiPromptResolver,
     billingService,
-    privacyService
+    privacyService,
+    new SupabaseCvLanguagesRepository(supabaseClients.serviceRoleClient)
   );
   const importsService = new ImportsService(
     importsRepository,

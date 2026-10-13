@@ -263,13 +263,14 @@ export class AnthropicAiProvider implements AiProvider {
     let lastErrorContext: AnthropicProviderErrorContext | null = null;
     let lastAttemptedModel = request.model_name;
     const attemptedModels: string[] = [];
-    const modelCandidates = this.resolveModelCandidates(request.model_name);
+    const modelCandidates = request.single_attempt ? [request.model_name] : this.resolveModelCandidates(request.model_name);
+    const maxAttempts = request.single_attempt ? 1 : this.maxAttempts;
 
     for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
       const candidateModel = modelCandidates[modelIndex] ?? request.model_name;
       attemptedModels.push(candidateModel);
 
-      for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
           const response = await this.client.messages.create({
             model: candidateModel,
@@ -361,7 +362,7 @@ export class AnthropicAiProvider implements AiProvider {
           lastErrorContext = context;
           lastAttemptedModel = candidateModel;
           const shouldRetry =
-            attempt < this.maxAttempts && isRetryableProviderError(context);
+            attempt < maxAttempts && isRetryableProviderError(context);
 
           if (!shouldRetry) {
             break;

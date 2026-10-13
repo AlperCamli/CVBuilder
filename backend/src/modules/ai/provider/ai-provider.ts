@@ -15,6 +15,9 @@ export interface AiProviderRequest {
   prompt: AiPromptContext;
   output_schema: ZodTypeAny;
   input_payload: Record<string, unknown>;
+  // A block orchestrator owns retries: make one model attempt and skip fallback.
+  // Other requests retain the configured provider retry/fallback policy.
+  single_attempt?: boolean;
   // Report received usage before parsing/refusal checks can fail. This is
   // accounting metadata only; CV/provider payloads are never sent to logs.
   onUsage?: (result: Pick<AiProviderResult, "provider" | "model_name" | "usage">) => Promise<void>;

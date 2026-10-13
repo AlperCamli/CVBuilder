@@ -41,6 +41,8 @@ import {
   type LanguageWorkspace,
 } from "../../localization/studio/language-catalog";
 import "./language-studio.css";
+import { CvLanguageSettings } from "./CvLanguageSettings";
+import { exportCvLanguageCatalog } from "../../localization/studio/cv-language-catalog";
 
 const PREVIEW_PAGES = [
   [
@@ -99,6 +101,7 @@ function loadWorkspace() {
   return initialWorkspace();
 }
 export default function LanguageStudio() {
+  const [editorMode, setEditorMode] = useState<"interface" | "cv">("interface");
   const [workspace, setWorkspace] = useState<LanguageWorkspace>(loadWorkspace);
   const current = useRef(workspace);
   const past = useRef<LanguageWorkspace[]>([]),
@@ -471,6 +474,12 @@ export default function LanguageStudio() {
             <Download size={15} />
             Export catalog
           </button>
+          <button onClick={() => {
+            try {
+              download("cv-languages.json", exportCvLanguageCatalog(workspace));
+              setNotice("Exported CV languages. Import this catalog with the backend languages:import command to make it available to users.");
+            } catch (error) { setError(error instanceof Error ? error.message : "Could not export CV languages."); }
+          }}><Download size={15} />Export CV languages</button>
           <input
             hidden
             type="file"
@@ -796,7 +805,17 @@ export default function LanguageStudio() {
               )}
             </div>
           </div>
-          <section className="ls-editor" aria-label="Edit selected translation">
+          <div className="ls-editor-tabs" role="group" aria-label="Language settings">
+            <button type="button" aria-pressed={editorMode === "interface"} onClick={() => setEditorMode("interface")}>Interface text</button>
+            <button type="button" aria-pressed={editorMode === "cv"} onClick={() => setEditorMode("cv")}>CV languages & headings</button>
+          </div>
+          {editorMode === "cv" && (
+            <CvLanguageSettings
+              configuration={configuration}
+              onChange={(cvDocument, key) => editLanguage(language => ({ ...language, cvDocument }), key)}
+            />
+          )}
+          {editorMode === "interface" && <section className="ls-editor" aria-label="Edit selected translation">
             <div className="ls-editor-heading">
               <div>
                 <span className="ls-eyebrow">
@@ -915,7 +934,7 @@ export default function LanguageStudio() {
                 settings.
               </span>
             </div>
-          </section>
+          </section>}
           {(error || notice) && (
             <div
               className={`ls-notice ${error ? "is-error" : ""}`}

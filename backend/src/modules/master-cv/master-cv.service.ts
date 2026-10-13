@@ -1,4 +1,5 @@
-import { normalizeLanguage } from "../../shared/localization/languages";
+import { normalizeDocumentLanguage } from "../../shared/localization/languages";
+import { builtInCvLanguages, documentLanguageKey, type CvLanguagesRepository } from "../cv-languages/cv-languages.repository";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import {
   buildCvPreview,
@@ -29,7 +30,8 @@ export class MasterCvService {
   constructor(
     private readonly masterCvRepository: MasterCvRepository,
     private readonly templatesService: TemplatesService,
-    private readonly renderingService: RenderingService
+    private readonly renderingService: RenderingService,
+    private readonly cvLanguages: CvLanguagesRepository = builtInCvLanguages
   ) {}
 
   async listDocumentRevisions(session: SessionContext, masterId: string) {
@@ -142,7 +144,7 @@ export class MasterCvService {
   ): Promise<MasterCvDetail> {
     const existing = await this.requireMasterCv(session.appUser.id, masterCvId);
     const content = normalizeCvContent(input.current_content, existing.language);
-    if (content.language !== existing.language && (!normalizeLanguage(existing.language) || normalizeLanguage(content.language) !== normalizeLanguage(existing.language))) throw new ValidationError("Use translation to create a CV in another language");
+    if (content.language !== existing.language && (!normalizeDocumentLanguage(existing.language) || normalizeDocumentLanguage(content.language) !== normalizeDocumentLanguage(existing.language))) throw new ValidationError("Use translation to create a CV in another language");
     content.language = existing.language;
 
     const updated = await this.masterCvRepository.updateById(session.appUser.id, masterCvId, {
@@ -251,8 +253,9 @@ export class MasterCvService {
   }
 
   private async assertLanguageAvailable(userId: string, language: string) {
-    if (!["en", "tr"].includes(language)) throw new ValidationError("Choose English or Turkish for your CV");
-    const existing = (await this.masterCvRepository.listByUser(userId)).find(cv => cv.module_type === "standard" && normalizeLanguage(cv.language) === language);
+    const code = documentLanguageKey(language);
+    if (!(await this.cvLanguages.listActive()).some(item => item.code === code)) throw new ValidationError("Choose an available CV language");
+    const existing = (await this.masterCvRepository.listByUser(userId)).find(cv => cv.module_type === "standard" && documentLanguageKey(cv.language) === code);
     if (existing) throw new ConflictError("A master CV already exists in this language", { existing_master_cv_id: existing.id, reason: "master_language_exists" });
   }
 

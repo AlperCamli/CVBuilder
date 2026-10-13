@@ -712,3 +712,34 @@
     margin-left: 0;
   }
 }
+
+.ls-cv-headings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.ls-cv-headings label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.ls-cv-headings input {
+  padding: 8px 10px;
+  border: 1px solid #d8dedb;
+  border-radius: 6px;
+  width: 100%;
+}
+.ls-editor-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 8px 22px;
+  border-top: 1px solid var(--ls-line);
+}
+.ls-editor-tabs button { padding: 6px 10px; }
+.ls-editor-tabs button[aria-pressed="true"] {
+  background: #ece7f5;
+  border-color: var(--ls-accent);
+}

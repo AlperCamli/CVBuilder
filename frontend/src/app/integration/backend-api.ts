@@ -316,7 +316,8 @@ export class BackendApi {
   getMasterDocumentRevisions(masterId: string): Promise<MasterDocumentRevision[]> { return this.client.get(`/master-cvs/${masterId}/revisions`); }
   restoreMasterDocumentRevision(masterId: string, revisionId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/revisions/${revisionId}/restore`); }
   getBillingPrices(): Promise<BillingPrices> { return this.client.get<BillingPrices>("/billing/prices"); }
-  startTranslation(masterId: string, target_language: "en" | "tr"): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language }); }
+  getCvLanguages(): Promise<{ languages: CvLanguage[] }> { return this.client.get("/cv-languages"); }
+  startTranslation(masterId: string, target_language: string): Promise<{ ai_run_id: string }> { return this.client.post(`/master-cvs/${masterId}/translations`, { target_language }); }
   executeTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/execute`); }
   getTranslation(masterId: string, runId: string): Promise<TranslationRun> { return this.client.get(`/master-cvs/${masterId}/translations/${runId}`); }
   applyTranslation(masterId: string, runId: string): Promise<MasterCvDetail> { return this.client.post(`/master-cvs/${masterId}/translations/${runId}/apply`); }
@@ -834,6 +835,7 @@ export class BackendApi {
   }
 }
 
-export interface TranslationRun { id: string; status: "pending" | "completed" | "failed"; progress_stage: string; error_message: string | null; output_payload: { current_content: CvContent } | null; }
+export interface CvLanguage { code: string; name: string; direction: "ltr" | "rtl"; section_titles: Record<string, string>; }
+export interface TranslationRun { id: string; status: "pending" | "completed" | "failed"; progress_stage: string; error_message: string | null; output_payload: { current_content: CvContent; target_language?: string; target_direction?: "ltr" | "rtl"; translated_blocks?: number } | null; }
 
 export interface MasterDocumentRevision { id: string; revision_number: number; created_at: string; content_snapshot: CvContent; }

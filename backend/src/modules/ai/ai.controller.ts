@@ -15,6 +15,10 @@ const requireSession = (request: Request) => {
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
+  getCvLanguages = asyncHandler(async (_request: Request, response: Response) => {
+    sendSuccess(response, await this.aiService.listTranslationLanguages());
+  });
+
   postTranslationStart = asyncHandler(async (request: Request, response: Response) => {
     sendSuccess(response, await this.aiService.startTranslation(requireSession(request), request.params.masterCvId, request.body.target_language), { statusCode: 202 });
   });

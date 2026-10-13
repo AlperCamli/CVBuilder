@@ -1394,5 +1394,10 @@
   "Demo mode: this action is unavailable.": "Demo modu: bu işlem kullanılamıyor.",
   "Demo mode: external links and downloads are disabled.": "Demo modu: harici bağlantılar ve indirmeler devre dışıdır.",
   "Demo mode: Google sign-in is disabled.": "Demo modu: Google ile giriş devre dışıdır.",
-  "This is a demo account. No session is signed in.": "Bu bir demo hesabıdır. Açık bir oturum yoktur."
+  "This is a demo account. No session is signed in.": "Bu bir demo hesabıdır. Açık bir oturum yoktur.",
+  "Translate into": "Çeviri dili",
+  "Loading CV languages…": "Özgeçmiş dilleri yükleniyor…",
+  "No other CV languages are available.": "Başka bir özgeçmiş dili mevcut değil.",
+  "Failed to load CV languages": "Özgeçmiş dilleri yüklenemedi",
+  "Choose an available CV language": "Mevcut bir özgeçmiş dili seçin"
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../integration/auth-context";
-import type { TranslationRun } from "../integration/backend-api";
+import type { CvLanguage, TranslationRun } from "../integration/backend-api";
 import type { MasterCvSummary } from "../integration/api-types";
 import { translate as t } from "../localization/i18n";
 import { ApiClientError } from "../integration/api-error";
@@ -22,10 +22,23 @@ export function TranslationDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingId, setExistingId] = useState<string | null>(null);
-  const target = source.language.startsWith("tr") ? "en" : "tr";
+  const [languages, setLanguages] = useState<CvLanguage[]>([]);
+  const [loadingLanguages, setLoadingLanguages] = useState(true);
+  const [target, setTarget] = useState("");
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
+  useEffect(() => {
+    let active = true;
+    setLoadingLanguages(true);
+    void api.getCvLanguages().then(({ languages }) => {
+      if (!active) return;
+      setLanguages(languages.filter(language => language.code !== source.language.toLowerCase().replace(/_/g, "-")));
+    }).catch(error => {
+      if (active) setError(error instanceof Error ? error.message : t("Failed to load CV languages"));
+    }).finally(() => { if (active) setLoadingLanguages(false); });
+    return () => { active = false; };
+  }, [api, source.language]);
   const handleError = (error: unknown) => {
     setError(
       error instanceof Error
@@ -39,8 +52,11 @@ export function TranslationDialog({
       setExistingId(error.details.existing_master_cv_id);
   };
   const start = async () => {
+    if (!languages.some(language => language.code === target)) return;
     setBusy(true);
     setError(null);
+    setExistingId(null);
+    setRun(null);
     try {
       const started = await api.startTranslation(source.id, target);
       setRun(await api.getTranslation(source.id, started.ai_run_id));
@@ -81,16 +97,26 @@ export function TranslationDialog({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="rounded-2xl border-0 p-6 shadow-xl backdrop:bg-black/40 w-[min(700px,calc(100%-2rem))] max-h-[85vh]"
+      className="m-auto rounded-2xl border-0 p-6 shadow-xl backdrop:bg-black/40 w-[min(700px,calc(100%-2rem))] max-h-[85vh]"
     >
       <h2 id="translation-title" className="text-xl font-medium mb-3">
-        {t(target === "tr" ? "Translate to Turkish" : "Translate to English")}
+        {t("Translate")}
       </h2>
       <p className="text-sm text-slate-600 mb-4">
         {t(
           "Your original CV stays unchanged. The translated master is an independent copy and uses one AI action.",
         )}
       </p>
+      <label className="block text-sm font-medium mb-4" htmlFor="translation-language">
+        {t("Translate into")}
+        <select id="translation-language" value={target} disabled={loadingLanguages || busy || run?.status === "pending" || run?.status === "completed"}
+          onChange={event => { setTarget(event.target.value); setRun(null); setError(null); setExistingId(null); }}
+          className="block w-full border rounded-lg px-3 py-2 mt-2">
+          <option value="">{t(loadingLanguages ? "Loading CV languages…" : "Choose CV language")}</option>
+          {languages.map(language => <option key={language.code} value={language.code}>{language.name}</option>)}
+        </select>
+      </label>
+      {!loadingLanguages && !languages.length && !error && <p role="status">{t("No other CV languages are available.")}</p>}
       {error && (
         <p role="alert" className="text-red-700 mb-3">
           {t(error)}
@@ -106,6 +132,7 @@ export function TranslationDialog({
         <div
           className="overflow-y-auto max-h-[50vh] border rounded-xl p-4 mb-4"
           lang={target}
+          dir={run.output_payload.target_direction ?? languages.find(language => language.code === target)?.direction}
         >
           {run.output_payload.current_content.sections.map((section) => (
             <section key={section.id} className="mb-4">
@@ -157,7 +184,7 @@ export function TranslationDialog({
         ) : (
           <button
             type="button"
-            disabled={busy || run?.status === "pending"}
+            disabled={busy || loadingLanguages || !target || run?.status === "pending"}
             onClick={() => void start()}
             className="bg-teal-700 text-white rounded-lg px-4 py-2"
           >

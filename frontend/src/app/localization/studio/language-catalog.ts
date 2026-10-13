@@ -1,5 +1,6 @@
 import en from "../en.json";
 import tr from "../tr.json";
+import { defaultCvLanguageDraft, type CvLanguageDraft } from "./cv-language-catalog";
 
 export const LANGUAGE_DRAFT_KEY = "cv-language-studio-v1";
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
@@ -10,6 +11,7 @@ export interface LanguageConfiguration {
   direction: "ltr" | "rtl";
   translations: Record<string, string>;
   reviewed: string[];
+  cvDocument?: CvLanguageDraft;
 }
 export interface LanguageWorkspace {
   version: 1;
@@ -48,6 +50,7 @@ export function createLanguage(
     direction,
     translations: { ...(BUILT_IN_CATALOGS[code] ?? {}) },
     reviewed: [],
+    cvDocument: defaultCvLanguageDraft(code),
   };
 }
 export function initialWorkspace(): LanguageWorkspace {
@@ -137,6 +140,13 @@ export function parseLanguage(value: unknown): LanguageConfiguration {
   )
     throw new Error("Choose a Language Studio configuration (version 1).");
   const translations = parseTranslations(value.translations);
+  let cvDocument = defaultCvLanguageDraft(value.code);
+  if (value.cvDocument !== undefined) {
+    if (!object(value.cvDocument) || typeof value.cvDocument.enabled !== "boolean") throw new Error("Invalid CV language settings.");
+    const sectionTitles = parseTranslations(value.cvDocument.sectionTitles);
+    if (Object.entries(sectionTitles).some(([type, title]) => !/^[a-z][a-z0-9_]{0,63}$/.test(type) || title.length > 160)) throw new Error("CV section headings must use section types and at most 160 characters.");
+    cvDocument = { enabled: value.cvDocument.enabled, sectionTitles };
+  }
   const reviewed = Array.isArray(value.reviewed)
     ? value.reviewed.filter(
         (key): key is string =>
@@ -150,6 +160,7 @@ export function parseLanguage(value: unknown): LanguageConfiguration {
     direction: value.direction as "ltr" | "rtl",
     translations,
     reviewed: Array.from(new Set(reviewed)),
+    cvDocument,
   };
 }
 export function parseWorkspace(value: unknown): LanguageWorkspace {
