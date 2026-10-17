@@ -420,9 +420,8 @@ function OnboardingFlow() {
                 <h1 tabIndex={-1}>{t("Upload your CV")}</h1>
                 <p className="ob-description">
                   {t("Start with your existing CV. No account needed.")}</p>
-                <p className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</p>
                 {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? t("Uploads are temporarily unavailable while privacy arrangements are verified.") : t("Checking upload availability…")}</p>}
-                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} />
+                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible />
                 {aiRequired && <button type="button" className="ob-back" disabled={uploading || busy} onClick={() => void changeGuestAi(false)}>{t("Not now")}</button>}
                 {aiRequired && !aiProcessing && <p className="ob-footnote" role="status">{aiDeclined ? guest ? t("AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave.") : t("AI remains off. You can change your mind by enabling it above; nothing has been uploaded.") : t("Enable AI above to upload and analyze your CV.")}</p>}
                 <input
@@ -468,6 +467,7 @@ function OnboardingFlow() {
                     {"or"}<b>{t("browse files")}</b> {" "}{t("on your device")}</span>
                   <small>{t("PDF or DOCX · up to 20 MB")}</small>
                 </button>
+                <p className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</p>
                 {uploadError && (
                   <p className="ob-error" role="alert">
                     {uploadError}

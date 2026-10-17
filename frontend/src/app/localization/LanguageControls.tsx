@@ -140,7 +140,7 @@ export function LanguageChooser() {
       ref={dialog}
       aria-labelledby="language-choice-title"
       onCancel={(event) => event.preventDefault()}
-      className="rounded-2xl border-0 p-8 shadow-xl backdrop:bg-black/40 max-w-sm w-[calc(100%-2rem)]"
+      className="fixed inset-0 m-auto max-h-[calc(100dvh_-_2rem)] overflow-y-auto rounded-2xl border-0 p-8 shadow-xl backdrop:bg-black/40 max-w-sm w-[calc(100%_-_2rem)]"
     >
       <h2
         id="language-choice-title"

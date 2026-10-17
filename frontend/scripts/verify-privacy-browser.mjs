@@ -123,9 +123,10 @@ async function scenario(method, acceptAnalytics = false) {
     });
   };
   const page = await context.newPage(); await attach(page);
+  await page.evaluateOnNewDocument(() => localStorage.setItem('cv-interface-locale', 'en'));
   await page.goto(`${base}/guided-journey`, { waitUntil: 'networkidle0' });
   assert.equal(googleRequests.length, 0);
-  await clickText(page, acceptAnalytics ? 'Accept analytics' : 'Reject analytics');
+  await clickText(page, acceptAnalytics ? 'Allow optional cookies' : 'Essential cookies only');
   await page.goto(`${base}/onboarding`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('input[type=checkbox]:not([disabled])');
   assert.equal(await page.$eval('input[type=checkbox]', el => el.checked), false);
@@ -177,7 +178,7 @@ async function scenario(method, acceptAnalytics = false) {
   await page.goto(`${base}/app/profile`, { waitUntil: 'networkidle0' });
   await waitText(page, 'Privacy & your data');
   // Consent acceptance and withdrawal across two tabs, without transmitting GA.
-  await clickText(page, 'Privacy choices'); await clickText(page, 'Accept analytics');
+  await clickText(page, 'Cookie settings'); await clickText(page, 'Allow optional cookies');
   await page.waitForFunction(() => !!document.getElementById('ga4-google-tag'));
   assert(googleRequests.length > 0);
   assert.equal(preferences.analytics, true);
@@ -202,7 +203,7 @@ async function scenario(method, acceptAnalytics = false) {
   }
   const tab = await context.newPage(); await attach(tab); await tab.goto(`${base}/cookies`, { waitUntil: 'networkidle0' });
   await tab.waitForFunction(() => !!document.getElementById('ga4-google-tag'));
-  await clickText(page, 'Privacy choices'); await clickText(page, 'Reject analytics');
+  await clickText(page, 'Cookie settings'); await clickText(page, 'Essential cookies only');
   await page.waitForFunction(() => !document.getElementById('ga4-google-tag'));
   await tab.waitForFunction(() => !document.getElementById('ga4-google-tag'));
   const afterWithdrawal = googleRequests.length;
@@ -228,6 +229,7 @@ async function gpcScenario() {
   const context = await browser.createBrowserContext(); const page = await context.newPage();
   let google = 0; const errors = [];
   await page.evaluateOnNewDocument(version => {
+    localStorage.setItem('cv-interface-locale', 'en');
     Object.defineProperty(navigator, 'globalPrivacyControl', { get: () => true });
     localStorage.setItem('cv-builder:privacy-choices', JSON.stringify({ version, analytics: true, expires_at: new Date(Date.now()+86400000).toISOString() }));
   }, version);
@@ -241,8 +243,8 @@ async function gpcScenario() {
     await req.continue();
   });
   await page.goto(`${base}/cookies`, { waitUntil: 'networkidle0' });
-  await clickText(page, 'Privacy choices'); await waitText(page, 'Global Privacy Control is enabled.');
-  assert.equal(await page.evaluate(() => [...document.querySelectorAll('button')].find(el=>el.textContent === 'Accept analytics').disabled), true);
+  await clickText(page, 'Cookie settings'); await waitText(page, 'Your browser asks us not to track usage (Global Privacy Control).');
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('button')].find(el=>el.textContent === 'Allow optional cookies').disabled), true);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cv-builder:privacy-choices')).analytics), false);
   assert.equal(google, 0); assert.deepEqual(errors, []);
   await context.close(); return 'Global Privacy Control overrides a previously accepted choice; Google remains unloaded';

@@ -8,7 +8,7 @@ import "./privacy.css";
 
 export function PrivacyLinks() {
   useTranslation();
-  return <nav aria-label={t("Privacy links")} className="privacy-links"><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Privacy choices")}</button></nav>;
+  return <nav aria-label={t("Privacy links")} className="privacy-links"><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Cookie settings")}</button></nav>;
 }
 export function PrivacyControls() {
   useTranslation();
@@ -71,7 +71,7 @@ export function PrivacyControls() {
       }
       setOpen(false);
       if (reloadAfterWithdrawal) window.location.reload();
-    } catch { setError(t("Browser storage is unavailable. Analytics stays disabled.")); }
+    } catch { setError(t("Your browser couldn’t save this choice. Optional cookies stay off.")); }
     finally { finishSync(); setSyncPending(false); }
   }
   useEffect(() => {
@@ -103,18 +103,18 @@ export function PrivacyControls() {
   }, []);
   return <>
     <PrivacyLinks />
-    {open && <aside className="privacy-banner" aria-label={t("Analytics choices")}>
-      <p><strong>{t("Your privacy choices")}</strong></p>
-      <p>{t("Essential storage keeps your upload and sign-in working. Optional analytics helps us improve JobSpecificCV.")}</p>
-      {details && <p>{t("Analytics is off until you accept. No advertising tracking. Change your choice here at any time.")}{" "}<Link to="/cookies">{t("See storage details")}</Link>{"."}</p>}
-      {configLoading ? <p role="status">{t("Checking privacy settings…")}</p> : configFailed ? <p role="status">{t("Privacy settings could not be loaded. Reopen Privacy choices to try again.")}</p> : !analyticsAvailable && <p>{t("Optional analytics is currently unavailable.")}</p>}
-      <p>{t("You can accept or reject analytics, then change your mind using “Privacy choices” at any time. Analytics is not required to use the app.")}</p>
-      {hasGlobalPrivacyControl() && <p>{t("Global Privacy Control is enabled. Optional analytics remains off.")}</p>}
+    {open && <aside className="privacy-banner" aria-label={t("Cookie preferences")}>
+      <p><strong>{t("Cookie preferences")}</strong></p>
+      <p>{t("Essential cookies keep uploads and sign-in working. Optional cookies help us understand which pages and features people use, so we can improve JobSpecificCV.")}</p>
+      <p>{t("Your CV content isn’t included in usage data. You can use the app without optional cookies and change your choice anytime in Cookie settings.")}</p>
+      {details && <p id="cookie-usage-details">{t("We use Google Analytics for usage statistics only after you agree. No advertising tracking.")}{" "}<Link to="/cookies">{t("Read about cookies and storage")}</Link>{"."}</p>}
+      {configLoading ? <p role="status">{t("Loading cookie settings…")}</p> : configFailed ? <p role="status">{t("Cookie settings couldn’t load. Optional cookies stay off. Reopen Cookie settings to try again.")}</p> : !analyticsAvailable && <p>{t("Optional cookies are currently unavailable. Essential cookies still work.")}</p>}
+      {hasGlobalPrivacyControl() && <p>{t("Your browser asks us not to track usage (Global Privacy Control). Optional cookies stay off.")}</p>}
       {error && <p role="alert">{t(error)}</p>}
       <div className="privacy-actions">
-        <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Accept analytics")}</button>
-        <button type="button" disabled={syncPending} onClick={() => void choose(false)}>{t("Reject analytics")}</button>
-        <button type="button" onClick={() => setDetails(!details)} aria-expanded={details}>{t("Settings")}</button>
+        <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Allow optional cookies")}</button>
+        <button type="button" disabled={syncPending} onClick={() => void choose(false)}>{t("Essential cookies only")}</button>
+        <button type="button" className="privacy-details-toggle" onClick={() => setDetails(!details)} aria-expanded={details} aria-controls={details ? "cookie-usage-details" : undefined}>{details ? t("Less detail") : t("Learn more")}</button>
       </div>
     </aside>}
   </>;
