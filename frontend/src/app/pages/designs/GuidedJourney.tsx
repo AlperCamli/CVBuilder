@@ -180,7 +180,7 @@ export default function GuidedJourney({
       <header className="cv-header cv-wrap">
         <Link to={BASE || "/"} className="cv-wordmark">
           <span className="cv-brand-icon">
-            <FileText size={21} />
+            <img src="/images/logo.png" width={32} height={32} alt="" />
           </span>
           {"jobspecific"}<span>{t("CV")}</span>
           <span className="cv-brand-dot">{"."}</span>
@@ -400,6 +400,9 @@ export default function GuidedJourney({
       <footer className="cv-footer cv-wrap">
         <div>
           <Link to={BASE || "/"} className="cv-wordmark">
+            <span className="cv-brand-icon">
+              <img src="/images/logo.png" width={32} height={32} alt="" />
+            </span>
             {"jobspecific"}<span>{t("CV")}</span>{"."}</Link>
           <p>{t("Your experience. Clearly relevant.")}</p>
         </div>

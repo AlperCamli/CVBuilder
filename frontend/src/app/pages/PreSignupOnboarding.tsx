@@ -80,8 +80,10 @@ function OnboardingFlow() {
   const [config, setConfig] = useState<PrivacyConfig | null>(null);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [aiDeclined, setAiDeclined] = useState(false);
+  const [aiConsentPrompt, setAiConsentPrompt] = useState(false);
   const aiRequired = config?.ai_required !== false;
   const uploadAllowed = !!config?.collection_enabled && (!aiRequired || (aiProcessing && config.ai_enabled));
+  const needsAiConsent = !!config?.collection_enabled && !!config.ai_enabled && aiRequired && !aiProcessing;
   const rawStage = params.get("step");
   const stage: Stage = guest
     ? rawStage === "upload" || rawStage === "questions" || rawStage === "signup"
@@ -108,6 +110,7 @@ function OnboardingFlow() {
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const aiConsentInput = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
   const trackedProcessing = useRef("");
@@ -221,10 +224,19 @@ function OnboardingFlow() {
     };
   }, [guest, aiProcessing, config?.ai_required]);
 
+  function promptForAiConsent() {
+    setAiConsentPrompt(true);
+    aiConsentInput.current?.focus({ preventScroll: true });
+    aiConsentInput.current?.closest(".ai-upload-disclosure")?.scrollIntoView({ block: "center", behavior: "instant" });
+  }
   async function selectFile(files: File[]) {
     setDragging(false);
-    if (uploadingRef.current) return;
-    if (!uploadAllowed) { setUploadError(aiRequired && !aiProcessing ? "Enable AI processing to upload your CV. You can change this choice at any time." : "Uploads are currently unavailable."); return; }
+    if (uploadingRef.current || busy) return;
+    if (!uploadAllowed) {
+      if (needsAiConsent) promptForAiConsent();
+      else setUploadError("Uploads are currently unavailable.");
+      return;
+    }
     if (files.length !== 1) {
       setUploadError("Please choose one CV at a time.");
       return;
@@ -265,6 +277,7 @@ function OnboardingFlow() {
     }
   }
   async function changeGuestAi(accepted: boolean) {
+    if (accepted) setAiConsentPrompt(false);
     if (!guest) { setAiProcessing(accepted); setAiDeclined(!accepted); return; }
     setBusy(true); setError("");
     try {
@@ -421,8 +434,7 @@ function OnboardingFlow() {
                 <p className="ob-description">
                   {t("Start with your existing CV. No account needed.")}</p>
                 {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? t("Uploads are temporarily unavailable while privacy arrangements are verified.") : t("Checking upload availability…")}</p>}
-                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible />
-                {aiRequired && <button type="button" className="ob-back" disabled={uploading || busy} onClick={() => void changeGuestAi(false)}>{t("Not now")}</button>}
+                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible highlighted={aiConsentPrompt && needsAiConsent} inputRef={aiConsentInput} onHighlightEnd={() => setAiConsentPrompt(false)} />
                 {aiRequired && !aiProcessing && <p className="ob-footnote" role="status">{aiDeclined ? guest ? t("AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave.") : t("AI remains off. You can change your mind by enabling it above; nothing has been uploaded.") : t("Enable AI above to upload and analyze your CV.")}</p>}
                 <input
                   ref={fileInput}
@@ -440,9 +452,12 @@ function OnboardingFlow() {
                 />
                 <button
                   type="button"
-                  disabled={uploading || !uploadAllowed}
+                  disabled={uploading || busy || (!uploadAllowed && !needsAiConsent)}
                   className={`ob-upload-zone${dragging ? " is-dragging" : ""}`}
-                  onClick={() => fileInput.current?.click()}
+                  onClick={() => {
+                    if (needsAiConsent) promptForAiConsent();
+                    else if (uploadAllowed) fileInput.current?.click();
+                  }}
                   onDragOver={(event) => {
                     event.preventDefault();
                     setDragging(true);

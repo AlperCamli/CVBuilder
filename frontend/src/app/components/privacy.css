@@ -12,3 +12,8 @@
 .ai-upload-disclosure summary:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
 .ai-upload-details > summary { width: fit-content; text-decoration: underline; text-underline-offset: 3px; }
 .ai-upload-disclosure details p { margin-left: 0; }
+.ai-upload-checkbox { position: relative; display: inline-flex; flex-shrink: 0; margin-top: 4px; }
+.ai-upload-checkbox input { margin: 0; }
+.ai-upload-warning { position: absolute; inset: 0; border: 2px solid #ef4444; border-radius: 2px; background: transparent; pointer-events: none; animation: ai-upload-warning-fade 1.5s ease-out forwards; }
+@keyframes ai-upload-warning-fade { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ai-upload-warning { animation-duration: 0.01ms; } }

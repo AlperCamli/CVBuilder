@@ -131,7 +131,8 @@ async function scenario(method, acceptAnalytics = false) {
   await page.waitForSelector('input[type=checkbox]:not([disabled])');
   assert.equal(await page.$eval('input[type=checkbox]', el => el.checked), false);
   assert.equal(await page.$eval('#onboarding-cv-file', el => el.disabled), true);
-  await clickText(page, 'Not now'); await waitText(page, 'AI remains off.');
+  await page.click('.ob-upload-zone');
+  await page.waitForSelector('.ai-upload-disclosure.is-highlighted');
   assert(!uploaded);
   await page.click('input[type=checkbox]');
   await page.waitForSelector('#onboarding-cv-file:not([disabled])');
