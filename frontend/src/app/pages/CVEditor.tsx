@@ -538,6 +538,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [showLayoutControls, setShowLayoutControls] = useState(false);
+  useEffect(() => {
+    if (showTemplateGallery) completeStep("template");
+    if (showLayoutControls) completeStep("layout");
+    if (showExportDialog) completeStep("export");
+  }, [showTemplateGallery, showLayoutControls, showExportDialog, completeStep]);
   const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
   const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
   const templatePreviewsRef = useRef<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
@@ -2629,7 +2634,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
               {cvKind === "master" && cvId && (
                 <button
-                  onClick={() => navigate(`/app/tailor/${cvId}`)}
+                  onClick={() => { completeStep("customize"); navigate(`/app/tailor/${cvId}`); }}
                   data-onboarding="customize-btn"
                   className="min-h-10 px-4 py-2 rounded-lg font-medium flex items-center gap-2 border"
                   style={{

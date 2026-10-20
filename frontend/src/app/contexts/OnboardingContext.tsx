@@ -19,6 +19,7 @@ import {
   completedStepCount,
   deriveCurrentStep,
   isOnboardingActive,
+  isEditorTourComplete,
   isStepComplete
 } from "../onboarding/onboarding-steps";
 
@@ -84,7 +85,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
       const now = new Date().toISOString();
       let next = applyStepCompletion(current, stepId, now);
-      const finishesOnboarding = stepId === "export";
+      const finishesOnboarding = isEditorTourComplete(next);
       if (finishesOnboarding) {
         next = applyOnboardingCompletion(next, now);
         setJustCompleted(true);

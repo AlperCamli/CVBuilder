@@ -55,11 +55,19 @@ async function scenario(method) {
       assert(req.headers().authorization, `authenticated request required: ${path}`);
       if (path === '/me') { if (tourChecks && method === 'verification') appUser.locale = 'tr'; await respond(me); return; }
       if (path === '/me/privacy') { if (req.method() === 'PATCH' && typeof body.ai_processing === 'boolean') aiProcessing = body.ai_processing; await respond({ analytics: false, ai_processing: aiProcessing, privacy_revision: 0 }); return; }
-      if (path === '/me/settings') { await respond({ settings: { default_cv_language: 'en', locale: 'en', onboarding_completed: false, onboarding_state: {} } }); return; }
+      if (path === '/me/settings') {
+        if (req.method() === 'PATCH') {
+          const progress = body.onboarding_state;
+          if (progress) appUser.onboarding_state = { ...appUser.onboarding_state, ...progress, steps: { ...appUser.onboarding_state.steps, ...progress.steps } };
+          if (typeof body.onboarding_completed === 'boolean') appUser.onboarding_completed = body.onboarding_completed;
+        }
+        await respond({ settings: { default_cv_language: 'en', locale: appUser.locale, onboarding_completed: appUser.onboarding_completed, onboarding_state: appUser.onboarding_state } }); return;
+      }
       if (path === '/me/onboarding-answers') { appUser.onboarding_answers = body; await respond({ answers: body }); return; }
       if (path === '/master-cvs' && req.method() === 'POST') { assert.deepEqual(body, { title: 'My Main CV', language: 'en' }); await respond(master); return; }
       if (path === '/master-cvs') { await respond([master]); return; }
       if (path === `/tailored-cvs/${cvId}`) { await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'Master CV fixture' } }) }); return; }
+      if (path === `/master-cvs/${cvId}/exports`) { await respond({ master_cv_id: cvId, exports: [] }); return; }
       if (path === `/master-cvs/${cvId}/template`) { master.template_id = body.template_id; await respond(master); return; }
       if (path === `/master-cvs/${cvId}/content`) { master.current_content = body.current_content ?? body; await respond(master); return; }
       if (path === `/master-cvs/${cvId}`) { await respond(master); return; }
@@ -145,7 +153,7 @@ async function scenario(method) {
   await page.reload({ waitUntil: 'networkidle0' });
   try { await waitText(page, 'My Main CV'); } catch { throw new Error(JSON.stringify({ method, path: new URL(page.url()).pathname, text: await page.evaluate(() => document.body.innerText), unexpected, errors, paths: requests.slice(-18).map(row => row.path) })); }
   assert.equal(requests.filter(row => row.path === '/master-cvs' && row.method === 'POST').length, 1);
-  if (tourChecks) await verifyEditorTour(page, { mode: method === 'email' ? 'select' : method === 'google' ? 'browse' : 'dismiss', width: method === 'email' ? 1280 : method === 'google' ? 390 : 320, screenshotDir: output.pathname });
+  if (tourChecks) await verifyEditorTour(page, { mode: method === 'email' ? 'select' : method === 'google' ? 'browse' : 'dismiss', width: method === 'email' ? 1280 : method === 'google' ? 390 : 320, screenshotDir: output.pathname, getProgress: () => appUser.onboarding_state, getRequests: () => requests });
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
   await context.close();

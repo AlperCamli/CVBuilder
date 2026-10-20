@@ -39,14 +39,19 @@ The sample CV, simulated timers, mock signup, and sample score/editor are remove
 
 The editor tips have their own sequence, separate from task completion:
 customize (main CV only) → templates → font/layout → export. Closing a tip
-advances to the next tip without claiming its task was completed. Job details
+advances to the next tip for the current session. Opening a feature marks that
+onboarding step complete and saves it to the account, even if its settings are
+left unchanged. Completed feature tips do not return after refresh. Job details
 are introduced when the user actually enters the tailoring form. A saved
 main CV counts as the creation milestone immediately, including a blank CV.
 
 Clicking the highlighted template button opens the gallery; the font tip waits
 until that gallery closes, whether a template was selected or simply browsed.
 Font controls open by click/tap and keyboard, and the export tip waits until
-they close. Main and tailored CV exports can both finish the setup checklist.
+they close. Opening export counts as exploring export; downloading a file is
+not required. Setup completes once creation, templates, font/layout and export
+have been explored, in any order. Tailoring remains optional. Actual export
+analytics are still emitted only after an export succeeds.
 Tips allow clicks on their highlighted controls, support Escape, and reposition
 to avoid covering the button or running beyond the viewport.
 

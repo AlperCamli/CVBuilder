@@ -10,12 +10,30 @@ import {
   ONBOARDING_STEP_ORDER,
   staticStepRoute
 } from "./onboarding-steps";
-import { MASTER_EDITOR_COACH_STEPS, TAILORED_EDITOR_COACH_STEPS, nextCoachMarkStep } from "./onboarding-steps";
+import { MASTER_EDITOR_COACH_STEPS, TAILORED_EDITOR_COACH_STEPS, nextCoachMarkStep, isEditorTourComplete } from "./onboarding-steps";
 
 const NOW = "2026-07-08T10:00:00.000Z";
 const LATER = "2026-07-08T11:00:00.000Z";
 
 describe("onboarding steps", () => {
+  it("restores explored features as complete without requiring setting changes", () => {
+    const state = { steps: { create_cv: NOW, template: NOW, layout: NOW } };
+    expect(nextCoachMarkStep(TAILORED_EDITOR_COACH_STEPS, step => isStepComplete(state, step), () => false)).toBe("export");
+    expect(isEditorTourComplete(state)).toBe(false);
+    expect(isEditorTourComplete(applyStepCompletion(state, "export", NOW))).toBe(true);
+  });
+
+  it("finishes after all essential features have been explored in any order", () => {
+    let state = applyStepCompletion({}, "create_cv", NOW);
+    state = applyStepCompletion(state, "export", NOW);
+    expect(isEditorTourComplete(state)).toBe(false);
+    state = applyStepCompletion(state, "layout", NOW);
+    expect(isEditorTourComplete(state)).toBe(false);
+    state = applyStepCompletion(state, "template", NOW);
+    expect(isEditorTourComplete(state)).toBe(true);
+    expect(isStepComplete(state, "customize")).toBe(false);
+    expect(isStepComplete(state, "job_details")).toBe(false);
+  });
   it("advances the main editor tour without completing tailoring or job details", () => {
     const state = { steps: { create_cv: NOW } };
     const dismissed = new Set<string>();
@@ -23,8 +41,7 @@ describe("onboarding steps", () => {
     expect(next()).toBe("customize");
     dismissed.add("customize");
     expect(next()).toBe("template");
-    // Dismissal, opening the gallery or browsing without selecting all finish
-    // a tip without asserting that a template has actually been applied.
+    // Simply dismissing a tip still advances this session's walkthrough.
     dismissed.add("template");
     expect(next()).toBe("layout");
     expect(isStepComplete(state, "customize")).toBe(false);

@@ -149,7 +149,7 @@ export function OnboardingChecklist() {
         <h3 className="font-medium mb-1" style={{ fontSize: "16px" }}>
           {t("You're all set 🎉")}</h3>
         <p style={{ fontSize: "13px", lineHeight: "1.6", color: "rgba(255,255,255,0.85)" }}>
-          {t("You exported your first CV. Next up: cover letters and job tracking are waiting in the sidebar.")}</p>
+          {t("You’ve explored the CV editor. You can return to these tools whenever you need them.")}</p>
       </div>
     );
   }

@@ -265,6 +265,8 @@ export function TailorCV() {
             <div
               className="p-6 rounded-xl border"
               data-onboarding="job-form"
+              onFocusCapture={() => completeStep("job_details")}
+              onClickCapture={() => completeStep("job_details")}
               style={{
                 background: "var(--color-background-primary)",
                 borderColor: "var(--color-border-tertiary)"

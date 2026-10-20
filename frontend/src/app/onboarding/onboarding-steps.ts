@@ -67,6 +67,12 @@ export function isStepComplete(state: OnboardingState | null | undefined, stepId
   return Boolean(state?.steps?.[stepId]);
 }
 
+export function isEditorTourComplete(state: OnboardingState): boolean {
+  // Tailoring is optional. Opening export early must not hide the other tools
+  // before the user has explored them, and the tools can be opened in any order.
+  return (["create_cv", "template", "layout", "export"] as const).every(step => isStepComplete(state, step));
+}
+
 export function completedStepCount(state: OnboardingState | null | undefined): number {
   return ONBOARDING_STEP_ORDER.filter((stepId) => isStepComplete(state, stepId)).length;
 }
