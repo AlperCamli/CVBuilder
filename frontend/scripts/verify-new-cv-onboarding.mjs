@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import puppeteer from 'puppeteer';
+import { verifyEditorTour } from './editor-tour-checks.mjs';
 const base = process.env.ONBOARDING_BROWSER_URL ?? 'http://127.0.0.1:5174';
 const output = new URL('../../artifacts/new-cv-onboarding/', import.meta.url);
 await mkdir(output, { recursive: true });
+const tourChecks = process.env.EDITOR_TOUR_CHECK === '1';
 const browser = await puppeteer.launch({ headless: true });
 const waitText = (page, text) => page.waitForFunction(text => document.body.innerText.includes(text), {}, text);
 const clickText = async (page, text) => {
@@ -17,6 +19,7 @@ async function scenario(method) {
   const page = await context.newPage();
   await page.setViewport({ width: 1280, height: 900 });
   const errors = [], unexpected = [], requests = [];
+  let aiProcessing = false;
   const now = new Date().toISOString(), userId = randomUUID(), authId = randomUUID(), cvId = randomUUID();
   const user = { id: authId, aud: 'authenticated', email: 'candidate@example.invalid', role: 'authenticated', app_metadata: { provider: method === 'google' ? 'google' : 'email', providers: [method === 'google' ? 'google' : 'email'] }, user_metadata: { full_name: 'Test Candidate' }, identities: [], created_at: now };
   const jwt = [Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'), Buffer.from(JSON.stringify({ sub: authId, exp: Math.floor(Date.now()/1000)+3600, iat: Math.floor(Date.now()/1000), amr: [{ method: 'password', timestamp: Math.floor(Date.now()/1000) }] })).toString('base64url'), 'fixture-signature'].join('.');
@@ -25,6 +28,7 @@ async function scenario(method) {
   const appUser = { id: userId, auth_user_id: authId, email: user.email, full_name: 'Test Candidate', locale: 'en', default_cv_language: 'en', onboarding_completed: false, onboarding_state: {}, onboarding_answers: {}, created_at: now, updated_at: now };
   const me = { user: appUser, current_plan: { plan_code: 'free', status: 'active' }, entitlements: { plan_code: 'free', limits, remaining: limits }, usage_summary: { plan_code: 'free', limits, remaining: limits, period_month: now.slice(0,7), ai_actions_count: 0, exports_count: 0, tailored_cv_generations_count: 0, storage_bytes_used: 0 } };
   const config = { notice_version: '2026-10-06.2', controller: 'Fixture', address: 'Test only', contact: 'privacy@example.invalid', processors: [], collection_enabled: true, ai_required: true, ai_enabled: true, ai_provider: 'Test provider', analytics_enabled: false };
+  const template = { id: randomUUID(), name: 'Studio', slug: 'studio', status: 'active', module_type: 'standard', preview_config: {}, export_config: {}, created_at: now, updated_at: now };
   const content = { version: 'v1', language: 'en', metadata: {}, sections: [] };
   const master = { id: cvId, user_id: userId, title: 'My Main CV', language: 'en', template_id: null, module_type: 'standard', current_content: content, original_content: content, source_type: 'scratch', created_at: now, updated_at: now };
   page.on('pageerror', error => errors.push(error.message));
@@ -49,16 +53,19 @@ async function scenario(method) {
       requests.push({ path, method: req.method(), body });
       if (path === '/privacy/config') { await respond(config); return; }
       assert(req.headers().authorization, `authenticated request required: ${path}`);
-      if (path === '/me') { await respond(me); return; }
-      if (path === '/me/privacy') { await respond({ analytics: false, ai_processing: false, privacy_revision: 0 }); return; }
+      if (path === '/me') { if (tourChecks && method === 'verification') appUser.locale = 'tr'; await respond(me); return; }
+      if (path === '/me/privacy') { if (req.method() === 'PATCH' && typeof body.ai_processing === 'boolean') aiProcessing = body.ai_processing; await respond({ analytics: false, ai_processing: aiProcessing, privacy_revision: 0 }); return; }
       if (path === '/me/settings') { await respond({ settings: { default_cv_language: 'en', locale: 'en', onboarding_completed: false, onboarding_state: {} } }); return; }
       if (path === '/me/onboarding-answers') { appUser.onboarding_answers = body; await respond({ answers: body }); return; }
       if (path === '/master-cvs' && req.method() === 'POST') { assert.deepEqual(body, { title: 'My Main CV', language: 'en' }); await respond(master); return; }
       if (path === '/master-cvs') { await respond([master]); return; }
       if (path === `/tailored-cvs/${cvId}`) { await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'Master CV fixture' } }) }); return; }
+      if (path === `/master-cvs/${cvId}/template`) { master.template_id = body.template_id; await respond(master); return; }
+      if (path === `/master-cvs/${cvId}/content`) { master.current_content = body.current_content ?? body; await respond(master); return; }
       if (path === `/master-cvs/${cvId}`) { await respond(master); return; }
       if ((path.endsWith('/ai/block-versions') || path.endsWith('/ai-block-versions'))) { await respond({ blocks: [] }); return; }
-      if (path === '/templates') { await respond({ templates: [] }); return; }
+      if (path === `/templates/${template.id}`) { await respond({ template }); return; }
+      if (path === '/templates') { await respond({ templates: [template] }); return; }
       if (path === '/rendering/preview') { await respond({ presentation: null, resolved_template: { resolution: 'none', template: null } }); return; }
       if (path === '/billing/prices') { await respond({ market: 'GLOBAL', currency: 'usd', available: false, quote: null, plans: [] }); return; }
       if (path === '/billing/usage') { await respond(me.usage_summary); return; }
@@ -138,14 +145,17 @@ async function scenario(method) {
   await page.reload({ waitUntil: 'networkidle0' });
   try { await waitText(page, 'My Main CV'); } catch { throw new Error(JSON.stringify({ method, path: new URL(page.url()).pathname, text: await page.evaluate(() => document.body.innerText), unexpected, errors, paths: requests.slice(-18).map(row => row.path) })); }
   assert.equal(requests.filter(row => row.path === '/master-cvs' && row.method === 'POST').length, 1);
+  if (tourChecks) await verifyEditorTour(page, { mode: method === 'email' ? 'select' : method === 'google' ? 'browse' : 'dismiss', width: method === 'email' ? 1280 : method === 'google' ? 390 : 320, screenshotDir: output.pathname });
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
   await context.close();
   console.log(`${method}: new CV → questions/back/skip/refresh → signup → blank CV editor; exactly one creation, no upload or parsing requests`);
 }
 try {
-  await scenario('email');
-  await scenario('google');
-  await scenario('verification');
+  const methods = process.env.ONBOARDING_METHOD ? [process.env.ONBOARDING_METHOD] : ['email', 'google', 'verification'];
+  for (const method of methods) {
+    assert(['email', 'google', 'verification'].includes(method));
+    await scenario(method);
+  }
   console.log('Desktop/mobile layouts and collapsed privacy details passed. Screenshots: artifacts/new-cv-onboarding');
 } finally { await browser.close(); }

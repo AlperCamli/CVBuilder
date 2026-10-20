@@ -35,6 +35,26 @@ Questions cover goal, career stage, education level (including study in progress
 and referral source. Back, skip, refresh, and auth redirects preserve answers.
 The sample CV, simulated timers, mock signup, and sample score/editor are removed.
 
+## Editor walkthrough
+
+The editor tips have their own sequence, separate from task completion:
+customize (main CV only) → templates → font/layout → export. Closing a tip
+advances to the next tip without claiming its task was completed. Job details
+are introduced when the user actually enters the tailoring form. A saved
+main CV counts as the creation milestone immediately, including a blank CV.
+
+Clicking the highlighted template button opens the gallery; the font tip waits
+until that gallery closes, whether a template was selected or simply browsed.
+Font controls open by click/tap and keyboard, and the export tip waits until
+they close. Main and tailored CV exports can both finish the setup checklist.
+Tips allow clicks on their highlighted controls, support Escape, and reposition
+to avoid covering the button or running beyond the viewport.
+
+Run `EDITOR_TOUR_CHECK=1 node scripts/verify-new-cv-onboarding.mjs` against the
+isolated fixture dev server to verify template selection, browsing without a
+selection, tip dismissal, interactive fonts, and later tailoring guidance at
+1280px, 390px, and 320px (including Turkish).
+
 ## Ownership and authentication
 
 The backend creates a separate `guest_imports` record and a private signed upload

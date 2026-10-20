@@ -42,13 +42,26 @@ export const ONBOARDING_STEPS: OnboardingStepDefinition[] = [
   },
   {
     id: "export",
-    label: "Export your tailored CV",
+    label: "Export your CV",
     description: "Download the finished PDF or DOCX.",
     icon: Download
   }
 ];
 
 export const ONBOARDING_STEP_ORDER: OnboardingStepId[] = ONBOARDING_STEPS.map((step) => step.id);
+
+// Job details belong to the tailoring form. An editor tour remains useful even
+// when the user chooses to keep working on their main CV without tailoring it.
+export const MASTER_EDITOR_COACH_STEPS: readonly OnboardingStepId[] = ["customize", "template", "layout", "export"];
+export const TAILORED_EDITOR_COACH_STEPS: readonly OnboardingStepId[] = ["template", "layout", "export"];
+
+export function nextCoachMarkStep(
+  sequence: readonly OnboardingStepId[],
+  completed: (step: OnboardingStepId) => boolean,
+  dismissed: (step: OnboardingStepId) => boolean,
+): OnboardingStepId | null {
+  return sequence.find(step => !completed(step) && !dismissed(step)) ?? null;
+}
 
 export function isStepComplete(state: OnboardingState | null | undefined, stepId: OnboardingStepId): boolean {
   return Boolean(state?.steps?.[stepId]);

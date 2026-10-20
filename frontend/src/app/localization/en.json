@@ -1513,5 +1513,12 @@
   "Return to onboarding": "Return to onboarding",
   "Your account is ready. We're creating your new CV.": "Your account is ready. We're creating your new CV.",
   "Please start your new CV again.": "Please start your new CV again.",
-  "This CV setup belongs to another account. Please start again.": "This CV setup belongs to another account. Please start again."
+  "This CV setup belongs to another account. Please start again.": "This CV setup belongs to another account. Please start again.",
+  "CV editor guide": "CV editor guide",
+  "Customize your CV for a job when you’re ready. You can also choose a template and adjust fonts first.": "Customize your CV for a job when you’re ready. You can also choose a template and adjust fonts first.",
+  "Pick a template for your CV. You can switch designs any time without losing content.": "Pick a template for your CV. You can switch designs any time without losing content.",
+  "Open this button to adjust font size, spacing, and page density until the CV fits neatly.": "Open this button to adjust font size, spacing, and page density until the CV fits neatly.",
+  "Looks good? Export your CV as a PDF or DOCX when you’re ready to send it.": "Looks good? Export your CV as a PDF or DOCX when you’re ready to send it.",
+  "Get your CV ready": "Get your CV ready",
+  "You exported your first CV. Next up: cover letters and job tracking are waiting in the sidebar.": "You exported your first CV. Next up: cover letters and job tracking are waiting in the sidebar."
 }

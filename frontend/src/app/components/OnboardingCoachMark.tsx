@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trackOnboardingStepView } from "../integration/analytics";
 import type { OnboardingStepId } from "../integration/api-types";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { TutorialGuide } from "./TutorialGuide";
+import { nextCoachMarkStep } from "../onboarding/onboarding-steps";
 
 interface OnboardingCoachMarkProps {
   step: OnboardingStepId;
@@ -11,6 +12,8 @@ interface OnboardingCoachMarkProps {
   position?: "top" | "bottom" | "left" | "right";
   /** Extra page-level gating, e.g. suppress while a dialog is open. */
   enabled?: boolean;
+  /** A page's walkthrough can advance without requiring every task to be done. */
+  sequence?: readonly OnboardingStepId[];
 }
 
 const APPEAR_DELAY_MS = 600;
@@ -22,13 +25,26 @@ export function OnboardingCoachMark({
   targetSelector,
   message,
   position = "bottom",
-  enabled = true
+  enabled = true,
+  sequence,
 }: OnboardingCoachMarkProps) {
-  const { active, currentStep, isCoachMarkDismissed, dismissCoachMark } = useOnboarding();
+  const { active, currentStep, isStepComplete, isCoachMarkDismissed, dismissCoachMark } = useOnboarding();
   const [show, setShow] = useState(false);
   const viewTracked = useRef(false);
 
-  const shouldShow = active && currentStep === step && enabled && !isCoachMarkDismissed(step);
+  const coachStep = sequence ? nextCoachMarkStep(sequence, isStepComplete, isCoachMarkDismissed) : currentStep;
+  const shouldShow = active && coachStep === step && enabled && !isCoachMarkDismissed(step);
+  const close = useCallback(() => {
+    setShow(false);
+    dismissCoachMark(step);
+  }, [dismissCoachMark, step]);
+
+  useEffect(() => {
+    if (!show || !shouldShow) return;
+    const target = document.querySelector(targetSelector);
+    target?.addEventListener("click", close);
+    return () => target?.removeEventListener("click", close);
+  }, [show, shouldShow, targetSelector, close]);
 
   // Wait for the page layout to settle, then poll briefly for the target in
   // case it renders after data loads.
@@ -82,11 +98,8 @@ export function OnboardingCoachMark({
 
   return (
     <TutorialGuide
-      show={show}
-      onClose={() => {
-        setShow(false);
-        dismissCoachMark(step);
-      }}
+      show={show && shouldShow}
+      onClose={close}
       targetElement={targetSelector}
       message={message}
       position={position}

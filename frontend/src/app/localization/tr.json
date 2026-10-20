@@ -1447,5 +1447,12 @@
   "Return to onboarding": "Başlangıç adımlarına dön",
   "Your account is ready. We're creating your new CV.": "Hesabınız hazır. Yeni özgeçmişinizi oluşturuyoruz.",
   "Please start your new CV again.": "Lütfen yeni özgeçmişinizi oluşturmaya yeniden başlayın.",
-  "This CV setup belongs to another account. Please start again.": "Bu özgeçmiş kurulumu başka bir hesaba ait. Lütfen yeniden başlayın."
+  "This CV setup belongs to another account. Please start again.": "Bu özgeçmiş kurulumu başka bir hesaba ait. Lütfen yeniden başlayın.",
+  "CV editor guide": "Özgeçmiş editörü rehberi",
+  "Customize your CV for a job when you’re ready. You can also choose a template and adjust fonts first.": "Hazır olduğunuzda özgeçmişinizi bir işe göre özelleştirin. Önce şablon seçip yazı boyutunu da ayarlayabilirsiniz.",
+  "Pick a template for your CV. You can switch designs any time without losing content.": "Özgeçmişiniz için bir şablon seçin. İçeriğinizi kaybetmeden tasarımı istediğiniz zaman değiştirebilirsiniz.",
+  "Open this button to adjust font size, spacing, and page density until the CV fits neatly.": "Yazı boyutunu, aralıkları ve sayfa yoğunluğunu ayarlamak için bu düğmeyi açın.",
+  "Looks good? Export your CV as a PDF or DOCX when you’re ready to send it.": "Her şey hazır mı? Özgeçmişinizi göndermeye hazır olduğunuzda PDF veya DOCX olarak dışa aktarın.",
+  "Get your CV ready": "Özgeçmişinizi hazırlayın",
+  "You exported your first CV. Next up: cover letters and job tracking are waiting in the sidebar.": "İlk özgeçmişinizi dışa aktardınız. Sırada: yan menüde ön yazılar ve iş takibi sizi bekliyor."
 }

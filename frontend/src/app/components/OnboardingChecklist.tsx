@@ -132,7 +132,7 @@ export function OnboardingChecklist() {
   if (justCompleted) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-40 w-80 rounded-xl p-5 shadow-xl"
+        className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-xl p-5 shadow-xl"
         style={{
           background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
           color: "white",
@@ -149,7 +149,7 @@ export function OnboardingChecklist() {
         <h3 className="font-medium mb-1" style={{ fontSize: "16px" }}>
           {t("You're all set 🎉")}</h3>
         <p style={{ fontSize: "13px", lineHeight: "1.6", color: "rgba(255,255,255,0.85)" }}>
-          {t("You exported your first tailored CV. Next up: cover letters and job tracking are waiting in the sidebar.")}</p>
+          {t("You exported your first CV. Next up: cover letters and job tracking are waiting in the sidebar.")}</p>
       </div>
     );
   }
@@ -177,7 +177,7 @@ export function OnboardingChecklist() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-40 w-80 rounded-xl shadow-xl overflow-hidden"
+      className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-xl shadow-xl overflow-hidden"
       style={{
         background: "var(--color-background-primary)",
         border: "1px solid var(--color-border-tertiary)"
@@ -188,7 +188,7 @@ export function OnboardingChecklist() {
         style={{ background: "var(--color-teal-600)", color: "white" }}
       >
         <div>
-          <h3 style={{ fontSize: "14px", fontWeight: 500 }}>{t("Get your first tailored CV")}</h3>
+          <h3 style={{ fontSize: "14px", fontWeight: 500 }}>{t("Get your CV ready")}</h3>
           <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)" }}>
             {completedCount} {"of"}{TOTAL_STEPS} {" "}{t("steps done")}</p>
         </div>

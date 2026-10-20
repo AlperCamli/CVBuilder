@@ -1,255 +1,107 @@
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { GUIDE_GAP, positionGuide, type GuideSide } from "../onboarding/tutorial-position";
 
 interface TutorialGuideProps {
   show: boolean;
   onClose: () => void;
-  targetElement?: string; // CSS selector for the target element
+  targetElement?: string;
   message: string;
-  position?: "top" | "bottom" | "left" | "right";
+  position?: GuideSide;
 }
 
-// Space reserved between the target edge and the card; the arrow lives here.
-const ARROW_ZONE = 44;
-const ARROW_SIZE = 22;
-const EDGE_MARGIN = 12;
+const ARROW_SIZE = 18;
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(value, Math.max(min, max)));
-
-export function TutorialGuide({
-  show,
-  onClose,
-  targetElement,
-  message,
-  position = "right",
-}: TutorialGuideProps) {
+export function TutorialGuide({ show, onClose, targetElement, message, position = "right" }: TutorialGuideProps) {
   useTranslation();
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [cardPos, setCardPos] = useState<ReturnType<typeof positionGuide> | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const messageId = useId();
 
   useEffect(() => {
     if (!show || !targetElement) {
-      setVisible(false);
       setTargetRect(null);
       setCardPos(null);
       return;
     }
-
-    const updateTarget = () => {
-      const element = document.querySelector(targetElement);
-      setTargetRect(element ? element.getBoundingClientRect() : null);
+    const element = document.querySelector(targetElement);
+    if (!element) return;
+    const update = () => setTargetRect(element.getBoundingClientRect());
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
     };
-
-    updateTarget();
-    window.addEventListener("resize", updateTarget);
-    window.addEventListener("scroll", updateTarget, true);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("keydown", escape, true);
     return () => {
-      window.removeEventListener("resize", updateTarget);
-      window.removeEventListener("scroll", updateTarget, true);
-      setVisible(false);
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("keydown", escape, true);
     };
-  }, [show, targetElement]);
+  }, [show, targetElement, onClose]);
 
-  // The card is rendered invisibly first, then measured, so it can be placed
-  // fully outside the target and clamped to the viewport. The arrow is
-  // positioned separately, aligned to the target's center, so viewport
-  // clamping of the card never drags the arrow off the button.
   useLayoutEffect(() => {
-    if (!targetRect || !cardRef.current) {
-      return;
-    }
-
-    const cardWidth = cardRef.current.offsetWidth;
-    const cardHeight = cardRef.current.offsetHeight;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const targetCenterX = targetRect.left + targetRect.width / 2;
-    const targetCenterY = targetRect.top + targetRect.height / 2;
-
-    let top = 0;
-    let left = 0;
-
-    switch (position) {
-      case "right":
-        left = targetRect.right + ARROW_ZONE;
-        top = targetCenterY - cardHeight / 2;
-        break;
-      case "left":
-        left = targetRect.left - ARROW_ZONE - cardWidth;
-        top = targetCenterY - cardHeight / 2;
-        break;
-      case "bottom":
-        top = targetRect.bottom + ARROW_ZONE;
-        left = targetCenterX - cardWidth / 2;
-        break;
-      case "top":
-        top = targetRect.top - ARROW_ZONE - cardHeight;
-        left = targetCenterX - cardWidth / 2;
-        break;
-    }
-
-    setCardPos({
-      top: clamp(top, EDGE_MARGIN, viewportHeight - cardHeight - EDGE_MARGIN),
-      left: clamp(left, EDGE_MARGIN, viewportWidth - cardWidth - EDGE_MARGIN)
-    });
-    requestAnimationFrame(() => setVisible(true));
-  }, [targetRect, position, message]);
-
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 150);
-  };
+    if (!show || !targetRect || !cardRef.current) return;
+    setCardPos(positionGuide(targetRect, cardRef.current.offsetWidth, cardRef.current.offsetHeight, innerWidth, innerHeight, position));
+  }, [show, targetRect, position, message]);
 
   if (!show || !targetRect) return null;
-
-  const targetCenterX = targetRect.left + targetRect.width / 2;
-  const targetCenterY = targetRect.top + targetRect.height / 2;
-  const arrowGapOffset = (ARROW_ZONE - ARROW_SIZE) / 2;
-
-  // Arrow points AT the target from the space between target and card.
-  const arrow =
-    position === "right"
-      ? {
-          Icon: ArrowLeft,
-          top: targetCenterY - ARROW_SIZE / 2,
-          left: targetRect.right + arrowGapOffset,
-          bounceClass: "tutorial-arrow-bounce-left"
-        }
-      : position === "left"
-        ? {
-            Icon: ArrowRight,
-            top: targetCenterY - ARROW_SIZE / 2,
-            left: targetRect.left - ARROW_ZONE + arrowGapOffset,
-            bounceClass: "tutorial-arrow-bounce-right"
-          }
-        : position === "bottom"
-          ? {
-              Icon: ArrowUp,
-              top: targetRect.bottom + arrowGapOffset,
-              left: targetCenterX - ARROW_SIZE / 2,
-              bounceClass: "tutorial-arrow-bounce-up"
-            }
-          : {
-              Icon: ArrowDown,
-              top: targetRect.top - ARROW_ZONE + arrowGapOffset,
-              left: targetCenterX - ARROW_SIZE / 2,
-              bounceClass: "tutorial-arrow-bounce-down"
-            };
-
+  const side = cardPos?.side ?? position;
+  const centerX = targetRect.left + targetRect.width / 2;
+  const centerY = targetRect.top + targetRect.height / 2;
+  const arrowOffset = (GUIDE_GAP - ARROW_SIZE) / 2;
+  const arrow = side === "right"
+    ? { Icon: ArrowLeft, top: centerY - ARROW_SIZE / 2, left: targetRect.right + arrowOffset }
+    : side === "left"
+      ? { Icon: ArrowRight, top: centerY - ARROW_SIZE / 2, left: targetRect.left - GUIDE_GAP + arrowOffset }
+      : side === "bottom"
+        ? { Icon: ArrowUp, top: targetRect.bottom + arrowOffset, left: centerX - ARROW_SIZE / 2 }
+        : { Icon: ArrowDown, top: targetRect.top - GUIDE_GAP + arrowOffset, left: centerX - ARROW_SIZE / 2 };
   const ArrowIcon = arrow.Icon;
+  const holeTop = Math.max(0, Math.min(innerHeight, targetRect.top - 6));
+  const holeBottom = Math.max(holeTop, Math.min(innerHeight, targetRect.bottom + 6));
+  const holeLeft = Math.max(0, Math.min(innerWidth, targetRect.left - 6));
+  const holeRight = Math.max(holeLeft, Math.min(innerWidth, targetRect.right + 6));
 
-  return (
-    <>
-      {/* Click-away backdrop; dimming comes from the spotlight shadow. */}
-      <div className="fixed inset-0 z-50 tutorial-backdrop" onClick={handleClose} />
-
-      {/* Spotlight ring around target */}
-      <div
-        className="fixed z-50 pointer-events-none tutorial-spotlight"
-        style={{
-          top: targetRect.top - 6,
-          left: targetRect.left - 6,
-          width: targetRect.width + 12,
-          height: targetRect.height + 12,
-          borderRadius: "12px",
-          border: "2px solid var(--color-teal-400)",
-          opacity: visible ? 1 : 0,
-          transition: "opacity 0.3s ease"
-        }}
-      />
-
-      {/* Arrow, aligned to the target's center */}
-      <div
-        className={`fixed z-50 pointer-events-none ${arrow.bounceClass}`}
-        style={{
-          top: arrow.top,
-          left: arrow.left,
-          opacity: visible ? 1 : 0,
-          transition: "opacity 0.25s ease"
-        }}
-      >
-        <ArrowIcon size={ARROW_SIZE} style={{ color: "var(--color-teal-600)" }} />
-      </div>
-
-      {/* Card */}
-      <div
-        ref={cardRef}
-        className="fixed z-50 p-4 rounded-xl max-w-xs"
-        style={{
-          top: cardPos?.top ?? -9999,
-          left: cardPos?.left ?? -9999,
-          background: "var(--color-background-primary)",
-          border: "1px solid var(--color-border-secondary)",
-          boxShadow: "0 20px 40px -12px rgba(0, 0, 0, 0.25)",
-          opacity: visible ? 1 : 0,
-          transform: `scale(${visible ? 1 : 0.95})`,
-          transition: "opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)"
-        }}
-      >
-        <button
-          onClick={handleClose}
-          aria-label={t("Dismiss guide")}
-          className="absolute top-2.5 right-2.5 p-1.5 rounded-lg transition-colors"
-          style={{ color: "var(--color-text-secondary)" }}
-          onMouseEnter={(event) => {
-            event.currentTarget.style.background = "var(--color-background-secondary)";
-          }}
-          onMouseLeave={(event) => {
-            event.currentTarget.style.background = "transparent";
-          }}
-        >
-          <X size={14} />
-        </button>
-        <p
-          style={{
-            fontSize: "13px",
-            lineHeight: "1.6",
-            color: "var(--color-text-primary)",
-            paddingRight: "24px"
-          }}
-        >
-          {message}
-        </p>
-      </div>
-
-      <style>{`
-        @keyframes tutorialArrowBounceLeft {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(-6px); }
-        }
-        @keyframes tutorialArrowBounceRight {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(6px); }
-        }
-        @keyframes tutorialArrowBounceUp {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-        @keyframes tutorialArrowBounceDown {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(6px); }
-        }
-        .tutorial-arrow-bounce-left { animation: tutorialArrowBounceLeft 1.2s ease-in-out infinite; }
-        .tutorial-arrow-bounce-right { animation: tutorialArrowBounceRight 1.2s ease-in-out infinite; }
-        .tutorial-arrow-bounce-up { animation: tutorialArrowBounceUp 1.2s ease-in-out infinite; }
-        .tutorial-arrow-bounce-down { animation: tutorialArrowBounceDown 1.2s ease-in-out infinite; }
-        @keyframes spotlightPulse {
-          0%, 100% {
-            box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.4), 0 0 16px rgba(20, 184, 166, 0.25);
-          }
-          50% {
-            box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.4), 0 0 26px rgba(20, 184, 166, 0.45);
-          }
-        }
-        .tutorial-spotlight {
-          animation: spotlightPulse 2s ease-in-out infinite;
-        }
-      `}</style>
-    </>
-  );
+  return <>
+    {/* Four click-away regions leave the highlighted button interactive. */}
+    <div className="fixed inset-0 z-50 pointer-events-none tutorial-backdrop" aria-hidden="true">
+      <div className="absolute pointer-events-auto" style={{ top: 0, left: 0, right: 0, height: holeTop }} onClick={onClose} />
+      <div className="absolute pointer-events-auto" style={{ top: holeBottom, left: 0, right: 0, bottom: 0 }} onClick={onClose} />
+      <div className="absolute pointer-events-auto" style={{ top: holeTop, left: 0, width: holeLeft, height: holeBottom - holeTop }} onClick={onClose} />
+      <div className="absolute pointer-events-auto" style={{ top: holeTop, left: holeRight, right: 0, height: holeBottom - holeTop }} onClick={onClose} />
+    </div>
+    <div className="fixed z-50 pointer-events-none tutorial-spotlight" style={{
+      top: targetRect.top - 6, left: targetRect.left - 6, width: targetRect.width + 12, height: targetRect.height + 12,
+      borderRadius: 12, border: "2px solid var(--color-teal-400)",
+      boxShadow: "0 0 0 4000px rgba(15,23,42,0.36), 0 0 16px rgba(20,184,166,0.25)",
+    }} />
+    <div className="fixed z-50 pointer-events-none" style={{ top: arrow.top, left: arrow.left, color: "var(--color-teal-600)", visibility: cardPos ? "visible" : "hidden" }}>
+      <ArrowIcon size={ARROW_SIZE} />
+    </div>
+    <div ref={cardRef} role="dialog" aria-label={t("CV editor guide")} aria-describedby={messageId} data-onboarding-guide={targetElement}
+      className="fixed z-50 rounded-xl p-4" style={{
+        top: cardPos?.top ?? -9999, left: cardPos?.left ?? -9999, width: "min(320px, calc(100vw - 24px))",
+        maxHeight: "calc(100dvh - 24px)", overflowY: "auto", visibility: cardPos ? "visible" : "hidden",
+        background: "var(--color-background-primary)", border: "1px solid var(--color-border-secondary)",
+        boxShadow: "0 20px 40px -12px rgba(0,0,0,0.25)",
+      }}>
+      <button type="button" onClick={onClose} aria-label={t("Dismiss guide")} className="absolute top-1 right-1 flex items-center justify-center rounded-lg hover:bg-gray-100"
+        style={{ width: 44, height: 44, color: "var(--color-text-secondary)" }}>
+        <X size={18} />
+      </button>
+      <p id={messageId} style={{ fontSize: 13, lineHeight: 1.6, color: "var(--color-text-primary)", paddingRight: 32 }}>{message}</p>
+    </div>
+  </>;
 }

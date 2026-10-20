@@ -35,6 +35,7 @@ import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
 import { resolveScaleFromMetadata } from "../integration/cv-display-settings";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
+import { MASTER_EDITOR_COACH_STEPS, TAILORED_EDITOR_COACH_STEPS } from "../onboarding/onboarding-steps";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -47,10 +48,10 @@ import {
   DialogDescription
 } from "../components/ui/dialog";
 import {
-  HoverCard,
-  HoverCardTrigger,
-  HoverCardContent
-} from "../components/ui/hover-card";
+  Popover,
+  PopoverTrigger,
+  PopoverContent
+} from "../components/ui/popover";
 import { Button } from "../components/ui/button";
 import {
   HeaderSection,
@@ -459,7 +460,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
   const { showUpgradePrompt } = useUpgradePrompt();
-  const { completeStep } = useOnboarding();
+  const { completeStep, dismissCoachMark } = useOnboarding();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
   const isUploadedFlow = Boolean(location.state?.isUploaded);
@@ -536,6 +537,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   } | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
+  const [showLayoutControls, setShowLayoutControls] = useState(false);
   const [templatePreviewsByTemplateId, setTemplatePreviewsByTemplateId] = useState<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
   const [templatePreviewLoadingIds, setTemplatePreviewLoadingIds] = useState<string[]>([]);
   const templatePreviewsRef = useRef<Record<string, RenderingPreviewResponse["presentation"] | null>>({});
@@ -893,6 +895,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   useEffect(() => {
     void loadCv();
   }, [forcedModuleType, forcedTitle, id, isUploadedFlow, routeCvKind]);
+
+  useEffect(() => {
+    if (!loading && cvKind === "master" && cvId) completeStep("create_cv");
+  }, [loading, cvKind, cvId, completeStep]);
 
   useEffect(() => {
     if (!cvId) {
@@ -1412,11 +1418,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         page_count: pageCount
       });
 
-      // Exporting the tailored CV is the final onboarding step; master
-      // exports keep the checklist pointed at "Customize for a job".
-      if (cvKind === "tailored") {
-        completeStep("export");
-      }
+      // Exporting either version finishes the user's first CV setup.
+      completeStep("export");
 
       const history =
         cvKind === "tailored"
@@ -2430,8 +2433,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           request so a late AI response cannot replace newer manual edits. */}
       <div className="h-screen flex flex-col" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
         <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto">
               <button onClick={() => navigate("/app")} style={{ color: "var(--color-text-secondary)" }}>
                 <ChevronLeft size={20} />
               </button>
@@ -2458,7 +2461,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex w-full items-center gap-2 flex-wrap justify-start sm:w-auto sm:justify-end">
               {error && (
                 <span style={{ fontSize: "12px", color: "var(--color-red-700)" }}>{t(error)}</span>
               )}
@@ -2476,7 +2479,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               <button
                 onClick={() => setShowTemplateGallery(true)}
                 data-onboarding="template-btn"
-                className="px-3 py-1.5 rounded-lg border"
+                className="min-h-10 max-w-full px-3 py-2 rounded-lg border"
                 style={{
                   fontSize: "12px",
                   borderColor: "var(--color-border-secondary)",
@@ -2488,12 +2491,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 {t("Choose template:")}{" "}{selectedTemplateName}
               </button>
 
-              <HoverCard openDelay={120} closeDelay={150}>
-                <HoverCardTrigger asChild>
+              <Popover open={showLayoutControls} onOpenChange={setShowLayoutControls}>
+                <PopoverTrigger asChild>
                   <button
                     type="button"
                     data-onboarding="layout-btn"
-                    className="px-3 py-1.5 rounded-lg border flex items-center gap-2"
+                    className="min-h-10 px-3 py-2 rounded-lg border flex items-center gap-2"
                     style={{
                       borderColor: "var(--color-border-secondary)",
                       background: "var(--color-background-primary)",
@@ -2509,8 +2512,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       {pageCount} {pageCount === 1 ? "page" : "pages"}
                     </span>
                   </button>
-                </HoverCardTrigger>
-                <HoverCardContent
+                </PopoverTrigger>
+                <PopoverContent
                   align="end"
                   sideOffset={10}
                   className="w-72"
@@ -2607,8 +2610,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         {t("Reset")}</button>
                     </div>
                   </div>
-                </HoverCardContent>
-              </HoverCard>
+                </PopoverContent>
+              </Popover>
 
               {selectedTemplateDetail && (
                 <span
@@ -2628,7 +2631,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 <button
                   onClick={() => navigate(`/app/tailor/${cvId}`)}
                   data-onboarding="customize-btn"
-                  className="px-4 py-1.5 rounded-lg font-medium flex items-center gap-2 border"
+                  className="min-h-10 px-4 py-2 rounded-lg font-medium flex items-center gap-2 border"
                   style={{
                     fontSize: "13px",
                     background: "var(--color-teal-600)",
@@ -2789,9 +2792,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         </div>
 
         {(() => {
+          const coachSequence = cvKind === "master" ? MASTER_EDITOR_COACH_STEPS : TAILORED_EDITOR_COACH_STEPS;
           const coachMarksEnabled =
             !loading &&
             !showTemplateGallery &&
+            !showLayoutControls &&
             !showExportDialog &&
             !showAIPopup &&
             !showAddContentModal &&
@@ -2804,42 +2809,47 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               {cvKind === "master" && (
                 <OnboardingCoachMark
                   step="customize"
+                  sequence={coachSequence}
                   targetSelector='[data-onboarding="customize-btn"]'
-                  message="Your CV is saved. Now customize it for a real job — paste the posting and we tailor the content to match."
+                  message={t("Customize your CV for a job when you’re ready. You can also choose a template and adjust fonts first.")}
                   position="bottom"
                   enabled={coachMarksEnabled && Boolean(cvId)}
                 />
               )}
               <OnboardingCoachMark
                 step="template"
+                sequence={coachSequence}
                 targetSelector='[data-onboarding="template-btn"]'
-                message="Pick a template for your CV. You can switch designs any time without losing content."
+                message={t("Pick a template for your CV. You can switch designs any time without losing content.")}
                 position="bottom"
                 enabled={coachMarksEnabled}
               />
               <OnboardingCoachMark
                 step="layout"
+                sequence={coachSequence}
                 targetSelector='[data-onboarding="layout-btn"]'
-                message="Hover here to adjust font size, spacing, and page density until the CV fits neatly."
+                message={t("Open this button to adjust font size, spacing, and page density until the CV fits neatly.")}
                 position="bottom"
                 enabled={coachMarksEnabled}
               />
-              {cvKind === "tailored" && (
-                <OnboardingCoachMark
-                  step="export"
-                  targetSelector='[data-onboarding="export-btn"]'
-                  message="Looks good? Export your tailored CV as a PDF or DOCX — that's the file you send with the application."
-                  position="bottom"
-                  enabled={coachMarksEnabled}
-                />
-              )}
+              <OnboardingCoachMark
+                step="export"
+                sequence={coachSequence}
+                targetSelector='[data-onboarding="export-btn"]'
+                message={t("Looks good? Export your CV as a PDF or DOCX when you’re ready to send it.")}
+                position="bottom"
+                enabled={coachMarksEnabled}
+              />
             </>
           );
         })()}
 
         <TemplateGalleryDialog
           open={showTemplateGallery}
-          onOpenChange={setShowTemplateGallery}
+          onOpenChange={(open) => {
+            setShowTemplateGallery(open);
+            if (!open) dismissCoachMark("template");
+          }}
           templates={templates}
           selectedTemplateId={templateId}
           previewsByTemplateId={templatePreviewsByTemplateId}
@@ -2847,6 +2857,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           onVisibleTemplateIdsChange={ensureTemplatePreviews}
           onSelectTemplate={(nextTemplateId) => {
             void assignTemplate(nextTemplateId);
+            dismissCoachMark("template");
             setShowTemplateGallery(false);
           }}
           fontScale={fontScale}

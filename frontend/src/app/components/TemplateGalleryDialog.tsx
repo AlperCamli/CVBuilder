@@ -155,8 +155,8 @@ export function TemplateGalleryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-hidden [&>button:last-child]:size-11 [&>button:last-child]:flex [&>button:last-child]:items-center [&>button:last-child]:justify-center">
+        <DialogHeader className="pr-10">
           <DialogTitle style={{ fontSize: "22px", color: "var(--color-text-primary)" }}>
             {t("Choose a Template")}</DialogTitle>
           <DialogDescription style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
@@ -251,7 +251,7 @@ export function TemplateGalleryDialog({
                     </div>
                     <button
                       onClick={() => onSelectTemplate(card.templateId)}
-                      className="px-3 py-1.5 rounded-lg border"
+                      className="min-h-10 px-4 py-2 rounded-lg border"
                       style={{
                         fontSize: "12px",
                         borderColor: isSelected ? "var(--color-teal-600)" : "var(--color-border-secondary)",
@@ -270,7 +270,7 @@ export function TemplateGalleryDialog({
                 <button
                   type="button"
                   onClick={loadNextBatch}
-                  className="px-3 py-1.5 rounded-lg border"
+                  className="min-h-10 px-4 py-2 rounded-lg border"
                   style={{
                     fontSize: "12px",
                     borderColor: "var(--color-border-secondary)",

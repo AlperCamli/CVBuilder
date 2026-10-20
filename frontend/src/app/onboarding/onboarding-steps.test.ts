@@ -10,11 +10,36 @@ import {
   ONBOARDING_STEP_ORDER,
   staticStepRoute
 } from "./onboarding-steps";
+import { MASTER_EDITOR_COACH_STEPS, TAILORED_EDITOR_COACH_STEPS, nextCoachMarkStep } from "./onboarding-steps";
 
 const NOW = "2026-07-08T10:00:00.000Z";
 const LATER = "2026-07-08T11:00:00.000Z";
 
 describe("onboarding steps", () => {
+  it("advances the main editor tour without completing tailoring or job details", () => {
+    const state = { steps: { create_cv: NOW } };
+    const dismissed = new Set<string>();
+    const next = () => nextCoachMarkStep(MASTER_EDITOR_COACH_STEPS, step => isStepComplete(state, step), step => dismissed.has(step));
+    expect(next()).toBe("customize");
+    dismissed.add("customize");
+    expect(next()).toBe("template");
+    // Dismissal, opening the gallery or browsing without selecting all finish
+    // a tip without asserting that a template has actually been applied.
+    dismissed.add("template");
+    expect(next()).toBe("layout");
+    expect(isStepComplete(state, "customize")).toBe(false);
+    expect(isStepComplete(state, "job_details")).toBe(false);
+    expect(isStepComplete(state, "template")).toBe(false);
+    dismissed.add("layout");
+    expect(next()).toBe("export");
+    dismissed.add("export");
+    expect(next()).toBeNull();
+  });
+
+  it("skips completed editor tasks while keeping job details in the tailoring flow", () => {
+    expect(nextCoachMarkStep(TAILORED_EDITOR_COACH_STEPS, step => step === "template", () => false)).toBe("layout");
+    expect(deriveCurrentStep({ steps: { create_cv: NOW, customize: NOW } })).toBe("job_details");
+  });
   it("orders the six steps from creation to export", () => {
     expect(ONBOARDING_STEP_ORDER).toEqual([
       "create_cv",
