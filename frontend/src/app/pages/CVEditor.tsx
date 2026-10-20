@@ -33,7 +33,12 @@ import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble
 import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
-import { resolveScaleFromMetadata } from "../integration/cv-display-settings";
+import {
+  resolveScaleFromMetadata, nextCompactScales, resolveSourcePageCount,
+  FONT_SCALE_MIN, FONT_SCALE_MAX,
+  SPACING_SCALE_MIN, SPACING_SCALE_MAX,
+  LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX
+} from "../integration/cv-display-settings";
 import { TemplateGalleryDialog } from "../components/TemplateGalleryDialog";
 import { MASTER_EDITOR_COACH_STEPS, TAILORED_EDITOR_COACH_STEPS } from "../onboarding/onboarding-steps";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
@@ -129,12 +134,6 @@ const formatDateTime = (value: string | null | undefined): string => {
   });
 };
 
-const FONT_SCALE_MIN = 0.7;
-const FONT_SCALE_MAX = 1.15;
-const SPACING_SCALE_MIN = 0.5;
-const SPACING_SCALE_MAX = 1.4;
-const LAYOUT_SCALE_MIN = 0.5;
-const LAYOUT_SCALE_MAX = 1.3;
 // Fine slider increment so users can dial in a compact layout precisely.
 const SCALE_STEP = 0.01;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
@@ -161,13 +160,15 @@ const withDisplayMetadata = (
   content: CvContent,
   fontScale: number,
   spacingScale: number,
-  layoutScale: number
+  layoutScale: number,
+  sourcePageCount: number | null
 ): CvContent => {
   const metadata = {
     ...(content.metadata ?? {}),
     font_scale: clampFontScale(fontScale),
     spacing_scale: clampSpacingScale(spacingScale),
-    layout_scale: clampLayoutScale(layoutScale)
+    layout_scale: clampLayoutScale(layoutScale),
+    ...(sourcePageCount !== null ? { source_page_count: sourcePageCount } : {})
   };
 
   return {
@@ -477,9 +478,12 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [spacingScale, setSpacingScale] = useState(1);
   const [layoutScale, setLayoutScale] = useState(1);
   const [pageCount, setPageCount] = useState(1);
+  const [sourcePageCount, setSourcePageCount] = useState<number | null>(null);
+  const autoFitTargetPagesRef = useRef(1);
+  const autoFitFontFirstRef = useRef(false);
   const [autoFitting, setAutoFitting] = useState(false);
   const [autoFitPreparing, setAutoFitPreparing] = useState(false);
-  const autoFitAttemptsRef = useRef(0);
+  const manualAutoFitRef = useRef(false);
   const autoFitInitializedRef = useRef(false);
   const autoFitChangedRef = useRef(false);
   const [sections, setSections] = useState<EditorSection[]>([]);
@@ -626,6 +630,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     setFontScale(resolveFontScaleFromContent(master.current_content));
     setSpacingScale(resolveSpacingScaleFromContent(master.current_content));
     setLayoutScale(resolveLayoutScaleFromContent(master.current_content));
+    setSourcePageCount(resolveSourcePageCount(master.current_content));
     setSections(cvContentToEditorSections(master.current_content, nextModuleType));
     setLastSavedAt(master.updated_at);
     void loadTemplates(nextModuleType);
@@ -643,6 +648,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     setFontScale(resolveFontScaleFromContent(tailored.current_content));
     setSpacingScale(resolveSpacingScaleFromContent(tailored.current_content));
     setLayoutScale(resolveLayoutScaleFromContent(tailored.current_content));
+    setSourcePageCount(resolveSourcePageCount(tailored.current_content));
     setSections(cvContentToEditorSections(tailored.current_content, nextModuleType));
     setLastSavedAt(tailored.updated_at);
     setTailoredJobData(
@@ -710,7 +716,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
-      layoutScale
+      layoutScale,
+      sourcePageCount
     );
 
     let didReplace = false;
@@ -763,9 +770,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
-      layoutScale
+      layoutScale,
+      sourcePageCount
     );
-  }, [fontScale, language, layoutScale, moduleType, sections, spacingScale]);
+  }, [fontScale, language, layoutScale, moduleType, sections, sourcePageCount, spacingScale]);
 
   const restoreDraftIfAvailable = (nextCvKind: "master" | "tailored", nextCvId: string): boolean => {
     const draft = readDraft(nextCvKind, nextCvId);
@@ -1058,7 +1066,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         editorSectionsToCvContent(sections, language, undefined, moduleType),
         fontScale,
         spacingScale,
-        layoutScale
+        layoutScale,
+        sourcePageCount
       );
 
       if (targetCvKind === "master") {
@@ -1126,8 +1135,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   }, []);
 
   useEffect(() => {
+    autoFitTargetPagesRef.current = 1;
+    autoFitFontFirstRef.current = false;
     autoFitInitializedRef.current = false;
-    autoFitAttemptsRef.current = 0;
+    manualAutoFitRef.current = false;
     autoFitChangedRef.current = false;
     setAutoFitting(false);
     setAutoFitPreparing(false);
@@ -1146,18 +1157,21 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       return;
     }
 
-    const sessionKey = `cv-editor:auto-fit:${cvKind}:${cvId}`;
+    const sessionKey = `cv-editor:auto-fit:v2:${cvKind}:${cvId}:${sourcePageCount ?? "unknown"}`;
     if (typeof window !== "undefined" && window.sessionStorage.getItem(sessionKey) === "done") {
       autoFitInitializedRef.current = true;
       return;
     }
 
     autoFitInitializedRef.current = true;
-    autoFitAttemptsRef.current = 0;
+    const preserveUploadLength = cvKind === "master" && (isUploadedFlow || isAiImprovedFlow) && sourcePageCount !== null;
+    autoFitTargetPagesRef.current = preserveUploadLength ? sourcePageCount : 1;
+    autoFitFontFirstRef.current = preserveUploadLength;
+    manualAutoFitRef.current = false;
     autoFitChangedRef.current = false;
     setAutoFitPreparing(true);
     setAutoFitting(true);
-  }, [cvId, cvKind, isAiImprovedFlow, isTailoredFlow, isUploadedFlow, loading, renderingPreview]);
+  }, [cvId, cvKind, isAiImprovedFlow, isTailoredFlow, isUploadedFlow, loading, renderingPreview, sourcePageCount]);
 
   useEffect(() => {
     if (!autoFitting) {
@@ -1172,38 +1186,36 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         setRestoredDraftAt(null);
       }
       if (typeof window !== "undefined" && cvId) {
-        window.sessionStorage.setItem(`cv-editor:auto-fit:${cvKind}:${cvId}`, "done");
+        window.sessionStorage.setItem(`cv-editor:auto-fit:v2:${cvKind}:${cvId}:${sourcePageCount ?? "unknown"}`, "done");
+      }
+      if (manualAutoFitRef.current) {
+        manualAutoFitRef.current = false;
+        if (pageCount <= 1) toast.success(t("Fits on one page"));
+        else toast.info(t("The CV still needs more than one page at the smallest settings. Shorten the content to fit one page."));
+      } else if (autoFitFontFirstRef.current && pageCount > autoFitTargetPagesRef.current) {
+        toast.info(t("The CV is still longer than the original upload at the smallest settings. Shorten the content or adjust the layout."));
       }
     };
 
-    if (pageCount <= 1) {
-      finish();
-      return;
-    }
-
-    if (autoFitAttemptsRef.current >= 16) {
-      finish();
-      return;
-    }
-
+    // Allow the preview to measure the latest scale before deciding to stop.
     const timeoutId = window.setTimeout(() => {
-      autoFitAttemptsRef.current += 1;
-      if (spacingScale > SPACING_SCALE_MIN + 0.001) {
-        autoFitChangedRef.current = true;
-        setSpacingScale((prev) => Math.max(SPACING_SCALE_MIN, prev - 0.05));
-      } else if (layoutScale > LAYOUT_SCALE_MIN + 0.001) {
-        autoFitChangedRef.current = true;
-        setLayoutScale((prev) => Math.max(LAYOUT_SCALE_MIN, prev - 0.05));
-      } else if (fontScale > FONT_SCALE_MIN + 0.001) {
-        autoFitChangedRef.current = true;
-        setFontScale((prev) => Math.max(FONT_SCALE_MIN, prev - 0.02));
-      } else {
+      if (pageCount <= autoFitTargetPagesRef.current) {
         finish();
+        return;
       }
-    }, 250);
+      const next = nextCompactScales({ fontScale, spacingScale, layoutScale }, autoFitFontFirstRef.current);
+      if (!next) {
+        finish();
+        return;
+      }
+      autoFitChangedRef.current = true;
+      setFontScale(next.fontScale);
+      setSpacingScale(next.spacingScale);
+      setLayoutScale(next.layoutScale);
+    }, 150);
 
     return () => window.clearTimeout(timeoutId);
-  }, [autoFitting, cvId, cvKind, fontScale, layoutScale, pageCount, spacingScale]);
+  }, [autoFitting, cvId, cvKind, fontScale, layoutScale, pageCount, sourcePageCount, spacingScale]);
 
   useEffect(() => {
     if (!cvId || !dirty || loading || saving || autoSaving || autoFitting || aiLoading) {
@@ -1937,7 +1949,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       editorSectionsToCvContent(sections, language, undefined, moduleType),
       fontScale,
       spacingScale,
-      layoutScale
+      layoutScale,
+      sourcePageCount
     );
     const nextSections = currentContent.sections.map((section) => {
       const nextBlocks = section.blocks.map((block) => {
@@ -2534,6 +2547,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       </div>
                       <input
                         type="range"
+                        disabled={autoFitting}
+                        aria-label={t("Font size")}
                         min={FONT_SCALE_MIN}
                         max={FONT_SCALE_MAX}
                         step={SCALE_STEP}
@@ -2557,6 +2572,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       </div>
                       <input
                         type="range"
+                        disabled={autoFitting}
+                        aria-label={t("Spacing")}
                         min={SPACING_SCALE_MIN}
                         max={SPACING_SCALE_MAX}
                         step={SCALE_STEP}
@@ -2582,6 +2599,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       </div>
                       <input
                         type="range"
+                        disabled={autoFitting}
+                        aria-label={t("Layout")}
                         min={LAYOUT_SCALE_MIN}
                         max={LAYOUT_SCALE_MAX}
                         step={SCALE_STEP}
@@ -2598,6 +2617,23 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                         {t("Page padding and overall density.")}</p>
                     </div>
 
+                    <button
+                      type="button"
+                      disabled={autoFitting || !renderingPreview || pageCount <= 1}
+                      onClick={() => {
+                        autoFitTargetPagesRef.current = 1;
+                        autoFitFontFirstRef.current = false;
+                        manualAutoFitRef.current = true;
+                        autoFitChangedRef.current = false;
+                        setAutoFitting(true);
+                        completeStep("layout");
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50"
+                      style={{ background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
+                    >
+                      {autoFitting ? (manualAutoFitRef.current ? t("Fitting to 1 page…") : t("Adjusting layout…")) : t("Fit to 1 page")}
+                    </button>
+
                     <div className="pt-2 border-t flex items-center justify-between" style={{ borderColor: "var(--color-border-tertiary)" }}>
                       <span style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                         {t("Preview length:")}{" "}{pageCount} {pageCount === 1 ? "page" : "pages"}
@@ -2605,6 +2641,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                       <button
                         type="button"
                         onClick={() => {
+                          manualAutoFitRef.current = false;
+                          setAutoFitting(false);
+                          setAutoFitPreparing(false);
                           setFontScale(1);
                           setSpacingScale(1);
                           setLayoutScale(1);

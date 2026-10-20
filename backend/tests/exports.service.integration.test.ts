@@ -675,7 +675,10 @@ describe("exports service integration checks", () => {
     expect(filesService.lastForcedDownloadFilename).toBe("Tailored CV.pdf");
   });
 
-  it("applies spacing and layout scales to section and block spacing before generation", async () => {
+  it.each([
+    { font_scale: 1, spacing_scale: 1.2, layout_scale: 1.3 },
+    { font_scale: 0.5, spacing_scale: 0.2, layout_scale: 0.2 }
+  ])("passes display scales to PDF generation: %j", async (scales) => {
     const userId = randomUUID();
     const session = buildSession(userId);
 
@@ -720,14 +723,14 @@ describe("exports service integration checks", () => {
 
     await service.createPdfExport(session, "tailored-1", {
       template_id: "template-override",
-      spacing_scale: 1.2,
-      layout_scale: 1.3
+      ...scales
     });
 
     expect(generator.lastSectionSpacing).toBe(16);
     expect(generator.lastBlockSpacing).toBe(12);
-    expect(generator.lastSpacingScale).toBeCloseTo(1.2, 5);
-    expect(generator.lastLayoutScale).toBeCloseTo(1.3, 5);
+    expect(generator.lastFontScale).toBeCloseTo(scales.font_scale, 5);
+    expect(generator.lastSpacingScale).toBeCloseTo(scales.spacing_scale, 5);
+    expect(generator.lastLayoutScale).toBeCloseTo(scales.layout_scale, 5);
   });
 
   it("creates completed master CV export and stores it under master scope", async () => {

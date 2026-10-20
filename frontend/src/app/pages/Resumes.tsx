@@ -190,51 +190,53 @@ export function Resumes() {
                   </button>
                 </div>
               </div>
-              <h3 className="text-sm font-medium mt-4 mb-2">
-                {t("Customized CVs")}
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {tailored
-                  .filter((cv) => cv.master_cv_id === master.id)
-                  .map((cv) => (
-                    <article key={cv.id} className="border rounded-xl p-4">
-                      <h4 className="font-medium">
-                        {cv.job?.job_title || cv.title}
-                      </h4>
-                      <p className="text-sm text-slate-600 mb-3">
-                        {cv.job?.company_name} · {languageName(cv.language)}
-                      </p>
-                      <div className="flex gap-3 text-sm">
-                        <Link
-                          className="text-teal-800 underline"
-                          to={`/app/cv/${cv.id}`}
-                          state={{ cvKind: "tailored" }}
-                        >
-                          {t("Open")}
-                        </Link>
-                        <button
-                          type="button"
-                          disabled={busy === cv.id}
-                          onClick={() => void exportCv(cv)}
-                          className="inline-flex gap-1 items-center"
-                        >
-                          <Download size={14} />
-                          {t("Download")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy === cv.id}
-                          onClick={() => void remove(cv.id, "tailored")}
-                          className="text-red-700"
-                        >
-                          {t("Delete")}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-              </div>
             </section>
           ))}
+          {tailored.length > 0 && (
+            <section>
+              <h2 className="text-sm font-medium mb-2">
+                {t("Customized CVs")}
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {tailored.map((cv) => (
+                  <article key={cv.id} className="border rounded-xl p-4">
+                    <h3 className="font-medium">
+                      {cv.job?.job_title || cv.title}
+                    </h3>
+                    <p className="text-sm text-slate-600 mb-3">
+                      {cv.job?.company_name} · {languageName(cv.language)}
+                    </p>
+                    <div className="flex gap-3 text-sm">
+                      <Link
+                        className="text-teal-800 underline"
+                        to={`/app/cv/${cv.id}`}
+                        state={{ cvKind: "tailored" }}
+                      >
+                        {t("Open")}
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={busy === cv.id}
+                        onClick={() => void exportCv(cv)}
+                        className="inline-flex gap-1 items-center"
+                      >
+                        <Download size={14} />
+                        {t("Download")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === cv.id}
+                        onClick={() => void remove(cv.id, "tailored")}
+                        className="text-red-700"
+                      >
+                        {t("Delete")}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
       {historyId && (

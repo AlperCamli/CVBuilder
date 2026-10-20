@@ -74,13 +74,13 @@ const isTemplateFormatEnabled = (template: TemplateSummary, format: ExportFormat
   return true;
 };
 
-const FONT_SCALE_MIN = 0.7;
+const FONT_SCALE_MIN = 0.5;
 const FONT_SCALE_MAX = 1.15;
 const DEFAULT_FONT_SCALE = 1;
-const SPACING_SCALE_MIN = 0.5;
+const SPACING_SCALE_MIN = 0.2;
 const SPACING_SCALE_MAX = 1.4;
 const DEFAULT_SPACING_SCALE = 1;
-const LAYOUT_SCALE_MIN = 0.5;
+const LAYOUT_SCALE_MIN = 0.2;
 const LAYOUT_SCALE_MAX = 1.3;
 const DEFAULT_LAYOUT_SCALE = 1;
 

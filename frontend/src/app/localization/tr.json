@@ -1,4 +1,9 @@
 {
+  "Adjusting layout…": "Düzen ayarlanıyor…",
+  "The CV is still longer than the original upload at the smallest settings. Shorten the content or adjust the layout.": "Özgeçmiş en küçük ayarlarda bile yüklenen orijinal dosyadan daha uzun. İçeriği kısaltın veya düzeni değiştirin.",
+  "Fit to 1 page": "Tek sayfaya sığdır",
+  "Fitting to 1 page…": "Tek sayfaya sığdırılıyor…",
+  "The CV still needs more than one page at the smallest settings. Shorten the content to fit one page.": "Özgeçmiş en küçük ayarlarda bile bir sayfayı aşıyor. Tek sayfaya sığdırmak için içeriği kısaltın.",
   "To upload your CV, select “Enable AI-powered CV analysis”.": "Özgeçmişinizi yüklemek için “Yapay zekâ destekli özgeçmiş analizini aç” kutusunu işaretleyin.",
   "Cookie settings": "Çerez ayarları",
   "Cookie preferences": "Çerez tercihleri",

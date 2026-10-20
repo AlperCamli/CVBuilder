@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../integration/auth-context";
 import type { RenderingPreviewResponse } from "../integration/api-types";
-import { resolveScaleFromMetadata } from "../integration/cv-display-settings";
+import {
+  resolveScaleFromMetadata,
+  FONT_SCALE_MIN, FONT_SCALE_MAX,
+  SPACING_SCALE_MIN, SPACING_SCALE_MAX,
+  LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX
+} from "../integration/cv-display-settings";
 import { translate as t } from "../localization/i18n";
 import { CVPresentationPreview } from "./CVPresentationPreview";
 
@@ -59,9 +64,9 @@ export function TranslationCvPreview({ masterId, runId, direction }: { masterId:
           <div dir={direction} style={{ width: PAGE_WIDTH, transform: `scale(${scale})`, transformOrigin: "top left" }}>
             <CVPresentationPreview
               presentation={preview.presentation}
-              fontScale={resolveScaleFromMetadata(content, "font_scale", clamp(0.7, 1.15))}
-              spacingScale={resolveScaleFromMetadata(content, "spacing_scale", clamp(0.5, 1.4))}
-              layoutScale={resolveScaleFromMetadata(content, "layout_scale", clamp(0.5, 1.3))}
+              fontScale={resolveScaleFromMetadata(content, "font_scale", clamp(FONT_SCALE_MIN, FONT_SCALE_MAX))}
+              spacingScale={resolveScaleFromMetadata(content, "spacing_scale", clamp(SPACING_SCALE_MIN, SPACING_SCALE_MAX))}
+              layoutScale={resolveScaleFromMetadata(content, "layout_scale", clamp(LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX))}
               onPageCountChange={setPageCount}
             />
           </div>

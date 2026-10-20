@@ -14,6 +14,11 @@ import type {
   PresentationTheme,
   RenderingPresentation
 } from "../integration/api-types";
+import {
+  FONT_SCALE_MIN as MIN_FONT_SCALE, FONT_SCALE_MAX as MAX_FONT_SCALE,
+  SPACING_SCALE_MIN as MIN_SPACING_SCALE, SPACING_SCALE_MAX as MAX_SPACING_SCALE,
+  LAYOUT_SCALE_MIN as MIN_LAYOUT_SCALE, LAYOUT_SCALE_MAX as MAX_LAYOUT_SCALE
+} from "../integration/cv-display-settings";
 import { PLACEHOLDER_OPEN, PLACEHOLDER_SEGMENT_RE } from "../integration/preview-placeholders";
 
 // Measurement still runs before paint in the browser; static previews need no DOM effect.
@@ -29,13 +34,6 @@ interface CVPresentationPreviewProps {
   mode?: PreviewMode;
   onPageCountChange?: (pageCount: number) => void;
 }
-
-const MIN_FONT_SCALE = 0.7;
-const MAX_FONT_SCALE = 1.15;
-const MIN_SPACING_SCALE = 0.5;
-const MAX_SPACING_SCALE = 1.4;
-const MIN_LAYOUT_SCALE = 0.5;
-const MAX_LAYOUT_SCALE = 1.3;
 
 // A4 at 72dpi (PDF points) — matches the backend PDF page size exactly.
 const PAGE_WIDTH_PX = 595;

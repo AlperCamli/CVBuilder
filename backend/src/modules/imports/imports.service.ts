@@ -29,6 +29,7 @@ import type {
   ParseCvFileInput,
   ParseCvFileResult
 } from "./parsers/cv-parser";
+import { readSourcePageCount } from "./parsers/source-page-count";
 import { canonicalizeImportedCvContent } from "./import-content-canonicalizer";
 
 const toMasterCvDetail = (row: MasterCvRecord) => {
@@ -234,6 +235,8 @@ export class ImportsService {
         import_id: importId
       }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
       const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
+      const sourcePageCount = await readSourcePageCount(parseInput);
+      if (sourcePageCount !== null) canonicalizedContent.metadata.source_page_count = sourcePageCount;
       if (cvModule.id === "standard") {
         const detected = detectCvLanguage(effectiveParseResult.rawExtractedText);
         canonicalizedContent.language = detected ?? canonicalizedContent.language;
@@ -502,6 +505,8 @@ export class ImportsService {
       original_filename: input.originalFilename, mime_type: input.mimeType
     }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest) : await this.parser.parse(input);
     const content = canonicalizeImportedCvContent(result.parsedContent);
+    const sourcePageCount = await readSourcePageCount(input);
+    if (sourcePageCount !== null) content.metadata.source_page_count = sourcePageCount;
     const detected = detectCvLanguage(result.rawExtractedText);
     content.language = detected ?? content.language;
     content.metadata.detected_language = detected;

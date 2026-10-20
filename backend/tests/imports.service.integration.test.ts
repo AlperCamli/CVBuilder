@@ -2,6 +2,7 @@ import { ConflictError } from "../src/shared/errors/app-error";
 import { trackedAiService } from "./helpers/tracked-ai-service";
 import { reviewCv } from "../src/modules/cv-review/cv-review";
 import { randomUUID } from "node:crypto";
+import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
 import { ImportsService } from "../src/modules/imports/imports.service";
 import { AiPromptResolver } from "../src/modules/ai/prompts/prompt-resolver";
@@ -505,6 +506,29 @@ const createPromptResolver = (): AiPromptResolver => {
 };
 
 describe("imports service integration checks", () => {
+  it("retains the uploaded page count through guest parsing and authenticated conversion", async () => {
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    pdf.addPage();
+    const bytes = await pdf.save();
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, bytes, "application/pdf", "two-pages.pdf");
+    const parser: CvParser = {
+      async parse() {
+        return { parserName: "fixture", rawExtractedText: "John Doe\nSoftware Engineer", parsedContent: createNonCanonicalContent(), warnings: [] };
+      }
+    };
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser);
+    const guest = await service.parseGuestFile({ bytes, mimeType: "application/pdf", originalFilename: "two-pages.pdf", sizeBytes: bytes.length });
+    expect(guest.parsedContent.metadata.source_page_count).toBe(2);
+    const session = buildSession(userId);
+    await service.parseImport(session, repository.importId);
+    const imported = await service.getImportResult(session, repository.importId);
+    expect(imported.parsed_content?.metadata.source_page_count).toBe(2);
+    const converted = await service.createMasterCvFromImport(session, repository.importId, { title: "Two-page CV" });
+    expect(converted.master_cv.current_content.metadata.source_page_count).toBe(2);
+  });
+
   it("automatically updates the latest same-language master while preserving other languages and older duplicates", async () => {
     const userId = randomUUID();
     const imports = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("CV")), "text/plain", "cv.txt");

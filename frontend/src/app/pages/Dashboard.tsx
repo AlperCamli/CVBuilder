@@ -10,7 +10,6 @@ import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type {
-  DashboardActivityResponseData,
   DashboardResponseData,
   JobBoardResponse,
   JobStatus
@@ -222,7 +221,6 @@ export function Dashboard() {
   const { showUpgradePrompt } = useUpgradePrompt();
   const [dashboard, setDashboard] = useState<DashboardResponseData | null>(null);
   const [jobBoard, setJobBoard] = useState<JobBoardResponse | null>(null);
-  const [activity, setActivity] = useState<DashboardActivityResponseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -264,10 +262,9 @@ export function Dashboard() {
       setError(null);
 
       try {
-        const [dashboardData, boardData, activityData] = await Promise.all([
+        const [dashboardData, boardData] = await Promise.all([
           api.getDashboard(),
-          api.getJobsBoard(),
-          api.getDashboardActivity()
+          api.getJobsBoard()
         ]);
 
         if (cancelled) {
@@ -276,7 +273,6 @@ export function Dashboard() {
 
         setDashboard(dashboardData);
         setJobBoard(boardData);
-        setActivity(activityData);
       } catch (err) {
         if (cancelled) {
           return;
@@ -564,52 +560,6 @@ export function Dashboard() {
         </DndProvider>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <p
-            className="uppercase tracking-wider"
-            style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}
-          >
-            {t("Recent activity")}</p>
-        </div>
-
-        <div
-          className="p-4 rounded-xl border"
-          style={{
-            background: "var(--color-background-primary)",
-            borderColor: "var(--color-border-tertiary)"
-          }}
-        >
-          {!activity || activity.activity.length === 0 ? (
-            <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-              {t("No activity yet.")}</p>
-          ) : (
-            <div className="space-y-2">
-              {activity.activity.slice(0, 8).map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 py-2 border-b last:border-b-0"
-                  style={{ borderColor: "var(--color-border-tertiary)" }}
-                >
-                  <div>
-                    <p style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
-                      {item.message}
-                    </p>
-                    {item.related_entity.title ? (
-                      <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        {item.related_entity.title}
-                      </p>
-                    ) : null}
-                  </div>
-                  <span style={{ fontSize: "11px", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-                    {formatDate(item.timestamp)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

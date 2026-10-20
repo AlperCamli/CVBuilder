@@ -24,6 +24,41 @@ const collectLinkUris = (pdf: PDFDocument): string[] => {
 };
 
 describe("pdf generator", () => {
+  it("fits a multi-page CV on one page at compact scales without losing entries", async () => {
+    const model: ExportDocumentModel = {
+      title: "Jane Doe",
+      subtitle: "Engineer",
+      contact_line: "jane@example.com",
+      contact_items: ["jane@example.com"],
+      social_links: [],
+      photo_data_uri: null,
+      photo_shape: "circle",
+      photo_position: "left",
+      theme: {
+        layout: "modern-clean", mode: "classic-single-column",
+        heading_color_hex: "#111827", accent_color_hex: "#0f5ea6",
+        body_color_hex: "#1f2937", muted_color_hex: "#4b5563",
+        page_background_hex: "#ffffff", body_text_size: 12,
+        section_spacing: 16, block_spacing: 12, font_family: "Georgia, serif"
+      },
+      sections: [{
+        type: "experience", title: "Experience", inline_text: null,
+        blocks: Array.from({ length: 16 }, (_, i) => ({
+          headline: `Engineer ${i + 1}`, subheadline: "Company",
+          metadata_line: "2020 - 2026", body: null,
+          bullets: ["Designed reliable applications for customers.", "Improved performance and delivered projects."]
+        }))
+      }]
+    };
+    const regular = await PDFDocument.load(await generatePdfDocument(model));
+    const compactBytes = await generatePdfDocument(model, { font_scale: 0.5, spacing_scale: 0.2, layout_scale: 0.2 });
+    const compact = await PDFDocument.load(compactBytes);
+    expect(regular.getPageCount()).toBeGreaterThan(1);
+    expect(compact.getPageCount()).toBe(1);
+    const text = await extractPdfText(compactBytes);
+    for (let i = 1; i <= 16; i++) expect(text).toContain(`Engineer ${i}`);
+  });
+
   it("preserves unicode characters and generates parseable PDF", async () => {
     const model: ExportDocumentModel = {
       language: "tr",
