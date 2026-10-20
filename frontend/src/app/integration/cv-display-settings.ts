@@ -13,14 +13,16 @@ interface DisplayScales {
   layoutScale: number;
 }
 
-// Reduce whitespace before text size. Integer rounding avoids slider drift.
+// Pause layout reduction at 0.3x until font reduction is exhausted.
+// Integer rounding avoids slider drift.
 export const nextCompactScales = (current: DisplayScales, fontFirst = false): DisplayScales | null => {
   const adjustments = [
     ["spacingScale", SPACING_SCALE_MIN, 0.08],
-    ["layoutScale", LAYOUT_SCALE_MIN, 0.08],
+    ["layoutScale", 0.3, 0.08],
     ["fontScale", FONT_SCALE_MIN, 0.02],
+    ["layoutScale", LAYOUT_SCALE_MIN, 0.08],
   ] as const;
-  const ordered = fontFirst ? [adjustments[2], adjustments[0], adjustments[1]] : adjustments;
+  const ordered = fontFirst ? [adjustments[2], adjustments[0], adjustments[1], adjustments[3]] : adjustments;
   for (const [key, min, step] of ordered) {
     if (current[key] > min) {
       return { ...current, [key]: Math.max(min, Math.round((current[key] - step) * 100) / 100) };

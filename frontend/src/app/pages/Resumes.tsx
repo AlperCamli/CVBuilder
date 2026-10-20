@@ -1,6 +1,6 @@
 import { MasterRevisionDialog } from "../components/MasterRevisionDialog";
 import { Link, useNavigate } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText, Plus, Download, Trash2, Languages } from "lucide-react";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -15,6 +15,9 @@ import {
 } from "../integration/export-filenames";
 import { TranslationDialog } from "../components/TranslationDialog";
 import { localeCode, translate as t } from "../localization/i18n";
+import { prioritizeMasterLanguages } from "./resume-list";
+
+const CV_BATCH_SIZE = 2;
 
 export function Resumes() {
   useTranslation();
@@ -28,6 +31,29 @@ export function Resumes() {
   const [busy, setBusy] = useState<string | null>(null);
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [translating, setTranslating] = useState<MasterCvSummary | null>(null);
+  const [extraMasterCount, setExtraMasterCount] = useState(0);
+  const [tailoredVisibleCount, setTailoredVisibleCount] =
+    useState(CV_BATCH_SIZE);
+  const tailoredEnd = useRef<HTMLDivElement>(null);
+  const orderedMasters = useMemo(
+    () => prioritizeMasterLanguages(masters),
+    [masters],
+  );
+  const masterVisibleCount = orderedMasters.initialCount + extraMasterCount;
+  const hasMoreTailored = tailoredVisibleCount < tailored.length;
+
+  useEffect(() => {
+    const sentinel = tailoredEnd.current;
+    if (!sentinel || !hasMoreTailored || loading) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        setTailoredVisibleCount((count) => count + CV_BATCH_SIZE);
+      }
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreTailored, loading, tailoredVisibleCount, tailored.length]);
   const load = async () => {
     try {
       const [masterRows, tailoredRows] = await Promise.all([
@@ -130,75 +156,94 @@ export function Resumes() {
         <p>{t("Create or upload CV")}</p>
       ) : (
         <div className="space-y-8">
-          {masters.map((master) => (
-            <section key={master.id}>
-              <div className="rounded-xl border border-slate-200 p-5 bg-white">
-                <div className="flex justify-between gap-4 mb-4">
-                  <div>
-                    <h2 className="font-medium text-lg">{master.title}</h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                      {t("Main CV")} ·{" "}
-                      <span lang={master.language}>
-                        {languageName(master.language)}
-                      </span>{" "}
-                      ·{" "}
-                      {new Date(master.updated_at).toLocaleDateString(
-                        localeCode(),
-                      )}
-                    </p>
-                  </div>
-                  <FileText size={24} className="text-teal-700" />
-                </div>
-                <div className="flex flex-wrap gap-3 text-sm">
-                  <Link
-                    className="rounded-lg bg-teal-700 text-white px-4 py-2"
-                    to={`/app/cv/${master.id}`}
-                    state={{ cvKind: "master", masterCvId: master.id }}
-                  >
-                    {t("Open")}
-                  </Link>
-                  <Link
-                    className="rounded-lg border px-4 py-2"
-                    to={`/app/tailor/${master.id}`}
-                  >
-                    {t("Customize for a job")}
-                  </Link>
-                  {master.module_type === "standard" && (
-                    <button
-                      type="button"
-                      className="rounded-lg border px-4 py-2 inline-flex gap-2 items-center"
-                      onClick={() => setTranslating(master)}
-                    >
-                      <Languages size={15} />
-                      {t("Translate")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="rounded-lg border px-4 py-2"
-                    onClick={() => setHistoryId(master.id)}
-                  >
-                    {t("Revisions")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy === master.id}
-                    className="rounded-lg border px-4 py-2 text-red-700"
-                    onClick={() => void remove(master.id, "master")}
-                  >
-                    <Trash2 size={15} aria-label={t("Delete")} />
-                  </button>
-                </div>
-              </div>
-            </section>
-          ))}
+          <section aria-label={t("Main CVs")}>
+            <div className="space-y-4">
+              {orderedMasters.items
+                .slice(0, masterVisibleCount)
+                .map((master) => (
+                  <section key={master.id}>
+                    <div className="rounded-xl border border-slate-200 p-5 bg-white">
+                      <div className="flex justify-between gap-4 mb-4">
+                        <div>
+                          <h2 className="font-medium text-lg">
+                            {master.title}
+                          </h2>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {t("Main CV")} ·{" "}
+                            <span lang={master.language}>
+                              {languageName(master.language)}
+                            </span>{" "}
+                            ·{" "}
+                            {new Date(master.updated_at).toLocaleDateString(
+                              localeCode(),
+                            )}
+                          </p>
+                        </div>
+                        <FileText size={24} className="text-teal-700" />
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <Link
+                          className="rounded-lg bg-teal-700 text-white px-4 py-2"
+                          to={`/app/cv/${master.id}`}
+                          state={{ cvKind: "master", masterCvId: master.id }}
+                        >
+                          {t("Open")}
+                        </Link>
+                        <Link
+                          className="rounded-lg border px-4 py-2"
+                          to={`/app/tailor/${master.id}`}
+                        >
+                          {t("Customize for a job")}
+                        </Link>
+                        {master.module_type === "standard" && (
+                          <button
+                            type="button"
+                            className="rounded-lg border px-4 py-2 inline-flex gap-2 items-center"
+                            onClick={() => setTranslating(master)}
+                          >
+                            <Languages size={15} />
+                            {t("Translate")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="rounded-lg border px-4 py-2"
+                          onClick={() => setHistoryId(master.id)}
+                        >
+                          {t("Revisions")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy === master.id}
+                          className="rounded-lg border px-4 py-2 text-red-700"
+                          onClick={() => void remove(master.id, "master")}
+                        >
+                          <Trash2 size={15} aria-label={t("Delete")} />
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                ))}
+            </div>
+            {masterVisibleCount < masters.length && (
+              <button
+                type="button"
+                onClick={() =>
+                  setExtraMasterCount((count) => count + CV_BATCH_SIZE)
+                }
+                className="mt-4 rounded-lg border px-4 py-2 text-sm text-teal-800"
+              >
+                {t("Load more main CVs")}
+              </button>
+            )}
+          </section>
           {tailored.length > 0 && (
-            <section>
+            <section aria-label={t("Customized CVs")}>
               <h2 className="text-sm font-medium mb-2">
                 {t("Customized CVs")}
               </h2>
               <div className="grid gap-3 sm:grid-cols-2">
-                {tailored.map((cv) => (
+                {tailored.slice(0, tailoredVisibleCount).map((cv) => (
                   <article key={cv.id} className="border rounded-xl p-4">
                     <h3 className="font-medium">
                       {cv.job?.job_title || cv.title}
@@ -235,6 +280,14 @@ export function Resumes() {
                   </article>
                 ))}
               </div>
+              {hasMoreTailored && (
+                <div
+                  ref={tailoredEnd}
+                  className="py-4 text-center text-sm text-slate-500"
+                >
+                  {t("Scroll to see more customized CVs")}
+                </div>
+              )}
             </section>
           )}
         </div>

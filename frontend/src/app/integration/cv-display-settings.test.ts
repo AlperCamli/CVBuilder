@@ -18,15 +18,25 @@ describe("compact CV settings", () => {
     }
   });
 
+  it("pauses layout at 0.3x, then reduces fonts before using the remaining layout range", () => {
+    expect(nextCompactScales({ fontScale: 1, spacingScale: 0.2, layoutScale: 0.34 }))
+      .toEqual({ fontScale: 1, spacingScale: 0.2, layoutScale: 0.3 });
+    expect(nextCompactScales({ fontScale: 1, spacingScale: 0.2, layoutScale: 0.3 }))
+      .toEqual({ fontScale: 0.98, spacingScale: 0.2, layoutScale: 0.3 });
+    expect(nextCompactScales({ fontScale: 0.5, spacingScale: 0.2, layoutScale: 0.3 }))
+      .toEqual({ fontScale: 0.5, spacingScale: 0.2, layoutScale: 0.22 });
+  });
+
   it("reduces whitespace before reducing font size and reaches every minimum", () => {
     let scales = { fontScale: 1.15, spacingScale: 1.4, layoutScale: 1.3 };
     let steps = 0;
     for (let next = nextCompactScales(scales); next; next = nextCompactScales(scales)) {
       if (next.fontScale < scales.fontScale) {
         expect(next.spacingScale).toBe(0.2);
-        expect(next.layoutScale).toBe(0.2);
+        expect(next.layoutScale).toBe(0.3);
       }
       if (next.layoutScale < scales.layoutScale) expect(next.spacingScale).toBe(0.2);
+      if (next.layoutScale < 0.3) expect(next.fontScale).toBe(0.5);
       expect(next.fontScale).toBeGreaterThanOrEqual(0.5);
       expect(next.spacingScale).toBeGreaterThanOrEqual(0.2);
       expect(next.layoutScale).toBeGreaterThanOrEqual(0.2);
