@@ -19,7 +19,7 @@ const clickText = async (page, text) => {
 };
 const waitText = (page, text) => page.waitForFunction(text => document.body.innerText.includes(text), { polling: 100 }, text);
 const limits = { tailored_cv_generations: 3, exports: 5, ai_actions: 20, storage_bytes: 1000000 };
-const content = { schema_version: '1.0', language: 'en', metadata: {}, sections: [{ id: 'header', type: 'header', title: 'Personal details', order: 0, blocks: [{ id: 'header-block', type: 'header', data: { full_name: 'Test Candidate', headline: 'Software engineer', email: 'candidate@example.invalid' }, meta: {} }] }] };
+const content = { version: 'v1', language: 'en', metadata: {}, sections: [{ id: 'header', type: 'header', title: 'Personal details', order: 0, blocks: [{ id: 'header-block', type: 'header', fields: { full_name: 'Test Candidate', headline: 'Software engineer', email: 'candidate@example.invalid' }, meta: {} }] }] };
 const review = { status: 'scored', score: 72, summary: 'Your CV is readable. Guidance only.', strengths: [], improvements: [], dimensions: [], limitations: ['Guidance, not an employment guarantee.'], matched_keywords: [], missing_keywords: [], version: 'fixture' };
 async function scenario(method, acceptAnalytics = false) {
   const context = await browser.createBrowserContext();
@@ -112,9 +112,10 @@ async function scenario(method, acceptAnalytics = false) {
         if (path === `/imports/${importId}/create-master-cv`) { await respond({ master_cv: master }); return; }
         if (path === `/master-cvs/${cvId}`) { await respond(master); return; }
         if (path === `/tailored-cvs/${cvId}`) { await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'This fixture CV is a master CV.' } }) }); return; }
-        if (path.endsWith('/ai/block-versions')) { await respond({ blocks: [] }); return; }
+        if ((path.endsWith('/ai/block-versions') || path.endsWith('/ai-block-versions'))) { await respond({ blocks: [] }); return; }
         if (path === '/templates') { await respond({ templates: [] }); return; }
-        if (path === '/rendering/preview') { await respond({ presentation: null }); return; }
+        if (path === '/rendering/preview') { await respond({ presentation: null, resolved_template: { resolution: 'none', template: null } }); return; }
+        if (path === '/billing/prices') { await respond({ market: 'GLOBAL', currency: 'usd', available: false, quote: null, plans: [] }); return; }
         if (path === '/billing/usage') { await respond(me.usage_summary); return; }
         if (path === '/billing/plan') { await respond({ ...me.current_plan, entitlements: me.entitlements }); return; }
         if (path === '/me/privacy/deletion') { assert.equal(body.confirmation, 'DELETE'); await respond({ status: 'deletion_requested' }); return; }
@@ -158,7 +159,7 @@ async function scenario(method, acceptAnalytics = false) {
     await page.type('#onboarding-name', 'Test Candidate'); await page.type('#onboarding-email', user.email); await page.type('#onboarding-password', 'fixture-password');
     await clickText(page, 'Create account & see my score');
   }
-  await waitText(page, 'Your CV Score');
+  try { await waitText(page, 'Your CV Score'); } catch { throw new Error(JSON.stringify({ path: new URL(page.url()).pathname, text: await page.evaluate(() => document.body.innerText), unexpected, errors, paths: requests.slice(-12).map(row => row.path) })); }
   assert(claimed); assert.equal(preferences.ai_processing, true); assert.equal(preferences.analytics, acceptAnalytics);
   assert.equal(await page.evaluate(() => localStorage.getItem('cv-builder:guest-import')), null);
   await clickText(page, 'Continue to CV editor');

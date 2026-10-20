@@ -1,4 +1,4 @@
-import { translate as t } from "../localization/i18n";
+import { i18n, documentLocale, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { getPrivacyConfig, choices, openPrivacyChoices, type PrivacyConfig } from "../integration/privacy";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -14,7 +14,6 @@ import {
   Loader2,
   LockKeyhole,
   RotateCcw,
-  ShieldCheck,
   Upload,
 } from "lucide-react";
 import {
@@ -35,6 +34,8 @@ import {
   uploadGuestCv,
   type GuestUpload,
 } from "../integration/guest-import";
+import { ONBOARDING_STEPS } from "../onboarding/onboarding-steps";
+import { clearNewCvOnboarding, readNewCvOnboarding, saveNewCvOnboarding, type NewCvOnboarding } from "../integration/new-cv-onboarding";
 import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { trackEvent } from "../integration/analytics";
 import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
@@ -76,7 +77,8 @@ function OnboardingFlow() {
   const { signUp, signInWithGoogle, isAuthenticated, initialized } = useAuth();
   const [params, setParams] = useSearchParams();
   const [guest, setGuest] = useState<GuestUpload | null>(readGuestUpload);
-  const [hydrated, setHydrated] = useState(() => !guest);
+  const [newCv, setNewCv] = useState<NewCvOnboarding | null>(readNewCvOnboarding);
+  const [hydrated, setHydrated] = useState(() => !guest || !!newCv);
   const [config, setConfig] = useState<PrivacyConfig | null>(null);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [aiDeclined, setAiDeclined] = useState(false);
@@ -85,20 +87,20 @@ function OnboardingFlow() {
   const uploadAllowed = !!config?.collection_enabled && (!aiRequired || (aiProcessing && config.ai_enabled));
   const needsAiConsent = !!config?.collection_enabled && !!config.ai_enabled && aiRequired && !aiProcessing;
   const rawStage = params.get("step");
-  const stage: Stage = guest
+  const stage: Stage = guest || newCv
     ? rawStage === "upload" || rawStage === "questions" || rawStage === "signup"
       ? rawStage
-      : guest.step
+      : newCv?.step ?? guest!.step
     : "upload";
   const questionParam = Number(
-    params.get("question") ?? (guest ? guest.question + 1 : 1),
+    params.get("question") ?? (newCv ? newCv.question + 1 : guest ? guest.question + 1 : 1),
   );
   const questionIndex = Number.isInteger(questionParam)
     ? Math.min(4, Math.max(1, questionParam)) - 1
     : 0;
   const question = PRE_SIGNUP_QUESTIONS[questionIndex];
   const [answers, setAnswers] = useState<OnboardingAnswers>(
-    () => guest?.answers ?? {},
+    () => newCv?.answers ?? guest?.answers ?? {},
   );
   const [uploadError, setUploadError] = useState("");
   const [error, setError] = useState("");
@@ -125,12 +127,12 @@ function OnboardingFlow() {
   useEffect(() => {
     let active = true;
     void getPrivacyConfig().then(value => { if (active) setConfig(value); }).catch(() => { if (active) setUploadError("Upload availability could not be checked. Please try again."); });
-    const expired = () => { if (!readGuestUpload()) { setGuest(null); setAnswers({}); setProcessing("idle"); setHydrated(true); setError(t("Your recovery window has expired. Please upload your CV again.")); } };
+    const expired = () => { if (!readGuestUpload() && !readNewCvOnboarding()) { setGuest(null); setAnswers({}); setProcessing("idle"); setHydrated(true); setError(t("Your recovery window has expired. Please upload your CV again.")); } };
     window.addEventListener("cv-builder:guest-expired", expired);
     return () => { active = false; window.removeEventListener("cv-builder:guest-expired", expired); };
   }, []);
   useEffect(() => {
-    if (!guest || hydrated) return;
+    if (!guest || newCv || hydrated) return;
     let active = true;
     void getGuestStatus(guest).then(value => {
       if (!active) return;
@@ -139,7 +141,7 @@ function OnboardingFlow() {
       setHydrated(true);
     }).catch(() => { if (active) setError(t("We couldn't restore your upload. Refresh to retry, or delete it and start again.")); });
     return () => { active = false; };
-  }, [guest?.id, hydrated]);
+  }, [guest?.id, newCv, hydrated]);
 
   function go(next: Stage, index = 0) {
     setParams(
@@ -159,6 +161,11 @@ function OnboardingFlow() {
     });
   }, [stage, questionIndex, question.id]);
   useEffect(() => {
+    if (newCv && stage !== "upload") {
+      try { saveNewCvOnboarding({ ...newCv, answers, step: stage, question: questionIndex }); }
+      catch { setError(t("Allow browser storage to keep your CV through sign-up.")); }
+      return;
+    }
     if (!guest || !hydrated || stage === "upload") return;
     const row = { ...guest, answers, step: stage, question: questionIndex };
     try {
@@ -171,9 +178,9 @@ function OnboardingFlow() {
         t("We couldn't save your answers. Please try again before signing up."),
       ),
     );
-  }, [guest, answers, stage, questionIndex, hydrated]);
+  }, [guest, newCv, answers, stage, questionIndex, hydrated]);
   useEffect(() => {
-    if (!guest) return;
+    if (!guest || newCv) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let first = true;
@@ -222,7 +229,7 @@ function OnboardingFlow() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [guest, aiProcessing, config?.ai_required]);
+  }, [guest, newCv, aiProcessing, config?.ai_required]);
 
   function promptForAiConsent() {
     setAiConsentPrompt(true);
@@ -258,6 +265,8 @@ function OnboardingFlow() {
     try {
       if (guest) { await deleteGuestUpload(guest); clearGuestUpload(); setGuest(null); }
       const row = await uploadGuestCv(selected, aiProcessing);
+      clearNewCvOnboarding();
+      setNewCv(null);
       setHydrated(true);
       setAnswers({});
       setGuest(row);
@@ -275,6 +284,30 @@ function OnboardingFlow() {
       uploadingRef.current = false;
       setUploading(false);
     }
+  }
+  async function startNewCv() {
+    if (uploading || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const draft: NewCvOnboarding = {
+        id: crypto.randomUUID(), expiresAt: Date.now() + 86_400_000,
+        language: documentLocale(i18n.language) ?? "en", answers: {}, step: "questions", question: 0,
+      };
+      saveNewCvOnboarding(draft);
+      if (guest) { await deleteGuestUpload(guest); clearGuestUpload(); setGuest(null); }
+      setNewCv(draft);
+      setAnswers({});
+      setHydrated(true);
+      setProcessing("idle");
+      setEmailSent(false);
+      setUploadError("");
+      go("questions");
+      trackEvent("pre_signup_path_selected", { path_selected: "manual_create" });
+    } catch (err) {
+      clearNewCvOnboarding();
+      setError(err instanceof Error ? err.message : t("Couldn't continue. Please try again."));
+    } finally { setBusy(false); }
   }
   async function changeGuestAi(accepted: boolean) {
     if (accepted) setAiConsentPrompt(false);
@@ -309,6 +342,8 @@ function OnboardingFlow() {
     catch { setError(t("Your upload could not be deleted. Please retry; it has not been cleared from this device.")); return; }
     finally { setBusy(false); }
     clearGuestUpload();
+    clearNewCvOnboarding();
+    setNewCv(null);
     setGuest(null);
     setHydrated(true);
     setAnswers({});
@@ -320,6 +355,11 @@ function OnboardingFlow() {
     setParams({}, { replace: true });
   }
   async function prepareAuth() {
+    if (newCv) {
+      saveNewCvOnboarding({ ...newCv, answers, step: "signup", question: questionIndex });
+      stashPostAuthRedirect(ONBOARDING_RESUME_PATH);
+      return;
+    }
     if (!guest) throw new Error("Please upload your CV first.");
     const row = { ...guest, answers, step: "signup" as const };
     saveGuestUpload(row);
@@ -407,10 +447,25 @@ function OnboardingFlow() {
           <span>{guest ? t("Delete upload & restart") : t("Restart")}</span>
         </button>
       </header>
-      <main ref={content} className="ob-main">
+      <main ref={content} className={`ob-main${stage === "upload" ? " ob-main-start" : ""}`}>
         <div className="ob-layout">
+          {stage === "upload" && <aside className="ob-start-guidance">
+            <h1 tabIndex={-1}>{t("Start with your current CV")}</h1>
+            <p className="ob-description">{t("Upload your CV first, then customize it for a real job and export the finished version. This is the fastest path to seeing how jobspecificCV helps.")}</p>
+            <h2>{t("First application checklist")}</h2>
+            <ol className="ob-start-checklist">
+              {ONBOARDING_STEPS.map(step => {
+                const Icon = step.icon;
+                return <li key={step.id}>
+                  <span className="ob-step-icon"><Icon size={19} aria-hidden="true" /></span>
+                  <div><h3>{t(step.label)}</h3><p>{t(step.description)}</p></div>
+                </li>;
+              })}
+            </ol>
+          </aside>}
+
           <div className="ob-content" key={`${stage}-${questionIndex}`}>
-            {!hydrated && guest && <p role="status">{t("Restoring your upload and answers…")}</p>}
+            {!hydrated && guest && !newCv && <p role="status">{t("Restoring your upload and answers…")}</p>}
             {error && (
               <p className="ob-error" role="alert">
                 {t(error)}
@@ -420,22 +475,19 @@ function OnboardingFlow() {
               <button className="ob-back" onClick={retryParsing}>
                 {t("Retry analysis")}</button>
             )}
-            {guest && stage !== "upload" && hydrated && <div className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>
+            {guest && !newCv && stage !== "upload" && hydrated && <div className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>
               <label style={{ display: "flex", gap: 8 }}><input type="checkbox" aria-label={t("AI processing for this upload")} checked={aiProcessing} disabled={busy || (!config?.ai_enabled && !aiProcessing)} onChange={event => void changeGuestAi(event.target.checked)} />{t("AI processing")}{" "}{config?.ai_provider ? `with ${config.ai_provider}` : ""}</label>
               <span>{t("You can change this choice at any time.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</span>
             </div>}
-            {guest && stage !== "upload" && hydrated && aiRequired && !aiProcessing && <>
+            {guest && !newCv && stage !== "upload" && hydrated && aiRequired && !aiProcessing && <>
               <h1 tabIndex={-1}>{t("Enable AI to continue")}</h1>
               <p className="ob-description">{t("Your upload is saved for your remaining recovery window. JobSpecificCV needs AI to analyze it. You can enable AI above to resume, or delete your upload and leave.")}</p>
             </>}
             {stage === "upload" && (
               <>
-                <h1 tabIndex={-1}>{t("Upload your CV")}</h1>
-                <p className="ob-description">
-                  {t("Start with your existing CV. No account needed.")}</p>
                 {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? t("Uploads are temporarily unavailable while privacy arrangements are verified.") : t("Checking upload availability…")}</p>}
-                <AiUploadDisclosure config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible highlighted={aiConsentPrompt && needsAiConsent} inputRef={aiConsentInput} onHighlightEnd={() => setAiConsentPrompt(false)} />
-                {aiRequired && !aiProcessing && <p className="ob-footnote" role="status">{aiDeclined ? guest ? t("AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave.") : t("AI remains off. You can change your mind by enabling it above; nothing has been uploaded.") : t("Enable AI above to upload and analyze your CV.")}</p>}
+                <AiUploadDisclosure extraDetails={<p>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}</p>} config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible highlighted={aiConsentPrompt && needsAiConsent} inputRef={aiConsentInput} onHighlightEnd={() => setAiConsentPrompt(false)} />
+                {aiRequired && !aiProcessing && <p className="ob-footnote ob-upload-hint" role="status">{aiDeclined ? guest ? t("AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave.") : t("AI remains off. You can change your mind by enabling it above; nothing has been uploaded.") : t("Enable AI above to upload and analyze your CV.")}</p>}
                 <input
                   ref={fileInput}
                   className="ob-visually-hidden"
@@ -479,10 +531,15 @@ function OnboardingFlow() {
                     {uploading ? t("Uploading your CV…") : t("Drop your CV here")}
                   </strong>
                   <span>
-                    {"or"}<b>{t("browse files")}</b> {" "}{t("on your device")}</span>
+                    {t("or")}{" "}<b>{t("browse files")}</b> {" "}{t("on your device")}</span>
                   <small>{t("PDF or DOCX · up to 20 MB")}</small>
                 </button>
-                <p className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</p>
+                <button type="button" className="ob-create-zone" disabled={uploading || busy} onClick={() => void startNewCv()}>
+                  <span className="ob-upload-icon"><FileText size={27} aria-hidden="true" /></span>
+                  <strong>{t("Create a new CV")}</strong>
+                  <span>{t("Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.")}</span>
+                  <small><CheckCircle2 size={14} aria-hidden="true" />{t("Structured editor with live preview")}</small>
+                </button>
                 {uploadError && (
                   <p className="ob-error" role="alert">
                     {uploadError}
@@ -497,11 +554,9 @@ function OnboardingFlow() {
                     <ArrowRight size={17} />
                   </button>
                 )}
-                <p className="ob-footnote">
-                  <ShieldCheck size={14} /> {" "}{t("Temporary storage starts on upload. Create an account to keep your CV.")}</p>
               </>
             )}
-            {stage === "questions" && hydrated && (!aiRequired || aiProcessing) && (
+            {stage === "questions" && hydrated && (newCv || !aiRequired || aiProcessing) && (
               <>
                 <p className="ob-footnote" style={{ display: "block" }}>{question.id === "source" ? t("Optional: helps us understand how people find us. With analytics acceptance, we retain anonymous aggregate counts. This answer is not sent to AI.") : t("Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile.")}</p>
                 <div className="ob-question-progress">
@@ -587,22 +642,22 @@ function OnboardingFlow() {
                 <ParsingStatus phase={processing} />
               </>
             )}
-            {stage === "signup" && (!aiRequired || aiProcessing) && (
+            {stage === "signup" && (newCv || !aiRequired || aiProcessing) && (
               <>
                 <h1 tabIndex={-1}>
                   {emailSent ? t("Check your email") : t("Save your CV")}
                 </h1>
                 <p className="ob-description">
                   {emailSent
-                    ? t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
-                    : t("Create a free account to save your CV and see your score.")}
+                    ? newCv ? t("Confirm your email to open your new CV in the editor. Continue on this device within 24 hours.") : t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
+                    : newCv ? t("Create a free account to start building your new CV.") : t("Create a free account to save your CV and see your score.")}
                 </p>
                 <div className="ob-ready-strip">
                   <span className="ob-ready-icon">
                     <FileText size={19} />
                   </span>
                   <div>
-                    <strong>{guest?.original_filename}</strong>
+                    <strong>{newCv ? t("Your new CV") : guest?.original_filename}</strong>
                     <span>
                       {Object.keys(answers).length} {" "}{t("preferences selected")}</span>
                   </div>
@@ -614,7 +669,7 @@ function OnboardingFlow() {
                     disabled={busy}
                     onClick={() => void continueWithAccount()}
                   >
-                    {t("See my CV score")}{" "}<ArrowRight size={17} />
+                    {newCv ? t("Open CV editor") : t("See my CV score")}{" "}<ArrowRight size={17} />
                   </button>
                 ) : (
                   !emailSent && (
@@ -710,7 +765,7 @@ function OnboardingFlow() {
                             <Loader2 size={17} className="animate-spin" />
                           ) : (
                             <>
-                              {t("Create account & see my score")}{" "}
+                              {newCv ? t("Create account & open CV editor") : t("Create account & see my score")}{" "}
                               <ArrowRight size={17} />
                             </>
                           )}
@@ -721,7 +776,7 @@ function OnboardingFlow() {
                 )}
                 <ParsingStatus phase={processing} />
                 <p className="ob-footnote">
-                  <LockKeyhole size={13} /> {" "}{t("Your CV is stored temporarily now and linked to your account after sign-up.")}</p>
+                  <LockKeyhole size={13} /> {" "}{newCv ? t("Your new CV will be saved to your account after sign-up.") : t("Your CV is stored temporarily now and linked to your account after sign-up.")}</p>
                 <p className="ob-signin">
                   {emailSent ? t("Already verified?") : t("Already have an account?")}{" "}
                   <Link
@@ -746,7 +801,7 @@ function OnboardingFlow() {
         </div>
       </main>
       <footer className="ob-footer">
-        {t("Upload · A few questions · Create an account · Your CV score")}</footer>
+        {newCv ? t("Create a new CV · A few questions · Create an account · CV editor") : t("Create or upload · A few questions · Create an account · Your CV")}</footer>
     </div>
   );
 }

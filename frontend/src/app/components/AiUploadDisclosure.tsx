@@ -1,18 +1,19 @@
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
-import { useId, type Ref } from "react";
+import { useId, type Ref, type ReactNode } from "react";
 import { Link } from "react-router";
 import type { PrivacyConfig } from "../integration/privacy";
 import "./privacy.css";
 
-export function AiUploadDisclosure({config, checked = true, disabled = false, onChange, collapsible = false, highlighted = false, inputRef, onHighlightEnd}: {
-  config: PrivacyConfig | null; checked?: boolean; disabled?: boolean; onChange?: (accepted: boolean) => void; collapsible?: boolean; highlighted?: boolean; inputRef?: Ref<HTMLInputElement>; onHighlightEnd?: () => void;
+export function AiUploadDisclosure({config, checked = true, disabled = false, onChange, collapsible = false, highlighted = false, inputRef, onHighlightEnd, extraDetails}: {
+  extraDetails?: ReactNode; config: PrivacyConfig | null; checked?: boolean; disabled?: boolean; onChange?: (accepted: boolean) => void; collapsible?: boolean; highlighted?: boolean; inputRef?: Ref<HTMLInputElement>; onHighlightEnd?: () => void;
 }) {
   useTranslation();
   const hintId = useId();
   const provider = config?.ai_provider ?? "our configured AI provider";
   const policy = config?.processors.find(row => row.name === provider);
   const details = <>
+    {extraDetails}
     <p>{t("JobSpecificCV sends relevant CV information and your instructions to")}{" "}{provider} {" "}{t("to structure your CV and generate improvements. Your CV score is calculated separately using the app’s scoring rules.")}</p>
     <p>{t("Review how your information is processed, stored and protected in our")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</p>
     {policy && <p>{policy.safeguards.split(/(?<=\.)\s/)[0]}</p>}

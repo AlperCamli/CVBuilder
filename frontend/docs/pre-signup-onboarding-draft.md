@@ -1,4 +1,4 @@
-# Upload-first onboarding
+# Pre-signup onboarding
 
 Local review starts at http://127.0.0.1:5173/guided-journey. Start the backend with
 `npm run dev` in `backend`, and Vite with `npm run dev` in `frontend`.
@@ -7,6 +7,24 @@ The guided landing's Start free, hero, template, pricing, trial, and final CTAs
 enter `/onboarding`. The main `/` landing remains a separate page.
 
 ## Journey
+
+The entry screen shows the application checklist beside the existing upload
+drop box and a white “Create a new CV” card. Upload uses the light green design
+token. Privacy details stay collapsed by default.
+
+Create a new CV → the same four optional questions → signup → a blank master CV
+in the editor, using the current interface language. The questionnaire cursor,
+enum answers, language and 24-hour expiry are saved on this device for refresh,
+email verification and Google OAuth. The authenticated handoff saves answers
+through `/me/onboarding-answers`, reuses `/master-cvs` to create the blank CV,
+and checkpoints its account and document IDs before opening the editor. It
+skips upload, parsing and the score page. Repeated effect executions share the
+same creation request. Scratch CV editing and preview require an unrestricted
+account but do not require AI consent; AI operations retain their consent guard.
+
+`frontend/scripts/verify-new-cv-onboarding.mjs` checks this path with isolated
+transport fixtures for email signup, email verification and Google OAuth,
+including back/skip/refresh, one blank CV creation, and responsive layouts.
 
 Landing → real PDF/DOCX upload → four optional questions while parsing and
 CV analysis run → real signup → authenticated account claim → real CV score →

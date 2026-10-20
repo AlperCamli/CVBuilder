@@ -1433,5 +1433,19 @@
   "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.": "{{language}} dilindeki mevcut CV’nizin içeriği, yalnızca çeviri başarıyla tamamlandıktan ve Mevcut CV’yi değiştir seçeneğine bastıktan sonra değiştirilecektir. O zamana kadar mevcut CV’niz değişmeden kalır.",
   "Replace existing CV": "Mevcut CV’yi değiştir",
   "Translate and review": "Çevir ve gözden geçir",
-  "Could not replace the existing master CV": "Mevcut ana CV değiştirilemedi"
+  "Could not replace the existing master CV": "Mevcut ana CV değiştirilemedi",
+  "Create a new CV": "Yeni bir özgeçmiş oluştur",
+  "Confirm your email to open your new CV in the editor. Continue on this device within 24 hours.": "Yeni özgeçmişinizi editörde açmak için e-postanızı doğrulayın. 24 saat içinde bu cihazdan devam edin.",
+  "Create a free account to start building your new CV.": "Yeni özgeçmişinizi oluşturmaya başlamak için ücretsiz bir hesap açın.",
+  "Your new CV": "Yeni özgeçmişiniz",
+  "Open CV editor": "Özgeçmiş editörünü aç",
+  "Create account & open CV editor": "Hesap oluştur ve özgeçmiş editörünü aç",
+  "Your new CV will be saved to your account after sign-up.": "Yeni özgeçmişiniz kayıt olduktan sonra hesabınıza kaydedilecek.",
+  "Create a new CV · A few questions · Create an account · CV editor": "Yeni özgeçmiş oluştur · Birkaç soru · Hesap oluştur · Özgeçmiş editörü",
+  "Create or upload · A few questions · Create an account · Your CV": "Oluştur veya yükle · Birkaç soru · Hesap oluştur · Özgeçmişiniz",
+  "Preparing your new CV": "Yeni özgeçmişiniz hazırlanıyor",
+  "Return to onboarding": "Başlangıç adımlarına dön",
+  "Your account is ready. We're creating your new CV.": "Hesabınız hazır. Yeni özgeçmişinizi oluşturuyoruz.",
+  "Please start your new CV again.": "Lütfen yeni özgeçmişinizi oluşturmaya yeniden başlayın.",
+  "This CV setup belongs to another account. Please start again.": "Bu özgeçmiş kurulumu başka bir hesaba ait. Lütfen yeniden başlayın."
 }

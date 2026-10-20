@@ -65,6 +65,7 @@ import type {
   TailoringRunFlowType
 } from "./api-types";
 import { withProductAnalytics } from "./product-analytics";
+import type { OnboardingAnswers } from "../onboarding/pre-signup-questions";
 
 export interface UpdateMeInput {
   full_name?: string;
@@ -348,6 +349,10 @@ export class BackendApi {
 
   listMasterCvs(): Promise<MasterCvSummary[]> {
     return this.client.get<MasterCvSummary[]>("/master-cvs");
+  }
+
+  patchOnboardingAnswers(answers: OnboardingAnswers): Promise<{ answers: OnboardingAnswers }> {
+    return this.client.patch("/me/onboarding-answers", answers);
   }
 
   createMasterCv(payload: CreateMasterCvInput): Promise<MasterCvDetail> {

@@ -1,4 +1,5 @@
 import { createPrivacyRouter } from "../modules/privacy/privacy.routes";
+import { createProductAccessGuard } from "../modules/privacy/product-access.middleware";
 import { asyncHandler } from "../shared/utils/async-handler";
 import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports.routes";
 import type { Router } from "express";
@@ -74,7 +75,7 @@ export const registerV1Routes = (
     if (!["POST", "PATCH", "PUT"].includes(req.method) || !/^\/(imports|ai|master-cvs|tailored-cvs|jobs|cover-letters|cv-photos|exports|rendering)(\/|$)/.test(req.path)) { next(); return; }
     authMiddleware(req, res, error => {
       if (error) { next(error); return; }
-      void services.privacyService!.assertProductAccess(req.auth!.appUser.id).then(() => next(), next);
+      createProductAccessGuard(services.privacyService!, services.masterCvService)(req, res, next);
     });
   });
   router.use(createUsersRouter(usersController, authMiddleware));

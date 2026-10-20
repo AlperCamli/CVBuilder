@@ -13,16 +13,33 @@ import {
 } from "../integration/guest-import";
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
+import { clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding } from "../integration/new-cv-onboarding";
 
 export function OnboardingResume() {
   useTranslation();
   const navigate = useNavigate();
-  const { refreshMe } = useAuth();
+  const { refreshMe, me, api } = useAuth();
   const [guest] = useState(readGuestUpload);
+  const [newCv] = useState(readNewCvOnboarding);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!guest) return;
+    if (!newCv || !me?.user.id) return;
+    let cancelled = false;
+    setError(null);
+    void completeNewCvOnboarding(newCv, me.user.id, api).then(async masterCvId => {
+      if (cancelled) return;
+      await refreshMe();
+      if (cancelled) return;
+      clearNewCvOnboarding();
+      navigate(`/app/cv/${encodeURIComponent(masterCvId)}`, { replace: true, state: { masterCvId } });
+    }).catch(err => {
+      if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again."));
+    });
+    return () => { cancelled = true; };
+  }, [newCv, me?.user.id, api, navigate, refreshMe, retry]);
+  useEffect(() => {
+    if (!guest || newCv) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let parseRetryAttempted = false;
@@ -95,18 +112,18 @@ export function OnboardingResume() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [guest, navigate, refreshMe, retry]);
+  }, [guest, newCv, navigate, refreshMe, retry]);
 
   return (
     <div className="max-w-lg mx-auto px-6 py-16 text-center">
       <h1 className="text-2xl font-semibold mb-3">
-        {!guest
+        {!guest && !newCv
           ? t("Upload your CV to get started")
           : error
             ? t("Let's finish saving your CV")
-            : t("Preparing your CV score")}
+            : newCv ? t("Preparing your new CV") : t("Preparing your CV score")}
       </h1>
-      {!guest ? (
+      {!guest && !newCv ? (
         <p>
           {t("This upload has expired or isn't available on this device.")}{" "}
           <Link to="/onboarding" className="underline">
@@ -123,7 +140,7 @@ export function OnboardingResume() {
           >
             {t("Try again")}</button>
           <Link to="/onboarding" className="block mt-4 underline">
-            {t("Return to your upload")}</Link>
+            {newCv ? t("Return to onboarding") : t("Return to your upload")}</Link>
         </>
       ) : (
         <>
@@ -132,7 +149,7 @@ export function OnboardingResume() {
             className="animate-spin mx-auto my-6 text-teal-600"
           />
           <p role="status">
-            {t("Your account is ready. We're finishing the analysis and saving your CV.")}</p>
+            {newCv ? t("Your account is ready. We're creating your new CV.") : t("Your account is ready. We're finishing the analysis and saving your CV.")}</p>
         </>
       )}
     </div>

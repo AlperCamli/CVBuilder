@@ -142,7 +142,7 @@ export function CreateOrUpload() {
 
           {/* Right side - Action Cards */}
           <div className="flex flex-col gap-4">
-            {privacyConfig ? <AiUploadDisclosure config={privacyConfig} /> :
+            {privacyConfig ? <AiUploadDisclosure config={privacyConfig} collapsible /> :
               <p role="status">{privacyError ? <>{t("We couldn’t load the AI provider information.")}{" "}<button type="button" onClick={() => setPrivacyAttempt(attempt => attempt + 1)}>{t("Retry")}</button></> : t("Loading AI provider information…")}</p>}
             <button
               onClick={handleUploadClick}
@@ -187,7 +187,7 @@ export function CreateOrUpload() {
                 <FileText size={24} style={{ color: "var(--color-text-secondary)" }} />
               </div>
               <h3 className="font-medium mb-2" style={{ fontSize: "18px", color: "var(--color-text-primary)" }}>
-                {t("Create CV manually")}</h3>
+                {t("Create a new CV")}</h3>
               <p className="mb-4" style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
                 {t("Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.")}</p>
               <div className="flex items-center gap-2">

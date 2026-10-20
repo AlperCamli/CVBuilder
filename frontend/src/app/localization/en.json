@@ -1499,5 +1499,19 @@
   "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.": "Your existing CV in {{language}} will be overwritten only after translation succeeds and you choose Replace existing CV. Until then, it stays unchanged.",
   "Replace existing CV": "Replace existing CV",
   "Translate and review": "Translate and review",
-  "Could not replace the existing master CV": "Could not replace the existing master CV"
+  "Could not replace the existing master CV": "Could not replace the existing master CV",
+  "Create a new CV": "Create a new CV",
+  "Confirm your email to open your new CV in the editor. Continue on this device within 24 hours.": "Confirm your email to open your new CV in the editor. Continue on this device within 24 hours.",
+  "Create a free account to start building your new CV.": "Create a free account to start building your new CV.",
+  "Your new CV": "Your new CV",
+  "Open CV editor": "Open CV editor",
+  "Create account & open CV editor": "Create account & open CV editor",
+  "Your new CV will be saved to your account after sign-up.": "Your new CV will be saved to your account after sign-up.",
+  "Create a new CV · A few questions · Create an account · CV editor": "Create a new CV · A few questions · Create an account · CV editor",
+  "Create or upload · A few questions · Create an account · Your CV": "Create or upload · A few questions · Create an account · Your CV",
+  "Preparing your new CV": "Preparing your new CV",
+  "Return to onboarding": "Return to onboarding",
+  "Your account is ready. We're creating your new CV.": "Your account is ready. We're creating your new CV.",
+  "Please start your new CV again.": "Please start your new CV again.",
+  "This CV setup belongs to another account. Please start again.": "This CV setup belongs to another account. Please start again."
 }
