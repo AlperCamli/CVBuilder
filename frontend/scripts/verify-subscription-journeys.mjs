@@ -22,7 +22,7 @@ const clickText = async (page, text) => {
 };
 const waitText = (page, text) => page.waitForFunction(value => document.body.innerText.includes(value), {}, text);
 
-async function fixture({ signedIn = true, method = "email", failPayment = false, checkoutError = false, transition = false, renewedTrialUsed = false, savedTailored = false, locale = "en" } = {}) {
+async function fixture({ signedIn = true, method = "email", failPayment = false, checkoutError = false, pauseCheckout = false, pricesUnavailable = false, transition = false, renewedTrialUsed = false, savedTailored = false, locale = "en", market = "GLOBAL" } = {}) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
@@ -34,21 +34,25 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
   const jwt = [Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"), Buffer.from(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + 3600, iat: Math.floor(Date.now() / 1000) })).toString("base64url"), "fixture-signature"].join(".");
   const session = { access_token: jwt, refresh_token: "fixture-refresh", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user };
   const limits = { tailored_cv_generations: null, exports: null, ai_actions: null, storage_bytes: null };
-  const appUser = { id: userId, auth_user_id: userId, email: user.email, full_name: "Test Candidate", locale: "en", default_cv_language: "en", onboarding_completed: transition, onboarding_state: transition ? { completed_at: now } : {}, onboarding_answers: {}, created_at: now, updated_at: now };
+  const appUser = { id: userId, auth_user_id: userId, email: user.email, full_name: "Test Candidate", locale, default_cv_language: "en", onboarding_completed: transition, onboarding_state: transition ? { completed_at: now } : {}, onboarding_answers: {}, created_at: now, updated_at: now };
   const entitlements = { plan_code: "free", limits, remaining: limits, can_generate_tailored_cv: true, can_export_pdf: true, can_export_docx: true, can_use_ai_actions: true };
   const usage = { plan_code: "free", limits, remaining: limits, period_month: now.slice(0, 7), tailored_cv_generations_count: 0, exports_count: 0, ai_actions_count: 0, storage_bytes_used: 0 };
   let active = false, checkoutInput, selectedPlan = "weekly", trial = true, masterCreated = transition;
   const billing = () => ({ app_access: active, can_edit_existing_cvs: transition || active, subscription_required: true, trial_transition: transition ? { eligible: !active && !renewedTrialUsed } : null, plan_code: active ? selectedPlan : "free", subscription_status: active ? trial ? "trialing" : "active" : "inactive", current_period_start: now, current_period_end: new Date(Date.now() + 3 * 86400000).toISOString(), cancel_at_period_end: false, trial_eligible: !active && (!transition || !renewedTrialUsed), provider: { provider: "stripe" }, entitlement_summary: entitlements });
-  const prices = { market: "GLOBAL", currency: "usd", available: true, quote: "isolated-pricing", plans: [
-    { code: "weekly", amount: 499, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 1499, interval: "month", interval_count: 1, trial_days: 0 },
-    { code: "annual", amount: 9990, interval: "year", interval_count: 1, trial_days: 0 }
+  const prices = { market, currency: market === "TR" ? "try" : "usd", available: true, quote: "isolated-pricing", plans: [
+    { code: "weekly", amount: market === "TR" ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 3 },
+    { code: "monthly", amount: market === "TR" ? 34990 : 1499, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "annual", amount: market === "TR" ? 149900 : 9990, interval: "year", interval_count: 1, trial_days: 0 }
   ] };
   const template = { id: templateId, name: "Mosaic Rose", slug: "mosaic-columns-rose", status: "active", module_type: "standard", preview_config: {}, export_config: {}, created_at: now, updated_at: now };
   const content = { version: "v1", language: "en", metadata: {}, sections: transition ? [{ id: "summary", type: "summary", title: "Professional Summary", order: 0, meta: {}, blocks: [{ id: "summary-block", type: "summary", order: 0, visibility: "visible", meta: {}, fields: { text: "Experienced candidate." } }] }] : [] };
   const master = { id: cvId, title: "My Main CV", language: "en", template_id: null, module_type: "standard", current_content: content, original_content: content, source_type: "import", created_at: now, updated_at: now };
   const review = { version: "cv-review-v1", status: "complete", score: 74, assessed_weight: 100, summary: "A clear starting point.", dimensions: [], strengths: [], improvements: ["Clarify your experience."], matched_keywords: [], missing_keywords: [], limitations: [] };
   const requests = [], errors = [], unexpected = [], visits = [];
+  let releaseCheckout;
+  let notifyCheckoutStarted;
+  const checkoutStarted = new Promise(resolve => { notifyCheckoutStarted = resolve; });
+  const checkoutReady = pauseCheckout ? new Promise(resolve => { releaseCheckout = resolve; }) : Promise.resolve();
   page.on("pageerror", error => errors.push(error.message));
   page.on("framenavigated", frame => { if (frame === page.mainFrame()) visits.push(frame.url()); });
   await page.setRequestInterception(true);
@@ -78,7 +82,7 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
       const path = url.pathname.slice(7), body = req.postData() ? JSON.parse(req.postData()) : {};
       requests.push({ path, method: req.method(), body, active });
       if (path === "/privacy/config") return void await respond({ notice_version: "2026-10-06.2", controller: "Fixture", address: "Test", contact: "privacy@example.invalid", processors: [], collection_enabled: true, ai_required: true, ai_enabled: true, ai_provider: "Fixture", analytics_enabled: false });
-      if (path === "/billing/prices") return void await respond(prices);
+      if (path === "/billing/prices") return void await respond(pricesUnavailable ? { ...prices, available: false, quote: null, plans: [] } : prices);
       if (path === "/guest-imports") return void await respond({ id: guestId, guest_token: "a".repeat(43), expires_at: new Date(Date.now() + 86400000).toISOString(), upload: { storage_bucket: "imports", storage_path: "fixture.pdf", token: "signed-fixture" } });
       if (path.startsWith(`/guest-imports/${guestId}`)) {
         if (path.endsWith("/claim")) return void await respond({ import_id: importId, original_filename: "candidate.pdf", answers: guestAnswers });
@@ -95,8 +99,10 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
       if (path === "/billing/entitlements") return void await respond(entitlements);
       if (path === "/billing/checkout") {
         checkoutInput = body; selectedPlan = body.plan_code; trial = selectedPlan === "weekly" && body.with_trial !== false;
+        notifyCheckoutStarted();
+        await checkoutReady;
         if (checkoutError && !trial) return void await req.respond({ status: 502, headers, body: JSON.stringify({ success: false, error: { code: "BILLING_PROVIDER_ERROR", message: "Unable to open payment. Please try again." } }) });
-        return void await respond({ checkout_url: "https://checkout.stripe.test/session", checkout_session_id: "cs_test_owned", plan_code: selectedPlan, plan_name: selectedPlan, trial_applied: trial, trial_period_days: trial ? 3 : null, amount: prices.plans.find(item => item.code === selectedPlan).amount, currency: "usd" });
+        return void await respond({ checkout_url: "https://checkout.stripe.test/session", checkout_session_id: "cs_test_owned", plan_code: selectedPlan, plan_name: selectedPlan, trial_applied: trial, trial_period_days: trial ? 3 : null, amount: prices.plans.find(item => item.code === selectedPlan).amount, currency: prices.currency });
       }
       if (path === "/billing/checkout/confirm") {
         if (body.session_id !== "cs_test_owned") return void await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: "NOT_FOUND", message: "Checkout session not found" } }) });
@@ -133,11 +139,62 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
     localStorage.setItem("cv-builder:privacy-choices", JSON.stringify({ version: "2026-10-06.2", analytics: false, expires_at: new Date(Date.now() + 86400000).toISOString() }));
     if (signedIn && !localStorage.getItem("sb-journey-fixture-auth-token")) localStorage.setItem("sb-journey-fixture-auth-token", JSON.stringify(session));
   }, { signedIn, session, locale });
-  return { context, page, requests, errors, unexpected, visits, cvId, importId, master, templateId, activate: () => { active = true; }, session, async close() { assert.deepEqual(errors, []); assert.deepEqual(unexpected, []); await context.close(); } };
+  return { context, page, requests, errors, unexpected, visits, cvId, importId, master, templateId, checkoutStarted, activate: () => { active = true; }, releaseCheckout: () => releaseCheckout?.(), session, async close() { releaseCheckout?.(); assert.deepEqual(errors, []); assert.deepEqual(unexpected, []); await context.close(); } };
 }
 
 try {
   browser = await puppeteer.launch({ headless: true });
+  {
+    const f = await fixture({ pauseCheckout: true });
+    try {
+      await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1&next=${encodeURIComponent("/onboarding?step=upload")}`, { waitUntil: "domcontentloaded" });
+      let deadline;
+      await Promise.race([f.checkoutStarted, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("Automatic checkout did not start")), 15000); })]).finally(() => clearTimeout(deadline));
+      assert.equal(await f.page.$("h1"), null, "automatic checkout must not show a purchase interstitial");
+      assert(!(await f.page.$eval("body", el => el.innerText)).includes("Checking your subscription"));
+      assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 1);
+      // A stalled provider request reveals recovery without starting another checkout.
+      await waitText(f.page, "Complete your Pro purchase");
+      assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 1);
+      f.releaseCheckout();
+      await waitText(f.page, "Test payment details");
+      await clickText(f.page, "Activate subscription");
+      await f.page.waitForSelector(".ob-create-zone");
+      console.log("PASS silent automatic checkout -> delayed recovery -> one Stripe session -> saved onboarding destination");
+    } catch (error) {
+      console.error("Automatic handoff diagnostics", { url: f.page.url(), text: await f.page.$eval("body", el => el.innerText), requests: f.requests.map(row => row.path), errors: f.errors, unexpected: f.unexpected });
+      throw error;
+    } finally { await f.close(); }
+  }
+  {
+    const f = await fixture({ pricesUnavailable: true });
+    try {
+      await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1`, { waitUntil: "networkidle0" });
+      await waitText(f.page, "Pricing is temporarily unavailable");
+      assert(await f.page.$("h1"), "unavailable pricing must reveal recovery");
+      assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 0);
+      console.log("PASS automatic checkout with unavailable prices reveals recovery without creating a session");
+    } finally { await f.close(); }
+  }
+  {
+    const f = await fixture({ transition: true, renewedTrialUsed: true });
+    try {
+      await f.page.goto(`${base}/app/checkout?plan=weekly&trial=1&auto=1`, { waitUntil: "networkidle0" });
+      await waitText(f.page, "This account is not eligible for another free trial.");
+      assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 0);
+      console.log("PASS automatic trial ineligibility never silently charges for a paid plan");
+    } finally { await f.close(); }
+  }
+  {
+    const f = await fixture();
+    try {
+      f.activate();
+      await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1`, { waitUntil: "networkidle0" });
+      await f.page.waitForSelector(".ob-create-zone");
+      assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 0);
+      console.log("PASS an already active account resumes onboarding without another purchase");
+    } finally { await f.close(); }
+  }
   for (const savedTailored of [false, true]) {
     const f = await fixture({ transition: true, renewedTrialUsed: true, savedTailored });
     try {
@@ -248,7 +305,8 @@ try {
       await waitText(f.page, "You need Pro to export your CV");
       await waitText(f.page, "Start your 3-day free trial or choose Pro to continue.");
       await f.page.screenshot({ path: new URL("premium-popup-desktop.png", output).pathname, fullPage: true });
-      await f.page.setViewport({ width: 390, height: 844 });
+      await f.page.setViewport({ width: 390, height: 1100 });
+      await f.page.waitForFunction(() => document.querySelector("aside").getBoundingClientRect().right <= 1);
       await f.page.screenshot({ path: new URL("premium-popup-mobile.png", output).pathname, fullPage: true });
       assert(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await clickText(f.page, "Start 3-day free trial");
@@ -286,6 +344,7 @@ try {
     try {
       await f.page.goto(`${base}/pricing?billing=${plan}`, { waitUntil: "networkidle0" });
       assert.equal(await f.page.$(".gj-trial-link"), null);
+      assert(!(await f.page.$eval("body", el => el.innerText)).includes("Let me help you choose"));
       await clickText(f.page, `Choose Pro ${plan}`);
       await f.page.waitForFunction(() => location.pathname === "/signup");
       if (method === "google") await clickText(f.page, "Continue with Google");
@@ -314,10 +373,15 @@ try {
     try {
       await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1&next=${encodeURIComponent("/onboarding?step=upload")}`, { waitUntil: "networkidle0" });
       await waitText(f.page, "Test payment details"); await clickText(f.page, "Return after failed payment");
-      await waitText(f.page, "Having trouble purchasing?");
+      await waitText(f.page, "Why don’t you try the free trial first?");
+      await f.page.screenshot({ path: new URL("checkout-cancel-desktop.png", output).pathname, fullPage: true });
+      await f.page.setViewport({ width: 390, height: 844 });
+      assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      assert.equal(await f.page.$eval(".checkout-cancelled-mascot", el => getComputedStyle(el).transform), "matrix(-1, 0, 0, 1, 0, 0)");
+      await f.page.screenshot({ path: new URL("checkout-cancel-mobile.png", output).pathname, fullPage: true });
       assert(await f.page.$('a[href="/support#contact"][target="_blank"]'));
       assert(await f.page.$('a[href^="mailto:contact@jobspecificcv.com?"]'));
-      await clickText(f.page, "Start Free Trial");
+      await clickText(f.page, "Start my 3-day free trial");
       await clickText(f.page, "Activate 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
       await f.page.waitForSelector(".ob-create-zone");
       assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 2);
@@ -361,6 +425,36 @@ try {
       await f.page.waitForFunction(path => location.pathname === path, {}, `/app/tailor/${f.cvId}`);
       assert.equal(f.master.template_id, f.templateId);
       console.log("PASS upload -> four questions -> claim/score -> trial -> selected tailoring path");
+    } finally { await f.close(); }
+  }
+  {
+    const f = await fixture({ transition: true, renewedTrialUsed: true, locale: "tr", market: "TR" });
+    try {
+      await f.page.setViewport({ width: 320, height: 1100 });
+      await f.page.goto(`${base}/app/checkout?plan=annual&trial=0&checkout=cancel`, { waitUntil: "networkidle0" });
+      await waitText(f.page, "Kaldığınız yerden devam edelim.");
+      assert.equal(await f.page.$('a.checkout-cancelled-primary[href*="trial=1"]'), null);
+      assert((await f.page.$eval(".checkout-cancelled-offer", el => el.innerText)).includes("1.499,00"));
+      assert.equal(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await f.page.screenshot({ path: new URL("checkout-cancel-tr-ineligible.png", output).pathname, fullPage: true });
+      await clickText(f.page, "Yıllık plan ödemesini tekrar dene");
+      await waitText(f.page, "Test payment details");
+      assert.equal(f.requests.find(row => row.path === "/billing/checkout").body.plan_code, "annual");
+      console.log("PASS Turkish cancellation without trial eligibility shows live annual price and retries annual purchase");
+    } finally { await f.close(); }
+  }
+  {
+    const f = await fixture({ market: "TR" });
+    try {
+      await f.page.goto(`${base}/app/checkout?plan=weekly&trial=1&checkout=cancel`, { waitUntil: "networkidle0" });
+      await waitText(f.page, "Why don’t you try the free trial first?");
+      assert((await f.page.$eval(".checkout-cancelled-terms", el => el.innerText)).includes("149.90"));
+      await clickText(f.page, "Start my 3-day free trial");
+      await waitText(f.page, "Test payment details");
+      const checkout = f.requests.find(row => row.path === "/billing/checkout").body;
+      assert.equal(checkout.plan_code, "weekly");
+      assert.notEqual(checkout.with_trial, false);
+      console.log("PASS canceled trial resumes trial activation with the regional weekly renewal price");
     } finally { await f.close(); }
   }
   {

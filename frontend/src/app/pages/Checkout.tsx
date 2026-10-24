@@ -1,4 +1,5 @@
 import { SupportHelp } from "../components/SupportHelp";
+import { CheckoutCancelled } from "../components/CheckoutCancelled";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Loader2, CreditCard } from "lucide-react";
@@ -26,13 +27,23 @@ export function Checkout() {
   const outcome = params.get("checkout");
   const sessionId = params.get("session_id");
   const auto = params.get("auto") === "1";
+  const automaticHandoff = auto && !outcome;
   const regional = useRegionalPricing();
   const price = regional.prices?.plans.find(item => item.code === plan);
   const [eligibility, setEligibility] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [handoffDelayed, setHandoffDelayed] = useState(false);
   const started = useRef(false);
+
+  useEffect(() => {
+    setHandoffDelayed(false);
+    if (!automaticHandoff) return;
+    // Show recovery controls if a slow request prevents the automatic handoff.
+    const timer = window.setTimeout(() => setHandoffDelayed(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [automaticHandoff, plan, trial, destination]);
 
   useEffect(() => {
     let active = true;
@@ -91,6 +102,13 @@ export function Checkout() {
     }
   }, [auto, outcome, eligibility, regional.ready, openCheckout, trial, error]);
 
+  // Paid CTA/auth returns are a background handoff, not another purchase step.
+  // Retain the screen for deliberate trial activation, cancellation and recovery.
+  if (automaticHandoff && !handoffDelayed && !error && !regional.error &&
+      (regional.loading || regional.ready) && (!trial || eligibility !== false)) return null;
+
+  if (outcome === "cancel") return <CheckoutCancelled plan={plan} trial={trial} eligibility={eligibility} destination={destination} regional={regional} busy={busy} error={error} onRetry={() => void openCheckout()} />;
+
   return <div className="mx-auto max-w-lg px-6 py-14">
     <CreditCard className="mb-4 text-teal-700" size={32} />
     <h1 className="text-2xl font-semibold mb-3">{t(outcome === "success" ? "Confirming your subscription" : trial ? "Activate your 3-day free trial" : "Complete your Pro purchase")}</h1>
@@ -101,15 +119,14 @@ export function Checkout() {
       <p className="mt-2">{trial ? `${formatMoney(0, regional.prices!.currency)} ${t("today")}. ` : ""}{formatMoney(price.amount, regional.prices!.currency)} {t(plan === "annual" ? "billed yearly" : plan === "monthly" ? "billed monthly" : "billed weekly")}</p>
       <p className="mt-2 text-sm">{t(trial ? "Credit card required. Renews weekly after 3 days unless cancelled before the trial ends." : "Your subscription renews automatically. You can manage or cancel it in billing settings.")}</p>
     </div>}
-    {outcome === "cancel" && <p role="status" className="mb-4">{t("Payment was not completed. Your work is saved. You can retry or activate the 3-day trial instead.")}</p>}
     {error && <p role="alert" className="mb-4 text-red-700">{t(error)}</p>}
-    {(error || regional.error || outcome === "cancel") && <SupportHelp topic="Payment" />}
+    {(error || regional.error) && <SupportHelp topic="Payment" />}
     {trial && eligibility === false && <p role="status" className="mb-4">{t("This account is not eligible for another free trial. Choose a Pro plan to continue.")}</p>}
     {outcome === "success" ? <button className="interactive-button rounded-lg bg-teal-700 text-white px-5 py-3" disabled={busy} onClick={() => setAttempt(value => value + 1)}>{busy ? t("Confirming…") : t("Check activation again")}</button> :
       <button className="interactive-button rounded-lg bg-teal-700 text-white px-5 py-3 inline-flex gap-2 items-center" disabled={busy || !regional.ready || eligibility === null || (trial && !eligibility)} onClick={() => void openCheckout()}>
         {busy && <Loader2 className="animate-spin" size={16} />}{t(busy ? "Opening secure checkout…" : trial ? "Activate 3-day free trial" : "Continue to secure checkout")}
       </button>}
-    {!trial && (outcome === "cancel" || error) && eligibility !== false && <div className="mt-5"><p className="mb-2">{t("Having trouble purchasing? Try Pro with a 3-day free trial instead.")}</p><Link className="underline text-teal-700" to={checkoutPath({ with_trial: true, return_path: destination })}>{t("Start Free Trial")}</Link></div>}
+    {!trial && error && eligibility !== false && <div className="mt-5"><p className="mb-2">{t("Having trouble purchasing? Try Pro with a 3-day free trial instead.")}</p><Link className="underline text-teal-700" to={checkoutPath({ with_trial: true, return_path: destination })}>{t("Start Free Trial")}</Link></div>}
     <p className="mt-6"><Link to="/app/pricing" className="text-sm underline">{t("See Pro plans")}</Link></p>
   </div>;
 }

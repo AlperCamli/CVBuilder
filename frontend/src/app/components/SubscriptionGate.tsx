@@ -41,7 +41,8 @@ export function SubscriptionGate({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("focus", recheck); window.clearInterval(timer); };
   }, [exempt]);
   if (exempt) return <>{children}</>;
-  if (!state || state.path !== pathname) return <p role="status" className="p-8">{t("Checking your subscription…")}</p>;
+  // Keep access checks in place without flashing subscription status during navigation.
+  if (!state || state.path !== pathname) return null;
   if (state.error) return <div className="p-8"><p role="alert">{t(state.error)}</p><button onClick={() => setRetry(value => value + 1)}>{t("Try again")}</button></div>;
   if (state.manualReturn) return <Navigate to={state.manualReturn} replace />;
   if (!state.access) return <Navigate to={checkoutPath({ with_trial: state.trialEligible !== false, return_path: `${pathname}${search}` })} replace />;

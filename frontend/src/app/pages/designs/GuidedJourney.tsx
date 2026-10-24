@@ -323,15 +323,6 @@ export default function GuidedJourney({
                 {t("A tailored CV for every role. One subscription to keep you moving.")}</p>
             </div>
           )}
-          {pricing && (
-            <button
-              className="gj-pricing-help gj-inline-button"
-              onClick={() => setHelpRequest((value) => value + 1)}
-            >
-              <img src="/images/logo.png" width="25" height="25" alt="" />
-              {t("Let me help you choose")}{" "}<ArrowRight size={14} />
-            </button>
-          )}
           <PricingCards
             concept="journey"
             teaser={!pricing}
