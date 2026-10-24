@@ -19,7 +19,7 @@ export function LanguageSwitcher() {
   const navigate = useNavigate();
   const change = (locale: Locale) => {
     chooseLocale(locale);
-    if (["/", "/pricing", "/tr", "/tr/pricing"].includes(location.pathname)) {
+    if (["/", "/pricing", "/support", "/tr", "/tr/pricing", "/tr/support"].includes(location.pathname)) {
       const base = location.pathname.replace(/^\/tr/, "") || "/";
       navigate(`${publicPath(base, locale)}${location.search}${location.hash}`);
     }
@@ -83,7 +83,7 @@ export function LanguageChooser() {
       if (remembered) {
         chooseLocale(remembered, false);
         if (
-          ["/", "/pricing", "/tr", "/tr/pricing"].includes(location.pathname)
+          ["/", "/pricing", "/support", "/tr", "/tr/pricing", "/tr/support"].includes(location.pathname)
         ) {
           const base = location.pathname.replace(/^\/tr/, "") || "/";
           const nextPath = publicPath(base, remembered);
@@ -127,7 +127,7 @@ export function LanguageChooser() {
     chooseLocale(locale);
     setOpen(false);
     dialog.current?.close();
-    if (["/", "/pricing", "/tr", "/tr/pricing"].includes(location.pathname)) {
+    if (["/", "/pricing", "/support", "/tr", "/tr/pricing", "/tr/support"].includes(location.pathname)) {
       const base = location.pathname.replace(/^\/tr/, "") || "/";
       navigate(
         `${publicPath(base, locale)}${location.search}${location.hash}`,

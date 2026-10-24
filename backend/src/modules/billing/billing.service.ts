@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { RegionalPricingService, PurchasePlan } from "./regional-pricing";
 import {
   ConflictError,
+  ForbiddenError,
   BillingConfigurationError,
   BillingPlanValidationError,
   BillingProviderError,
@@ -10,7 +11,7 @@ import {
   NotFoundError,
   ValidationError
 } from "../../shared/errors/app-error";
-import type { CurrentPlanSummary, UserRecord } from "../../shared/types/domain";
+import type { CurrentPlanSummary, UserRecord, SubscriptionRecord } from "../../shared/types/domain";
 import type { UsersRepository } from "../users/users.repository";
 import type { EntitlementsService } from "../entitlements/entitlements.service";
 import type { PlanCode, PlanDefinition, ResolvedEntitlements } from "../entitlements/entitlements.types";
@@ -29,6 +30,7 @@ import type {
 } from "./billing.types";
 import type {
   BillingSubscriptionsRepository,
+  TrialTransitionGrant,
   SyncSubscriptionInput
 } from "./subscriptions.repository";
 import type {
@@ -39,6 +41,7 @@ import type {
 } from "./stripe-gateway";
 
 interface BillingServiceOptions {
+  requireSubscription?: boolean;
   regionalPricing?: RegionalPricingService;
   provider: "stripe";
   checkoutSuccessUrl: string;
@@ -136,6 +139,7 @@ const parseSubscriptionFromWebhookObject = (object: unknown): StripeSubscription
     id,
     customer_id: customerId,
     status: typeof row.status === "string" ? row.status : "inactive",
+    trial_start: toIsoFromUnixSeconds(row.trial_start),
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
     current_period_start: toIsoFromUnixSeconds(row.current_period_start),
     current_period_end: toIsoFromUnixSeconds(row.current_period_end),
@@ -168,16 +172,22 @@ export class BillingService {
   }
 
   async getBillingPlan(userId: string): Promise<BillingPlanResponseData> {
-    const snapshot = await this.getSnapshot(userId);
-    const trialEligible = await this.isUserTrialEligible(userId);
+    const [snapshot, transition] = await Promise.all([
+      this.getSnapshot(userId), this.subscriptionsRepository.getTrialTransitionGrant(userId)
+    ]);
+    const trialEligible = await this.isUserTrialEligible(userId, transition);
 
     return {
+      app_access: !this.options.requireSubscription || this.subscriptionAllowsAccess(snapshot.subscription),
+      subscription_required: this.options.requireSubscription === true,
+      can_edit_existing_cvs: Boolean(transition) || !this.options.requireSubscription || this.subscriptionAllowsAccess(snapshot.subscription),
       plan_code: snapshot.current_plan.plan_code as PlanCode,
       subscription_status: snapshot.current_plan.status,
       current_period_start: snapshot.current_plan.current_period_start,
       current_period_end: snapshot.current_plan.current_period_end,
       cancel_at_period_end: snapshot.current_plan.cancel_at_period_end,
       trial_eligible: trialEligible,
+      trial_transition: transition ? { eligible: trialEligible } : null,
       provider: {
         provider: snapshot.subscription?.provider ?? this.options.provider,
         provider_customer_id: snapshot.subscription?.provider_customer_id ?? null,
@@ -188,15 +198,17 @@ export class BillingService {
   }
 
   // Whether starting checkout right now would grant the free trial: trials must
-  // be enabled and the user must not have already consumed their one trial.
+  // be enabled and either the release grant or the normal first trial must be unused.
   // Shared by the checkout flow and the billing-plan endpoint so the UI's CTA
   // label ("Start 3-day free trial" vs "Start your subscription") always matches
   // what checkout will actually do.
-  private async isUserTrialEligible(userId: string): Promise<boolean> {
+  private async isUserTrialEligible(userId: string, grant?: TrialTransitionGrant | null): Promise<boolean> {
     if (this.options.trialPeriodDays <= 0) {
       return false;
     }
 
+    const transition = grant === undefined ? await this.subscriptionsRepository.getTrialTransitionGrant(userId) : grant;
+    if (transition) return transition.redeemed_at === null;
     return !(await this.subscriptionsRepository.hasUsedTrial(userId));
   }
 
@@ -226,6 +238,7 @@ export class BillingService {
   }
 
   async assertActionAllowed(userId: string, action: GatedAction): Promise<void> {
+    await this.assertSubscriptionAccess(userId);
     const snapshot = await this.getSnapshot(userId);
     const decision = this.entitlementsService.evaluateAction(action, snapshot.entitlements);
 
@@ -237,6 +250,43 @@ export class BillingService {
         remaining: snapshot.entitlements.remaining
       });
     }
+  }
+
+  async assertSubscriptionAccess(userId: string, allowExistingCvWorkspace = false): Promise<void> {
+    if (!this.options.requireSubscription) return;
+    const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (!this.subscriptionAllowsAccess(subscription)) {
+      if (allowExistingCvWorkspace && await this.subscriptionsRepository.getTrialTransitionGrant(userId)) return;
+      throw new ForbiddenError("Activate your 3-day free trial or purchase Pro to continue.", { reason: "subscription_required" });
+    }
+  }
+
+  private subscriptionAllowsAccess(subscription: SubscriptionRecord | null): boolean {
+    if (!subscription || this.entitlementsService.resolveEffectivePlanCode(subscription) === "free") return false;
+    // A delayed webhook must not extend a three-day trial indefinitely.
+    if (subscription.status === "trialing") {
+      const end = Date.parse(subscription.current_period_end ?? "");
+      if (!Number.isFinite(end) || end <= Date.now()) return false;
+    }
+    return true;
+  }
+
+  async confirmCheckout(userId: string, sessionId: string): Promise<BillingPlanResponseData> {
+    const gateway = this.requireStripeGateway();
+    if (!gateway.retrieveCheckoutSession) throw new BillingConfigurationError("Checkout confirmation is unavailable");
+    const session = await gateway.retrieveCheckoutSession(sessionId);
+    if (!session || session.metadata.app_user_id !== userId) throw new NotFoundError("Checkout session not found");
+    if (session.status !== "complete" || !session.subscription_id || !["paid", "no_payment_required"].includes(session.payment_status ?? "")) {
+      throw new ConflictError("Your payment is not complete. Please finish checkout or try again.");
+    }
+    const subscription = await gateway.retrieveSubscription(session.subscription_id);
+    if (!subscription || subscription.customer_id !== session.customer_id || subscription.metadata.app_user_id !== userId) {
+      throw new NotFoundError("Subscription not found");
+    }
+    if (!["active", "trialing"].includes(subscription.status)) throw new ConflictError("Your subscription is still being confirmed. Please try again.");
+    await this.requireUser(userId);
+    await this.syncStripeSubscription(userId, subscription);
+    return this.getBillingPlan(userId);
   }
 
   async recordTailoredCvGenerationUsage(userId: string): Promise<void> {
@@ -277,7 +327,7 @@ export class BillingService {
 
     // Only grant a free trial when: the plan supports one, trials are enabled,
     // the caller did not explicitly opt out (`with_trial: false`), and the user
-    // has never consumed a trial before. The last check closes the abuse vector
+    // has an unused release grant or has never consumed a trial. This closes the abuse vector
     // where a user starts a trial, cancels before the first charge, and then
     // starts a brand-new trial once the previous one lapses.
     let trialPeriodDays: number | null = null;
@@ -303,6 +353,7 @@ export class BillingService {
       trial_period_days: trialPeriodDays,
       metadata: {
         app_user_id: user.id,
+        ...(trialPeriodDays && await this.subscriptionsRepository.getTrialTransitionGrant(userId) ? { trial_transition: "1" } : {}),
         plan_code: plan.code,
         ...(regional ? { billing_market: regional.market, billing_currency: regional.currency } : {})
       }
@@ -542,6 +593,11 @@ export class BillingService {
       cancel_at_period_end: subscription.cancel_at_period_end
     };
 
+    // Only verified provider data redeems the grant. Abandoned/failed checkout does not.
+    // Do this before persistence so a webhook retry cannot leave a synced trial reusable.
+    if (subscription.metadata.trial_transition === "1" && (subscription.status === "trialing" || subscription.trial_start)) {
+      await this.subscriptionsRepository.redeemTrialTransitionGrant(userId, subscription.id);
+    }
     await this.subscriptionsRepository.upsertProviderSubscription(payload);
   }
 
@@ -631,6 +687,12 @@ export class BillingService {
     const usage = await this.usageService.getCurrentMonth(user.id);
     const usageSummary = this.entitlementsService.resolveUsage(usage, effectivePlanCode);
     const entitlements = this.entitlementsService.resolveEntitlements(usage, effectivePlanCode);
+    if (this.options.requireSubscription && !this.subscriptionAllowsAccess(subscription)) {
+      entitlements.can_generate_tailored_cv = false;
+      entitlements.can_export_pdf = false;
+      entitlements.can_export_docx = false;
+      entitlements.can_use_ai_actions = false;
+    }
 
     const currentPlan: CurrentPlanSummary = {
       plan_code: effectivePlanCode,

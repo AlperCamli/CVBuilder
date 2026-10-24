@@ -1126,12 +1126,16 @@ export interface BillingProviderSummary {
 }
 
 export interface BillingPlanResponseData {
+  app_access?: boolean;
+  can_edit_existing_cvs?: boolean;
+  subscription_required?: boolean;
   plan_code: "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";
   subscription_status: string;
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   trial_eligible: boolean;
+  trial_transition?: { eligible: boolean } | null;
   provider: BillingProviderSummary;
   entitlement_summary: EntitlementSummary;
 }

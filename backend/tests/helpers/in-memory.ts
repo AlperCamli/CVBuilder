@@ -122,6 +122,12 @@ export class InMemoryUsersRepository implements UsersRepository {
 }
 
 export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepository {
+  readonly transitionGrants = new Map<string, { redeemed_at: string | null }>();
+  async getTrialTransitionGrant(userId: string) { return this.transitionGrants.get(userId) ?? null; }
+  async redeemTrialTransitionGrant(userId: string, _subscriptionId: string) {
+    const grant = this.transitionGrants.get(userId);
+    if (grant && !grant.redeemed_at) grant.redeemed_at = nowIso();
+  }
   private readonly subscriptionsByUser = new Map<string, SubscriptionRecord[]>();
 
   seed(subscription: SubscriptionRecord): void {
@@ -476,6 +482,8 @@ export const createTestConfig = (): AppConfig => {
       photoUrlTtlSeconds: 3600
     },
     billing: {
+      requireSubscription: false,
+      freeUsageLimitsEnabled: true,
       provider: "stripe",
       stripeSecretKey: null,
       stripeWebhookSecret: null,

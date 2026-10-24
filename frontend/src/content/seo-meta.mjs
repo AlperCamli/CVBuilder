@@ -79,11 +79,11 @@ export const WEB_APPLICATION_JSON_LD = {
 export const GUIDED_JOURNEY_FAQ_ITEMS = [
   {
     question: "Can I start without a card?",
-    answer: "Yes. The Free plan includes 3 tailored CVs, 5 exports, and 20 AI actions per month. Each allowance has its own limit. No credit card is required.",
+    answer: "You can complete onboarding before entering card details. Existing users can view and manually edit saved CVs for free. Creating a new CV, exporting, AI tools, and tailoring require an active trial or Pro subscription. The 3-day trial requires a card and renews weekly unless cancelled before it ends.",
   },
   {
     question: "How is the Pro trial different?",
-    answer: "Eligible new subscribers can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at the displayed regional Weekly price unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
+    answer: "Eligible users can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at the displayed regional Weekly price unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
   },
   {
     question: "Can I review the changes?",
@@ -92,8 +92,8 @@ export const GUIDED_JOURNEY_FAQ_ITEMS = [
 ];
 
 export const GUIDED_JOURNEY_FAQ_ITEMS_TR = [
-  { question: "Kart olmadan başlayabilir miyim?", answer: "Evet. Ücretsiz plan ayda 3 işe özel özgeçmiş, 5 dışa aktarma ve 20 yapay zekâ işlemi içerir. Her hakkın ayrı bir sınırı vardır. Kredi kartı gerekmez." },
-  { question: "Pro denemesi nasıl farklı?", answer: "Uygun yeni aboneler Haftalık Pro’yu 3 gün ücretsiz deneyebilir. Ödeme sırasında kart gerekir. Deneme bitmeden iptal edilmezse gösterilen bölgesel Haftalık fiyatla yenilenir. Deneme Aylık plana uygulanmaz. Uygunluk ve koşullar ödeme sırasında doğrulanır." },
+  { question: "Kart olmadan başlayabilir miyim?", answer: "Kart bilgilerinizi girmeden başlangıç adımlarını tamamlayabilirsiniz. Mevcut kullanıcılar kayıtlı CV’lerini ücretsiz görüntüleyebilir ve elle düzenleyebilir. Yeni CV oluşturma, dışa aktarma, yapay zekâ araçları ve işe uyarlama için aktif bir deneme veya Pro aboneliği gerekir. 3 günlük deneme için kart gerekir; deneme bitmeden iptal edilmezse abonelik haftalık yenilenir." },
+  { question: "Pro denemesi nasıl farklı?", answer: "Uygun kullanıcılar Haftalık Pro’yu 3 gün ücretsiz deneyebilir. Ödeme sırasında kart gerekir. Deneme bitmeden iptal edilmezse gösterilen bölgesel Haftalık fiyatla yenilenir. Deneme Aylık plana uygulanmaz. Uygunluk ve koşullar ödeme sırasında doğrulanır." },
   { question: "Değişiklikleri inceleyebilir miyim?", answer: "Her zaman. Uygun anahtar kelimeleri seçin, önerileri inceleyin ve dışa aktarmadan önce özgeçmişinizi düzenleyin. Deneyiminiz her zaman temel alınır." }
 ];
 
@@ -103,8 +103,8 @@ function guidedJourneyRoute(pricing, locale = "en", primary = false) {
     ? "Guided Journey Pricing | jobspecificCV"
     : "Tailor Your CV in Minutes — Guided Journey | jobspecificCV";
   const description = locale === "tr" ? (pricing ? "Ücretsiz başlayın veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "Özgeçmişinizi yükleyin, iş ilanına göre uyarlayın ve her değişikliği inceleyin. Türkçe veya İngilizce özgeçmiş oluşturun.") : pricing
-    ? "Compare Weekly, Monthly, and Annual Pro with regional billing totals. Start Free or explore the eligible 3-day Weekly trial."
-    : "Try the interactive CV demo with a friendly guide. Tailor your CV to a job description, review every change, and start free.";
+    ? "Compare Weekly, Monthly, and Annual Pro with regional billing totals. Start a 3-day trial with card activation or purchase Pro directly."
+    : "Try the interactive CV demo with a friendly guide. Tailor your CV to a job description, review every change, and start a 3-day trial.";
   return {
     path,
     language: locale,
@@ -323,6 +323,18 @@ function articleRoute(content, article) {
 // frontend/prerendered/. `content` is the parsed career-advice-content.json.
 export function buildSeoRoutes(content) {
   return [
+    ...["en", "tr"].map(language => {
+      const tr = language === "tr";
+      const path = tr ? "/tr/support" : "/support";
+      return {
+        path, language, snapshot: `${language}-support`,
+        title: tr ? "Destek ve İletişim | jobspecificCV" : "Support & Contact | jobspecificCV",
+        description: tr ? "CV yükleme, dışa aktarma, ücretsiz deneme ve abonelik hakkında yardım alın. JobSpecificCV destek ekibine e-posta ile ulaşın." : "Get help with CV uploads, exports, your free trial, and subscriptions. Contact JobSpecificCV support by email.",
+        canonical: absoluteUrl(path), robots: "index, follow", ogType: "website",
+        ogImage: OG_IMAGE, includeInSitemap: true,
+        alternates: { en: absoluteUrl("/support"), tr: absoluteUrl("/tr/support"), "x-default": absoluteUrl("/support") }
+      };
+    }),
     guidedJourneyRoute(false, "en", true),
     guidedJourneyRoute(true, "en", true),
     guidedJourneyRoute(false, "tr", true),

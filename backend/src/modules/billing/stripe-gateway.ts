@@ -12,6 +12,7 @@ export interface StripeCustomerSummary {
 }
 
 export interface StripeSubscriptionSummary {
+  trial_start?: string | null;
   id: string;
   customer_id: string;
   status: string;
@@ -23,6 +24,8 @@ export interface StripeSubscriptionSummary {
 }
 
 export interface StripeCheckoutSessionSummary {
+  status?: string | null;
+  payment_status?: string;
   id: string;
   url: string | null;
   customer_id: string | null;
@@ -68,6 +71,7 @@ export interface CreateStripePortalInput {
 export interface StripePriceSummary { id: string; active: boolean; product_id: string; currency: string; amount: number; interval: string | null; interval_count: number | null }
 
 export interface StripeGateway {
+  retrieveCheckoutSession?(sessionId: string): Promise<StripeCheckoutSessionSummary | null>;
   hasBillableSubscription?(customerId: string): Promise<boolean>;
   expireCheckoutSession?(sessionId: string): Promise<void>;
   retrievePrice?(priceId: string): Promise<StripePriceSummary | null>;
@@ -164,6 +168,15 @@ export class StripeBillingGateway implements StripeGateway {
 
   async expireCheckoutSession(sessionId: string): Promise<void> { await this.stripe.checkout.sessions.expire(sessionId); }
 
+  async retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSessionSummary | null> {
+    const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+    return {
+      id: session.id, url: session.url, status: session.status, payment_status: session.payment_status,
+      customer_id: session.customer ? normalizeCustomerId(session.customer) : null,
+      subscription_id: normalizeSubscriptionId(session.subscription), metadata: toMetadataRecord(session.metadata)
+    };
+  }
+
   async retrievePortalConfiguration(id: string) {
     const config = await this.stripe.billingPortal.configurations.retrieve(id, {
       expand: ["features.subscription_update.products"]
@@ -231,6 +244,8 @@ export class StripeBillingGateway implements StripeGateway {
       };
 
       if (mode === "subscription") {
+        baseParams.payment_method_collection = "always";
+        if (input.trial_period_days) baseParams.payment_method_types = ["card"];
         const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
           metadata: input.metadata
         };
@@ -317,6 +332,7 @@ export class StripeBillingGateway implements StripeGateway {
         id: subscription.id,
         customer_id: customerId,
         status: subscription.status,
+        trial_start: toPeriodIso(subscription.trial_start),
         cancel_at_period_end: subscription.cancel_at_period_end,
         current_period_start: toPeriodIso(subscription.current_period_start),
         current_period_end: toPeriodIso(subscription.current_period_end),

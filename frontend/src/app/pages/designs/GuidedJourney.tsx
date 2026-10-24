@@ -1,4 +1,3 @@
-import { useRegionalPricing, formatMoney } from "../../integration/regional-pricing";
 import { translate as t } from "../../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "../../localization/LanguageControls";
@@ -32,11 +31,9 @@ import {
   StartLink,
   TrustLine,
 } from "./DesignShared";
-import { DemoDialog, ProductDemo, type DemoAction } from "./ProductDemo";
+import { ProductDemo, type DemoAction } from "./ProductDemo";
 import { MascotRail } from "./MascotRail";
 import { scrollToJourneySection } from "./mascot-navigation";
-import { setPendingCheckout } from "../../integration/pending-checkout";
-import { BILLING } from "./concepts";
 import {
   DEFAULT_MASCOT_CONFIG,
   type MascotConfig,
@@ -67,16 +64,13 @@ export default function GuidedJourney({
   };
 }) {
   useTranslation();
-  const regional = useRegionalPricing();
-  const weeklyPrice = regional.ready ? formatMoney(regional.prices!.plans.find(p => p.code === "weekly")!.amount, regional.prices!.currency) : "—";
   const mascotConfig = settings?.config ?? DEFAULT_MASCOT_CONFIG;
   const pinned = settings?.pinned ?? null;
   const inspect = settings?.inspect ?? false;
   const [languageDialog, setLanguageDialog] = useState(false);
   useEffect(() => { setLanguageDialog(Boolean(document.querySelector('dialog[open][aria-labelledby="language-choice-title"]'))); const update = (event: Event) => setLanguageDialog(Boolean((event as CustomEvent).detail)); window.addEventListener("cv-language-dialog", update); return () => window.removeEventListener("cv-language-dialog", update); }, []);
   const [menu, setMenu] = useState(false);
-  const [trial, setTrial] = useState(false);
-  const [demoModal, setDemoModal] = useState(false);
+    const [demoModal, setDemoModal] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
   const [demoStep, setDemoStep] = useState(1);
   const [reaction, setReaction] = useState<DemoAction | null>(null);
@@ -143,10 +137,6 @@ export default function GuidedJourney({
     [mascotConfig.motion],
   );
   const jumpTo = scrollToJourneySection;
-  const beginTrial = () => {
-    setPendingCheckout({ plan_code: "weekly", with_trial: true });
-    navigate("/onboarding");
-  };
   return (
     <div
       className="cv-concept cv-journey cv-guided-journey"
@@ -211,7 +201,7 @@ export default function GuidedJourney({
           <Link to="/signin" className="cv-signin">
             {t("Sign in")}</Link>
           <StartLink to="/onboarding" className="cv-button cv-button-small">
-            {t("Start free")}{" "}<ArrowUpRight size={15} />
+            {t("Start Free Trial")}{" "}<ArrowUpRight size={15} />
           </StartLink>
         </div>
         <button
@@ -239,7 +229,7 @@ export default function GuidedJourney({
                   {t("Upload your CV, paste a job description, and get a cleaner, ATS-friendly version focused on the role in front of you.")}</p>
                 <div className="cv-hero-actions">
                   <StartLink to="/onboarding">
-                    {t("Tailor your CV — it’s free")}{" "}<ArrowRight size={17} />
+                    {t("Start Free Trial")}{" "}<ArrowRight size={17} />
                   </StartLink>
                   <button
                     className="cv-text-link gj-plain-button"
@@ -250,7 +240,7 @@ export default function GuidedJourney({
                 </div>
                 <div className="cv-free-note">
                   <Check size={13} />
-                  {t("Free to start · No credit card required")}</div>
+                  {t("3-day free trial · Card required to activate")}</div>
               </div>
             </section>
             <section className="gj-demo-section" id="demo">
@@ -317,7 +307,7 @@ export default function GuidedJourney({
                 {t("Your next step.")}<br />
                 <span>{t("At your own pace.")}</span>
               </h1>
-              <p>{t("Start free. Make room for every opportunity with Pro.")}</p>
+              <p>{t("Try Pro for 3 days. Make room for every opportunity.")}</p>
             </div>
           </section>
         )}
@@ -346,7 +336,6 @@ export default function GuidedJourney({
             concept="journey"
             teaser={!pricing}
             guided={{
-              onTrial: () => setTrial(true),
               pricingPath: `${BASE}/pricing`,
             }}
           />
@@ -379,7 +368,7 @@ export default function GuidedJourney({
             <StartLink to="/onboarding">
               {t("Let’s tailor my CV")}{" "}<ArrowRight size={17} />
             </StartLink>
-            <small>{t("Free to start. No card required.")}</small>
+            <small>{t("3-day free trial. Card required to activate.")}</small>
           </div>
         </section>
         <section className="cv-wrap gj-faq">
@@ -409,6 +398,7 @@ export default function GuidedJourney({
         <nav aria-label={t("Footer")}>
           <Link to={`${BASE}/pricing`}>{t("Pricing")}</Link>
           <Link to="/career-advice">{t("Career resources")}</Link>
+          <Link to={BASE === "/tr" ? "/tr/support" : "/support"}>{t("Support")}</Link>
           {review && (
             <Link to="/designs">
               {t("All design directions")}{" "}<ArrowUpRight size={13} />
@@ -439,50 +429,12 @@ export default function GuidedJourney({
         reaction={reaction}
         suspended={
           languageDialog ||
-          trial || demoModal || templateModal || menu || templateOverlayOpen
+          demoModal || templateModal || menu || templateOverlayOpen
         }
         openRequest={helpRequest}
-        onTrial={() => setTrial(true)}
+        onTrial={() => navigate("/onboarding")}
       />
-      {trial && (
-        <div className="cv-round-two">
-          <DemoDialog
-            title={t("Try Pro for 3 days")}
-            onClose={() => setTrial(false)}
-          >
-            <div className="gj-trial-intro">
-              <img
-                src="/images/designs/mascot/guide.webp"
-                width="70"
-                height="105"
-                alt=""
-              />
-              <p>
-                {t("A little time to try it all.")}<br />
-                <strong>{t("Unlimited tailoring, AI actions, and exports.")}</strong>
-              </p>
-            </div>
-            <div className="gj-trial-terms">
-              <div>
-                <span>{t("First 3 days")}</span>
-                <strong>{regional.prices ? formatMoney(0, regional.prices.currency) : "0"}</strong>
-              </div>
-              <div>
-                <span>{t("Then Weekly Pro")}</span>
-                <strong>{weeklyPrice} {" "}{t("/ week")}</strong>
-              </div>
-              <p>
-                {t("For eligible new subscribers. Card required. Renews weekly unless cancelled before the trial ends. Eligibility and final terms are confirmed at checkout.")}</p>
-            </div>
-            <button className="pd-primary" onClick={beginTrial} disabled={!regional.ready}>
-              {t("Create account & try Weekly Pro")}{" "}<ArrowRight size={15} />
-            </button>
-            <StartLink to="/onboarding" className="gj-dialog-link">
-              {t("Prefer Free? No card required")}{" "}<ArrowRight size={14} />
-            </StartLink>
-          </DemoDialog>
-        </div>
-      )}
+
     </div>
   );
 }

@@ -149,10 +149,10 @@ export function TemplateShowcase({
                     {t("The next one")}<br />
                     {t("could be yours.")}</h3>
                   <p>{t("Your story. A fresh start.")}</p>
-                  <StartLink className="cv-text-link">
+                  <StartLink className="cv-text-link" templateSlug={current.slug}>
                     {t("Create my CV")}{" "}<ArrowRight size={17} />
                   </StartLink>
-                  <small>{t("Free to start. No card required.")}</small>
+                  <small>{t("3-day free trial. Card required to activate.")}</small>
                 </div>
               </div>
             </>
@@ -213,11 +213,11 @@ export function TemplateShowcase({
                   <strong>{current.name}</strong>
                   <p>{t(current.detail)}</p>
                 </div>
-                <StartLink>
+                <StartLink templateSlug={current.slug}>
                   {t("Create my CV")}{" "}<ArrowRight size={17} />
                 </StartLink>
                 <small className="ts-free-note">
-                  {t("Free to start. Make it yours in the editor.")}</small>
+                  {t("3-day free trial. Make it yours in the editor.")}</small>
               </div>
             </div>
           )}
@@ -332,10 +332,10 @@ export function TemplateShowcase({
                 ))}
               </div>
               <div className="ts-lookbook-cta">
-                <StartLink>
+                <StartLink templateSlug={current.slug}>
                   {t("Make it yours")}{" "}<ArrowRight size={17} />
                 </StartLink>
-                <span>{t("Free to start. Choose your style in the editor.")}</span>
+                <span>{t("3-day free trial. Your selected style opens in the editor.")}</span>
               </div>
             </>
           )}
@@ -369,8 +369,8 @@ export function TemplateShowcase({
           </div>
           <div className="ts-preview-footer">
             <span>{t("Choose your template in the CV editor.")}</span>
-            <StartLink className="ts-modal-cta">
-              {t("Start free")}{" "}<ArrowRight size={16} />
+            <StartLink className="ts-modal-cta" templateSlug={templates[preview ?? selected].slug}>
+              {t("Start Free Trial")}{" "}<ArrowRight size={16} />
             </StartLink>
           </div>
         </DialogContent>

@@ -45,6 +45,8 @@ describe("environment config", () => {
     expect(config.exports.storageBucket).toBe("exports");
     expect(config.exports.downloadUrlTtlSeconds).toBe(900);
     expect(config.billing.provider).toBe("stripe");
+    expect(config.billing.requireSubscription).toBe(true);
+    expect(config.billing.freeUsageLimitsEnabled).toBe(false);
     expect(config.billing.stripeSecretKey).toBeNull();
     expect(config.billing.stripeWebhookSecret).toBeNull();
     expect(config.billing.stripeWeeklyPriceId).toBe("price_weekly");

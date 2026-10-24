@@ -4,6 +4,7 @@ import { translate as t } from "../localization/i18n";
 import type { CheckoutTarget } from "../../content/pricing";
 import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
+import { checkoutPath } from "./subscription-flow";
 
 // Creates a Stripe Checkout session for the given plan and sends the browser to
 // it. Shared by the in-app pricing page, the public pricing page, and the
@@ -12,7 +13,7 @@ import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 export async function startStripeCheckout(
   api: BackendApi,
   plan: CheckoutTarget,
-  options?: { withTrial?: boolean; source?: string }
+  options?: { withTrial?: boolean; source?: string; returnPath?: string }
 ): Promise<void> {
   const base = window.location.origin;
   const prices = await api.getBillingPrices();
@@ -31,11 +32,12 @@ export async function startStripeCheckout(
       withTrial = false;
     }
   }
+  const returnPage = options?.returnPath ? `${base}${checkoutPath({ plan_code: plan, with_trial: withTrial, return_path: options.returnPath })}` : null;
   const checkoutInput = {
     pricing_quote: prices.quote,
     plan_code: plan,
-    success_url: `${base}/app/pricing?checkout=success`,
-    cancel_url: `${base}/app/pricing?checkout=cancel`,
+    success_url: returnPage ? `${returnPage}&checkout=success&session_id={CHECKOUT_SESSION_ID}` : `${base}/app/pricing?checkout=success`,
+    cancel_url: returnPage ? `${returnPage}&checkout=cancel` : `${base}/app/pricing?checkout=cancel`,
     ...(plan === "weekly" && withTrial === false ? { with_trial: false } : {})
   };
   let response;

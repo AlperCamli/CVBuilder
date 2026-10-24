@@ -9,6 +9,8 @@ import { resolvePostAuthDestination } from "../integration/auth-route-guards";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 
+import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
+
 export function SignIn() {
   useTranslation();
   const navigate = useNavigate();
@@ -41,6 +43,7 @@ export function SignIn() {
     setIsGoogleLoading(true);
 
     try {
+      stashPostAuthRedirect(postAuthDestination);
       await signInWithGoogle();
     } catch (error) {
       setErrorMessage(mapAuthErrorMessage("google_oauth", error));
@@ -55,6 +58,7 @@ export function SignIn() {
     setIsLoading(true);
 
     try {
+      stashPostAuthRedirect(postAuthDestination);
       await signIn(email, password);
       navigate(postAuthDestination, { replace: true });
     } catch (error) {

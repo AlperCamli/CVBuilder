@@ -6,6 +6,8 @@ import { Breadcrumbs } from "../components/Breadcrumbs";
 import { setPendingCheckout } from "../integration/pending-checkout";
 import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
+import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
+
 export function PublicPricing() {
   const navigate = useNavigate();
   const trialEligible = true;
@@ -13,30 +15,13 @@ export function PublicPricing() {
   // From the public marketing page we never load auth or call Stripe directly.
   // The plan choice is stashed and the authenticated app resumes checkout after
   // sign-up, keeping the SEO bundle small.
-  const choosePlan = (target: CheckoutTarget, withTrial = true) => {
-    setPendingCheckout({
-      plan_code: target,
-      ...(target === "weekly" && !withTrial ? { with_trial: false } : {})
-    });
-    navigate("/signup", { state: { from: "/app/create" } });
+  const choosePlan = (target: CheckoutTarget) => {
+    setPendingCheckout({ plan_code: target, with_trial: false, return_path: ONBOARDING_ENTRY_PATH });
+    navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: target, with_trial: false, auto: true }) } });
   };
-
-  const goFree = () => {
-    navigate("/signup", { state: { from: "/app/create" } });
-  };
-
-  const resolveCta = (card: PlanCard): { label: string; onClick: () => void } => {
-    if (card.code === "free") {
-      return { label: "Get started free", onClick: goFree };
-    }
-    if (card.code === "weekly") {
-      return {
-        label: trialEligible ? "Start 3-day free trial" : "Start weekly plan",
-        onClick: () => choosePlan("weekly")
-      };
-    }
-    return { label: `Choose ${card.name.toLowerCase()}`, onClick: () => choosePlan(card.code as CheckoutTarget) };
-  };
+  const resolveCta = (card: PlanCard): { label: string; onClick: () => void } => card.code === "trial"
+    ? { label: "Start Free Trial", onClick: () => navigate("/onboarding") }
+    : { label: `Choose ${card.name}`, onClick: () => choosePlan(card.code as CheckoutTarget) };
 
   return (
     <div className="min-h-screen bg-white">

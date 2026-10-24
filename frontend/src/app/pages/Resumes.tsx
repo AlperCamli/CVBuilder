@@ -1,3 +1,4 @@
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { MasterRevisionDialog } from "../components/MasterRevisionDialog";
 import { Link, useNavigate } from "react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +24,7 @@ export function Resumes() {
   useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
+  const { ensureProAccess } = useUpgradePrompt();
   const navigate = useNavigate();
   const [masters, setMasters] = useState<MasterCvSummary[]>([]);
   const [tailored, setTailored] = useState<TailoredCvSummary[]>([]);
@@ -99,6 +101,7 @@ export function Resumes() {
     }
   };
   const exportCv = async (cv: TailoredCvSummary) => {
+    if (!(await ensureProAccess("export_pdf"))) return;
     setBusy(cv.id);
     try {
       const result = await api.createPdfExport(cv.id);
@@ -199,7 +202,7 @@ export function Resumes() {
                           <button
                             type="button"
                             className="rounded-lg border px-4 py-2 inline-flex gap-2 items-center"
-                            onClick={() => setTranslating(master)}
+                            onClick={() => void ensureProAccess("ai_action").then(allowed => { if (allowed) setTranslating(master); })}
                           >
                             <Languages size={15} />
                             {t("Translate")}

@@ -2,6 +2,8 @@ import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import type { ReactNode } from "react";
+import { readPendingCheckout } from "./pending-checkout";
+import { checkoutPath } from "./subscription-flow";
 import { useAuth } from "./auth-context";
 
 // Reads the destination a guard stashed before bouncing to an auth page, so the
@@ -61,7 +63,8 @@ export const RedirectIfAuthenticated = ({ children }: { children: ReactNode }) =
   }
 
   if (isAuthenticated) {
-    return <Navigate to={resolvePostAuthDestination(location.state)} replace />;
+    const pending = readPendingCheckout();
+    return <Navigate to={resolvePostAuthDestination(location.state, pending && location.pathname === "/signup" && new URLSearchParams(location.search).get("purchase") === "1" ? checkoutPath({ ...pending, auto: true }) : "/app")} replace />;
   }
 
   return <>{children}</>;

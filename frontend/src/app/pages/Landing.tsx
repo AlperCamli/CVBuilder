@@ -464,7 +464,7 @@ export function Landing() {
             className="mt-3"
             style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
           >
-            Free to start · No credit card required
+            3-day free trial · Card required to activate
           </p>
         </div>
 
@@ -728,7 +728,7 @@ export function Landing() {
             className="mt-3"
             style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}
           >
-            Free to start · No credit card required
+            3-day free trial · Card required to activate
           </p>
         </div>
       </section>

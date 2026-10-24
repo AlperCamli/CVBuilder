@@ -55,6 +55,10 @@ export class BillingController {
 
   postCancelCheckout = asyncHandler(async (request: Request, response: Response) => { sendSuccess(response, await this.billingService.cancelCheckout(requireSession(request).appUser.id)); });
 
+  postConfirmCheckout = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.billingService.confirmCheckout(requireSession(request).appUser.id, request.body.session_id));
+  });
+
   postPortal = asyncHandler(async (request: Request, response: Response) => {
     const data = await this.billingService.createPortalSession(requireSession(request).appUser.id, request.body);
     sendSuccess(response, data);

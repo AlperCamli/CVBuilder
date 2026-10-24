@@ -1,15 +1,16 @@
+import { hasAppAccess } from "../integration/subscription-flow";
+import { SupportHelp } from "../components/SupportHelp";
 import { useRegionalPricing } from "../integration/regional-pricing";
 import { PricingAvailability } from "../components/PricingAvailability";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { BillingPlanResponseData, EntitlementSummary, UsageSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
-import { startStripeCheckout } from "../integration/checkout-redirect";
 import {
   clearCheckoutAttribution,
   hasTrackedPaymentCompleted,
@@ -27,12 +28,15 @@ const formatTrialEnd = (iso: string | null): string | null => {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
+import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
+
 export function Pricing() {
   const regional = useRegionalPricing();
   useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [busyTarget, setBusyTarget] = useState<CheckoutTarget | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,11 +87,11 @@ export function Pricing() {
     };
   }, [api]);
 
-  const startCheckout = async (target: CheckoutTarget, withTrial = true) => {
+  const startCheckout = async (target: CheckoutTarget) => {
     setBusyTarget(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target, { withTrial, source: "pricing_page" });
+      navigate(checkoutPath({ plan_code: target, with_trial: false, return_path: ONBOARDING_ENTRY_PATH, auto: true }));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusyTarget(null);
@@ -157,10 +161,11 @@ export function Pricing() {
   }, [checkoutState]);
 
   const resolveCta = (card: PlanCard): { label: string; disabled: boolean; onClick?: () => void } => {
-    if (card.code === "free") {
+    if (card.code === "trial") {
       return {
-        label: currentPlanCode === "free" ? "Current plan" : "Included in paid plan",
-        disabled: true
+        label: hasPaidPlan ? "Included in your subscription" : trialEligible ? "Start Free Trial" : "Trial already used",
+        disabled: hasPaidPlan || !trialEligible,
+        onClick: () => navigate(checkoutPath({ with_trial: true, return_path: ONBOARDING_ENTRY_PATH }))
       };
     }
 
@@ -178,11 +183,9 @@ export function Pricing() {
 
     return {
       label:
-        card.code === "weekly" && trialEligible
-          ? "Start 3-day free trial"
-          : t("Choose {{plan}}", { plan: card.name }),
+        t("Choose {{plan}}", { plan: card.name }),
       disabled: false,
-      onClick: () => void startCheckout(card.code as CheckoutTarget)
+      onClick: () => { if (hasPaidPlan) void openPortal(); else void startCheckout(card.code as CheckoutTarget); }
     };
   };
 
@@ -240,6 +243,7 @@ export function Pricing() {
           {t("Checkout was canceled.")}</div>
       )}
 
+      {error && <SupportHelp topic="Payment" />}
       {error && (
         <div
           className="max-w-3xl mx-auto mb-8 p-4 rounded-lg border"
@@ -260,8 +264,8 @@ export function Pricing() {
             {regional.cards.map((card) => {
               const cta = resolveCta(card);
               const isBusy =
-                (card.code !== "free" && busyTarget === card.code) ||
-                (card.code !== "free" && currentPlanCode === card.code && busyTarget === "portal");
+                (card.code !== "trial" && busyTarget === card.code) ||
+                (card.code !== "trial" && currentPlanCode === card.code && busyTarget === "portal");
               // The trial badge is misleading once the weekly trial is used.
               const badge =
                 card.code === "weekly" && !trialEligible ? null : card.badge;
@@ -328,7 +332,7 @@ export function Pricing() {
                   </ul>
                   <button
                     onClick={cta.onClick}
-                    disabled={cta.disabled || isBusy || (card.code !== "free" && !regional.ready)}
+                    disabled={cta.disabled || isBusy || (card.code !== "trial" && !regional.ready)}
                     className="w-full px-6 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                     style={{
                       fontSize: "13px",
@@ -357,7 +361,7 @@ export function Pricing() {
             })}
           </div>
 
-          {entitlements && usage && (
+          {plan && hasAppAccess(plan) && entitlements && usage && (
             <div
               className="max-w-4xl mx-auto p-5 rounded-xl border"
               style={{ borderColor: "var(--color-border-tertiary)" }}

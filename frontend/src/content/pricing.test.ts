@@ -16,12 +16,12 @@ import {
 
 describe("pricing content", () => {
   it("shows weekly-emphasized pricing for the visible plans", () => {
-    expect(PLAN_CARDS.map((card) => card.code)).toEqual(["free", "weekly", "monthly", "annual"]);
+    expect(PLAN_CARDS.map((card) => card.code)).toEqual(["trial", "weekly", "monthly", "annual"]);
 
     expect(PLAN_CARDS.find((card) => card.code === "weekly")).toMatchObject({
       weeklyPrice: WEEKLY_PRICE,
       totalPrice: `${WEEKLY_PRICE} billed weekly`,
-      trialEligible: true
+      trialEligible: false
     });
     expect(PLAN_CARDS.find((card) => card.code === "monthly")).toMatchObject({
       weeklyPrice: MONTHLY_WEEKLY_EQUIVALENT,

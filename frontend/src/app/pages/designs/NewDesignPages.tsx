@@ -163,7 +163,7 @@ function Hero({ concept }: { concept: NewConcept }) {
       </div>
       <div className="v2-free-note">
         <Check size={13} />
-        Free to start · No credit card required
+        3-day free trial · Card required to activate
       </div>
     </>
   );
@@ -260,7 +260,7 @@ function ShortFAQ({ pricing = false }: { pricing?: boolean }) {
   const items = [
     [
       "Can I start for free?",
-      "Yes. No card required. You get 3 tailored CVs, 5 exports, and 20 AI actions per month. Each allowance has its own limit.",
+      "Start a 3-day trial with a card. Pro features are available once the trial is activated. It renews weekly unless cancelled.",
     ],
     [
       "Will it stay true to my experience?",

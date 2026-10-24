@@ -1,3 +1,4 @@
+import { isExistingCvWorkspaceRequest } from "../billing/subscription-access";
 import type { RequestHandler } from "express";
 import type { MasterCvService } from "../master-cv/master-cv.service";
 import type { PrivacyService } from "./privacy.service";
@@ -8,11 +9,12 @@ export function createProductAccessGuard(privacy: PrivacyService, masterCvs: Mas
     const userId = req.auth!.appUser.id;
     const creation = req.method === "POST" && req.path === "/master-cvs";
     const preview = req.method === "POST" && req.path === "/rendering/preview";
-    const manualEdit = req.method === "PUT" ? /^\/master-cvs\/([^/]+)\/content$/.exec(req.path)
-      : req.method === "PATCH" ? /^\/master-cvs\/([^/]+)(?:\/template|\/blocks\/[^/]+)?$/.exec(req.path) : null;
+    const manualEdit = isExistingCvWorkspaceRequest(req.method, req.path);
+    const masterId = /^\/master-cvs\/([^/]+)/.exec(req.path)?.[1];
+    if (manualEdit && masterId) await masterCvs.getMasterCv(req.auth!, masterId);
     // These operations do not invoke AI. Keep account restrictions and ownership
-    // checks while allowing the signup-to-blank-editor journey without AI consent.
-    if (creation || preview || (manualEdit && (await masterCvs.getMasterCv(req.auth!, manualEdit[1])).source_type === "scratch")) {
+    // checks while allowing manual work on existing CVs without AI consent.
+    if (creation || preview || manualEdit) {
       await privacy.assertProcessingAvailable(userId);
     } else {
       await privacy.assertProductAccess(userId);

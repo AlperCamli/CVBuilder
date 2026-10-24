@@ -137,6 +137,7 @@ export function EmailSent() {
 
         <Link
           to="/signin"
+          state={location.state && typeof location.state.from === "string" ? { from: location.state.from } : undefined}
           className="inline-flex items-center gap-2 mt-4"
           style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}
         >

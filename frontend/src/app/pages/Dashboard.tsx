@@ -238,6 +238,7 @@ export function Dashboard() {
       .getBillingPlan()
       .then((plan) => {
         if (cancelled) return;
+        if (plan.can_edit_existing_cvs && plan.app_access === false) return;
         if (isPaidPlanCode(plan.plan_code)) {
           window.localStorage.setItem(WELCOME_PROMPT_STORAGE_KEY, "true");
           return;

@@ -132,6 +132,21 @@ const getCopy = (
         dismiss: "Continue with Free"
       };
     case "limit_reached": {
+      if (options.requiresPro) {
+        const title = options.feature === "ai_action" ? "You need Pro to use AI tools"
+          : options.feature === "tailored_cv_generation" ? "You need Pro to tailor your CV"
+          : options.feature === "export_pdf" || options.feature === "export_docx" ? "You need Pro to export your CV"
+          : "You need Pro to use this feature";
+        return {
+          eyebrow: "Pro required",
+          title,
+          body: options.reason ?? (trialEligible
+            ? "Start your 3-day free trial or choose Pro to continue."
+            : "Choose a Pro plan to continue."),
+          ctaPrimary: weeklyCta,
+          dismiss: "Not now"
+        };
+      }
       const { title, pitch } = limitReachedCopy(options.feature);
       const reasonSentence = options.reason
         ? `${options.reason.replace(/\.?\s*$/, ".")} `
@@ -266,7 +281,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     setBusy(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}` });
+      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}`, withTrial: target === "weekly" && trialEligible, returnPath: options.returnPath ?? `${window.location.pathname}${window.location.search}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusy(null);
@@ -345,7 +360,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
 
                 <div className="flex flex-col gap-3">
                   <PricingAvailability {...regional} />
-                  {regional.cards.filter((card): card is PlanCard & { code: CheckoutTarget } => card.code !== "free").map((card) => {
+                  {regional.cards.filter((card): card is PlanCard & { code: CheckoutTarget } => card.code !== "trial").map((card) => {
                     const isBusy = busy === card.code;
                     const badge = postExportPlanBadge(card, trialEligible);
                     const isEmphasized = card.code === "weekly" || card.highlighted;

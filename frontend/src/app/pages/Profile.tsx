@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router";
+import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
 import { chooseLocale } from "../localization/i18n";
 import { localeCode } from "../localization/i18n";
 import { translate as t } from "../localization/i18n";
@@ -12,6 +14,7 @@ import { ApiClientError } from "../integration/api-error";
 
 export function Profile() {
   const { i18n } = useTranslation();
+  const navigate = useNavigate();
   const { setSidebarVisible } = useSidebar();
   const { api, refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -103,25 +106,7 @@ export function Profile() {
   };
 
   const openCheckout = async () => {
-    setBillingBusy(true);
-    setError(null);
-
-    try {
-      const base = window.location.origin;
-      const response = await api.createBillingCheckout({
-        plan_code: "weekly",
-        success_url: `${base}/app/pricing?checkout=success`,
-        cancel_url: `${base}/app/profile?checkout=cancel`
-      });
-      window.location.href = response.checkout_url;
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError(t("Failed to open checkout."));
-      }
-      setBillingBusy(false);
-    }
+    navigate(checkoutPath({ with_trial: billingPlan?.trial_eligible !== false, return_path: ONBOARDING_ENTRY_PATH }));
   };
 
   const openPortal = async () => {
@@ -276,10 +261,10 @@ export function Profile() {
             <div className="flex items-center justify-between p-4 rounded-lg" style={{ background: "var(--color-background-secondary)" }}>
               <div>
                 <p className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                  {planCode.toUpperCase()} {" "}{t("Plan")}</p>
+                  {planCode === "free" ? t("Subscription inactive") : `${planCode.toUpperCase()} ${t("Plan")}`}</p>
                 <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  {usage
-                    ? `${usage.remaining.tailored_cv_generations ?? "∞"} customized CV generations remaining this month`
+                  {planCode === "free" ? t("Activate a trial or purchase Pro to access the application.") : usage
+                    ? t("Unlimited CVs and exports with your subscription.")
                     : t("Loading usage...")}
                 </p>
                 {planCode !== "free" && meData?.current_plan.current_period_end && (
@@ -302,7 +287,7 @@ export function Profile() {
                       opacity: billingBusy ? 0.7 : 1
                     }}
                   >
-                    {billingBusy ? t("Redirecting...") : t("Start weekly plan")}
+                    {billingBusy ? t("Redirecting...") : billingPlan?.trial_eligible ? t("Start Free Trial") : t("Choose Pro")}
                   </button>
                 ) : (
                   <button

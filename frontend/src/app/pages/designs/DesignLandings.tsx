@@ -55,7 +55,7 @@ function JourneyLanding() {
             </a>
           </div>
           <div className="cv-free-note">
-            <Check size={15} /> Free to start. No card required.
+            <Check size={15} /> 3-day free trial. Card required to activate.
           </div>
         </div>
         <div className="cv-journey-art">
@@ -467,7 +467,7 @@ function StudioLanding() {
           </a>
         </div>
         <div className="cv-free-note">
-          No card required <span>·</span> You review every change
+          Card required to activate <span>·</span> You review every change
         </div>
         <ProductWorkbench />
       </section>
@@ -620,7 +620,7 @@ function EditorialLanding() {
                   Write your next chapter <ArrowUpRight size={18} />
                 </StartLink>
                 <div className="cv-free-note">
-                  Start free. No card required.
+                  Start a 3-day trial. Card required to activate.
                 </div>
               </div>
             </div>

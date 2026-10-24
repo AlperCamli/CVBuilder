@@ -120,7 +120,7 @@
           "heading": "Turn a clear base CV into a targeted one.",
           "text": "Upload your CV, paste a job description, and choose which real experience to emphasize.",
           "buttonText": "Tailor your CV",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -370,7 +370,7 @@
           "heading": "One document, tailored for each application.",
           "text": "Upload your CV or resume once, then paste each job description — jobspecificCV builds a focused version per role and exports it as an ATS-friendly PDF, whatever the employer calls the file.",
           "buttonText": "Create a tailored version",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -428,8 +428,8 @@
           "type": "cta",
           "heading": "Tailor your CV to this job in minutes, not evenings.",
           "text": "Upload your CV, paste the job description, and jobspecificCV extracts the role's keywords, suggests edits grounded in your real experience, and exports an ATS-friendly version — you approve every change before it lands.",
-          "buttonText": "Start tailoring free",
-          "href": "/signup"
+          "buttonText": "Start Free Trial",
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -802,7 +802,7 @@
           "heading": "Create a focused version faster.",
           "text": "Use the job ad to choose the right themes, then keep the edits honest and reviewable.",
           "buttonText": "Customize your CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "How to Customize Your CV for Every Job in Minutes (Repeatable System) | jobspecificCV"
@@ -936,7 +936,7 @@
           "heading": "Replace broad claims with role-specific evidence.",
           "text": "Paste the job description and compare it with your CV before you apply.",
           "buttonText": "Tailor my CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "Generic CV vs Tailored CV: What Actually Changes (With Examples) | jobspecificCV"
@@ -1086,7 +1086,7 @@
           "heading": "Tailor your medical CV to the post.",
           "text": "Use the job description to choose the clinical evidence, courses, audits, and skills that matter for this application.",
           "buttonText": "Tailor my medical CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ]
     },
@@ -1256,7 +1256,7 @@
           "heading": "Tailor your NHS CV against the person specification.",
           "text": "Paste the advert or person specification into jobspecificCV and it extracts the criteria as keywords, shows you which ones your CV already evidences, and suggests edits you approve one by one.",
           "buttonText": "Tailor my NHS CV",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -1524,7 +1524,7 @@
           "heading": "Build a doctor CV around the post.",
           "text": "Paste the advert or person specification and jobspecificCV extracts what the post actually asks for, then suggests CV edits grounded in your real clinical experience — you approve each one.",
           "buttonText": "Tailor my doctor CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "Doctor CV Example (NHS): Structure, Sections & Template | jobspecificCV"
@@ -1655,7 +1655,7 @@
           "heading": "Check your nurse CV against the role.",
           "text": "Use the person specification to choose the right examples before you apply.",
           "buttonText": "Tailor my nurse CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ]
     },
@@ -1845,7 +1845,7 @@
           "heading": "See how software reads your CV.",
           "text": "Upload your CV (resume) to jobspecificCV and it parses your sections the way an ATS does — you will see straight away whether your titles, dates, and skills survive intact.",
           "buttonText": "Upload my CV and check",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -2173,7 +2173,7 @@
           "heading": "Export a CV that follows these rules automatically.",
           "text": "jobspecificCV's templates are single-column and parser-safe. Build or upload your CV (resume), and export an ATS-friendly PDF without re-checking every formatting rule by hand.",
           "buttonText": "Get an ATS-friendly export",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -2227,7 +2227,7 @@
           "heading": "Paste a job description and get its keywords extracted free.",
           "text": "jobspecificCV analyzes the advert, lists the topics and keywords it actually asks for, and lets you pick the ones that are true for your experience — no guessing which terms matter.",
           "buttonText": "Extract keywords free",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -2397,7 +2397,7 @@
           "heading": "Paste any job description and see its exact keywords.",
           "text": "jobspecificCV extracts the keywords and themes from the actual advert — the terms a recruiter will search for — and shows you which ones match your real experience. Free to try, no guessing.",
           "buttonText": "Extract keywords from a job description",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -2623,7 +2623,7 @@
           "heading": "Find the keywords that match your real experience.",
           "text": "Compare your CV with a job description and choose the terms you can honestly support — jobspecificCV extracts them, you pick, it rewrites with your approval.",
           "buttonText": "Match my CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "Resume Keywords for ATS: How to Find and Use Them (+ Examples by Role) | jobspecificCV"
@@ -2798,7 +2798,7 @@
           "heading": "Run a final role-specific check.",
           "text": "Compare your CV with the job description before you send the application.",
           "buttonText": "Check my CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "Resume Checklist: 25 Things to Fix Before You Apply (Free PDF) | jobspecificCV"
@@ -2903,7 +2903,7 @@
           "heading": "Or skip the copy-paste and build it in the app.",
           "text": "jobspecificCV uses this same ATS-safe structure: upload or build your CV, paste a job description, and export a tailored, parser-friendly PDF without wrestling Word formatting.",
           "buttonText": "Build my CV in the app",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -3057,7 +3057,7 @@
           "heading": "Fill the template against a real person specification.",
           "text": "Paste the advert or person specification into jobspecificCV and it extracts the criteria, shows which ones your CV already evidences, and suggests edits you approve — then exports a clean NHS-ready PDF.",
           "buttonText": "Tailor my NHS CV",
-          "href": "/signup"
+          "href": "/onboarding"
         },
         {
           "type": "heading",
@@ -3229,7 +3229,7 @@
           "heading": "Turn vague bullets into evidence.",
           "text": "Compare your CV with a role and choose the examples that make the strongest match.",
           "buttonText": "Improve my CV",
-          "href": "/signup"
+          "href": "/onboarding"
         }
       ],
       "seoTitle": "Before and After Resume Examples: 6 Rewrites From Generic to Tailored | jobspecificCV"

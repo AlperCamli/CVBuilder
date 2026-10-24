@@ -13,7 +13,7 @@ import {
 } from "../integration/guest-import";
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
-import { clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding } from "../integration/new-cv-onboarding";
+import { saveNewCvOnboarding, readNewCvOnboarding } from "../integration/new-cv-onboarding";
 
 export function OnboardingResume() {
   useTranslation();
@@ -27,15 +27,11 @@ export function OnboardingResume() {
     if (!newCv || !me?.user.id) return;
     let cancelled = false;
     setError(null);
-    void completeNewCvOnboarding(newCv, me.user.id, api).then(async masterCvId => {
-      if (cancelled) return;
-      await refreshMe();
-      if (cancelled) return;
-      clearNewCvOnboarding();
-      navigate(`/app/cv/${encodeURIComponent(masterCvId)}`, { replace: true, state: { masterCvId } });
-    }).catch(err => {
-      if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again."));
-    });
+    if (newCv.accountId && newCv.accountId !== me.user.id) { setError(t("This CV setup belongs to another account. Please start again.")); return; }
+    saveNewCvOnboarding({ ...newCv, accountId: me.user.id });
+    void api.patchOnboardingAnswers(newCv.answers).then(() => {
+      if (!cancelled) navigate("/app/cv-score?source=scratch", { replace: true });
+    }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again.")); });
     return () => { cancelled = true; };
   }, [newCv, me?.user.id, api, navigate, refreshMe, retry]);
   useEffect(() => {

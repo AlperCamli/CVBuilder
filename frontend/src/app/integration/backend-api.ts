@@ -836,6 +836,10 @@ export class BackendApi {
     );
   }
 
+  confirmBillingCheckout(sessionId: string): Promise<BillingPlanResponseData> {
+    return this.client.post<BillingPlanResponseData>("/billing/checkout/confirm", { session_id: sessionId });
+  }
+
   createBillingPortal(payload: BillingPortalInput = {}): Promise<CreatePortalResponseData> {
     return this.client.post<CreatePortalResponseData, BillingPortalInput>("/billing/portal", payload);
   }

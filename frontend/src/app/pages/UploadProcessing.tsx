@@ -1,3 +1,4 @@
+import { SupportHelp } from "../components/SupportHelp";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
@@ -171,6 +172,7 @@ export function UploadProcessing() {
               }}
             >
               {t(error)}
+              <SupportHelp topic="CV upload" />
               <button
                 type="button"
                 className="ml-3 underline"

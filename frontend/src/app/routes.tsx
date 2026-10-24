@@ -11,6 +11,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { CareerAdvice } from "./pages/CareerAdvice";
 import { CareerCategory } from "./pages/CareerCategory";
 import { CareerArticle } from "./pages/CareerArticle";
+import Support from "./pages/Support";
 import { NotFound } from "./pages/NotFound";
 import { RouteSeo } from "./seo/route-seo";
 import { DESIGN_TOOLS_ENABLED } from "./design-tools";
@@ -88,6 +89,7 @@ const DashboardRoute = lazyRoute(() =>
     default: DashboardRoute,
   })),
 );
+const CheckoutRoute = lazyRoute(() => import("./routes/PrivateAppRoutes").then(({ CheckoutRoute }) => ({ default: CheckoutRoute })));
 const CreateOrUploadRoute = lazyRoute(() =>
   import("./routes/PrivateAppRoutes").then(({ CreateOrUploadRoute }) => ({
     default: CreateOrUploadRoute,
@@ -192,6 +194,8 @@ export function RouteElements({
 }: { guidedJourney?: ComponentType } = {}) {
   return (
     <Routes>
+      <Route path="/support" element={<Support />} />
+      <Route path="/tr/support" element={<Support />} />
       <Route path="/privacy" element={lazyElement(PrivacyNoticeRoute)} />
       <Route path="/cookies" element={lazyElement(PrivacyNoticeRoute)} />
       <Route path="/" element={lazyElement(guidedJourney)} />
@@ -251,6 +255,7 @@ export function RouteElements({
 
       <Route path="/app" element={lazyElement(AppShellRoute)}>
         <Route index element={lazyElement(DashboardRoute)} />
+        <Route path="checkout" element={lazyElement(CheckoutRoute)} />
         <Route path="onboarding" element={lazyElement(OnboardingResumeRoute)} />
         <Route path="create" element={lazyElement(CreateOrUploadRoute)} />
         <Route

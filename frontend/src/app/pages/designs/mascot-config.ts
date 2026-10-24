@@ -191,21 +191,21 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
     ),
     plans: {
       ...message(
-        "Start Free, or go Pro for unlimited CVs and exports.",
+        "Start a 3-day trial, or choose Pro for your job search.",
         "celebrate",
         "signup",
-        "Start free",
+        "Start Free Trial",
       ),
-      secondaryAction: "trial",
-      secondaryLabel: "About the 3-day trial",
+      secondaryAction: "none",
+      secondaryLabel: "",
     },
     signup: message(
       "Let’s put your experience to work.",
       "guide",
       "signup",
-      "Create free account",
+      "Start Free Trial",
     ),
-    return: message("Ready to make it yours?", "point", "signup", "Start free"),
+    return: message("Ready to make it yours?", "point", "signup", "Start Free Trial"),
     greeting: message(
       "You’ve got this—I’m right here.",
       "celebrate",
@@ -232,7 +232,7 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
       "Ready to make one of your own?",
       "celebrate",
       "signup",
-      "Start free",
+      "Start Free Trial",
     ),
   },
   motion: {

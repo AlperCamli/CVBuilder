@@ -1,3 +1,4 @@
+import { canOpenExistingCvWorkspace } from "../integration/subscription-flow";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState, type ReactNode } from "react";
@@ -15,12 +16,12 @@ import "./privacy.css";
 
 export function AiExperienceGate({ children }: { children: ReactNode }) {
   useTranslation();
-  const { me, api } = useAuth();
+  const { me } = useAuth();
   const userId = me?.user.id;
   const { pathname } = useLocation();
   // Claim transfers the guest's choice. Privacy and subscription management
   // remain reachable when permission is withdrawn or the provider is paused.
-  const exempt = ["/app/profile", "/app/pricing", "/app/onboarding"].some(
+  const exempt = ["/app/profile", "/app/pricing", "/app/onboarding", "/app/cv-score", "/app/checkout"].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
   const [state, setState] = useState<{
@@ -35,19 +36,7 @@ export function AiExperienceGate({ children }: { children: ReactNode }) {
   const error = failure && failure.userId === userId ? failure.message : "";
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [manualEditor, setManualEditor] = useState<{ userId: string; cvId: string } | null>(null);
-  const editorId = /^\/app\/cv\/([\da-f-]{36})$/i.exec(pathname)?.[1];
   const current = state?.userId === userId ? state : null;
-  useEffect(() => {
-    // Scratch CVs can be edited without sending any content to an AI provider.
-    // AI endpoints continue to check the account's consent on the server.
-    if (!userId || !editorId || !current || current.preferences.ai_processing) return;
-    let active = true;
-    void api.getMasterCv(editorId).then(cv => {
-      if (active) setManualEditor(cv.source_type === "scratch" ? { userId, cvId: editorId } : null);
-    }).catch(() => { if (active) setManualEditor(null); });
-    return () => { active = false; };
-  }, [api, userId, editorId, current]);
   useEffect(() => {
     if (!userId) return;
     let active = true;
@@ -87,7 +76,7 @@ export function AiExperienceGate({ children }: { children: ReactNode }) {
   // Pending checks are invisible; confirmed denial still shows the opt-in UI.
   // Server AI guards enforce consent independently of this presentation gate.
   if (
-    exempt || (manualEditor?.userId === userId && manualEditor?.cvId === editorId) ||
+    exempt || canOpenExistingCvWorkspace(pathname) ||
     (!current && !error) ||
     (current &&
       (current.config.ai_required === false ||

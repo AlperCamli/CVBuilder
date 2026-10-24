@@ -1,8 +1,8 @@
 import { LANGUAGES, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { personalizedGuidance } from "../onboarding/pre-signup-questions";
-import { useEffect, useState } from "react";
-import { useNavigate, useLocation, useSearchParams } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
 import type { CvContent, CvReview } from "../integration/api-types";
@@ -14,6 +14,9 @@ import {
   trackOnboardingStepView,
 } from "../integration/analytics";
 
+import { applyOnboardingTemplate, checkoutPath, hasAppAccess, readOnboardingTemplate, clearOnboardingTemplate, onboardingTemplateName } from "../integration/subscription-flow";
+import { completeNewCvOnboarding, readNewCvOnboarding, clearNewCvOnboarding } from "../integration/new-cv-onboarding";
+
 export function CVScore() {
   useTranslation();
   const navigate = useNavigate();
@@ -21,6 +24,10 @@ export function CVScore() {
   const { api, me } = useAuth();
   const [params] = useSearchParams();
   const fromGuest = params.get("source") === "guest";
+  const scratch = params.get("source") === "scratch";
+  const [newCv] = useState(readNewCvOnboarding);
+  const resumed = useRef(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(readOnboardingTemplate);
   const { completeStep } = useOnboarding();
 
   const importId = (location.state?.importId ??
@@ -32,13 +39,14 @@ export function CVScore() {
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cvLanguage, setCvLanguage] = useState<string>("");
+  const [cvLanguage, setCvLanguage] = useState<string>(params.get("language") ?? (scratch ? newCv?.language ?? "" : ""));
   const [parsedContent, setParsedContent] = useState<CvContent | null>(null);
   const [moduleType, setModuleType] = useState<string | undefined>(
     location.state?.moduleType as string | undefined,
   );
 
   useEffect(() => {
+    if (scratch) { setLoading(false); return; }
     if (!importId) {
       navigate("/app/create", { replace: true });
       return;
@@ -59,7 +67,7 @@ export function CVScore() {
 
         setReview(result.review ?? null);
         setParsedContent(result.parsed_content);
-        setCvLanguage(result.parsed_content?.metadata.needs_language_confirmation ? "" : result.parsed_content?.language ?? "");
+        setCvLanguage(params.get("language") ?? (result.parsed_content?.metadata.needs_language_confirmation ? "" : result.parsed_content?.language ?? ""));
         setModuleType(result.module_type);
       } catch (err) {
         if (cancelled) {
@@ -84,9 +92,9 @@ export function CVScore() {
     return () => {
       cancelled = true;
     };
-  }, [api, importId, navigate]);
+  }, [api, importId, navigate, scratch]);
 
-  const improvements = review?.improvements ?? [];
+  const improvements = useMemo(() => review?.improvements ?? [], [review]);
   const parseNeedsManualReview = review?.status === "unscorable" || !review;
 
   useEffect(() => {
@@ -96,100 +104,57 @@ export function CVScore() {
     });
   }, []);
 
-  const convertImportToMasterCv = async (
-    contentToSave: CvContent,
-    destination: "tailor" | "editor",
-  ) => {
-    if (!importId) {
-      return;
-    }
-
-    setError(null);
-
-    if (fromGuest) {
-      try {
-        const detail = await api.getImport(importId);
-        if (detail.target_master_cv) {
-          navigate(`/app/cv/${detail.target_master_cv.id}`);
-          return;
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t("Couldn't load your CV."));
-        return;
-      }
-    }
+  type NextAction = "editor" | "tailor" | "improve";
+  const handleAction = useCallback(async (action: NextAction) => {
+    if (converting) return;
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
-
-    setConverting(true);
-
+    if (!scratch && (!parsedContent || !importId)) return;
+    setConverting(true); setError(null);
     try {
-      await api.patchImportResult(importId, { ...contentToSave, language: cvLanguage });
-      const converted = await api.createMasterCvFromImport(importId, { language: cvLanguage });
-
-      completeStep("create_cv");
-
-      trackOnboardingStepCompleted({
-        step: "cv_score",
-        destination,
-        parse_needs_manual_review: parseNeedsManualReview,
-      });
-
-      if (destination === "tailor") {
-        navigate(`/app/tailor/${converted.master_cv.id}`, {
-          state: {
-            source: "onboarding_upload",
-          },
-        });
+      const billing = await api.getBillingPlan();
+      if (!hasAppAccess(billing)) {
+        const next = new URLSearchParams({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage });
+        if (importId) next.set("import", importId);
+        navigate(checkoutPath({ with_trial: true, return_path: `/app/cv-score?${next}` }));
         return;
       }
-
-      navigate(`/app/cv/${converted.master_cv.id}`, {
-        state: {
-          cvKind: "master",
-          masterCvId: converted.master_cv.id,
-          isUploaded: true,
-        },
-      });
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError(t("Failed to convert import to main CV."));
+      if (scratch) {
+        if (!newCv || !me?.user.id) throw new Error(t("Your new CV setup has expired. Please start again."));
+        const id = await completeNewCvOnboarding(newCv, me.user.id, api);
+        await applyOnboardingTemplate(api, id);
+        completeStep("create_cv");
+        clearNewCvOnboarding();
+        navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { masterCvId: id, onboardingAction: action } });
+        return;
       }
-      setConverting(false);
-    }
-  };
+      if (action === "improve") {
+        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload" } });
+        return;
+      }
+      const detail = await api.getImport(importId!);
+      let id = detail.target_master_cv?.id;
+      if (!id) {
+        await api.patchImportResult(importId!, { ...parsedContent!, language: cvLanguage });
+        id = (await api.createMasterCvFromImport(importId!, { language: cvLanguage })).master_cv.id;
+      }
+      await applyOnboardingTemplate(api, id, moduleType ?? "standard");
+      completeStep("create_cv");
+      trackOnboardingStepCompleted({ step: "cv_score", destination: action });
+      navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: true } });
+    } catch (err) { setError(err instanceof Error ? err.message : t("Couldn't open your CV. Please try again.")); }
+    finally { setConverting(false); }
+  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType]);
+  const handleImproveWithAI = () => { void handleAction("improve"); };
+  const handleCustomizeForJob = () => { void handleAction("tailor"); };
+  const handleReviewInEditor = () => { void handleAction("editor"); };
+  const resumeAction = params.get("action");
+  useEffect(() => {
+    if (loading || !cvLanguage || resumed.current || !["editor", "tailor", "improve"].includes(resumeAction ?? "")) return;
+    resumed.current = true;
+    void handleAction(resumeAction as NextAction);
+  }, [loading, cvLanguage, resumeAction, handleAction]);
 
-  const handleImproveWithAI = () => {
-    if (!cvLanguage) { setError(t("Choose CV language")); return; }
-    if (!parsedContent || !importId || parseNeedsManualReview) {
-      return;
-    }
-
-    navigate("/app/ai-improving", {
-      state: {
-        importId,
-        parsedContent: parsedContent ? { ...parsedContent, language: cvLanguage } : parsedContent,
-        improvements,
-        moduleType,
-        source: "onboarding_upload",
-      },
-    });
-  };
-
-  const handleCustomizeForJob = () => {
-    if (!parsedContent || parseNeedsManualReview) {
-      return;
-    }
-    void convertImportToMasterCv(parsedContent, "tailor");
-  };
-
-  const handleReviewInEditor = () => {
-    if (!parsedContent) {
-      return;
-    }
-    void convertImportToMasterCv(parsedContent, "editor");
-  };
+  if (scratch && !newCv) return <div className="p-8"><p role="alert">{t("Your new CV setup has expired. Please start again.")}</p><Link className="underline" to="/onboarding">{t("Create a new CV")}</Link></div>;
 
   if (loading) {
     return (
@@ -235,7 +200,7 @@ export function CVScore() {
             <p
               style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
             >
-              {t("Based on")}{" "}{fileName || "uploaded file"}
+              {t("Based on")}{" "}{scratch ? t("Your new CV") : fileName || "uploaded file"}
             </p>
             <p className="mt-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{t("This score is guidance and does not guarantee employment outcomes.")}</p>
           </div>
@@ -263,7 +228,7 @@ export function CVScore() {
           )}
 
           <div className="mb-8">
-            {review ? (
+            {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, activate your trial, then add your experience to receive useful AI feedback.")}</p> : review ? (
               <CvReviewPanel review={review} />
             ) : (
               <p role="status" style={{ color: "var(--color-text-secondary)" }}>
@@ -271,7 +236,7 @@ export function CVScore() {
             )}
           </div>
 
-          {parseNeedsManualReview ? (
+          {!scratch && parseNeedsManualReview ? (
             <button
               type="button"
               onClick={() => navigate("/app/create")}
@@ -284,11 +249,13 @@ export function CVScore() {
               {t("Upload another CV")}</button>
           ) : null}
 
+          <p className="mb-4 text-sm text-slate-600">{t("An active 3-day trial or Pro subscription is required to continue. Your selected next step will resume after activation.")}</p>
+          {selectedTemplate && <p className="mb-4 text-sm">{t("Selected template")}: {onboardingTemplateName(selectedTemplate)} <button className="underline" onClick={() => { clearOnboardingTemplate(); setSelectedTemplate(null); setError(null); }}>{t("Use default template")}</button></p>}
           <div className="space-y-3">
-            {fromGuest && (
+            {(fromGuest || scratch) && (
               <button
                 onClick={handleReviewInEditor}
-                disabled={converting || !parsedContent}
+                disabled={converting || (!scratch && !parsedContent)}
                 className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2"
                 style={{
                   background: "var(--color-teal-600)",
@@ -305,7 +272,7 @@ export function CVScore() {
             )}
             <button
               onClick={handleCustomizeForJob}
-              disabled={converting || !parsedContent || parseNeedsManualReview}
+              disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
               className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all hover:shadow-md"
               style={{
                 background: fromGuest ? "transparent" : "var(--color-teal-600)",
@@ -314,7 +281,7 @@ export function CVScore() {
                   ? "1px solid var(--color-border-tertiary)"
                   : undefined,
                 fontSize: "14px",
-                opacity: converting || parseNeedsManualReview ? 0.7 : 1,
+                opacity: converting || (!scratch && parseNeedsManualReview) ? 0.7 : 1,
               }}
             >
               {converting ? (
@@ -327,7 +294,7 @@ export function CVScore() {
 
             <button
               onClick={handleImproveWithAI}
-              disabled={converting || !parsedContent || parseNeedsManualReview}
+              disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
               className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
               style={{
                 background: "transparent",
@@ -340,10 +307,10 @@ export function CVScore() {
               <Sparkles size={16} />
               {t("Improve with AI")}</button>
 
-            {!fromGuest && (
+            {!fromGuest && !scratch && (
               <button
                 onClick={handleReviewInEditor}
-                disabled={converting || !parsedContent}
+                disabled={converting || (!scratch && !parsedContent)}
                 className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
                 style={{
                   background: "transparent",

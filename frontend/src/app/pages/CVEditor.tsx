@@ -460,7 +460,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const location = useLocation();
   const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, ensureProAccess } = useUpgradePrompt();
   const { completeStep, dismissCoachMark } = useOnboarding();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
@@ -1330,6 +1330,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     [api, buildCurrentContent, cvKind, language, moduleType, showTemplateGallery]
   );
 
+  const requireProFeature = async (feature: "export_pdf" | "export_docx" | "ai_action" | "tailored_cv_generation") => {
+    if (dirty && !(await persistCv("manual"))) return false;
+    return ensureProAccess(feature, feature === "tailored_cv_generation" && cvId ? `/app/tailor/${cvId}` : undefined);
+  };
+
   const maybeShowExportUpsell = async (): Promise<void> => {
     if (typeof window === "undefined") return;
     if (onboardingCompleted !== true) return;
@@ -1359,6 +1364,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const openExportDialog = async () => {
+    if (!(await requireProFeature("export_pdf"))) return;
     if (!cvId) {
       setExportError("CV id is missing.");
       setShowExportDialog(true);
@@ -1383,6 +1389,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const handleExport = async (format: "pdf" | "docx") => {
+    if (!(await requireProFeature(format === "pdf" ? "export_pdf" : "export_docx"))) { setShowExportDialog(false); return; }
     if (!cvId) {
       setExportError("CV id is missing.");
       return;
@@ -1474,6 +1481,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const downloadExistingExport = async (exportId: string, format: "pdf" | "docx") => {
+    if (!(await requireProFeature(format === "pdf" ? "export_pdf" : "export_docx"))) { setShowExportDialog(false); return; }
     try {
       const download = await api.getExportDownload(exportId);
       await triggerBlobDownload(download.download_url, buildCvExportFilename(title, format));
@@ -1590,6 +1598,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const openSkillsPool = async (sectionId: string, blockId?: string) => {
+    if (!(await requireProFeature("ai_action"))) return;
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
       setError(t("Skills section could not be resolved."));
@@ -1689,6 +1698,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const refreshSkillsPool = async (sectionIdOverride?: string) => {
+    if (!(await requireProFeature("ai_action"))) return;
     const targetSectionId = sectionIdOverride ?? skillsPoolSectionId;
     if (!targetSectionId) {
       return;
@@ -1797,6 +1807,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const openAiForSection = async (sectionId: string, blockId?: string, anchor?: HTMLElement) => {
+    if (!(await requireProFeature("ai_action"))) return;
     if (aiRunningRef.current) return;
     const targetSection = sections.find((section) => section.id === sectionId);
     if (!targetSection) {
@@ -1875,6 +1886,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     action: "improve" | "summarize" | "ats_optimize" | "expand",
     instruction?: string
   ) => {
+    if (!(await requireProFeature("ai_action"))) return;
     if (aiRunningRef.current) return;
     if (!cvId) {
       setAiError("CV id is missing.");
@@ -2447,6 +2459,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   return (
     <DndProvider backend={HTML5Backend}>
+      {location.state?.onboardingAction === "improve" && <p role="status" className="p-4 bg-teal-50 text-teal-900">{t("Add your experience to your new CV, then use the AI tools to improve it.")}</p>}
       {/* The bubble is portalled outside this element; lock CV controls during the
           request so a late AI response cannot replace newer manual edits. */}
       <div className="h-screen flex flex-col" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
@@ -2673,7 +2686,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
               {cvKind === "master" && cvId && (
                 <button
-                  onClick={() => { completeStep("customize"); navigate(`/app/tailor/${cvId}`); }}
+                  onClick={() => void requireProFeature("tailored_cv_generation").then(allowed => { if (allowed) { completeStep("customize"); navigate(`/app/tailor/${cvId}`); } })}
                   data-onboarding="customize-btn"
                   className="min-h-10 px-4 py-2 rounded-lg font-medium flex items-center gap-2 border"
                   style={{

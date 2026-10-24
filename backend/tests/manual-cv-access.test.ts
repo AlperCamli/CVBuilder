@@ -32,6 +32,7 @@ describe("manual CV access without AI consent", () => {
     ["post", "/master-cvs"], ["post", "/rendering/preview"],
     ["put", "/master-cvs/owned/content"], ["patch", "/master-cvs/owned"],
     ["patch", "/master-cvs/owned/template"], ["patch", "/master-cvs/owned/blocks/summary"],
+    ["put", "/tailored-cvs/owned/content"], ["patch", "/tailored-cvs/owned/template"],
   ] as const)("permits %s %s while checking account restrictions", async (method, path) => {
     const { app, privacy } = fixture();
     expect((await request(app)[method](path).set("Authorization", "Bearer fixture")).status).toBe(204);
@@ -53,9 +54,10 @@ describe("manual CV access without AI consent", () => {
     const blocked = fixture("scratch", true);
     expect((await request(blocked.app).post("/master-cvs").set("Authorization", "Bearer fixture")).status).toBe(403);
   });
-  it("keeps the existing consent requirement for editing imported CVs", async () => {
+  it("allows manual editing of imported CVs without AI consent", async () => {
     const { app, privacy } = fixture("import");
-    expect((await request(app).put("/master-cvs/owned/content").set("Authorization", "Bearer fixture")).status).toBe(403);
-    expect(privacy.assertProductAccess).toHaveBeenCalledWith("owner");
+    expect((await request(app).put("/master-cvs/owned/content").set("Authorization", "Bearer fixture")).status).toBe(204);
+    expect(privacy.assertProcessingAvailable).toHaveBeenCalledWith("owner");
+    expect(privacy.assertProductAccess).not.toHaveBeenCalled();
   });
 });

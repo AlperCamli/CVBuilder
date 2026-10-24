@@ -13,7 +13,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   Mail,
-  LogOut
+  LogOut,
+  CircleHelp
 } from "lucide-react";
 import { useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -33,7 +34,8 @@ export function Layout() {
     { path: "/app/job-tracker", label: "Applications", icon: Briefcase },
     { path: "/app/cover-letters", label: "Cover Letters", icon: Mail },
     { path: "/app/pricing", label: "Pricing", icon: CreditCard },
-    { path: "/app/profile", label: "Profile", icon: User }
+    { path: "/app/profile", label: "Profile", icon: User },
+    { path: publicPath("/support"), label: "Support", icon: CircleHelp }
   ];
 
   const isActive = (path: string) => {

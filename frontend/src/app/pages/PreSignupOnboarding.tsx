@@ -1,3 +1,4 @@
+import { SupportHelp } from "../components/SupportHelp";
 import { i18n, documentLocale, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { getPrivacyConfig, choices, openPrivacyChoices, type PrivacyConfig } from "../integration/privacy";
@@ -41,6 +42,8 @@ import { trackEvent } from "../integration/analytics";
 import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
 import "./pre-signup-onboarding.css";
 
+import { rememberOnboardingTemplate } from "../integration/subscription-flow";
+
 type Stage = "upload" | "questions" | "signup";
 type ProcessingPhase = "idle" | "parsing" | "ready" | "failed";
 function ParsingStatus({ phase }: { phase: ProcessingPhase }) {
@@ -76,6 +79,7 @@ function OnboardingFlow() {
   const navigate = useNavigate();
   const { signUp, signInWithGoogle, isAuthenticated, initialized } = useAuth();
   const [params, setParams] = useSearchParams();
+  useEffect(() => { const slug = params.get("template"); if (slug) rememberOnboardingTemplate(slug); }, [params]);
   const [guest, setGuest] = useState<GuestUpload | null>(readGuestUpload);
   const [newCv, setNewCv] = useState<NewCvOnboarding | null>(readNewCvOnboarding);
   const [hydrated, setHydrated] = useState(() => !guest || !!newCv);
@@ -471,6 +475,7 @@ function OnboardingFlow() {
                 {t(error)}
               </p>
             )}
+            {error && <SupportHelp topic="CV upload" />}
             {processing === "failed" && (
               <button className="ob-back" onClick={retryParsing}>
                 {t("Retry analysis")}</button>
@@ -540,6 +545,7 @@ function OnboardingFlow() {
                   <span>{t("Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.")}</span>
                   <small><CheckCircle2 size={14} aria-hidden="true" />{t("Structured editor with live preview")}</small>
                 </button>
+                {uploadError && <SupportHelp topic="CV upload" />}
                 {uploadError && (
                   <p className="ob-error" role="alert">
                     {uploadError}
@@ -649,8 +655,8 @@ function OnboardingFlow() {
                 </h1>
                 <p className="ob-description">
                   {emailSent
-                    ? newCv ? t("Confirm your email to open your new CV in the editor. Continue on this device within 24 hours.") : t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
-                    : newCv ? t("Create a free account to start building your new CV.") : t("Create a free account to save your CV and see your score.")}
+                    ? newCv ? t("Confirm your email to review your new CV and choose your next step. Continue on this device within 24 hours.") : t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
+                    : newCv ? t("Create an account to save your new CV and choose your next step.") : t("Create an account to save your CV and see your score.")}
                 </p>
                 <div className="ob-ready-strip">
                   <span className="ob-ready-icon">
@@ -669,7 +675,7 @@ function OnboardingFlow() {
                     disabled={busy}
                     onClick={() => void continueWithAccount()}
                   >
-                    {newCv ? t("Open CV editor") : t("See my CV score")}{" "}<ArrowRight size={17} />
+                    {t("See my CV score")}{" "}<ArrowRight size={17} />
                   </button>
                 ) : (
                   !emailSent && (
@@ -765,7 +771,7 @@ function OnboardingFlow() {
                             <Loader2 size={17} className="animate-spin" />
                           ) : (
                             <>
-                              {newCv ? t("Create account & open CV editor") : t("Create account & see my score")}{" "}
+                              {newCv ? t("Create account & see my score") : t("Create account & see my score")}{" "}
                               <ArrowRight size={17} />
                             </>
                           )}
@@ -801,7 +807,7 @@ function OnboardingFlow() {
         </div>
       </main>
       <footer className="ob-footer">
-        {newCv ? t("Create a new CV · A few questions · Create an account · CV editor") : t("Create or upload · A few questions · Create an account · Your CV")}</footer>
+        {newCv ? t("Create a new CV · A few questions · Create an account · CV score · Activate trial") : t("Create or upload · A few questions · Create an account · CV score · Activate trial")}</footer>
     </div>
   );
 }

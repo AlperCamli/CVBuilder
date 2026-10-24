@@ -63,13 +63,13 @@ export function formatMoney(amount: number, currency: string): string {
 }
 export function regionalCards(prices: BillingPrices | null): PlanCard[] {
   return PLAN_CARDS.map((card) => {
-    if (card.code === "free")
+    if (card.code === "trial")
       return {
         ...card,
-        name: t("Free"),
+        name: t("3-day free trial"),
         weeklyPrice: prices ? formatMoney(0, prices.currency) : "0",
-        totalPrice: prices ? formatMoney(0, prices.currency) : "0",
-        billingPeriod: t("forever"),
+        totalPrice: prices?.available && prices.plans.some(p => p.code === "weekly") ? t("After 3 days, {{amount}} billed weekly unless cancelled.", { amount: formatMoney(prices.plans.find(p => p.code === "weekly")!.amount, prices.currency) }) : t("Card required to activate. Renewal terms confirmed at checkout."),
+        billingPeriod: t("3 days"),
         description: t(card.description),
         features: card.features.map((f) => t(f)),
       };

@@ -1,6 +1,7 @@
 import type { PlanCatalog } from "./entitlements.types";
 
 interface CreatePlanCatalogOptions {
+  freeUsageLimitsEnabled?: boolean;
   weeklyStripePriceId?: string | null;
   monthlyStripePriceId?: string | null;
   annualStripePriceId?: string | null;
@@ -35,7 +36,7 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
       code: "free",
       name: "Free",
       stripe_price_id: null,
-      limits: {
+      limits: options?.freeUsageLimitsEnabled === false ? { ...UNLIMITED_LIMITS } : {
         tailored_cv_generations: 3,
         exports: 5,
         ai_actions: 20,

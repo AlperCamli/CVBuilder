@@ -1,3 +1,4 @@
+import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../../integration/subscription-flow";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
@@ -37,9 +38,9 @@ export function SubscriptionOffer({
   const choosePro = () => {
     setPendingCheckout({
       plan_code: period,
-      ...(period === "weekly" ? { with_trial: false } : {}),
+      with_trial: false, return_path: ONBOARDING_ENTRY_PATH,
     });
-    navigate("/signup", { state: { from: "/app/create" } });
+    navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: period, with_trial: false, auto: true }) } });
   };
   const select = (value: CheckoutTarget) => {
     setLocalPeriod(value);
@@ -136,27 +137,27 @@ export function SubscriptionOffer({
         <article className="v2-free-card">
           <div>
             <span className="v2-overline">JUST GETTING STARTED?</span>
-            <h3>Free</h3>
+            <h3>3-day free trial</h3>
             <div className="v2-free-price">
               $0 <span>/ month</span>
             </div>
           </div>
           <ul>
             <li>
-              <Check size={15} />3 tailored CVs / month
+              <Check size={15} />Unlimited tailored CVs
             </li>
             <li>
-              <Check size={15} />5 exports / month
+              <Check size={15} />Unlimited exports
             </li>
             <li>
               <Check size={15} />
-              20 AI actions / month
+              Unlimited AI actions
             </li>
           </ul>
           <StartLink className="v2-free-link">
-            Start free <ArrowRight size={15} />
+            Start Free Trial <ArrowRight size={15} />
           </StartLink>
-          <p>No card required. Limits apply separately.</p>
+          <p>Card required. Renews weekly after 3 days unless cancelled.</p>
         </article>
       </div>
       {full ? (
@@ -166,20 +167,20 @@ export function SubscriptionOffer({
           </summary>
           <div className="v2-plan-table">
             <table>
-              <caption className="pd-sr-only">Free and Pro plan limits</caption>
+              <caption className="pd-sr-only">Trial and Pro plan features</caption>
               <thead>
                 <tr>
                   <th scope="col">Included</th>
-                  <th scope="col">Free</th>
+                  <th scope="col">3-day trial</th>
                   <th scope="col">Pro</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ["Tailored CVs", "3 / month", "Unlimited"],
-                  ["PDF & DOCX exports", "5 / month", "Unlimited"],
-                  ["AI actions", "20 / month", "Unlimited"],
-                  ["Storage", "25 MB", "Unlimited"],
+                  ["Tailored CVs", "Unlimited", "Unlimited"],
+                  ["PDF & DOCX exports", "Unlimited", "Unlimited"],
+                  ["AI actions", "Unlimited", "Unlimited"],
+                  ["Storage", "Included", "Included"],
                   ["Review & edit", "Included", "Included"],
                 ].map(([label, free, pro]) => (
                   <tr key={label}>
@@ -193,7 +194,7 @@ export function SubscriptionOffer({
           </div>
           <p>
             An AI action is a request such as a rewrite or suggestion. Tailoring
-            can also use AI actions. All Pro billing periods include the same
+            can also use AI actions. Trial and Pro billing periods include the same
             features.
           </p>
         </details>

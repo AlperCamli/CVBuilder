@@ -72,6 +72,8 @@ const envSchema = z
     STRIPE_PRO_PRICE_ID: z.string().min(1).optional(),
     STRIPE_LIFETIME_PRICE_ID: z.string().min(1).optional(),
     BILLING_TRIAL_PERIOD_DAYS: z.coerce.number().int().min(0).max(90).default(3),
+    BILLING_REQUIRE_SUBSCRIPTION: z.enum(["true", "false"]).default("true"),
+    FREE_USAGE_LIMITS_ENABLED: z.enum(["true", "false"]).default("false"),
     BILLING_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
     BILLING_CHECKOUT_CANCEL_URL: z.string().url().optional(),
     BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
@@ -170,6 +172,8 @@ export interface AppConfig {
     photoUrlTtlSeconds: number;
   };
   billing: {
+    requireSubscription?: boolean;
+    freeUsageLimitsEnabled?: boolean;
     geoSecret?: string | null;
     quoteSecret?: string | null;
     developmentCountry?: string;
@@ -304,6 +308,8 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       photoUrlTtlSeconds: parsed.data.CV_PHOTO_URL_TTL_SECONDS
     },
     billing: {
+      requireSubscription: parsed.data.BILLING_REQUIRE_SUBSCRIPTION === "true",
+      freeUsageLimitsEnabled: parsed.data.FREE_USAGE_LIMITS_ENABLED === "true",
       geoSecret: parsed.data.BILLING_GEO_SECRET ?? null,
       quoteSecret: parsed.data.BILLING_QUOTE_SECRET ?? null,
       developmentCountry: parsed.data.BILLING_DEVELOPMENT_COUNTRY,

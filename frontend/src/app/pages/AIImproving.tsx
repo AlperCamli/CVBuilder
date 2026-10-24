@@ -9,6 +9,8 @@ import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
 
+import { applyOnboardingTemplate } from "../integration/subscription-flow";
+
 export function AIImproving() {
   useTranslation();
   const navigate = useNavigate();
@@ -84,6 +86,7 @@ export function AIImproving() {
 
               const converted = await api.createMasterCvFromImport(importId, { language: parsedContent.language });
 
+              await applyOnboardingTemplate(api, converted.master_cv.id, moduleType ?? "standard");
               completeStep("create_cv");
 
               if (source === "onboarding_upload") {

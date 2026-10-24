@@ -1,5 +1,5 @@
 export type CheckoutTarget = "weekly" | "monthly" | "annual";
-export type VisiblePlanCode = "free" | CheckoutTarget;
+export type VisiblePlanCode = "trial" | CheckoutTarget;
 export type LegacyPaidPlanCode = "pro" | "lifetime";
 
 export const WEEKLY_PRICE = "$4.99";
@@ -24,18 +24,13 @@ export interface PlanCard {
 
 export const PLAN_CARDS: PlanCard[] = [
   {
-    code: "free",
-    name: "Free",
+    code: "trial",
+    name: "3-day free trial",
     weeklyPrice: "$0",
-    totalPrice: "$0",
-    billingPeriod: "forever",
-    description: "Try the basics, no card required.",
-    features: [
-      "3 customized CVs per month",
-      "5 exports per month",
-      "20 AI actions per month",
-      "25 MB storage"
-    ]
+    totalPrice: "Card required. Renews at the displayed Weekly Pro price after 3 days unless cancelled.",
+    billingPeriod: "3 days",
+    description: "Complete onboarding, choose your next step, then activate the trial.",
+    features: ["Unlimited customized CVs", "Unlimited PDF & DOCX exports", "Unlimited AI actions"]
   },
   {
     code: "weekly",
@@ -44,8 +39,8 @@ export const PLAN_CARDS: PlanCard[] = [
     totalPrice: `${WEEKLY_PRICE} billed weekly`,
     billingPeriod: "per week",
     description: "Start with the lowest commitment.",
-    badge: "3-day free trial",
-    trialEligible: true,
+    badge: "Flexible weekly access",
+    trialEligible: false,
     features: [
       "Unlimited customized CVs",
       "Unlimited exports (PDF + DOCX)",
@@ -92,7 +87,7 @@ export const PLAN_CARDS: PlanCard[] = [
 ];
 
 export const PAID_PLAN_CARDS = PLAN_CARDS.filter(
-  (card): card is PlanCard & { code: CheckoutTarget } => card.code !== "free"
+  (card): card is PlanCard & { code: CheckoutTarget } => card.code !== "trial"
 );
 
 export const CHECKOUT_TARGETS: CheckoutTarget[] = ["weekly", "monthly", "annual"];

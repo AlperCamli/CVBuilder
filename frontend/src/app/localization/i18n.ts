@@ -111,6 +111,6 @@ export const publicPath = (
   path: string,
   locale: Locale = i18n.language === "tr" ? "tr" : "en",
 ) =>
-  locale === "tr" && (path === "/" || path === "/pricing")
+  locale === "tr" && (path === "/" || path === "/pricing" || path === "/support")
     ? `/tr${path === "/" ? "" : path}`
     : path;

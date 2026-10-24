@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { BillingController } from "./billing.controller";
-import { billingCheckoutSchema, billingPortalSchema } from "./billing.schemas";
+import { billingCheckoutSchema, billingPortalSchema, billingCheckoutConfirmSchema } from "./billing.schemas";
 
 export const createBillingRouter = (
   billingController: BillingController,
@@ -25,6 +25,7 @@ export const createBillingRouter = (
   );
 
   router.post("/billing/checkout/cancel", authMiddleware, billingController.postCancelCheckout);
+  router.post("/billing/checkout/confirm", authMiddleware, validate({ body: billingCheckoutConfirmSchema }), billingController.postConfirmCheckout);
 
   router.post(
     "/billing/portal",

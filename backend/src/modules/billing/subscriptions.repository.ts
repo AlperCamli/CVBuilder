@@ -14,7 +14,11 @@ export interface SyncSubscriptionInput {
   cancel_at_period_end: boolean;
 }
 
+export interface TrialTransitionGrant { redeemed_at: string | null; }
+
 export interface BillingSubscriptionsRepository {
+  getTrialTransitionGrant(userId: string): Promise<TrialTransitionGrant | null>;
+  redeemTrialTransitionGrant(userId: string, subscriptionId: string): Promise<void>;
   getCurrentForUser(userId: string): Promise<SubscriptionRecord | null>;
   getLatestForUser(userId: string): Promise<SubscriptionRecord | null>;
   hasUsedTrial(userId: string): Promise<boolean>;
@@ -99,6 +103,20 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
     }
 
     return toSubscriptionRecord(data as Record<string, unknown>);
+  }
+
+  async getTrialTransitionGrant(userId: string): Promise<TrialTransitionGrant | null> {
+    const { data, error } = await this.supabaseClient.from("trial_transition_grants")
+      .select("redeemed_at").eq("user_id", userId).maybeSingle();
+    if (error) throw new InternalServerError("Failed to load transition trial", { reason: error.message });
+    return data;
+  }
+
+  async redeemTrialTransitionGrant(userId: string, subscriptionId: string): Promise<void> {
+    const { error } = await this.supabaseClient.from("trial_transition_grants")
+      .update({ redeemed_at: new Date().toISOString(), provider_subscription_id: subscriptionId })
+      .eq("user_id", userId).is("redeemed_at", null);
+    if (error) throw new InternalServerError("Failed to redeem transition trial", { reason: error.message });
   }
 
   async hasUsedTrial(userId: string): Promise<boolean> {

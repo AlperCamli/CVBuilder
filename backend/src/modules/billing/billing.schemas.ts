@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const billingCheckoutConfirmSchema = z.object({ session_id: z.string().regex(/^cs_[A-Za-z0-9_]+$/).max(256) }).strict();
+
 export const billingCheckoutSchema = z
   .object({
     pricing_quote: z.string().max(4096).optional(),

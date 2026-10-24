@@ -11,6 +11,9 @@ import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 import { trackSignupPageView } from "../integration/analytics";
 
+import { readPendingCheckout } from "../integration/pending-checkout";
+import { checkoutPath } from "../integration/subscription-flow";
+
 export function SignUp() {
   useTranslation();
   const navigate = useNavigate();
@@ -26,7 +29,8 @@ export function SignUp() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // New signups land in the CV creation flow unless a deep link was preserved.
-  const postSignupDestination = resolvePostAuthDestination(location.state, "/app/create");
+  const pending = readPendingCheckout();
+  const postSignupDestination = resolvePostAuthDestination(location.state, pending && new URLSearchParams(location.search).get("purchase") === "1" ? checkoutPath({ ...pending, auto: true }) : "/app/onboarding");
 
   useEffect(() => {
     trackSignupPageView({
@@ -58,12 +62,13 @@ export function SignUp() {
     setIsLoading(true);
 
     try {
+      stashPostAuthRedirect(postSignupDestination);
       const result = await signUp(name, email, password);
       if (result.needsEmailVerification) {
         // The verification link re-enters the app outside router state, so stash
         // the destination for the authenticated layout to pick up.
         stashPostAuthRedirect(postSignupDestination);
-        navigate("/email-sent", { state: { email }, replace: true });
+        navigate("/email-sent", { state: { email, from: postSignupDestination }, replace: true });
         return;
       } else {
         navigate(postSignupDestination, { replace: true });

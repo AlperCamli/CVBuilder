@@ -1,4 +1,4 @@
-import { translate as t } from "../localization/i18n";
+import { publicPath, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -8,7 +8,7 @@ import "./privacy.css";
 
 export function PrivacyLinks() {
   useTranslation();
-  return <nav aria-label={t("Privacy links")} className="privacy-links"><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Cookie settings")}</button></nav>;
+  return <nav aria-label={t("Support and privacy links")} className="privacy-links"><Link to={publicPath("/support")}>{t("Support")}</Link><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Cookie settings")}</button></nav>;
 }
 export function PrivacyControls() {
   useTranslation();

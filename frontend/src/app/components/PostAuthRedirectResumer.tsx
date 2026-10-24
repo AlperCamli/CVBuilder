@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { consumePostAuthRedirect } from "../integration/post-auth-redirect";
 import { isLanguagePreview } from "../localization/i18n";
 
-// Mounted inside the authenticated layout (like CheckoutIntentResumer). Catches
+// Mounted inside the authenticated layout. Catches
 // auth round-trips that re-enter the app without passing through /auth/callback —
 // most notably the email-verification link — and resumes the stashed post-signup
 // destination the first time the user lands anywhere in /app.

@@ -10,6 +10,7 @@ import { useOnboarding } from "../contexts/OnboardingContext";
 import { ONBOARDING_STEPS, staticStepRoute } from "../onboarding/onboarding-steps";
 
 const HIDDEN_ROUTE_PREFIXES = [
+  "/app/checkout",
   "/app/create",
   "/app/upload-processing",
   "/app/cv-score",

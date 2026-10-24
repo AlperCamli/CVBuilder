@@ -1,3 +1,4 @@
+import { checkoutPath, rememberOnboardingTemplate, ONBOARDING_ENTRY_PATH } from "../../integration/subscription-flow";
 import { publicPath } from "../../localization/i18n";
 import { useRegionalPricing, formatMoney } from "../../integration/regional-pricing";
 import { PricingAvailability } from "../../components/PricingAvailability";
@@ -42,23 +43,25 @@ import { weeklyPriceComparison } from "./weekly-pricing";
 export function StartLink({
   children = (
     <>
-      {t("Tailor my CV free")}{" "}<ArrowRight size={17} />
+      {t("Start Free Trial")}{" "}<ArrowRight size={17} />
     </>
   ),
   className = "cv-button",
   to = CV_START_PATH,
+  templateSlug,
 }: {
   children?: ReactNode;
   className?: string;
   to?: string;
+  templateSlug?: string;
 }) {
   useTranslation();
   return (
     <Link
-      to={to}
+      to={templateSlug ? `${to}${to.includes("?") ? "&" : "?"}template=${encodeURIComponent(templateSlug)}` : to}
       state={{ from: "/app/create" }}
       className={className}
-      onClick={clearPendingCheckout}
+      onClick={() => { clearPendingCheckout(); if (templateSlug) rememberOnboardingTemplate(templateSlug); }}
     >
       {children}
     </Link>
@@ -145,7 +148,7 @@ export function DesignNav({
         <Link to="/signin" className="cv-signin">
           {t("Sign in")}</Link>
         <StartLink className="cv-button cv-button-small">
-          {t("Start free")}{" "}<ArrowUpRight size={15} />
+          {t("Start Free Trial")}{" "}<ArrowUpRight size={15} />
         </StartLink>
       </div>
       <button
@@ -343,7 +346,7 @@ export function PricingCards({
 }: {
   concept: Concept;
   teaser?: boolean;
-  guided?: { onTrial: () => void; pricingPath: string };
+  guided?: { onTrial?: () => void; pricingPath: string };
 }) {
   useTranslation();
   const navigate = useNavigate();
@@ -386,9 +389,10 @@ export function PricingCards({
     // The paid weekly choice is explicit: do not imply unverified trial terms.
     setPendingCheckout({
       plan_code: period,
-      ...(period === "weekly" ? { with_trial: false } : {}),
+      with_trial: false,
+      return_path: ONBOARDING_ENTRY_PATH,
     });
-    navigate(guided ? "/onboarding" : "/signup", { state: { from: "/app/create" } });
+    navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: period, with_trial: false, return_path: ONBOARDING_ENTRY_PATH, auto: true }) } });
   };
   const proFeatures = [
     "Unlimited tailored CVs",
@@ -436,18 +440,18 @@ export function PricingCards({
             <span>{t("01 / GET STARTED")}</span>
             <FileText size={21} />
           </div>
-          <h3>{t("Free")}</h3>
-          <p>{t("Find your footing. Make your first moves.")}</p>
+          <h3>{t("3-day free trial")}</h3>
+          <p>{t("Try every Pro feature for 3 days.")}</p>
           <div className="cv-price">
             <strong>{regional.prices ? formatMoney(0, regional.prices.currency) : "0"}</strong>
-            <span>{"/"}{guided ? t("week") : t("month")}</span>
+            <span>{"/"}{t("3 days")}</span>
           </div>
-          <div className="cv-price-caption">{t("No card required.")}</div>
+          <div className="cv-price-caption">{t("Credit card required to activate.")}</div>
           <StartLink className="cv-button cv-button-outline">
-            {t("Start with Free")}{" "}<ArrowUpRight size={17} />
+            {t("Start Free Trial")}{" "}<ArrowUpRight size={17} />
           </StartLink>
           <ul>
-            {PLAN_CARDS[0].features.slice(0, 3).map((feature) => (
+            {proFeatures.slice(0, 3).map((feature) => (
               <li key={feature}>
                 <Check size={16} />
                 {t(feature)}
@@ -458,7 +462,7 @@ export function PricingCards({
               {t("PDF & DOCX export")}</li>
           </ul>
           <p className="cv-plan-footnote">
-            {t("Monthly limits apply separately to CVs, exports, and AI actions.")}</p>
+            {t("After 3 days, renews at {{amount}} per week unless cancelled. Complete onboarding, then activate with your card.", { amount: money(weeklyBase) })}</p>
         </article>
         <article className="cv-plan cv-plan-pro">
           <div className="cv-plan-label">
@@ -523,28 +527,7 @@ export function PricingCards({
               </li>
             ))}
           </ul>
-          <p className="cv-plan-footnote">
-            {guided ? (
-              <>
-                <button
-                  type="button"
-                  className="gj-trial-link"
-                  onClick={guided.onTrial}
-                  disabled={!regional.ready}
-                >
-                  {t("Or try Pro free for 3 days")}{" "}<ArrowRight size={12} />
-                </button>
-                <br />
-                {t("Eligible new subscribers · Weekly plan · Then")}{" "}
-                {money(weeklyBase)}{t("/week.")}</>
-            ) : (
-              <>
-                {t("Create your account, then confirm your plan at checkout.")}{period === "weekly"
-                  ? t(" This selects the paid weekly plan without a trial.")
-                  : ""}
-              </>
-            )}
-          </p>
+          <p className="cv-plan-footnote">{t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}</p>
         </article>
       </div>
       {teaser && (
@@ -562,12 +545,12 @@ export function PricingCards({
 export function PlanComparison() {
   useTranslation();
   const rows = [
-    ["Tailored CVs", "3 / month", "Unlimited"],
-    ["PDF & DOCX exports", "5 / month", "Unlimited"],
-    ["AI actions", "20 / month", "Unlimited"],
+    ["Tailored CVs", "Unlimited", "Unlimited"],
+    ["PDF & DOCX exports", "Unlimited", "Unlimited"],
+    ["AI actions", "Unlimited", "Unlimited"],
     ["Choose relevant keywords", "Included", "Included"],
     ["Review and edit your CV", "Included", "Included"],
-    ["Document storage", "25 MB", "Unlimited"],
+    ["Document storage", "Included", "Included"],
   ];
   return (
     <section className="cv-wrap cv-section cv-plan-comparison">
@@ -577,11 +560,11 @@ export function PlanComparison() {
       </div>
       <div className="cv-table-scroll">
         <table>
-          <caption className="cv-sr-only">{t("Free and Pro plan features")}</caption>
+          <caption className="cv-sr-only">{t("Trial and Pro plan features")}</caption>
           <thead>
             <tr>
               <th scope="col">{t("What’s included")}</th>
-              <th scope="col">{t("Free")}</th>
+              <th scope="col">{t("3-day free trial")}</th>
               <th scope="col">{t("Pro · all billing periods")}</th>
             </tr>
           </thead>
@@ -597,7 +580,7 @@ export function PlanComparison() {
         </table>
       </div>
       <p className="cv-table-note">
-        {t("An AI action is a request to an AI feature, such as a rewrite or suggestion. Tailoring may also use AI actions; free limits are separate allowances.")}</p>
+        {t("Trial and Pro include the same features. Activate the trial with a credit card; it renews weekly unless cancelled before the trial ends.")}</p>
     </section>
   );
 }
@@ -607,7 +590,7 @@ export function FAQ({ pricing = false }: { pricing?: boolean }) {
   const items = [
     [
       "Can I start for free?",
-      "Yes. The Free plan requires no card and includes 3 customized CVs, 5 exports, and 20 AI actions each month. These are separate limits, so a tailoring workflow may use both a CV generation and AI actions.",
+      "Start a 3-day trial with a card. Trial and Pro include the same features.",
     ],
     [
       "Do I need to write a new CV?",
@@ -619,7 +602,7 @@ export function FAQ({ pricing = false }: { pricing?: boolean }) {
     ],
     [
       "What can I download?",
-      "You can export your CV as PDF or DOCX. The Free plan includes 5 exports per month; Pro includes unlimited exports.",
+      "Trial and Pro include unlimited PDF and DOCX exports after activation.",
     ],
     ...(pricing
       ? [
@@ -682,7 +665,7 @@ export function FinalCTA({ concept }: { concept: Concept }) {
       </div>
       <div>
         <StartLink />
-        <p>{t("Start free. No card required.")}</p>
+        <p>{t("Start a 3-day trial. Card required to activate.")}</p>
       </div>
       <ArrowUpRight className="cv-final-arrow" aria-hidden="true" />
     </section>

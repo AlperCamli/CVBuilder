@@ -1,6 +1,9 @@
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useAuth } from "../integration/auth-context";
+import { hasAppAccess } from "../integration/subscription-flow";
+import type { EntitlementFeature } from "../integration/entitlement-upsell";
 import { UpgradePromptModal } from "../components/UpgradePromptModal";
 
 export type UpgradePromptVariant =
@@ -16,6 +19,8 @@ export interface UpgradePromptNextStep {
 
 export interface UpgradePromptOptions {
   feature?: string;
+  requiresPro?: boolean;
+  returnPath?: string;
   reason?: string | null;
   exportedCvKind?: "master" | "tailored";
   firstOnboardingPaywall?: boolean;
@@ -29,6 +34,7 @@ interface UpgradePromptState {
 }
 
 interface UpgradePromptContextValue {
+  ensureProAccess: (feature: EntitlementFeature, returnPath?: string) => Promise<boolean>;
   showUpgradePrompt: (variant: UpgradePromptVariant, options?: UpgradePromptOptions) => void;
   dismissUpgradePrompt: () => void;
 }
@@ -37,6 +43,7 @@ const UpgradePromptContext = createContext<UpgradePromptContextValue | undefined
 
 export function UpgradePromptProvider({ children }: { children: ReactNode }) {
   useTranslation();
+  const { api } = useAuth();
   const [state, setState] = useState<UpgradePromptState | null>(null);
 
   const showUpgradePrompt = useCallback(
@@ -46,13 +53,23 @@ export function UpgradePromptProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const ensureProAccess = useCallback(async (feature: EntitlementFeature, returnPath?: string) => {
+    try {
+      if (hasAppAccess(await api.getBillingPlan())) return true;
+      showUpgradePrompt("limit_reached", { feature, returnPath, requiresPro: true });
+    } catch {
+      showUpgradePrompt("limit_reached", { feature, returnPath, requiresPro: true, reason: t("Could not verify your subscription.") });
+    }
+    return false;
+  }, [api, showUpgradePrompt]);
+
   const dismissUpgradePrompt = useCallback(() => {
     setState(null);
   }, []);
 
   const value = useMemo(
-    () => ({ showUpgradePrompt, dismissUpgradePrompt }),
-    [showUpgradePrompt, dismissUpgradePrompt]
+    () => ({ showUpgradePrompt, dismissUpgradePrompt, ensureProAccess }),
+    [showUpgradePrompt, dismissUpgradePrompt, ensureProAccess]
   );
 
   return (

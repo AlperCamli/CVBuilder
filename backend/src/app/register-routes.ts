@@ -1,3 +1,4 @@
+import { isExistingCvWorkspaceRequest } from "../modules/billing/subscription-access";
 import { createPrivacyRouter } from "../modules/privacy/privacy.routes";
 import { createProductAccessGuard } from "../modules/privacy/product-access.middleware";
 import { asyncHandler } from "../shared/utils/async-handler";
@@ -71,6 +72,19 @@ export const registerV1Routes = (
     }));
   }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
+  // Onboarding may claim/read an import and save account answers before activation.
+  // Existing users retain their manual CV workspace; creation, AI, tailoring and exports stay paid.
+  router.use((req, res, next) => {
+    // Express routes accept case variations and a trailing slash by default.
+    const path = req.path.toLowerCase().replace(/\/+$/, "") || "/";
+    const applicationRoute = /^\/(dashboard|master-cvs|tailored-cvs|jobs|cover-letters|cv-revisions|revisions|ai|rendering|cv-photos|exports)(\/|$)/.test(path);
+    const importMutation = /^\/imports(?:\/|$)/.test(path) && !["GET", "HEAD", "OPTIONS"].includes(req.method);
+    if (!applicationRoute && !importMutation) { next(); return; }
+    authMiddleware(req, res, error => {
+      if (error) { next(error); return; }
+      void services.billingService.assertSubscriptionAccess(req.auth!.appUser.id, isExistingCvWorkspaceRequest(req.method, req.path)).then(() => next(), next);
+    });
+  });
   if (services.privacyService) router.use((req, res, next) => {
     if (!["POST", "PATCH", "PUT"].includes(req.method) || !/^\/(imports|ai|master-cvs|tailored-cvs|jobs|cover-letters|cv-photos|exports|rendering)(\/|$)/.test(req.path)) { next(); return; }
     authMiddleware(req, res, error => {

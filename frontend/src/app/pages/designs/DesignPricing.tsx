@@ -62,7 +62,7 @@ export function DesignPricing({ concept }: { concept: Concept }) {
             <p>
               {concept === "journey"
                 ? "Begin with a little help. Give yourself more room when you need it."
-                : "Start free. Go further with Pro. The price you see is the amount billed."}
+                : "Start a 3-day trial or choose Pro. The price you see is the amount billed."}
             </p>
           </div>
         )}

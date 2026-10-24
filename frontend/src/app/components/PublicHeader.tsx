@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Menu, X } from "lucide-react";
 import { CAREER_CATEGORIES, getCareerCategoryPath } from "../../content/career-advice";
+import { clearPendingCheckout } from "../integration/pending-checkout";
 import { CV_START_PATH } from "../design-tools";
 
 type PublicHeaderProps = {
@@ -135,7 +136,7 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
                 <Link
                   to={getStartedTarget}
                   state={getStartedState}
-                  onClick={closeMobileMenu}
+                  onClick={() => { clearPendingCheckout(); closeMobileMenu(); }}
                   className="interactive-button px-4 py-3 rounded-lg font-medium text-center transition-colors"
                   style={{
                     fontSize: "13px",
@@ -143,7 +144,7 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
                     color: "var(--color-teal-50)",
                   }}
                 >
-                  {t("Get started")}</Link>
+                  {t("Start Free Trial")}</Link>
               </div>
             </nav>
           </div>,
@@ -217,6 +218,7 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
           <Link
             to={getStartedTarget}
             state={getStartedState}
+            onClick={clearPendingCheckout}
             className="interactive-button px-4 py-2 rounded-lg font-medium transition-colors"
             style={{
               fontSize: "13px",
@@ -224,7 +226,7 @@ export function PublicHeader({ activeCategorySlug }: PublicHeaderProps) {
               color: "var(--color-teal-50)",
             }}
           >
-            {t("Get started")}</Link>
+            {t("Start Free Trial")}</Link>
         </div>
 
         <button

@@ -202,6 +202,7 @@ export const buildDefaultServices = (
     overrides?.entitlementsService ??
     new EntitlementsService(
       createPlanCatalog({
+        freeUsageLimitsEnabled: config.billing.freeUsageLimitsEnabled ?? false,
         weeklyStripePriceId: config.billing.stripeWeeklyPriceId,
         monthlyStripePriceId: config.billing.stripeMonthlyPriceId,
         annualStripePriceId: config.billing.stripeAnnualPriceId,
@@ -237,6 +238,7 @@ export const buildDefaultServices = (
           historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
         }),
         provider: config.billing.provider,
+        requireSubscription: config.billing.requireSubscription ?? true,
         checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
         checkoutCancelUrl: config.billing.checkoutCancelUrl,
         portalReturnUrl: config.billing.portalReturnUrl,
