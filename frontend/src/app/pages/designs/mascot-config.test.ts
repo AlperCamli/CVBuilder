@@ -150,4 +150,17 @@ describe("portable companion configuration", () => {
     });
     expect(readMascotConfig()).toEqual(cloneConfig());
   });
+  it("adds the carousel stop to old exports without replacing existing settings", () => {
+    const previous = cloneConfig() as any;
+    delete previous.stops.companies;
+    delete previous.messages.companies;
+    previous.stops.demo.y = 80;
+    previous.messages.hero.text = "My welcome";
+    const parsed = parseMascotConfig(previous);
+    expect(parsed.stops.companies).toEqual(DEFAULT_MASCOT_CONFIG.stops.companies);
+    expect(parsed.messages.companies.pose).toBe("celebrate");
+    for (const id of Object.keys(previous.stops))
+      expect(parsed.stops[id]).toEqual(previous.stops[id]);
+    expect(parsed.messages.hero.text).toBe("My welcome");
+  });
 });

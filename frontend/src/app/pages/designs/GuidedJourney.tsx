@@ -27,7 +27,7 @@ import {
 import {
   Eyebrow,
   PlanComparison,
-  PricingCards,
+  RegionalPricingCards,
   StartLink,
   TrustLine,
 } from "./DesignShared";
@@ -41,6 +41,8 @@ import {
 } from "./mascot-config";
 import { GUIDED_JOURNEY_FAQ_ITEMS } from "../../../content/seo-meta.mjs";
 import { TemplateShowcase } from "./TemplateShowcase";
+import { CompanyCarousel } from "./CompanyCarousel";
+import { useRegionalPricing } from "../../integration/regional-pricing";
 import "./round-two.css";
 import "./guided-journey.css";
 
@@ -64,6 +66,7 @@ export default function GuidedJourney({
   };
 }) {
   useTranslation();
+  const regional = useRegionalPricing();
   const mascotConfig = settings?.config ?? DEFAULT_MASCOT_CONFIG;
   const pinned = settings?.pinned ?? null;
   const inspect = settings?.inspect ?? false;
@@ -243,6 +246,7 @@ export default function GuidedJourney({
                   {t("3-day free trial · Card required to activate")}</div>
               </div>
             </section>
+            <CompanyCarousel market={regional.prices?.market} />
             <section className="gj-demo-section" id="demo">
               <div className="cv-wrap">
                 <div className="gj-section-title">
@@ -323,7 +327,8 @@ export default function GuidedJourney({
                 {t("A tailored CV for every role. One subscription to keep you moving.")}</p>
             </div>
           )}
-          <PricingCards
+          <RegionalPricingCards
+            regional={regional}
             concept="journey"
             teaser={!pricing}
             guided={{

@@ -339,14 +339,25 @@ export function Transformation({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function PricingCards({
-  concept,
-  teaser = false,
-  guided,
-}: {
+type PricingCardsProps = {
   concept: Concept;
   teaser?: boolean;
   guided?: { onTrial?: () => void; pricingPath: string };
+};
+
+export function PricingCards(props: PricingCardsProps) {
+  const regional = useRegionalPricing();
+  return <RegionalPricingCards {...props} regional={regional} />;
+}
+
+/** Share the landing page's pricing response with its regional company logos. */
+export function RegionalPricingCards({
+  concept,
+  teaser = false,
+  guided,
+  regional,
+}: PricingCardsProps & {
+  regional: ReturnType<typeof useRegionalPricing>;
 }) {
   useTranslation();
   const navigate = useNavigate();
@@ -362,7 +373,6 @@ export function PricingCards({
     : hydrated && isCheckoutTarget(selectedBilling)
       ? selectedBilling
       : "monthly";
-  const regional = useRegionalPricing();
   const selected = regional.prices?.plans.find(plan => plan.code === period);
   const weeklyAmount = selected ? Math.round(selected.amount * (period === "monthly" ? 12 / 52 : period === "annual" ? 1 / 52 : 1)) : 0;
   const weeklyBase = regional.prices?.plans.find(plan => plan.code === "weekly")?.amount ?? 0;

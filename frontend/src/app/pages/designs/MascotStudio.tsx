@@ -332,7 +332,7 @@ export default function MascotStudio() {
   const jump = (id: RailStop, message: MessageId = STOP_MESSAGE[id]) => {
     if (
       page === "pricing" &&
-      ["hero", "demo", "showcase", "return"].includes(id)
+      ["hero", "companies", "demo", "showcase", "return"].includes(id)
     ) {
       setNotice("Choose the landing page preview to adjust this stop.");
       return;
@@ -504,7 +504,7 @@ export default function MascotStudio() {
                 onClick={() => jump(id)}
                 disabled={
                   page === "pricing" &&
-                  ["hero", "demo", "showcase", "return"].includes(id)
+                  ["hero", "companies", "demo", "showcase", "return"].includes(id)
                 }
                 aria-pressed={stop === id}
               >

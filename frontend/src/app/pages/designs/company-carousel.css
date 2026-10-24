@@ -1,0 +1,47 @@
+.gj-companies {
+  padding-block: 12px 56px;
+  text-align: center;
+}
+.gj-companies-heading { max-width: 760px; margin: 0 auto 25px; }
+.gj-companies-heading .cv-eyebrow { justify-content: center; font-size: 10px; }
+.cv-guided-journey .gj-companies-heading h2 {
+  font-size: clamp(22px, 2.5vw, 30px);
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+  margin: 12px 0 10px;
+}
+.gj-companies-heading p { font-size: 14px; color: var(--cv-muted); line-height: 1.6; }
+.gj-company-carousel { max-width: 1000px; margin: auto; }
+.gj-company-window {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+}
+.gj-company-track { display: flex; width: max-content; min-width: 200%; animation: gj-company-scroll linear infinite; }
+.gj-company-group {
+  display: flex; align-items: center; gap: 20px;
+  list-style: none; padding: 0 20px 0 0; margin: 0; flex: 1 0 auto; justify-content: space-around;
+}
+.gj-company-logo {
+  width: 164px; height: 86px; padding: 18px 22px;
+  color: #747a7e;
+  display: flex; align-items: center; justify-content: center;
+}
+.gj-company-logo img { width: 100%; height: 100%; object-fit: contain; }
+.gj-company-logo img[src$="/qnb.png"] { filter: brightness(0) invert(48%); }
+.gj-company-logo span { font-size: 18px; font-weight: 700; }
+.gj-company-carousel:focus-visible { outline: 2px solid var(--cv-accent); outline-offset: 4px; }
+.gj-company-carousel:hover .gj-company-track,
+.gj-company-carousel:focus-visible .gj-company-track { animation-play-state: paused; }
+.gj-companies .gj-companies-note { font-size: 10px; color: var(--cv-muted); margin: 16px auto 0; line-height: 1.6; max-width: 640px; }
+@keyframes gj-company-scroll { to { transform: translateX(-50%); } }
+@media (max-width: 600px) {
+  .gj-companies { padding-block: 0 36px; }
+  .gj-company-logo { width: 144px; height: 76px; padding: 16px 20px; }
+  .gj-company-group { gap: 12px; padding-right: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gj-company-window { overflow: visible; mask-image: none; }
+  .gj-company-track { animation: none; width: 100%; min-width: 0; }
+  .gj-company-group { flex-wrap: wrap; justify-content: center; width: 100%; padding: 0; }
+  .gj-company-group[aria-hidden="true"] { display: none; }
+}

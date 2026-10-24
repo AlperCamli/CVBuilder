@@ -2,6 +2,7 @@
  * Approved changes belong here so deployments do not depend on localStorage. */
 export const STOP_IDS = [
   "hero",
+  "companies",
   "demo",
   "showcase",
   "plans",
@@ -11,6 +12,7 @@ export const STOP_IDS = [
 export type RailStop = (typeof STOP_IDS)[number];
 export const STOP_LABELS: Record<RailStop, string> = {
   hero: "Welcome",
+  companies: "Company carousel",
   demo: "Demo",
   showcase: "Template collection",
   plans: "Pricing",
@@ -31,6 +33,7 @@ export const ACTIONS = [
 export type MascotAction = (typeof ACTIONS)[number];
 export const MESSAGE_IDS = [
   "hero",
+  "companies",
   "keywords",
   "editing",
   "showcase",
@@ -49,6 +52,7 @@ export const MESSAGE_IDS = [
 export type MessageId = (typeof MESSAGE_IDS)[number];
 export const MESSAGE_LABELS: Record<MessageId, string> = {
   hero: "Welcome",
+  companies: "Celebrating your next chapter",
   keywords: "Choosing keywords",
   editing: "Editing a CV",
   showcase: "Exploring the template collection",
@@ -66,6 +70,7 @@ export const MESSAGE_LABELS: Record<MessageId, string> = {
 };
 export const MESSAGE_STOP: Record<MessageId, RailStop> = {
   hero: "hero",
+  companies: "companies",
   keywords: "demo",
   editing: "demo",
   showcase: "showcase",
@@ -83,6 +88,7 @@ export const MESSAGE_STOP: Record<MessageId, RailStop> = {
 };
 export const STOP_MESSAGE: Record<RailStop, MessageId> = {
   hero: "hero",
+  companies: "companies",
   demo: "editing",
   showcase: "showcase",
   plans: "plans",
@@ -170,6 +176,12 @@ export const DEFAULT_MASCOT_CONFIG: MascotConfig = {
     ]),
   ) as MascotConfig["stops"],
   messages: {
+    companies: message(
+      "Big ambitions? Let’s make your experience shine.",
+      "celebrate",
+      "demo",
+      "Try the demo",
+    ),
     hero: message(
       "I’ll show you around—let’s try a little edit.",
       "guide",

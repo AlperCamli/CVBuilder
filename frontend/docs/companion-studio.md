@@ -42,6 +42,8 @@ To test visitor dragging inside Studio, turn off **Drag handles in preview** and
 
 ## Implementation
 
+The landing page also includes a configurable **Company carousel** stop with celebrating artwork. Older exports receive this stop's committed defaults. See [company carousel](./company-carousel.md) for employment claim verification, logo sources, localization, and motion behavior.
+
 - `src/app/pages/designs/MascotStudio.tsx`: editor, controls, undo/redo, local draft, import/export, and scaled live preview.
 - `src/app/pages/designs/mascot-config.ts`: typed versioned defaults, validation, and local settings loading.
 - `src/app/pages/designs/useMascotSettings.ts`: same-origin preview bridge, playback, drag handling, and review-page settings.

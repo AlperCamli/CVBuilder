@@ -136,6 +136,7 @@ export function MascotRail({
     if (!node || !bubbleNode) return;
     const root = node.closest<HTMLElement>(".cv-guided-journey")!;
     const hero = document.getElementById("gj-hero")!;
+    const companies = document.getElementById("companies");
     const demo = document.getElementById("demo");
     const showcase = document.getElementById("templates");
     const plans = document.getElementById("plans")!;
@@ -192,6 +193,7 @@ export function MascotRail({
     function measure() {
       return {
         hero: rect(hero),
+        companies: companies ? rect(companies) : null,
         demo: demo ? rect(demo) : null,
         demoContent: demo ? rect(demo.querySelector(".cv-wrap")!) : null,
         showcase: showcase ? rect(showcase) : null,
@@ -237,9 +239,11 @@ export function MascotRail({
             ? "plans"
             : g.showcase && g.showcase.top - scroll < height * 0.6
               ? "showcase"
-              : g.demo && scroll > 140 && g.demo.top - scroll < height * 0.65
-                ? "demo"
-                : "hero";
+              : g.companies && g.companies.top - scroll < height * 0.6 && g.companies.bottom - scroll > 80
+                ? "companies"
+                : g.demo && scroll > 140 && g.demo.top - scroll < height * 0.65
+                  ? "demo"
+                  : "hero";
       if (next !== currentContext) {
         currentContext = next;
         setContext(next);
@@ -436,6 +440,12 @@ export function MascotRail({
           stop = cfg.stops[next];
         }
       }
+      if (next === "companies" && g.companies) {
+        stop = cfg.stops.companies;
+        x = heroX;
+        y = clamp(g.companies.top - scroll + 40, 108, height - railHeight - 24);
+        traveling = false;
+      }
       const closingArrival = reduced.matches
         ? next === "signup"
           ? 1
@@ -564,6 +574,7 @@ export function MascotRail({
       node,
       bubbleNode,
       hero,
+      ...(companies ? [companies] : []),
       ...(demo ? [demo] : []),
       ...(showcase ? [showcase] : []),
       plans,
