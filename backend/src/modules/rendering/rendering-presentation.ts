@@ -855,32 +855,6 @@ const textItemsByKey = (block: RenderingBlock, keys: string[]): string[] => {
   return [];
 };
 
-const combineExperienceHeading = (
-  headline: string | null,
-  subheadline: string | null
-): { title: string | null; subtitle: string | null } => {
-  if (!headline && !subheadline) {
-    return { title: null, subtitle: null };
-  }
-
-  if (!headline) {
-    return { title: subheadline, subtitle: null };
-  }
-
-  if (!subheadline) {
-    return { title: headline, subtitle: null };
-  }
-
-  if (collapseForCompare(headline) === collapseForCompare(subheadline)) {
-    return { title: headline, subtitle: null };
-  }
-
-  return {
-    title: `${headline}, ${subheadline}`,
-    subtitle: null
-  };
-};
-
 const getSectionTitle = (sectionType: string, moduleType?: string | null): string => {
   if (moduleType === "medical_uk" && sectionType === "volunteer") {
     return "Extracurricular Activities";
@@ -1289,7 +1263,7 @@ const medicalBlockToPresentationItem = (
   return null;
 };
 
-const blockToPresentationItem = (sectionType: string, block: RenderingBlock, academicEntryStyle = false): PresentationItem | null => {
+const blockToPresentationItem = (sectionType: string, block: RenderingBlock): PresentationItem | null => {
   if (block.visibility !== "visible") {
     return null;
   }
@@ -1322,12 +1296,6 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock, aca
   }
 
   const mergedHeading = [headline, subheadline].filter(Boolean).join(" ");
-  const headingValues =
-    sectionType === "experience"
-      ? academicEntryStyle
-        ? { title: subheadline, subtitle: headline }
-        : combineExperienceHeading(headline, subheadline)
-      : { title: headline, subtitle: subheadline };
 
   if (
     body &&
@@ -1354,8 +1322,8 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock, aca
 
   const item: PresentationItem = {
     id: block.id,
-    title: sectionType === "summary" ? null : headingValues.title,
-    subtitle: sectionType === "summary" ? null : headingValues.subtitle,
+    title: sectionType === "summary" ? null : headline,
+    subtitle: sectionType === "summary" ? null : subheadline,
     date_range: dateRange,
     location,
     metadata_line: sectionType === "summary" ? null : metadataLine,
@@ -1470,8 +1438,7 @@ const collectLanguagesInlineText = (section: RenderingSection): string | null =>
 const mapSection = (
   section: RenderingSection,
   skillsDisplay: SkillsDisplay = "inline",
-  moduleType?: string | null,
-  academicEntryStyle = false
+  moduleType?: string | null
 ): PresentationSection | null => {
   const type = section.type;
   const rawTitle = section.title?.trim();
@@ -1765,7 +1732,7 @@ const mapSection = (
   }
 
   const items = section.blocks
-    .map((block) => blockToPresentationItem(type, block, academicEntryStyle))
+    .map((block) => blockToPresentationItem(type, block))
     .filter((item): item is PresentationItem => item !== null);
 
   if (items.length === 0) {
@@ -1926,7 +1893,7 @@ export const mapRenderingPayloadToPresentation = (
 
   const sections = rendering.sections
     .sort((a, b) => a.order - b.order)
-    .map((section) => mapSection(section, skillsDisplay, moduleType, theme.tokens.academic_entry_style))
+    .map((section) => mapSection(section, skillsDisplay, moduleType))
     .filter((section): section is PresentationSection => section !== null);
   if (normalizeLanguage(rendering.document.language) === "tr" && moduleType !== "medical_uk") {
     for (const section of sections) {

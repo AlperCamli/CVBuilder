@@ -35,11 +35,6 @@ async function main() {
     for (const template of templates) {
       const presentation = signaturePresentation(template.slug);
       presentation.theme.template_name = template.name;
-      // The fixture bypasses item mapping. Mirror the Academic Serif employer/role layout.
-      if (presentation.theme.tokens.academic_entry_style) {
-        for (const section of presentation.sections.filter(section => section.type === "experience"))
-          for (const item of section.items) [item.title, item.subtitle] = [item.subtitle, item.title];
-      }
       const stem = join(temp, template.slug);
       await writeFile(`${stem}.pdf`, await generatePdfDocument(mapPresentationToExportDocument(presentation)));
       execFileSync("pdftoppm", ["-f", "1", "-singlefile", "-scale-to", "1100", "-png", `${stem}.pdf`, stem], { stdio: ["ignore", "ignore", "pipe"] });

@@ -1,3 +1,4 @@
+import { standardModule } from "../src/shared/cv-modules/standard.module";
 import { describe, expect, it } from "vitest";
 import type { CvJsonValue } from "../src/shared/cv-content/cv-content.types";
 import { mapRenderingPayloadToPresentation } from "../src/modules/rendering/rendering-presentation";
@@ -190,14 +191,14 @@ const renderingPayload = (): RenderingPayload => ({
 });
 
 describe("rendering presentation mapper", () => {
-  it("keeps Academic Serif employers bold and roles separate for italic styling", () => {
+  it.each(standardModule.templateSlugs)("keeps the role above a separate organization line for %s", slug => {
     const payload = renderingPayload();
-    payload.template.template!.slug = "latex-academic-serif";
+    payload.template.template!.slug = slug;
     const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
-    expect(presentation.theme.tokens.academic_entry_style).toBe(true);
+    if (slug === "latex-academic-serif") expect(presentation.theme.tokens.academic_entry_style).toBe(true);
     const item = presentation.sections.find(section => section.type === "experience")!.items[0];
-    expect(item.title).toBe("Vakıfbank");
-    expect(item.subtitle).toBe("Business Intelligence Intern");
+    expect(item.title).toBe("Business Intelligence Intern");
+    expect(item.subtitle).toBe("Vakıfbank");
     expect(item.metadata_line).toContain("07/2025");
   });
 
@@ -242,8 +243,8 @@ describe("rendering presentation mapper", () => {
 
     const experienceSection = presentation.sections.find((section) => section.type === "experience");
     const experienceItem = experienceSection?.items[0];
-    expect(experienceItem?.title?.startsWith("Business Intelligence Intern, ")).toBe(true);
-    expect(experienceItem?.subtitle).toBeNull();
+    expect(experienceItem?.title).toBe("Business Intelligence Intern");
+    expect(experienceItem?.subtitle).toBe("Vakıfbank");
 
     const skillsSection = presentation.sections.find((section) => section.type === "skills");
     expect(skillsSection?.inline_text).toBe("PostgreSQL, Spark, Informatica");

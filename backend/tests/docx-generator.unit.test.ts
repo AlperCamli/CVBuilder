@@ -6,7 +6,7 @@ import { generateDocxDocument } from "../src/modules/exports/generators/docx-gen
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
 
 describe("docx generator", () => {
-  it("exports Academic Serif roles and dates in italic with an embedded italic font", async () => {
+  it("exports Academic Serif roles in bold above italic organizations and dates", async () => {
     const model = mapPresentationToExportDocument(signaturePresentation("latex-academic-serif"));
     const zip = await JSZip.loadAsync(await generateDocxDocument(model));
     const xml = await zip.file("word/document.xml")!.async("string");
@@ -15,6 +15,9 @@ describe("docx generator", () => {
       expect(run).toContain("<w:i/>");
       expect(run).toContain("Latin Modern Roman Italic");
     }
+    const roleRuns = xml.split("</w:r>").filter(part => part.includes("Senior Product Designer"));
+    expect(roleRuns.some(run => run.includes("<w:b/>") && !run.includes("<w:i/>"))).toBe(true);
+    expect(xml.indexOf("Senior Product Designer", xml.indexOf("Work Experience"))).toBeLessThan(xml.indexOf("Forma Studio"));
     const fonts = await zip.file("word/fontTable.xml")!.async("string");
     expect(fonts).toContain("Latin Modern Roman Italic");
   });
