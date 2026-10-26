@@ -36,7 +36,7 @@ import {
   type GuestUpload,
 } from "../integration/guest-import";
 import { ONBOARDING_STEPS } from "../onboarding/onboarding-steps";
-import { clearNewCvOnboarding, readNewCvOnboarding, saveNewCvOnboarding, type NewCvOnboarding } from "../integration/new-cv-onboarding";
+import { clearNewCvOnboarding, readNewCvOnboarding, recordNewCvStart, saveNewCvOnboarding, type NewCvOnboarding } from "../integration/new-cv-onboarding";
 import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { trackEvent } from "../integration/analytics";
 import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
@@ -299,6 +299,7 @@ function OnboardingFlow() {
         language: documentLocale(i18n.language) ?? "en", answers: {}, step: "questions", question: 0,
       };
       saveNewCvOnboarding(draft);
+      recordNewCvStart();
       if (guest) { await deleteGuestUpload(guest); clearGuestUpload(); setGuest(null); }
       setNewCv(draft);
       setAnswers({});
@@ -564,7 +565,7 @@ function OnboardingFlow() {
             )}
             {stage === "questions" && hydrated && (newCv || !aiRequired || aiProcessing) && (
               <>
-                <p className="ob-footnote" style={{ display: "block" }}>{question.id === "source" ? t("Optional: helps us understand how people find us. With analytics acceptance, we retain anonymous aggregate counts. This answer is not sent to AI.") : t("Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile.")}</p>
+                <p className="ob-footnote" style={{ display: "block" }}>{question.id === "source" ? t("Optional: helps us learn how people find us. If you've allowed analytics, your answer only counts toward totals. It's never sent to AI.") : t("Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile.")}</p>
                 <div className="ob-question-progress">
                   <span>{t("Question")}{" "}{questionIndex + 1} {" "}{t("of 4")}</span>
                   <button

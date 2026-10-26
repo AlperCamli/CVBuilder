@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding,
+  clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding, recordNewCvStart,
   saveNewCvOnboarding, type NewCvOnboarding,
 } from "./new-cv-onboarding";
+import { privacyApi } from "./privacy";
 import type { BackendApi } from "./backend-api";
 
 let storage: Map<string, string>;
@@ -68,5 +69,16 @@ describe("new CV onboarding handoff", () => {
     await expect(completeNewCvOnboarding(row, "account-2", api)).rejects.toThrow("another account");
     expect(api.patchOnboardingAnswers).not.toHaveBeenCalled();
     expect(api.createMasterCv).not.toHaveBeenCalled();
+  });
+
+  it("reports an anonymous start with only the path, ignoring failures and storing nothing", async () => {
+    const post = vi.spyOn(privacyApi, "post").mockRejectedValue(new Error("offline"));
+    saveNewCvOnboarding(draft());
+    const stored = new Map(storage);
+    expect(() => recordNewCvStart()).not.toThrow();
+    await Promise.resolve();
+    expect(post).toHaveBeenCalledWith("/onboarding/started", { path: "manual_create" }, { keepalive: true });
+    expect(storage).toEqual(stored);
+    post.mockRestore();
   });
 });

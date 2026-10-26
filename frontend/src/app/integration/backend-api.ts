@@ -351,8 +351,9 @@ export class BackendApi {
     return this.client.get<MasterCvSummary[]>("/master-cvs");
   }
 
-  patchOnboardingAnswers(answers: OnboardingAnswers): Promise<{ answers: OnboardingAnswers }> {
-    return this.client.patch("/me/onboarding-answers", answers);
+  // A new-CV signup marks the save so the backend counts it once in onboarding totals.
+  patchOnboardingAnswers(answers: OnboardingAnswers, options: { path?: "manual_create" } = {}): Promise<{ answers: OnboardingAnswers }> {
+    return this.client.patch(options.path ? `/me/onboarding-answers?path=${options.path}` : "/me/onboarding-answers", answers);
   }
 
   createMasterCv(payload: CreateMasterCvInput): Promise<MasterCvDetail> {

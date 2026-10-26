@@ -54,6 +54,41 @@ describe("privacy release and permissions", () => {
     expect(rpc).toHaveBeenCalledWith("record_analytics_choice", {p_user: user, p_guest: null, p_version: NOTICE_VERSION, p_analytics: true});
     expect(from).not.toHaveBeenCalled();
   });
+
+  describe("onboarding answers", () => {
+    function answersDb(rpcError: unknown = null) {
+      const updates: Array<[string, unknown]> = [];
+      const profile = { ai_processing: false, ai_provider: null, ai_notice_version: null, analytics: false, privacy_revision: 0, deletion_requested_at: null };
+      const from = vi.fn((table: string) => {
+        const query: any = new Proxy({}, { get: (_, key) =>
+          key === "then" ? (resolve: (value: unknown) => void) => resolve({ data: profile, error: null })
+            : key === "update" ? (payload: unknown) => { updates.push([table, payload]); return query; }
+              : () => query });
+        return query;
+      });
+      const rpc = vi.fn(async () => ({ error: rpcError }));
+      return { db: { from, rpc }, rpc, updates };
+    }
+
+    it("counts a new-CV signup with the full answers before dropping the referral answer", async () => {
+      const { db, rpc, updates } = answersDb(); const user = randomUUID();
+      const service = new PrivacyService(db as any, null, { error: vi.fn() });
+      await service.updateAnswers(user, { career: "student", source: "friend" }, "manual_create");
+      expect(rpc).toHaveBeenCalledWith("count_manual_onboarding_signup", { p_user: user, p_answers: { career: "student", source: "friend" } });
+      expect(updates).toContainEqual(["users", { onboarding_answers: { career: "student" } }]);
+    });
+
+    it("does not count profile edits, and a failed count never blocks saving answers", async () => {
+      const plain = answersDb();
+      await new PrivacyService(plain.db as any, null, { error: vi.fn() }).updateAnswers(randomUUID(), { career: "student" });
+      expect(plain.rpc).not.toHaveBeenCalled();
+
+      const failing = answersDb({ message: "metrics unavailable" }); const logger = { error: vi.fn() };
+      await new PrivacyService(failing.db as any, null, logger).updateAnswers(randomUUID(), { career: "student" }, "manual_create");
+      expect(logger.error).toHaveBeenCalledWith({ code: "ONBOARDING_METRIC_FAILED" }, expect.any(String));
+      expect(failing.updates).toContainEqual(["users", { onboarding_answers: { career: "student" } }]);
+    });
+  });
   it("fails closed without verified identity/arrangements and binds AI approval to its actual provider", () => {
     vi.stubEnv("PRIVACY_REVIEW_APPROVED", "false"); expect(privacyConfig().collection_enabled).toBe(false);
     approved(); expect(privacyConfig().collection_enabled).toBe(true); expect(privacyConfig().ai_enabled).toBe(true);
@@ -148,7 +183,7 @@ describe("privacy release and permissions", () => {
 
 describe("privacy endpoints", () => {
   function app() {
-    const fake = { config: () => privacyConfig(), health: async () => ({ overdue: false, failures: 0 }), preferences: vi.fn(async () => ({ ai_processing: false, analytics: false, privacy_revision: 0 })), record: vi.fn(async () => undefined), requestDeletion: vi.fn(async () => ({ status: "deletion_requested" })) };
+    const fake = { config: () => privacyConfig(), health: async () => ({ overdue: false, failures: 0 }), preferences: vi.fn(async () => ({ ai_processing: false, analytics: false, privacy_revision: 0 })), record: vi.fn(async () => undefined), countOnboardingStart: vi.fn(async () => undefined), updateAnswers: vi.fn(async () => ({ answers: {} })), requestDeletion: vi.fn(async () => ({ status: "deletion_requested" })) };
     const server = express(); server.use(express.json());
     server.use(createPrivacyRouter(fake as unknown as PrivacyService, (req, res, next) => {
       if (!req.get("Authorization")) { res.sendStatus(401); return; }
@@ -177,5 +212,21 @@ describe("privacy endpoints", () => {
     expect(fake.record).not.toHaveBeenCalled();
     await request(server).patch("/me/privacy").set("Authorization", "Bearer authenticated").send(choices).expect(200);
     expect(fake.record).toHaveBeenCalledWith("owner", null, choices);
+  });
+  it("counts anonymous new-CV starts without authentication and accepts only that path", async () => {
+    const { server, fake } = app();
+    await request(server).post("/onboarding/started").send({ path: "manual_create" }).expect(202);
+    expect(fake.countOnboardingStart).toHaveBeenCalledWith("manual_create");
+    await request(server).post("/onboarding/started").send({ path: "upload" }).expect(400);
+    await request(server).post("/onboarding/started").send({ path: "manual_create", email: "a@example.invalid" }).expect(400);
+    expect(fake.countOnboardingStart).toHaveBeenCalledTimes(1);
+  });
+  it("passes the new-CV path from the query to answer saving", async () => {
+    const { server, fake } = app(); const answers = { career: "student", source: "friend" };
+    await request(server).patch("/me/onboarding-answers?path=manual_create").set("Authorization", "Bearer authenticated").send(answers).expect(200);
+    expect(fake.updateAnswers).toHaveBeenLastCalledWith("owner", answers, "manual_create");
+    await request(server).patch("/me/onboarding-answers").set("Authorization", "Bearer authenticated").send(answers).expect(200);
+    expect(fake.updateAnswers).toHaveBeenLastCalledWith("owner", answers, undefined);
+    await request(server).patch("/me/onboarding-answers?path=upload").set("Authorization", "Bearer authenticated").send(answers).expect(400);
   });
 });

@@ -15,6 +15,8 @@ const OWNED_TABLES = ["users", "master_cvs", "tailored_cvs", "jobs", "job_status
 class MaintenanceYield extends Error {}
 const withinBudget = (deadline: number) => { if (Date.now() >= deadline - 500) throw new MaintenanceYield(); };
 type StoredObject = { bucket: string; path: string };
+// Uploads are counted by guest_imports triggers; only the new-CV path is reported by the browser.
+export type OnboardingPath = "manual_create";
 type Job = { id: string; subject_user_id: string; auth_user_id: string | null; kind: "deletion" | "export"; status: string; step: string; manifest: Record<string, unknown>; storage_path: string | null; expires_at: string | null; attempts: number };
 function check(error: { message?: string } | null) {
   if (error?.message === "privacy_subject_unavailable") throw new NotFoundError("Upload or account is no longer available.");
@@ -109,8 +111,17 @@ export class PrivacyService {
     const removed = await this.db.storage.from("imports").remove([data!.storage_path]);
     return { status: "deletion_requested", storage_removed: !removed.error };
   }
-  async updateAnswers(userId: string, answers: Record<string, string>) {
+  async countOnboardingStart(path: OnboardingPath) {
+    const { error } = await this.db.rpc("bump_onboarding_metric", { p_metric: "started", p_option: path });
+    if (error) this.logger.error({ code: "ONBOARDING_METRIC_FAILED" }, "Onboarding start was not counted");
+  }
+  async updateAnswers(userId: string, answers: Record<string, string>, path?: OnboardingPath) {
     await this.preferences(userId);
+    if (path === "manual_create") {
+      // Counted before the referral answer is dropped; the database applies the consent split.
+      const { error } = await this.db.rpc("count_manual_onboarding_signup", { p_user: userId, p_answers: answers });
+      if (error) this.logger.error({ code: "ONBOARDING_METRIC_FAILED" }, "Onboarding signup was not counted");
+    }
     const { source: _referral, ...guidance } = answers;
     const { error } = await this.db.from("users").update({ onboarding_answers: guidance }).eq("id", userId).is("deletion_requested_at", null);
     check(error);

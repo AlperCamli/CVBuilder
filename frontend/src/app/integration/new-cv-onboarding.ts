@@ -1,6 +1,7 @@
 import { PRE_SIGNUP_QUESTIONS, type OnboardingAnswers } from "../onboarding/pre-signup-questions";
 import type { Locale } from "../localization/i18n";
 import type { BackendApi } from "./backend-api";
+import { privacyApi } from "./privacy";
 
 const KEY = "cv-builder:new-cv-onboarding";
 export interface NewCvOnboarding {
@@ -33,6 +34,12 @@ export function readNewCvOnboarding(): NewCvOnboarding | null {
 export function saveNewCvOnboarding(row: NewCvOnboarding) {
   // Only questionnaire enums and the handoff cursor; no CV contents or signup fields.
   localStorage.setItem(KEY, JSON.stringify(row));
+}
+
+// Anonymous funnel total: sends only the path, never answers or identifiers, and
+// stores nothing on the device, so it is counted regardless of analytics choice.
+export function recordNewCvStart() {
+  void privacyApi.post("/onboarding/started", { path: "manual_create" }, { keepalive: true }).catch(() => undefined);
 }
 
 export function clearNewCvOnboarding() {

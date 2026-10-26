@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
 import { saveNewCvOnboarding, readNewCvOnboarding } from "../integration/new-cv-onboarding";
+import { syncBrowserChoice } from "../integration/privacy";
 
 export function OnboardingResume() {
   useTranslation();
@@ -29,7 +30,9 @@ export function OnboardingResume() {
     setError(null);
     if (newCv.accountId && newCv.accountId !== me.user.id) { setError(t("This CV setup belongs to another account. Please start again.")); return; }
     saveNewCvOnboarding({ ...newCv, accountId: me.user.id });
-    void api.patchOnboardingAnswers(newCv.answers).then(() => {
+    // Sync the visitor's analytics choice first so the signup count applies their consent.
+    void syncBrowserChoice().catch(() => undefined)
+      .then(() => api.patchOnboardingAnswers(newCv.answers, { path: "manual_create" })).then(() => {
       if (!cancelled) navigate("/app/cv-score?source=scratch", { replace: true });
     }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again.")); });
     return () => { cancelled = true; };

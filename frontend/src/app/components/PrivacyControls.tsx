@@ -104,15 +104,15 @@ export function PrivacyControls() {
   return <>
     <PrivacyLinks />
     {open && <aside className="privacy-banner" aria-label={t("Cookie preferences")}>
-      <p><strong>{t("Cookie preferences")}</strong></p>
-      <p>{t("Essential cookies keep uploads and sign-in working. Optional cookies help us understand which pages and features people use, so we can improve JobSpecificCV.")}</p>
-      <p>{t("Your CV content isn’t included in usage data. You can use the app without optional cookies and change your choice anytime in Cookie settings.")}</p>
-      {details && <p id="cookie-usage-details">{t("We use Google Analytics for usage statistics only after you agree. No advertising tracking.")}{" "}<Link to="/cookies">{t("Read about cookies and storage")}</Link>{"."}</p>}
+      <p><strong>{t("Help us improve jobspecificCV")}</strong></p>
+      <p>{t("Essential cookies keep sign-in and uploads working. With your OK, we also use Google Analytics to see which pages and features help people most, so we can make the app better for you.")}</p>
+      <p>{t("Your CV content is never included, and nothing is used for ads. It's completely optional: the app works the same either way, and you can change your choice anytime in Cookie settings.")}</p>
+      {details && <p id="cookie-usage-details">{t("Analytics loads only after you agree and may use Google's _ga cookies to measure visits.")}{" "}<Link to="/cookies">{t("Read about cookies and storage")}</Link>{"."}</p>}
       {configLoading ? <p role="status">{t("Loading cookie settings…")}</p> : configFailed ? <p role="status">{t("Cookie settings couldn’t load. Optional cookies stay off. Reopen Cookie settings to try again.")}</p> : !analyticsAvailable && <p>{t("Optional cookies are currently unavailable. Essential cookies still work.")}</p>}
       {hasGlobalPrivacyControl() && <p>{t("Your browser asks us not to track usage (Global Privacy Control). Optional cookies stay off.")}</p>}
       {error && <p role="alert">{t(error)}</p>}
       <div className="privacy-actions">
-        <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Allow optional cookies")}</button>
+        <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Allow analytics")}</button>
         <button type="button" disabled={syncPending} onClick={() => void choose(false)}>{t("Essential cookies only")}</button>
         <button type="button" className="privacy-details-toggle" onClick={() => setDetails(!details)} aria-expanded={details} aria-controls={details ? "cookie-usage-details" : undefined}>{details ? t("Less detail") : t("Learn more")}</button>
       </div>

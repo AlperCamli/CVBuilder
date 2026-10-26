@@ -47,3 +47,5 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cv-languages.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/translation-replacement.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/browser-write-revocation.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/guest-onboarding-service-role.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/onboarding-funnel-metrics.sql"

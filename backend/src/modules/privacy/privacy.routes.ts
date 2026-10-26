@@ -4,12 +4,15 @@ import { asyncHandler } from "../../shared/utils/async-handler";
 import { sendSuccess } from "../../shared/http/response";
 import { validate } from "../../shared/validation/validate";
 import { guestAnswersSchema } from "../guest-imports/guest-imports.schemas";
-import type { PrivacyService } from "./privacy.service";
+import rateLimit from "express-rate-limit";
+import type { OnboardingPath, PrivacyService } from "./privacy.service";
 import { requireFreshAuthentication } from "./reauthentication";
 
 export const privacyChoicesSchema = z.object({ notice_version: z.string().max(40), ai_processing: z.boolean().optional(), analytics: z.boolean() }).strict();
+const onboardingPathSchema = z.object({ path: z.literal("manual_create") }).strict();
 export function createPrivacyRouter(service: PrivacyService, auth: RequestHandler) {
   const router = Router();
+  const startLimit = rateLimit({ windowMs: 60 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, validate: { forwardedHeader: process.env.VERCEL !== "1" } });
   router.use((_, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   router.get("/privacy/config", asyncHandler(async (_, res) => { sendSuccess(res, service.config()); }));
   router.get("/privacy/health", asyncHandler(async (_, res) => {
@@ -22,7 +25,14 @@ export function createPrivacyRouter(service: PrivacyService, auth: RequestHandle
     await service.record(req.auth!.appUser.id, null, req.body);
     sendSuccess(res, await service.preferences(req.auth!.appUser.id));
   }));
-  router.patch("/me/onboarding-answers", auth, validate({ body: guestAnswersSchema }), asyncHandler(async (req, res) => { sendSuccess(res, await service.updateAnswers(req.auth!.appUser.id, req.body)); }));
+  // Anonymous funnel total: no body beyond the path, no identifiers, nothing stored on the device.
+  router.post("/onboarding/started", startLimit, validate({ body: onboardingPathSchema }), asyncHandler(async (req, res) => {
+    await service.countOnboardingStart(req.body.path);
+    sendSuccess(res, { counted: true }, { statusCode: 202 });
+  }));
+  router.patch("/me/onboarding-answers", auth, validate({ body: guestAnswersSchema, query: onboardingPathSchema.partial() }), asyncHandler(async (req, res) => {
+    sendSuccess(res, await service.updateAnswers(req.auth!.appUser.id, req.body, req.query.path as OnboardingPath | undefined));
+  }));
   router.post("/me/privacy/exports", auth, asyncHandler(async (req, res) => { sendSuccess(res, await service.requestExport(req.auth!.appUser.id), { statusCode: 202 }); }));
   router.get("/me/privacy/exports/:id", auth, validate({ params: z.object({ id: z.string().uuid() }) }), asyncHandler(async (req, res) => { sendSuccess(res, await service.exportStatus(req.auth!.appUser.id, req.params.id)); }));
   router.get("/me/privacy/exports/:id/download", auth, validate({ params: z.object({ id: z.string().uuid() }) }), asyncHandler(async (req, res) => { sendSuccess(res, await service.exportDownload(req.auth!.appUser.id, req.params.id)); }));
