@@ -14,6 +14,7 @@ export interface CvFontDefinition {
   fallback: "serif" | "sans-serif";
   regularFile: string;
   boldFile: string;
+  italicFile?: string;
 }
 
 export const DEFAULT_CV_FONT_ASSET_KEY: CvFontAssetKey = "noto-sans";
@@ -38,7 +39,8 @@ export const CV_FONT_DEFINITIONS: Record<CvFontAssetKey, CvFontDefinition> = {
     family: "Latin Modern Roman",
     fallback: "serif",
     regularFile: "LatinModernRoman-Regular.otf",
-    boldFile: "LatinModernRoman-Bold.otf"
+    boldFile: "LatinModernRoman-Bold.otf",
+    italicFile: "LatinModernRoman-Italic.otf"
   },
   "new-computer-modern": {
     key: "new-computer-modern",

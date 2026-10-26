@@ -190,6 +190,17 @@ const renderingPayload = (): RenderingPayload => ({
 });
 
 describe("rendering presentation mapper", () => {
+  it("keeps Academic Serif employers bold and roles separate for italic styling", () => {
+    const payload = renderingPayload();
+    payload.template.template!.slug = "latex-academic-serif";
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+    expect(presentation.theme.tokens.academic_entry_style).toBe(true);
+    const item = presentation.sections.find(section => section.type === "experience")!.items[0];
+    expect(item.title).toBe("Vakıfbank");
+    expect(item.subtitle).toBe("Business Intelligence Intern");
+    expect(item.metadata_line).toContain("07/2025");
+  });
+
   it("maps section titles, deduplicates inline lists, and preserves social/photo metadata", () => {
     const metadata: Record<string, CvJsonValue> = {
       full_name: "Alper Çamlı",

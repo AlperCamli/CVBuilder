@@ -11,6 +11,7 @@ import {
 } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { CVPresentationPreview } from "./CVPresentationPreview";
+import { sortTemplatesForGallery } from "../integration/template-order";
 import type { RenderingPresentation, TemplateSummary } from "../integration/api-types";
 
 interface TemplateGalleryDialogProps {
@@ -44,14 +45,6 @@ const getTemplateBadges = (template: TemplateSummary): string[] => {
     .filter((badge) => badge.length > 0);
 };
 
-const isLatexTemplate = (template: TemplateSummary): boolean => {
-  const badges = getTemplateBadges(template);
-  return (
-    template.slug.toLowerCase().startsWith("latex-") ||
-    badges.some((badge) => badge.toLowerCase() === "latex")
-  );
-};
-
 export function TemplateGalleryDialog({
   open,
   onOpenChange,
@@ -68,26 +61,7 @@ export function TemplateGalleryDialog({
   useTranslation();
   const loadingIds = new Set(loadingTemplateIds);
   const [visibleCount, setVisibleCount] = useState(TEMPLATE_BATCH_SIZE);
-  const sortedTemplates = useMemo(
-    () =>
-      [...templates].sort((a, b) => {
-        const aSignature = a.preview_config?.theme === "signature";
-        const bSignature = b.preview_config?.theme === "signature";
-        if (aSignature !== bSignature) return aSignature ? -1 : 1;
-        if (aSignature && bSignature) {
-          const aBase = a.preview_config?.family === a.slug;
-          const bBase = b.preview_config?.family === b.slug;
-          if (aBase !== bBase) return aBase ? -1 : 1;
-        }
-        const aLatex = isLatexTemplate(a);
-        const bLatex = isLatexTemplate(b);
-        if (aLatex !== bLatex) {
-          return aLatex ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      }),
-    [templates]
-  );
+  const sortedTemplates = useMemo(() => sortTemplatesForGallery(templates), [templates]);
   const cards = useMemo<Array<{
     id: string;
     templateId: string | null;

@@ -164,6 +164,8 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
   const fontAsset = resolveCvFontDefinition(documentModel.theme.font_asset_key);
   const documentFont = fontAsset.family;
   const boldDocumentFont = `${fontAsset.family} Bold`;
+  const academicEntryStyle = documentModel.theme.academic_entry_style ?? false;
+  const italicDocumentFont = academicEntryStyle && fontAsset.italicFile ? `${fontAsset.family} Italic` : documentFont;
   const regularFontBytes = readFontBytes(fontAsset.regularFile);
   const boldFontBytes = readFontBytes(fontAsset.boldFile);
 
@@ -224,6 +226,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
           children: [
             new TextRun({
               text: documentModel.subtitle,
+              font: academicEntryStyle ? italicDocumentFont : documentFont,
               color: accentColor,
               italics: true,
               size: bodySize + 2
@@ -407,6 +410,8 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             children: [
               new TextRun({
                 text: block.metadata_line,
+                font: italicDocumentFont,
+                italics: academicEntryStyle,
                 color: accentColor,
                 size: Math.max(18, bodySize - 4)
               })
@@ -439,6 +444,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
       if (block.subheadline) {
         body.push(
           paragraph(block.subheadline, {
+            children: [new TextRun({ text: block.subheadline, font: italicDocumentFont, italics: academicEntryStyle })],
             spacing: {
               after: 30
             }
@@ -452,6 +458,8 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
             children: [
               new TextRun({
                 text: block.metadata_line,
+                font: italicDocumentFont,
+                italics: academicEntryStyle,
                 color: "6C6C6C",
                 size: Math.max(18, bodySize - 4)
               })
@@ -508,6 +516,7 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
 
   const doc = new Document({
     fonts: [
+      ...(academicEntryStyle && fontAsset.italicFile ? [{ name: italicDocumentFont, data: readFontBytes(fontAsset.italicFile) }] : []),
       {
         name: documentFont,
         data: regularFontBytes

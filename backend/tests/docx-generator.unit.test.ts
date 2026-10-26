@@ -1,9 +1,24 @@
+import { signaturePresentation } from "./fixtures/signature-presentation";
+import { mapPresentationToExportDocument } from "../src/modules/exports/generators/rendering-document.mapper";
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { generateDocxDocument } from "../src/modules/exports/generators/docx-generator";
 import type { ExportDocumentModel } from "../src/modules/exports/generators/rendering-document.mapper";
 
 describe("docx generator", () => {
+  it("exports Academic Serif roles and dates in italic with an embedded italic font", async () => {
+    const model = mapPresentationToExportDocument(signaturePresentation("latex-academic-serif"));
+    const zip = await JSZip.loadAsync(await generateDocxDocument(model));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    for (const value of ["Forma Studio", "2022 – Present"]) {
+      const run = xml.split("</w:r>").find(part => part.includes(value));
+      expect(run).toContain("<w:i/>");
+      expect(run).toContain("Latin Modern Roman Italic");
+    }
+    const fonts = await zip.file("word/fontTable.xml")!.async("string");
+    expect(fonts).toContain("Latin Modern Roman Italic");
+  });
+
   it.each(["en", "tr"])("generates a %s DOCX with embedded fonts and correctly cased Unicode headings", async language => {
     const widePngDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";

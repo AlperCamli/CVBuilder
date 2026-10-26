@@ -353,11 +353,11 @@ function CourseItem({ item, index, updateItem, removeItem, toggleItemVisibility,
             }}
           />
           <BulletTextarea
-            rows={2}
+            rows={6}
             placeholder="Description (optional)"
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -587,11 +587,11 @@ function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility
             />
           </div>
           <BulletTextarea
-            rows={3}
+            rows={6}
             placeholder="Description"
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -816,11 +816,11 @@ function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, 
             onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
           <BulletTextarea
-            rows={2}
+            rows={6}
             placeholder="Description (optional)"
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -1045,11 +1045,11 @@ function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibi
             onChange={(nextValue) => updateItem(index, { ...item, date: nextValue })}
           />
           <BulletTextarea
-            rows={2}
+            rows={6}
             placeholder="Description (optional)"
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -1568,11 +1568,11 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
             </span>
           </label>
           <BulletTextarea
-            rows={3}
+            rows={6}
             placeholder="Responsibilities, Impact, Activities…"
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",

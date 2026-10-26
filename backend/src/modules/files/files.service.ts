@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { ExportStorageFailedError } from "../../shared/errors/app-error";
 import type { CvKind, ExportFormat, FileRecord } from "../../shared/types/domain";
 import type { CreateFilePayload, FilesRepository } from "./files.repository";
+import { isOwnedStorageLocation } from "./storage-ownership";
 
 interface FilesServiceOptions {
   storageBucket: string;
@@ -178,7 +179,8 @@ export class FilesService {
   }
 
   async findOwnedFileById(userId: string, fileId: string): Promise<FileRecord | null> {
-    return this.filesRepository.findById(userId, fileId);
+    const file = await this.filesRepository.findById(userId, fileId);
+    return file && isOwnedStorageLocation(userId, file.storage_bucket, file.storage_path) ? file : null;
   }
 
   async createSignedDownloadAccess(

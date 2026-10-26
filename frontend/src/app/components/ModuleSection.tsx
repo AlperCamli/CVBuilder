@@ -174,7 +174,7 @@ export function ModuleSection({
             {t(field.label)}
             {field.required ? " *" : ""} {" "}{t("(one per line)")}</label>
           <BulletTextarea
-            rows={3}
+            rows={6}
             placeholder={field.placeholder ?? field.label}
             value={asLines(value)}
             onValueChange={(next) =>
@@ -187,7 +187,7 @@ export function ModuleSection({
                   .filter((line) => line.length > 0)
               )
             }
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{ ...inputStyle, lineHeight: "1.6" }}
           />
         </div>
@@ -205,11 +205,11 @@ export function ModuleSection({
             {field.required ? " *" : ""}
           </label>
           <BulletTextarea
-            rows={2}
+            rows={6}
             placeholder={field.placeholder ?? field.label}
             value={asText(value)}
             onValueChange={(next) => updateItemField(index, field.key, next)}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{ ...inputStyle, lineHeight: "1.6" }}
           />
         </div>

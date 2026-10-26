@@ -18,7 +18,7 @@ class Database {
   from(name: string) { return new Query(this, name); }
   async rpc(name: string, args: any = {}) {
     if (name === "privacy_storage_inventory") {
-      const files = this.table("files").filter(row => row.user_id === args.p_user).map(row => ({ bucket: row.storage_bucket, path: row.storage_path }));
+      const files = this.table("files").filter(row => row.user_id === args.p_user && row.storage_path.startsWith(`users/${args.p_user}/`)).map(row => ({ bucket: row.storage_bucket, path: row.storage_path }));
       files.push(...this.table("guest_imports").filter(row => row.claimed_user_id === args.p_user).map(row => ({ bucket: "imports", path: row.storage_path })));
       files.push(...this.table("privacy_jobs").filter(row => row.subject_user_id === args.p_user && row.kind === "export").map(row => ({ bucket: "exports", path: row.storage_path ?? `privacy/${args.p_user}/${row.id}.zip` })));
       for (const key of this.objects.keys()) {
@@ -116,7 +116,7 @@ describe("privacy maintenance", () => {
 });
 describe("account privacy jobs", () => {
   it("blocks access immediately and retries physical deletion before removing database/Auth identities", async () => {
-    const { db, service, userId, cancel } = setup(); const path = "users/test/cv.pdf";
+    const { db, service, userId, cancel } = setup(); const path = `users/${userId}/cv.pdf`;
     db.table("files").push({ id: randomUUID(), user_id: userId, storage_bucket: "imports", storage_path: path }); db.objects.set(`imports/${path}`, Buffer.from("CV"));
     db.table("subscriptions").push({ id: randomUUID(), user_id: userId, provider_customer_id: "cus_test" }); db.failures.add(`imports/${path}`);
     await service.requestDeletion(userId, "auth_test", "verified-token");
@@ -153,10 +153,13 @@ describe("account privacy jobs", () => {
   });
   it("includes account rows and file bytes in private ZIP exports and enforces ownership/expiry", async () => {
     const { db, service, userId } = setup(); const id = randomUUID();
-    db.table("files").push({ id, user_id: userId, original_filename: "cv.pdf", storage_bucket: "imports", storage_path: "owned/cv.pdf" }); db.objects.set("imports/owned/cv.pdf", Buffer.from("CV bytes"));
+    db.table("files").push({ id, user_id: userId, original_filename: "cv.pdf", storage_bucket: "imports", storage_path: `users/${userId}/imports/cv.pdf` }); db.objects.set(`imports/users/${userId}/imports/cv.pdf`, Buffer.from("CV bytes"));
+    // A row pointing at another user's object is listed but its bytes are never copied.
+    const foreign = randomUUID(); const victimPath = `users/${randomUUID()}/imports/cv.pdf`;
+    db.table("files").push({ id: foreign, user_id: userId, original_filename: "cv.pdf", storage_bucket: "imports", storage_path: victimPath }); db.objects.set(`imports/${victimPath}`, Buffer.from("victim bytes"));
     const job = await service.requestExport(userId); expect(job.status).toBe("complete");
     const path = `exports/privacy/${userId}/${job.id}.zip`; const zip = await JSZip.loadAsync(db.objects.get(path)!);
-    expect(await zip.file(`files/${id}/cv.pdf`)!.async("string")).toBe("CV bytes"); expect(JSON.parse(await zip.file("data.json")!.async("string")).users[0].id).toBe(userId);
+    expect(await zip.file(`files/${id}/cv.pdf`)!.async("string")).toBe("CV bytes"); expect(zip.file(`files/${foreign}/cv.pdf`)).toBeNull(); expect(JSON.parse(await zip.file("data.json")!.async("string")).users[0].id).toBe(userId);
     db.table("users").push({ id: "other", ai_processing: false }); await expect(service.exportDownload("other", job.id)).rejects.toThrow("expired");
     expect((await service.exportDownload(userId, job.id)).url).toContain("ttl=300");
     vi.setSystemTime(Date.now() + 86_400_001); await expect(service.exportDownload(userId, job.id)).rejects.toThrow("expired"); await service.cleanup(); expect(db.objects.has(path)).toBe(false);

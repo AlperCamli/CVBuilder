@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import type { StripeGateway } from "../billing/stripe-gateway";
 import { AppError, ForbiddenError, InternalServerError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import { assertCollectionEnabled, assertProviderEnabled, NOTICE_VERSION, privacyConfig, type PrivacyPreferences } from "./privacy.config";
+import { isOwnedStorageLocation } from "../files/storage-ownership";
 
 const iso = (ms = Date.now()) => new Date(ms).toISOString();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -292,6 +293,7 @@ export class PrivacyService {
     for (const file of data.files as Record<string, any>[]) {
       // Deleted objects may legitimately be absent; their row remains in data.json.
       if (file.is_deleted) continue;
+      if (!isOwnedStorageLocation(job.subject_user_id, file.storage_bucket, file.storage_path, { allowGuestSource: true })) continue;
       const db = this.db;
       const source = Readable.from((async function* () {
         withinBudget(deadline);

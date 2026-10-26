@@ -31,6 +31,7 @@ import type {
 } from "./parsers/cv-parser";
 import { readSourcePageCount } from "./parsers/source-page-count";
 import { canonicalizeImportedCvContent } from "./import-content-canonicalizer";
+import { isOwnedStorageLocation } from "../files/storage-ownership";
 
 const toMasterCvDetail = (row: MasterCvRecord) => {
   return {
@@ -205,6 +206,17 @@ export class ImportsService {
 
     if (detail.importRow.status === "converted") {
       throw new ConflictError("Converted imports cannot be parsed again");
+    }
+
+    if (
+      !isOwnedStorageLocation(
+        session.appUser.id,
+        detail.sourceFile.storage_bucket,
+        detail.sourceFile.storage_path,
+        { bucket: DEFAULT_IMPORTS_STORAGE_BUCKET, allowGuestSource: true }
+      )
+    ) {
+      throw new ValidationError("Invalid storage location for import session");
     }
 
     await this.importsRepository.updateImport(session.appUser.id, importId, {

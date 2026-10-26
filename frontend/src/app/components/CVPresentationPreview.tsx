@@ -41,6 +41,7 @@ const PAGE_HEIGHT_PX = 842;
 const PAGE_GAP_PX = 24;
 const TWO_COLUMN_GAP_PX = 20;
 const SIDEBAR_OUTER_WIDTH = 170;
+const HORIZON_SIDEBAR_WIDTH = 200;
 const SIDEBAR_INNER_PADDING = 12;
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -200,19 +201,19 @@ function SectionTitle({
 function DefaultItemBody({ item, colors }: { item: PresentationItem; colors: PreviewColors }) {
   return (
     <div>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div style={{ display: "grid", gridTemplateColumns: item.metadata_line || item.date_range ? "minmax(0, 1fr) fit-content(42%)" : "minmax(0, 1fr)", gap: scaledPx(12), overflowWrap: "anywhere" }}>
+        <div style={{ minWidth: 0 }}>
           {item.title ? (
             <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
               {renderPreviewText(item.title)}
             </h3>
           ) : null}
           {item.subtitle ? (
-            <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
+            <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body, fontStyle: "var(--cv-entry-font-style)" as CSSProperties["fontStyle"] }}>{renderPreviewText(item.subtitle)}</p>
           ) : null}
         </div>
         {item.metadata_line || item.date_range ? (
-          <span style={{ fontSize: scaledPx(11), color: colors.muted, textAlign: "right" }}>
+          <span style={{ fontSize: scaledPx(11), color: colors.muted, textAlign: "right", fontStyle: "var(--cv-entry-font-style)" as CSSProperties["fontStyle"] }}>
             {renderPreviewText(item.metadata_line || item.date_range || "")}
           </span>
         ) : null}
@@ -224,7 +225,7 @@ function DefaultItemBody({ item, colors }: { item: PresentationItem; colors: Pre
 
 function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: PreviewColors }) {
   return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: `${scaledPx(110)} 1fr` }}>
+    <div className="grid gap-3" style={{ gridTemplateColumns: `minmax(0, 32%) minmax(0, 1fr)`, overflowWrap: "anywhere" }}>
       <div style={{ fontSize: scaledPx(11), color: colors.muted, paddingTop: scaledPx(2) }}>
         {renderPreviewText(item.metadata_line || item.date_range || "")}
       </div>
@@ -256,7 +257,7 @@ function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: Pr
           </h3>
         ) : null}
         {item.subtitle ? (
-          <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body }}>{renderPreviewText(item.subtitle)}</p>
+          <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body, fontStyle: "var(--cv-entry-font-style)" as CSSProperties["fontStyle"] }}>{renderPreviewText(item.subtitle)}</p>
         ) : null}
         {renderItemBody(item, colors.body)}
       </div>
@@ -410,7 +411,7 @@ function buildHeaderBlocks(
             {header.name ? renderPreviewText(header.name) : "Your Name"}
           </h1>
           {header.title ? (
-            <p style={{ fontSize: scaledPx(14), color: colors.accent, marginTop: scaledPx(2) }}>
+            <p style={{ fontSize: scaledPx(14), color: colors.accent, marginTop: scaledPx(2), fontStyle: theme.tokens.academic_entry_style ? "italic" : "normal" }}>
               {renderPreviewText(header.title)}
             </p>
           ) : null}
@@ -620,7 +621,9 @@ export function CVPresentationPreview({
 
   const compactSignature = presentation?.theme.mode === "ledger-split" || presentation?.theme.mode === "contour-cards";
   const rootScaleStyle = {
+    overflowWrap: "anywhere",
     "--cv-font-scale": String(resolvedFontScale),
+    "--cv-entry-font-style": presentation?.theme.tokens.academic_entry_style ? "italic" : "normal",
     "--cv-body-size": `${compactSignature ? presentation?.theme.tokens.body_text_size ?? 11 : 12}px`
   } as CSSProperties;
 
@@ -658,7 +661,7 @@ export function CVPresentationPreview({
     const mosaic = theme.mode === "mosaic-columns";
     const isTimeline = theme.mode === "timeline-split" || theme.mode === "ledger-split";
 
-    const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP_PX) / 2 : SIDEBAR_OUTER_WIDTH * resolvedFontScale;
+    const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP_PX) / 2 : (horizon ? HORIZON_SIDEBAR_WIDTH : SIDEBAR_OUTER_WIDTH) * resolvedFontScale;
     const sidebarPadY = mosaic ? 0 : SIDEBAR_INNER_PADDING * resolvedFontScale;
     const sidebarPadX = mosaic ? 0 : SIDEBAR_INNER_PADDING * resolvedFontScale;
     const sidebarInnerWidth = Math.max(0, sidebarOuterWidth - sidebarPadX * 2);
@@ -1024,7 +1027,7 @@ function TwoColumnPageContent({
       ))}
       <div
         className="grid"
-        style={{ gridTemplateColumns: mosaic ? "minmax(0, 1fr) minmax(0, 1fr)" : studio ? `minmax(0, 1fr) ${scaledPx(SIDEBAR_OUTER_WIDTH)}` : `${scaledPx(SIDEBAR_OUTER_WIDTH)} minmax(0, 1fr)`, gap: `${TWO_COLUMN_GAP_PX}px` }}
+        style={{ gridTemplateColumns: mosaic ? "minmax(0, 1fr) minmax(0, 1fr)" : studio ? `minmax(0, 1fr) ${scaledPx(SIDEBAR_OUTER_WIDTH)}` : `${scaledPx(horizon ? HORIZON_SIDEBAR_WIDTH : SIDEBAR_OUTER_WIDTH)} minmax(0, 1fr)`, gap: `${TWO_COLUMN_GAP_PX}px` }}
       >
         <aside
           style={{
@@ -1034,6 +1037,8 @@ function TwoColumnPageContent({
             alignSelf: studio || horizon ? "start" : undefined,
             border: horizon || studio || mosaic ? undefined : `1px solid ${built.colors.accent}2c`,
             borderRadius: horizon || studio || mosaic ? 0 : scaledPx(10),
+            minWidth: 0,
+            overflowWrap: "anywhere",
             padding: mosaic ? 0 : scaledPx(SIDEBAR_INNER_PADDING)
           }}
         >

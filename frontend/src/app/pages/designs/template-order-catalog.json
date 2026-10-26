@@ -1,0 +1,166 @@
+[
+  {
+    "slug": "contour-cards",
+    "name": "Contour"
+  },
+  {
+    "slug": "editorial-index",
+    "name": "Editorial"
+  },
+  {
+    "slug": "horizon-rail",
+    "name": "Horizon"
+  },
+  {
+    "slug": "ledger-split",
+    "name": "Ledger"
+  },
+  {
+    "slug": "mosaic-columns",
+    "name": "Mosaic"
+  },
+  {
+    "slug": "studio-banner",
+    "name": "Studio"
+  },
+  {
+    "slug": "contour-cards-cobalt",
+    "name": "Contour Cobalt"
+  },
+  {
+    "slug": "contour-cards-forest",
+    "name": "Contour Forest"
+  },
+  {
+    "slug": "editorial-index-forest",
+    "name": "Editorial Forest"
+  },
+  {
+    "slug": "editorial-index-graphite",
+    "name": "Editorial Graphite"
+  },
+  {
+    "slug": "horizon-rail-forest",
+    "name": "Horizon Forest"
+  },
+  {
+    "slug": "horizon-rail-plum",
+    "name": "Horizon Plum"
+  },
+  {
+    "slug": "ledger-split-plum",
+    "name": "Ledger Plum"
+  },
+  {
+    "slug": "ledger-split-teal",
+    "name": "Ledger Teal"
+  },
+  {
+    "slug": "mosaic-columns-graphite",
+    "name": "Mosaic Graphite"
+  },
+  {
+    "slug": "mosaic-columns-rose",
+    "name": "Mosaic Rose"
+  },
+  {
+    "slug": "studio-banner-ocean",
+    "name": "Studio Ocean"
+  },
+  {
+    "slug": "studio-banner-terracotta",
+    "name": "Studio Terracotta"
+  },
+  {
+    "slug": "latex-academic-serif",
+    "name": "Academic Serif"
+  },
+  {
+    "slug": "latex-editorial-sidebar",
+    "name": "LaTeX Editorial Sidebar"
+  },
+  {
+    "slug": "latex-grant-timeline",
+    "name": "LaTeX Grant Timeline"
+  },
+  {
+    "slug": "latex-modern-brief",
+    "name": "LaTeX Modern Brief"
+  },
+  {
+    "slug": "latex-photo-statement",
+    "name": "LaTeX Photo Statement"
+  },
+  {
+    "slug": "latex-scholar",
+    "name": "LaTeX Scholar"
+  },
+  {
+    "slug": "latex-technical-grid",
+    "name": "LaTeX Technical Grid"
+  },
+  {
+    "slug": "latex-two-column",
+    "name": "LaTeX Two Column"
+  },
+  {
+    "slug": "latex-two-tone-creative",
+    "name": "LaTeX Two Tone Creative"
+  },
+  {
+    "slug": "latex-research-cv",
+    "name": "Research CV"
+  },
+  {
+    "slug": "academic-classic",
+    "name": "Academic Classic"
+  },
+  {
+    "slug": "academic-serif-color",
+    "name": "Academic Serif Color"
+  },
+  {
+    "slug": "academic-timeline",
+    "name": "Academic Timeline"
+  },
+  {
+    "slug": "classic-monochrome",
+    "name": "Classic Monochrome"
+  },
+  {
+    "slug": "creative-color-block",
+    "name": "Creative Color Block"
+  },
+  {
+    "slug": "creative-photo-hero",
+    "name": "Creative Photo Hero"
+  },
+  {
+    "slug": "creative-portfolio",
+    "name": "Creative Portfolio"
+  },
+  {
+    "slug": "executive-timeline",
+    "name": "Executive Timeline"
+  },
+  {
+    "slug": "minimal-professional",
+    "name": "Minimal Professional"
+  },
+  {
+    "slug": "modern-clean",
+    "name": "Modern Clean"
+  },
+  {
+    "slug": "portfolio-modern",
+    "name": "Portfolio Modern"
+  },
+  {
+    "slug": "tech-compact",
+    "name": "Tech Compact"
+  },
+  {
+    "slug": "two-column-modern",
+    "name": "Two Column Modern"
+  }
+]

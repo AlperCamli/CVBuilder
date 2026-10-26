@@ -184,4 +184,25 @@ describe("CvPhotosService", () => {
     expect(repo.deleted).toContain("users/user-1/avatars/x.png");
     expect(repo.files.get(file.id)?.is_deleted).toBe(true);
   });
+
+  it("never signs, embeds or deletes an owned row that points at another user's object", async () => {
+    const repo = new FakeFilesRepository(PNG_BYTES);
+    const service = createService(repo);
+    const file = await repo.createFile({
+      user_id: "user-1",
+      file_type: "avatar",
+      storage_bucket: "cv-assets",
+      storage_path: "users/user-2/avatars/victim.png",
+      original_filename: "profile-photo.png",
+      mime_type: "image/png",
+      size_bytes: PNG_BYTES.byteLength,
+      checksum: null
+    });
+
+    await expect(service.getSignedUrl("user-1", file.id)).rejects.toThrow("Photo was not found");
+    await expect(service.resolveSignedUrl("user-1", file.id)).resolves.toBeNull();
+    await expect(service.resolveDataUri("user-1", file.id)).resolves.toBeNull();
+    await service.remove("user-1", file.id);
+    expect(repo.deleted).toEqual([]);
+  });
 });

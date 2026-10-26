@@ -14,6 +14,11 @@ privacy_psql=(psql -h 127.0.0.1 -p "$privacy_pg_port" -U privacy_test postgres -
 create role anon;
 create role authenticated;
 create role service_role bypassrls;
+-- Mirror Supabase's default grants so browser-role privileges are tested as deployed.
+grant usage on schema public to anon,authenticated,service_role;
+alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
+alter default privileges in schema public grant all on functions to anon,authenticated,service_role;
+alter default privileges in schema public grant all on sequences to anon,authenticated,service_role;
 create schema auth;
 grant usage on schema auth to anon,authenticated,service_role;
 create schema storage;
@@ -41,3 +46,4 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/localization-billing.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cv-languages.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/translation-replacement.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/browser-write-revocation.sql"

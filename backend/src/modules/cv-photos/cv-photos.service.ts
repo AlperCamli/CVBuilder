@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NotFoundError, ValidationError } from "../../shared/errors/app-error";
+import type { FileRecord } from "../../shared/types/domain";
 import type { FilesRepository } from "../files/files.repository";
+import { isOwnedStorageLocation } from "../files/storage-ownership";
 
 // Only PNG and JPEG are accepted: the PDF/DOCX export embedders only support those formats
 // (see rendering-document.mapper.ts `isDataUriImage`). Normalizing other formats (e.g. webp)
@@ -76,6 +78,11 @@ export class CvPhotosService {
 
   private avatarStoragePath(userId: string, fileId: string, ext: "png" | "jpg"): string {
     return `users/${userId}/avatars/${fileId}.${ext}`;
+  }
+
+  private async findOwnedPhoto(userId: string, fileId: string): Promise<FileRecord | null> {
+    const file = await this.filesRepository.findById(userId, fileId);
+    return file && isOwnedStorageLocation(userId, file.storage_bucket, file.storage_path) ? file : null;
   }
 
   // Step 1: issue a signed URL for a direct-to-storage upload (mirrors the import flow,
@@ -162,7 +169,7 @@ export class CvPhotosService {
   }
 
   async getSignedUrl(userId: string, fileId: string): Promise<CvPhotoAccess> {
-    const file = await this.filesRepository.findById(userId, fileId);
+    const file = await this.findOwnedPhoto(userId, fileId);
     if (!file) {
       throw new NotFoundError("Photo was not found", { file_id: fileId });
     }
@@ -170,7 +177,7 @@ export class CvPhotosService {
   }
 
   async remove(userId: string, fileId: string): Promise<void> {
-    const file = await this.filesRepository.findById(userId, fileId);
+    const file = await this.findOwnedPhoto(userId, fileId);
     if (!file) {
       return;
     }
@@ -191,7 +198,7 @@ export class CvPhotosService {
     if (!CvPhotosService.isManagedReference(reference)) {
       return reference;
     }
-    const file = await this.filesRepository.findById(userId, reference);
+    const file = await this.findOwnedPhoto(userId, reference);
     if (!file) {
       return null;
     }
@@ -218,7 +225,7 @@ export class CvPhotosService {
     if (!CvPhotosService.isManagedReference(reference)) {
       return null;
     }
-    const file = await this.filesRepository.findById(userId, reference);
+    const file = await this.findOwnedPhoto(userId, reference);
     if (!file) {
       return null;
     }

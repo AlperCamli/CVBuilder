@@ -1,3 +1,5 @@
+import { signaturePresentation } from "./fixtures/signature-presentation";
+import { mapPresentationToExportDocument } from "../src/modules/exports/generators/rendering-document.mapper";
 import { describe, expect, it } from "vitest";
 import { extractPdfText } from "./helpers/pdf-text";
 import { PDFDocument, PDFDict, PDFName, PDFString } from "pdf-lib";
@@ -24,6 +26,20 @@ const collectLinkUris = (pdf: PDFDocument): string[] => {
 };
 
 describe("pdf generator", () => {
+  it("embeds the Academic Serif italic face and preserves date and location text", async () => {
+    const presentation = signaturePresentation("latex-academic-serif");
+    presentation.sections[1].items[0].metadata_line = "January 2022 – Present • San Francisco, California";
+    const model = mapPresentationToExportDocument(presentation);
+    expect(model.theme.academic_entry_style).toBe(true);
+    const bytes = await generatePdfDocument(model);
+    const pdf = await PDFDocument.load(bytes);
+    const objects = pdf.context.enumerateIndirectObjects().map(([, value]) => value.toString()).join("\n");
+    expect(objects).toMatch(/LMRoman10-Italic/);
+    const text = await extractPdfText(bytes);
+    expect(text).toContain("San Francisco");
+    expect(text).toContain("January 2022");
+  });
+
   it("fits a multi-page CV on one page at compact scales without losing entries", async () => {
     const model: ExportDocumentModel = {
       title: "Jane Doe",

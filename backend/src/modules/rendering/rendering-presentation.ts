@@ -40,6 +40,7 @@ export interface PresentationStyleTokens {
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
+  academic_entry_style?: boolean;
   /** Signature palette roles, shared by the preview and PDF exporter. */
   header_background_hex?: string;
   header_text_color_hex?: string;
@@ -222,6 +223,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     layout: "academic-classic",
     mode: "classic-single-column",
     tokens: {
+      academic_entry_style: true,
       font_family: buildCvFontFamily("latin-modern-roman"),
       font_asset_key: "latin-modern-roman",
       header_alignment: "center",
@@ -1287,7 +1289,7 @@ const medicalBlockToPresentationItem = (
   return null;
 };
 
-const blockToPresentationItem = (sectionType: string, block: RenderingBlock): PresentationItem | null => {
+const blockToPresentationItem = (sectionType: string, block: RenderingBlock, academicEntryStyle = false): PresentationItem | null => {
   if (block.visibility !== "visible") {
     return null;
   }
@@ -1322,7 +1324,9 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
   const mergedHeading = [headline, subheadline].filter(Boolean).join(" ");
   const headingValues =
     sectionType === "experience"
-      ? combineExperienceHeading(headline, subheadline)
+      ? academicEntryStyle
+        ? { title: subheadline, subtitle: headline }
+        : combineExperienceHeading(headline, subheadline)
       : { title: headline, subtitle: subheadline };
 
   if (
@@ -1466,7 +1470,8 @@ const collectLanguagesInlineText = (section: RenderingSection): string | null =>
 const mapSection = (
   section: RenderingSection,
   skillsDisplay: SkillsDisplay = "inline",
-  moduleType?: string | null
+  moduleType?: string | null,
+  academicEntryStyle = false
 ): PresentationSection | null => {
   const type = section.type;
   const rawTitle = section.title?.trim();
@@ -1760,7 +1765,7 @@ const mapSection = (
   }
 
   const items = section.blocks
-    .map((block) => blockToPresentationItem(type, block))
+    .map((block) => blockToPresentationItem(type, block, academicEntryStyle))
     .filter((item): item is PresentationItem => item !== null);
 
   if (items.length === 0) {
@@ -1921,7 +1926,7 @@ export const mapRenderingPayloadToPresentation = (
 
   const sections = rendering.sections
     .sort((a, b) => a.order - b.order)
-    .map((section) => mapSection(section, skillsDisplay, moduleType))
+    .map((section) => mapSection(section, skillsDisplay, moduleType, theme.tokens.academic_entry_style))
     .filter((section): section is PresentationSection => section !== null);
   if (normalizeLanguage(rendering.document.language) === "tr" && moduleType !== "medical_uk") {
     for (const section of sections) {

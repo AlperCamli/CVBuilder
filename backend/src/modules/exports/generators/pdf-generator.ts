@@ -4,6 +4,7 @@ import {
   PDFDocument,
   appendBezierCurve,
   clip,
+  degrees,
   closePath,
   endPath,
   lineTo,
@@ -32,6 +33,7 @@ const PAGE_HEIGHT = 842;
 
 const TWO_COLUMN_GAP = 20;
 const SIDEBAR_OUTER_WIDTH = 170;
+const HORIZON_SIDEBAR_WIDTH = 200;
 const SIDEBAR_INNER_PADDING = 12;
 const HEADER_PHOTO_GAP = 16;
 
@@ -62,11 +64,13 @@ interface PdfPalette {
 interface PdfFonts {
   regular: PDFFont;
   bold: PDFFont;
+  italic: PDFFont;
+  hasItalicFace: boolean;
 }
 
 interface PlacedLine {
   text: string;
-  fontWeight: "regular" | "bold";
+  fontWeight: "regular" | "bold" | "italic";
   size: number;
   colorKey: ColorKey;
   xOffset: number;
@@ -118,6 +122,7 @@ interface PdfBlock {
 }
 
 interface Style {
+  academicEntryStyle: boolean;
   language: string;
   fontScale: number;
   spacingScale: number;
@@ -268,7 +273,7 @@ const appendTextLines = (
   text: string,
   options: {
     font: PDFFont;
-    fontWeight: "regular" | "bold";
+    fontWeight: "regular" | "bold" | "italic";
     size: number;
     color: ColorKey;
     maxWidth: number;
@@ -342,7 +347,7 @@ const appendLinkedSegments = (
   separator: string,
   options: {
     font: PDFFont;
-    fontWeight: "regular" | "bold";
+    fontWeight: "regular" | "bold" | "italic";
     size: number;
     color: ColorKey;
     maxWidth: number;
@@ -494,8 +499,8 @@ const buildHeaderBlock = (
   if (model.subtitle) {
     textY += 2 * style.fontScale;
     textY += appendTextLines(lines, model.subtitle, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
+      font: style.academicEntryStyle ? style.fonts.italic : style.fonts.regular,
+      fontWeight: style.academicEntryStyle ? "italic" : "regular",
       size: style.headerTitleSize,
       color: "accent",
       maxWidth: textMaxWidth,
@@ -651,7 +656,11 @@ const buildDefaultItemBlock = (
 ): BlockShape => {
   const lines: PlacedLine[] = [];
   const hasInlineMeta = Boolean(item.metadata_line && (item.headline || item.subheadline));
-  const metaWidth = hasInlineMeta ? Math.min(110 * style.fontScale, width * 0.4) : 0;
+  const metaFont = style.academicEntryStyle ? style.fonts.italic : style.fonts.regular;
+  const metaWidth = hasInlineMeta
+    ? Math.min(width * 0.42, Math.max(...item.metadata_line!.split("\n").map(line =>
+      metaFont.widthOfTextAtSize(normalizePdfText(line), style.itemMetaSize))))
+    : 0;
   const metaGap = hasInlineMeta ? 12 : 0;
   const leftWidth = width - metaWidth - metaGap;
 
@@ -676,8 +685,8 @@ const buildDefaultItemBlock = (
   }
   if (item.subheadline) {
     leftY += appendTextLines(lines, item.subheadline, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
+      font: style.academicEntryStyle ? style.fonts.italic : style.fonts.regular,
+      fontWeight: style.academicEntryStyle ? "italic" : "regular",
       size: style.itemSubtitleSize,
       color: "body",
       maxWidth: leftWidth,
@@ -690,8 +699,8 @@ const buildDefaultItemBlock = (
   let rightY = 0;
   if (hasInlineMeta && item.metadata_line) {
     rightY += appendTextLines(lines, item.metadata_line, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
+      font: style.academicEntryStyle ? style.fonts.italic : style.fonts.regular,
+      fontWeight: style.academicEntryStyle ? "italic" : "regular",
       size: style.itemMetaSize,
       color: "muted",
       maxWidth: metaWidth,
@@ -707,8 +716,8 @@ const buildDefaultItemBlock = (
 
   if (item.metadata_line && !hasInlineMeta) {
     cursorY += appendTextLines(lines, item.metadata_line, {
-      font: style.fonts.regular,
-      fontWeight: "regular",
+      font: style.academicEntryStyle ? style.fonts.italic : style.fonts.regular,
+      fontWeight: style.academicEntryStyle ? "italic" : "regular",
       size: style.itemMetaSize,
       color: "muted",
       maxWidth: width,
@@ -760,7 +769,7 @@ const buildTimelineItemBlock = (
   const lines: PlacedLine[] = [];
   const shapes: PlacedShape[] = [];
 
-  const dateColWidth = Math.min(110 * style.fontScale, width * 0.32);
+  const dateColWidth = width * 0.32;
   const columnGap = 12 * style.fontScale;
   const contentColX = dateColWidth + columnGap;
   const dotIndent = 16 * style.fontScale;
@@ -1204,7 +1213,7 @@ const drawBlock = (
   }
 
   for (const line of block.shape.lines) {
-    const font = line.fontWeight === "bold" ? style.fonts.bold : style.fonts.regular;
+    const font = line.fontWeight === "bold" ? style.fonts.bold : line.fontWeight === "italic" ? style.fonts.italic : style.fonts.regular;
     const baselineY = topY - line.yFromTop - line.lineHeight * ASCENT_RATIO;
     let drawX = leftX + line.xOffset;
     if (line.alignRight && line.alignBoxWidth) {
@@ -1219,6 +1228,7 @@ const drawBlock = (
       y: baselineY,
       size: line.size,
       font,
+      xSkew: line.fontWeight === "italic" && !style.fonts.hasItalicFace ? degrees(12) : undefined,
       color: resolveColor(palette, line.colorKey)
     });
 
@@ -1313,6 +1323,10 @@ export const generatePdfDocument = async (
   const boldFontBytes = tryReadFontBytes(fontAsset.boldFile);
   const regular = await pdf.embedFont(regularFontBytes, { subset: false });
   const bold = await pdf.embedFont(boldFontBytes, { subset: false });
+  const hasItalicFace = Boolean(theme.academic_entry_style && fontAsset.italicFile);
+  const italic = hasItalicFace
+    ? await pdf.embedFont(tryReadFontBytes(fontAsset.italicFile!), { subset: false })
+    : regular;
 
   const palette: PdfPalette = {
     heading: hexToRgb(theme.heading_color_hex),
@@ -1342,12 +1356,13 @@ export const generatePdfDocument = async (
   const innerWidth = PAGE_WIDTH - padX * 2;
   const innerHeight = PAGE_HEIGHT - padY * 2;
 
-  const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP) / 2 : SIDEBAR_OUTER_WIDTH * fontScale;
+  const sidebarOuterWidth = mosaic ? (innerWidth - TWO_COLUMN_GAP) / 2 : (horizon ? HORIZON_SIDEBAR_WIDTH : SIDEBAR_OUTER_WIDTH) * fontScale;
   const sidebarInnerPaddingScaled = mosaic ? 0 : SIDEBAR_INNER_PADDING * fontScale;
   const sidebarInnerWidth = Math.max(0, sidebarOuterWidth - sidebarInnerPaddingScaled * 2);
   const mainColumnWidth = Math.max(0, innerWidth - sidebarOuterWidth - TWO_COLUMN_GAP);
 
   const style: Style = {
+    academicEntryStyle: theme.academic_entry_style ?? false,
     language: documentModel.language?.toLowerCase().startsWith("tr") ? "tr" : "en",
     fontScale,
     spacingScale,
@@ -1375,7 +1390,7 @@ export const generatePdfDocument = async (
     sectionHeadingStyle: mosaic || ledger ? "ruled" : theme.section_heading_style ?? "plain",
     sidebarInnerWidth,
     mainColumnWidth,
-    fonts: { regular, bold },
+    fonts: { regular, bold, italic, hasItalicFace },
     palette,
     sidebarPalette
   };

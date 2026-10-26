@@ -648,11 +648,11 @@ export function SummarySection({
       </div>
       {!isHidden && (
         <textarea
-          rows={4}
+          rows={6}
           placeholder={t("Write your professional summary...")}
           value={data.text || ""}
           onChange={(e) => onChange({ ...data, text: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg border resize-none"
+          className="w-full px-3 py-2 rounded-lg border resize-y min-h-[140px]"
           style={{
             fontSize: "13px",
             lineHeight: "1.6",
@@ -830,11 +830,11 @@ function ExperienceItem({
               {t("I currently work here")}</span>
           </label>
           <BulletTextarea
-            rows={3}
+            rows={6}
             placeholder={t("Responsibilities, Achievements, Technologies/Tools…")}
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -1172,11 +1172,11 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
             </label>
           </div>
           <BulletTextarea
-            rows={2}
+            rows={6}
             placeholder={t("Additional details (optional)")}
             value={item.description || ""}
             onValueChange={(next) => updateItem(index, { ...item, description: next })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -1550,11 +1550,11 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
             }}
           />
           <textarea
-            rows={2}
+            rows={6}
             placeholder={t("Notes (optional)")}
             value={item.notes || ""}
             onChange={(e) => updateItem(index, { ...item, notes: e.target.value })}
-            className="w-full px-2 py-1.5 rounded border resize-none"
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{
               fontSize: "13px",
               lineHeight: "1.6",
@@ -1774,11 +1774,11 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
                         onChange={(nextValue) => updateItem(index, { ...item, dates: nextValue })}
                       />
                       <BulletTextarea
-                        rows={2}
+                        rows={6}
                         placeholder={t("Description (optional)")}
                         value={item.description || ""}
                         onValueChange={(next) => updateItem(index, { ...item, description: next })}
-                        className="w-full px-2 py-1.5 rounded border resize-none"
+                        className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
                         style={{
                           fontSize: "13px",
                           lineHeight: "1.6",

@@ -37,6 +37,7 @@ export interface ExportDocumentTheme {
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
   section_heading_style?: "plain" | "ruled";
+  academic_entry_style?: boolean;
   /** Signature palette roles, shared by the preview and PDF exporter. */
   header_background_hex?: string;
   header_text_color_hex?: string;
@@ -120,6 +121,7 @@ const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
   return {
     layout: presentation.theme.layout,
     mode: presentation.theme.mode,
+    academic_entry_style: presentation.theme.tokens.academic_entry_style,
     heading_color_hex: presentation.theme.tokens.heading_color_hex,
     accent_color_hex: presentation.theme.tokens.accent_color_hex,
     body_color_hex: presentation.theme.tokens.body_color_hex,

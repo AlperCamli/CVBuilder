@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "module_type": "standard",
+  "template_order": [
+    "two-column-modern",
+    "horizon-rail",
+    "studio-banner",
+    "editorial-index",
+    "ledger-split",
+    "latex-academic-serif",
+    "mosaic-columns",
+    "modern-clean",
+    "minimal-professional",
+    "contour-cards",
+    "tech-compact",
+    "executive-timeline",
+    "classic-monochrome",
+    "latex-research-cv",
+    "academic-classic",
+    "latex-modern-brief",
+    "latex-two-column",
+    "latex-scholar",
+    "latex-editorial-sidebar",
+    "latex-technical-grid",
+    "latex-grant-timeline",
+    "latex-photo-statement",
+    "latex-two-tone-creative",
+    "portfolio-modern",
+    "creative-portfolio",
+    "creative-photo-hero",
+    "creative-color-block",
+    "academic-timeline",
+    "academic-serif-color",
+    "horizon-rail-forest",
+    "horizon-rail-plum",
+    "studio-banner-ocean",
+    "studio-banner-terracotta",
+    "editorial-index-forest",
+    "editorial-index-graphite",
+    "ledger-split-teal",
+    "ledger-split-plum",
+    "mosaic-columns-rose",
+    "mosaic-columns-graphite",
+    "contour-cards-cobalt",
+    "contour-cards-forest"
+  ],
+  "templates": [
+    {
+      "position": 1,
+      "slug": "two-column-modern",
+      "name": "Two Column Modern"
+    },
+    {
+      "position": 2,
+      "slug": "horizon-rail",
+      "name": "Horizon"
+    },
+    {
+      "position": 3,
+      "slug": "studio-banner",
+      "name": "Studio"
+    },
+    {
+      "position": 4,
+      "slug": "editorial-index",
+      "name": "Editorial"
+    },
+    {
+      "position": 5,
+      "slug": "ledger-split",
+      "name": "Ledger"
+    },
+    {
+      "position": 6,
+      "slug": "latex-academic-serif",
+      "name": "Academic Serif"
+    },
+    {
+      "position": 7,
+      "slug": "mosaic-columns",
+      "name": "Mosaic"
+    },
+    {
+      "position": 8,
+      "slug": "modern-clean",
+      "name": "Modern Clean"
+    },
+    {
+      "position": 9,
+      "slug": "minimal-professional",
+      "name": "Minimal Professional"
+    },
+    {
+      "position": 10,
+      "slug": "contour-cards",
+      "name": "Contour"
+    },
+    {
+      "position": 11,
+      "slug": "tech-compact",
+      "name": "Tech Compact"
+    },
+    {
+      "position": 12,
+      "slug": "executive-timeline",
+      "name": "Executive Timeline"
+    },
+    {
+      "position": 13,
+      "slug": "classic-monochrome",
+      "name": "Classic Monochrome"
+    },
+    {
+      "position": 14,
+      "slug": "latex-research-cv",
+      "name": "Research CV"
+    },
+    {
+      "position": 15,
+      "slug": "academic-classic",
+      "name": "Academic Classic"
+    },
+    {
+      "position": 16,
+      "slug": "latex-modern-brief",
+      "name": "LaTeX Modern Brief"
+    },
+    {
+      "position": 17,
+      "slug": "latex-two-column",
+      "name": "LaTeX Two Column"
+    },
+    {
+      "position": 18,
+      "slug": "latex-scholar",
+      "name": "LaTeX Scholar"
+    },
+    {
+      "position": 19,
+      "slug": "latex-editorial-sidebar",
+      "name": "LaTeX Editorial Sidebar"
+    },
+    {
+      "position": 20,
+      "slug": "latex-technical-grid",
+      "name": "LaTeX Technical Grid"
+    },
+    {
+      "position": 21,
+      "slug": "latex-grant-timeline",
+      "name": "LaTeX Grant Timeline"
+    },
+    {
+      "position": 22,
+      "slug": "latex-photo-statement",
+      "name": "LaTeX Photo Statement"
+    },
+    {
+      "position": 23,
+      "slug": "latex-two-tone-creative",
+      "name": "LaTeX Two Tone Creative"
+    },
+    {
+      "position": 24,
+      "slug": "portfolio-modern",
+      "name": "Portfolio Modern"
+    },
+    {
+      "position": 25,
+      "slug": "creative-portfolio",
+      "name": "Creative Portfolio"
+    },
+    {
+      "position": 26,
+      "slug": "creative-photo-hero",
+      "name": "Creative Photo Hero"
+    },
+    {
+      "position": 27,
+      "slug": "creative-color-block",
+      "name": "Creative Color Block"
+    },
+    {
+      "position": 28,
+      "slug": "academic-timeline",
+      "name": "Academic Timeline"
+    },
+    {
+      "position": 29,
+      "slug": "academic-serif-color",
+      "name": "Academic Serif Color"
+    },
+    {
+      "position": 30,
+      "slug": "horizon-rail-forest",
+      "name": "Horizon Forest"
+    },
+    {
+      "position": 31,
+      "slug": "horizon-rail-plum",
+      "name": "Horizon Plum"
+    },
+    {
+      "position": 32,
+      "slug": "studio-banner-ocean",
+      "name": "Studio Ocean"
+    },
+    {
+      "position": 33,
+      "slug": "studio-banner-terracotta",
+      "name": "Studio Terracotta"
+    },
+    {
+      "position": 34,
+      "slug": "editorial-index-forest",
+      "name": "Editorial Forest"
+    },
+    {
+      "position": 35,
+      "slug": "editorial-index-graphite",
+      "name": "Editorial Graphite"
+    },
+    {
+      "position": 36,
+      "slug": "ledger-split-teal",
+      "name": "Ledger Teal"
+    },
+    {
+      "position": 37,
+      "slug": "ledger-split-plum",
+      "name": "Ledger Plum"
+    },
+    {
+      "position": 38,
+      "slug": "mosaic-columns-rose",
+      "name": "Mosaic Rose"
+    },
+    {
+      "position": 39,
+      "slug": "mosaic-columns-graphite",
+      "name": "Mosaic Graphite"
+    },
+    {
+      "position": 40,
+      "slug": "contour-cards-cobalt",
+      "name": "Contour Cobalt"
+    },
+    {
+      "position": 41,
+      "slug": "contour-cards-forest",
+      "name": "Contour Forest"
+    }
+  ]
+}

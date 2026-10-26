@@ -1,0 +1,15 @@
+{
+  "templates": 41,
+  "columns": 3,
+  "thumbnails": "all loaded",
+  "keyboard": "passed",
+  "dragAndDrop": "passed",
+  "sidebar": "passed",
+  "directPosition": "passed",
+  "longRangeDrag": "passed",
+  "autoScroll": "passed",
+  "persistence": "passed",
+  "preview": "passed",
+  "export": "passed",
+  "errors": []
+}

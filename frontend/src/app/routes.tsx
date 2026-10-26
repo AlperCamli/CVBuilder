@@ -50,6 +50,9 @@ const LanguageStudioRoute = DESIGN_TOOLS_ENABLED
 const DesignExplorationsRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/DesignRoutes"))
   : null;
+const TemplateOrderStudioRoute = DESIGN_TOOLS_ENABLED
+  ? lazyRoute(() => import("./pages/designs/TemplateOrderStudio"))
+  : null;
 const TemplateExplorationsRoute = DESIGN_TOOLS_ENABLED
   ? lazyRoute(() => import("./pages/designs/TemplateExplorations"))
   : null;
@@ -177,7 +180,10 @@ export function AppRoutes({ guidedJourney }: { guidedJourney?: ComponentType } =
 // Keep the same sibling order and useId tree for prerendering and hydration.
 export function RouteContents({ guidedJourney }: { guidedJourney?: ComponentType } = {}) {
   const { pathname } = useLocation();
-  const reviewTool = DESIGN_TOOLS_ENABLED && /^\/designs\/guided-journey\/(editor|languages)\/?$/.test(pathname);
+  const reviewTool = DESIGN_TOOLS_ENABLED && (
+    /^\/designs\/guided-journey\/(editor|languages)\/?$/.test(pathname) ||
+    /^\/designs\/template-order\/?$/.test(pathname)
+  );
   return (
     <>
       {!reviewTool && <LanguageChooser />}
@@ -216,6 +222,9 @@ export function RouteElements({
       )}
       {LanguageStudioRoute && (
         <Route path="/designs/guided-journey/languages" element={lazyElement(LanguageStudioRoute)} />
+      )}
+      {TemplateOrderStudioRoute && (
+        <Route path="/designs/template-order" element={lazyElement(TemplateOrderStudioRoute)} />
       )}
       {TemplateExplorationsRoute && (
         <Route path="/designs/guided-journey/templates/:presentation" element={lazyElement(TemplateExplorationsRoute)} />
