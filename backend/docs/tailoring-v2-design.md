@@ -1,8 +1,63 @@
 # CV Tailoring v2 — Design
 
-> Status: **Designed, not implemented.** Implementation starts only on explicit go-ahead.
-> The current flow (`/app/tailor/:id` → `/app/tailoring-flow/:id`, `tailored_draft` AI flow)
-> stays as **legacy** until v2 is proven, then it is removed (see §9).
+> Status: **Implemented** (2026-10-27). Needs the migration
+> `20261027120000_tailoring_v2_sessions.sql` applied and `ADMIN_EMAILS` /
+> `AI_MODEL_PRICING_JSON` configured before it works against a real database.
+> Legacy page-based flow is still reachable at `/app/tailor-legacy/:id`; `/app/tailor/:id`
+> now opens the editor in tailoring mode (see §9).
+>
+> **Decisions taken during implementation (vs. the design below):**
+> - **The editor is the only writer of CV content.** Accept/undo apply the change in the
+>   editor and the normal autosave persists it; the server stores suggestion status only.
+>   Server-side auto-apply would race the editor's full-content autosave. Auto-apply is
+>   therefore client-side (applied as each card arrives). "Also add to my main CV" is the
+>   one server-side write (to the master CV, which the editor is not editing).
+> - **Tasks live in their own table** (`tailoring_session_tasks`), not session JSON:
+>   parallel task runs would overwrite each other's JSON. Answers and requirement
+>   decisions are merged atomically by `tailoring_merge_session_json`.
+> - **Quick fixes re-run the card's task** with a refinement (shorter / more impact / more
+>   job terms) instead of calling the block-suggest API, so their tokens stay in the
+>   session's cost report.
+> - **Locking is UI-only** (overlay on the editor section + preview marker). Rejecting
+>   full-content saves with 409 would block all autosave.
+> - **Stale cards** are detected in the browser (block field differs from the card's
+>   "before" value) and offer Regenerate.
+> - **Cost**: OpenAI reports cached + reasoning tokens; Gemini/Anthropic still report only
+>   input/output. Models without a configured price store `cost_usd = null` and the admin
+>   views mark totals as partial. Admin views: cost dialog in the Tailor panel and
+>   `/app/admin/tailoring`.
+> - **Rate limit**: a dedicated per-user limiter (60/min) for tailoring inference routes.
+> - `SubscriptionGate` keeps the current page mounted while re-verifying a new path for
+>   users with full access (it used to unmount the app shell on every navigation, which
+>   reset the editor when it switched to the new tailored copy).
+> - **Rewrite language = CV language.** `tailoring_block` and `tailoring_skills` receive
+>   `cv_language: { code, name }` (from the tailored CV) and a rule that all CV output is
+>   in that language even when the job post / instructions are not; proper nouns, tool and
+>   product names and numbers stay verbatim. The analysis step is unchanged (its
+>   questions/reasons follow the global language policy: the UI locale).
+> - **Skills reference their source.** Each skills item is `{ name, allowed_skill }`;
+>   a new skill is kept only if `allowed_skill` is an unused `allowed_new_skills` entry
+>   (so a translation of a job keyword is accepted), it is itself an allowed entry, or the
+>   CV text contains it. One allowed entry licenses at most one new skill.
+> - **"Also add to my main CV"** is recorded exactly like an applied block suggestion on
+>   the main CV: an applied `ai_suggestions` row (`master_cv_id`, full before/after block,
+>   `action_type = 'tailor'`) that feeds the main CV's block version history, plus an
+>   `ai` block revision linked to it. The card's `meta.master_update` stores what was
+>   written. Undo restores the main CV field only if it still equals that value (a
+>   `restore` revision; the main CV suggestion becomes `rejected`), otherwise leaves the
+>   user's edit. The decision response carries `master_cv_updated`,
+>   `master_cv_reverted` and `master_cv_revert_skipped`.
+> - **Failure recovery.** A failed task is always marked `failed` (retryable) and the
+>   session settles before any error is rethrown; regenerating keeps the previous pending
+>   card until its replacement is stored; a retried analysis replaces the tasks of the
+>   failed attempt, and an analysis that was saved is never reset to draft.
+> - **Deleting a tailored CV keeps cost data.** `tailoring_sessions.tailored_cv_id` is
+>   nullable (`on delete set null`); the app's soft delete and a hard delete both detach
+>   the session, which a trigger archives and scrubs (snapshot, answers, analysis, cards,
+>   task briefs; only job title/company remain). Its `ai_runs` stay, with their payloads,
+>   like legacy runs. Account erasure still deletes everything (sessions before CVs).
+>
+> The remainder of this document is the design as agreed before implementation.
 
 ---
 
@@ -252,8 +307,7 @@ structure, quick fixes). Failed and retried runs are included (we pay for them).
 
 ## 10. Open decisions
 
-- **Cost visibility:** internal/admin only, or also shown to the user? (Default
-  assumption: internal only.)
+- ~~Cost visibility~~ — decided: **admins only**.
 
 ## 11. Suggested implementation order
 

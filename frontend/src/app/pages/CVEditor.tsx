@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import {
   ChevronLeft,
+  ChevronRight,
+  PencilLine,
   Save,
   Download,
   Target,
@@ -33,6 +35,15 @@ import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble
 import { ModuleSection } from "../components/ModuleSection";
 import { TipsDrawer } from "../components/TipsDrawer";
 import { CVPresentationPreview } from "../components/CVPresentationPreview";
+import { TailorPanel } from "../components/tailoring/TailorPanel";
+import { PreviewAnnotations, type PreviewMarker, type PreviewMarkerTone } from "../components/tailoring/PreviewAnnotations";
+import { AiWorkingBadge } from "../components/tailoring/ai-elements";
+import { sectionIdForBlock } from "../components/tailoring/tailoring-labels";
+import {
+  useTailoringSession,
+  type TailoringEditorBridge,
+  type TailoringJobInput
+} from "../components/tailoring/useTailoringSession";
 import {
   resolveScaleFromMetadata, nextCompactScales, resolveSourcePageCount,
   FONT_SCALE_MIN, FONT_SCALE_MAX,
@@ -119,6 +130,7 @@ import {
   getModuleManagedSectionDefinition
 } from "../modules/module-registry";
 import type { SectionTypeDefinition } from "../modules/cv-module.types";
+import { tailoringReturnPath, takePreloadedTailored } from "./cv-editor-tailoring-nav";
 
 const formatDateTime = (value: string | null | undefined): string => {
   if (!value) {
@@ -331,7 +343,7 @@ const clearDraft = (cvKind: "master" | "tailored", cvId: string): void => {
   window.localStorage.removeItem(getDraftStorageKey(cvKind, cvId));
 };
 
-const DraggableSection = ({ section, index, moveSection, highlighted, children }: any) => {
+const DraggableSection = ({ section, index, moveSection, highlighted, locked, children }: any) => {
   useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -382,6 +394,8 @@ const DraggableSection = ({ section, index, moveSection, highlighted, children }
   return (
     <div
       ref={ref}
+      data-editor-section-id={section.id}
+      aria-busy={locked ? true : undefined}
       className="transition-all duration-200"
       style={{
         opacity: isDragging ? 0.4 : 1,
@@ -393,13 +407,67 @@ const DraggableSection = ({ section, index, moveSection, highlighted, children }
             : "none",
         borderRadius: "12px",
         cursor: isDragging ? "grabbing" : "grab",
-        transition: "box-shadow 240ms ease, opacity 200ms ease, transform 200ms ease"
+        transition: "box-shadow 240ms ease, opacity 200ms ease, transform 200ms ease",
+        position: "relative"
       }}
     >
       {children}
+      {locked ? (
+        <div
+          className="absolute inset-0 rounded-xl flex items-start justify-end p-3"
+          style={{ background: "rgba(255, 255, 255, 0.62)", cursor: "not-allowed", zIndex: 5 }}
+          onPointerDownCapture={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <AiWorkingBadge label={t("AI is updating this section")} />
+        </div>
+      ) : null}
     </div>
   );
 };
+
+const TAILOR_PANE_WIDTH = 440;
+
+// Thin tab on the editor's edge; hovering the edge slides the full button in.
+const EdgeHandle = ({
+  side,
+  label,
+  shortcut,
+  icon,
+  onClick
+}: {
+  side: "left" | "right";
+  label: string;
+  shortcut: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) => (
+  <div
+    className="group absolute top-0 bottom-0 z-20 flex items-center"
+    style={{ [side]: 0, width: 28, justifyContent: side === "left" ? "flex-start" : "flex-end", pointerEvents: "auto" }}
+  >
+    <span
+      aria-hidden="true"
+      className="editor-edge-handle absolute rounded-full group-hover:opacity-0"
+      style={{ [side]: 3, top: "50%", height: 44, width: 4, marginTop: -22, background: "var(--color-teal-200)" }}
+    />
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${label} (${shortcut})`}
+      className={`editor-edge-handle flex items-center gap-1.5 px-3 py-2 shadow-md font-medium opacity-0 group-hover:opacity-100 focus:opacity-100 ${
+        side === "left" ? "rounded-r-xl -translate-x-full group-hover:translate-x-0 focus:translate-x-0" : "rounded-l-xl translate-x-full group-hover:translate-x-0 focus:translate-x-0"
+      }`}
+      style={{ fontSize: "12px", background: "var(--color-teal-600)", color: "white", whiteSpace: "nowrap" }}
+    >
+      {side === "left" ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+      {icon}
+      {label}
+    </button>
+  </div>
+);
 
 interface SkillPoolState {
   items: string[];
@@ -539,6 +607,15 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     company: string;
     jobId?: string;
   } | null>(null);
+  // Tailoring mode: the editor slides out and the Tailor panel slides in beside the preview.
+  // Switching panes is navigation only; the tailoring session keeps running.
+  const [paneMode, setPaneMode] = useState<"edit" | "tailor">(() => {
+    const state = location.state as { openTailoring?: boolean } | null;
+    return state?.openTailoring || new URLSearchParams(location.search).get("tailor") === "1" ? "tailor" : "edit";
+  });
+  const [previewFocus, setPreviewFocus] = useState<{ ids: string[]; tone: PreviewMarkerTone } | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+  const tailoringPrefill = (location.state as { prefillJob?: { role?: string; company?: string; jobDescription?: string } } | null)?.prefillJob;
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const [showLayoutControls, setShowLayoutControls] = useState(false);
@@ -810,10 +887,32 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   };
 
   const loadCv = async () => {
+    // A tailored copy created from the Tailor panel arrives preloaded, so the editor
+    // switches to it in place instead of showing the full-page loader. The preload is
+    // consumed once: it is stripped from history state so a refresh or back/forward loads
+    // fresh server content (and any local draft) instead of the creation-time snapshot.
+    const { preloaded, strippedState } = takePreloadedTailored<TailoredCvDetail>(location.state, id);
+    if (strippedState) {
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        { replace: true, state: strippedState }
+      );
+    }
+    if (preloaded) {
+      setError(null);
+      setDirty(false);
+      setRestoredDraftAt(null);
+      hydrateFromTailored(preloaded);
+      void loadAiData("tailored", preloaded.id);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setDirty(false);
     setRestoredDraftAt(null);
+    let masterMissing = false;
 
     try {
       if (forcedModuleType || routeCvKind === "master" || id === "master") {
@@ -854,12 +953,20 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           return;
         }
 
-        const master = await api.getMasterCv(targetMasterId);
-        hydrateFromMaster(master);
-        restoreDraftIfAllowed("master", master.id);
-        void loadAiData("master", master.id);
-        setLoading(false);
-        return;
+        // The "master" hint can be wrong for the URL id (e.g. an old /app/tailor/<id> link
+        // that points at a tailored copy); then load that id as a tailored CV instead.
+        const hintedFromUrl = !forcedModuleType && Boolean(id) && id !== "master" && targetMasterId === id;
+        try {
+          const master = await api.getMasterCv(targetMasterId);
+          hydrateFromMaster(master);
+          restoreDraftIfAllowed("master", master.id);
+          void loadAiData("master", master.id);
+          setLoading(false);
+          return;
+        } catch (masterError) {
+          if (!(hintedFromUrl && masterError instanceof ApiClientError && masterError.status === 404)) throw masterError;
+          masterMissing = true;
+        }
       }
 
       if (!id) {
@@ -885,7 +992,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         }
         void loadAiData("tailored", tailored.id);
       } catch (tailoredError) {
-        if (tailoredError instanceof ApiClientError && tailoredError.status === 404) {
+        if (!masterMissing && tailoredError instanceof ApiClientError && tailoredError.status === 404) {
           const master = await api.getMasterCv(id);
           hydrateFromMaster(master);
           restoreDraftIfAllowed("master", master.id);
@@ -1332,7 +1439,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const requireProFeature = async (feature: "export_pdf" | "export_docx" | "ai_action" | "tailored_cv_generation") => {
     if (dirty && !(await persistCv("manual"))) return false;
-    return ensureProAccess(feature, feature === "tailored_cv_generation" && cvId ? `/app/tailor/${cvId}` : undefined);
+    // Tailoring returns from checkout straight to this editor with the Tailor panel open;
+    // the editor resolves master vs tailored from the server, so no history state is needed.
+    return ensureProAccess(feature, feature === "tailored_cv_generation" && cvId ? tailoringReturnPath(cvId) : undefined);
   };
 
   const maybeShowExportUpsell = async (): Promise<void> => {
@@ -1459,7 +1568,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       ) {
         window.localStorage.setItem(MASTER_EXPORT_GUIDE_FLAG, "true");
         toast.success(t("Now let's customize this CV for a job!"));
-        navigate(`/app/tailor/${cvId}`);
+        setPaneMode("tailor");
       } else {
         void armPostExportReturnPrompt();
       }
@@ -2086,7 +2195,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         onboardingCompletedBefore: onboardingCompleted === true,
         nextStep: {
           label: "Create a job-specific CV",
-          onSelect: () => navigate(cvId ? `/app/tailor/${cvId}` : "/app")
+          onSelect: () => (cvId ? setPaneMode("tailor") : navigate("/app"))
         }
       });
     };
@@ -2138,12 +2247,197 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
 
     if (cvKind === "master" && cvId) {
-      navigate(`/app/tailor/${cvId}`);
+      setPaneMode("tailor");
       return;
     }
 
     navigate("/app");
   };
+
+  // -------------------------------------------------------------------------
+  // Tailoring mode
+  // -------------------------------------------------------------------------
+  const tailorMode = paneMode === "tailor";
+  const canTailor = moduleType === DEFAULT_MODULE_ID && Boolean(cvId);
+  // Tailoring needs Pro. The buttons check it before opening the panel; links that open the
+  // editor already in tailoring mode (?tailor=1 / openTailoring) are verified here, and the
+  // session stays closed (no analysis runs) until access is confirmed. Without Pro the usual
+  // upgrade prompt is shown and the editor slides back.
+  const [tailorAccess, setTailorAccess] = useState<"unknown" | "allowed">("unknown");
+  const tailorAccessCheckRef = useRef(false);
+  useEffect(() => {
+    if (!tailorMode || !canTailor || !cvId || tailorAccess === "allowed" || tailorAccessCheckRef.current) return;
+    tailorAccessCheckRef.current = true;
+    void ensureProAccess("tailored_cv_generation", tailoringReturnPath(cvId)).then((allowed) => {
+      tailorAccessCheckRef.current = false;
+      if (allowed) setTailorAccess("allowed");
+      else setPaneMode("edit");
+    });
+  }, [canTailor, cvId, ensureProAccess, tailorAccess, tailorMode]);
+  const editorPaneRef = useRef<HTMLDivElement | null>(null);
+  const tailorPaneRef = useRef<HTMLDivElement | null>(null);
+  // Content applied by tailoring but not rendered yet, so back-to-back changes compose.
+  const pendingTailoringContent = useRef<CvContent | null>(null);
+
+  useEffect(() => {
+    pendingTailoringContent.current = null;
+  }, [sections]);
+
+  // The collapsed pane stays mounted for the slide, but must not take focus.
+  useEffect(() => {
+    if (editorPaneRef.current) editorPaneRef.current.inert = tailorMode;
+    if (tailorPaneRef.current) tailorPaneRef.current.inert = !tailorMode;
+  }, [tailorMode, canTailor]);
+
+  const tailoringBridge = useRef<TailoringEditorBridge>({
+    getContent: () => buildCurrentContent(),
+    applyContent: () => undefined,
+    flushEdits: async () => true
+  });
+  tailoringBridge.current = {
+    getContent: () => pendingTailoringContent.current ?? buildCurrentContent(),
+    applyContent: (next) => {
+      pendingTailoringContent.current = next;
+      setSections(cvContentToEditorSections(next, moduleType));
+      markDirty();
+    },
+    flushEdits: async () => (dirty ? persistCv("auto") : true)
+  };
+
+  const tailoring = useTailoringSession({
+    api,
+    open: tailorMode && canTailor && tailorAccess === "allowed",
+    cvKind,
+    cvId,
+    bridge: tailoringBridge,
+    onTailoredCvCreated: async (tailoredCvId) => {
+      const detail = await api.getTailoredCv(tailoredCvId);
+      navigate(`/app/cv/${tailoredCvId}`, {
+        state: { cvKind: "tailored", isTailored: true, tailoredCvId, openTailoring: true, preloadedTailored: detail, preloadedAt: Date.now() }
+      });
+    }
+  });
+
+  const contentForTailoring = useMemo(() => buildCurrentContent(), [buildCurrentContent]);
+  const tailoringLockedBlockIds = tailoring.runningTasks
+    .map((task) => task.block_id)
+    .filter((blockId): blockId is string => Boolean(blockId));
+
+  const previewMarkers = useMemo<PreviewMarker[]>(() => {
+    if (!canTailor) return [];
+    const markers: PreviewMarker[] = [];
+    const seen = new Set<string>();
+    const add = (id: string | null, tone: PreviewMarkerTone) => {
+      if (!id || seen.has(`${id}:${tone}`)) return;
+      seen.add(`${id}:${tone}`);
+      markers.push({ id, tone, fallbackId: sectionIdForBlock(contentForTailoring, id) });
+    };
+    tailoringLockedBlockIds.forEach((blockId) => add(blockId, "working"));
+    if (tailorMode) {
+      if (tailoring.view?.session.status !== "ready") {
+        tailoring.view?.suggestions
+          .filter((suggestion) => suggestion.status === "pending")
+          .forEach((suggestion) => add(suggestion.block_id, "suggested"));
+      }
+      previewFocus?.ids.forEach((id) => add(id, previewFocus.tone));
+    }
+    return markers;
+  }, [canTailor, contentForTailoring, previewFocus, tailorMode, tailoring.view?.suggestions, tailoringLockedBlockIds.join("|")]);
+
+  const enterTailoring = async () => {
+    if (!canTailor) return;
+    const allowed = await requireProFeature("tailored_cv_generation");
+    if (!allowed) return;
+    setTailorAccess("allowed");
+    completeStep("customize");
+    setPaneMode("tailor");
+  };
+
+  // Pencil on a preview section: slide the editor back and bring that section into view.
+  const editFromPreview = ({ sectionId, blockId }: { sectionId: string | null; blockId: string | null }) => {
+    const target = sections.find(
+      (section) =>
+        section.backendSectionId === sectionId ||
+        section.id === sectionId ||
+        (blockId ? sectionContainsBlock(section, blockId) : false)
+    );
+    const wasTailoring = tailorMode;
+    setPaneMode("edit");
+    if (!target) return;
+    window.setTimeout(() => {
+      const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(target.id) : target.id;
+      const element = document.querySelector(`[data-editor-section-id="${escaped}"]`);
+      const pane = editorPaneRef.current;
+      // Scroll only the editor pane, never the page around it.
+      if (element && pane) {
+        pane.scrollBy({ top: element.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16, behavior: "smooth" });
+      }
+      const flashId = blockId ?? getSectionFirstBlockId(target);
+      if (flashId) {
+        setHighlightedAiBlockIds([flashId]);
+        window.setTimeout(() => setHighlightedAiBlockIds((current) => current.filter((id) => id !== flashId)), 1600);
+      }
+    }, wasTailoring ? 440 : 0);
+  };
+
+  useEffect(() => {
+    const state = location.state as { openTailoring?: boolean } | null;
+    if (state?.openTailoring || new URLSearchParams(location.search).get("tailor") === "1") {
+      setPaneMode("tailor");
+    }
+  }, [location.search, location.state]);
+
+  // The URL mirrors the open pane (?tailor=1), so a refresh reopens the pane the user was on.
+  // Leaving tailoring also drops openTailoring from history state, or the effect above would
+  // reopen it. The preload is never carried over (loadCv strips it in the same commit).
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const state = (location.state ?? {}) as Record<string, unknown>;
+    const inUrl = params.get("tailor") === "1";
+    if (tailorMode === inUrl && (tailorMode || !state.openTailoring)) return;
+    if (tailorMode) params.set("tailor", "1");
+    else params.delete("tailor");
+    const { preloadedTailored: _preloaded, preloadedAt: _preloadedAt, openTailoring: _open, ...rest } = state;
+    const search = params.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : "", hash: location.hash },
+      { replace: true, state: tailorMode ? { ...rest, openTailoring: true } : rest }
+    );
+  }, [tailorMode]);
+
+  // Cmd/Ctrl+[ shows the editor, Cmd/Ctrl+] shows the Tailor panel (outside text fields).
+  useEffect(() => {
+    if (!canTailor) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || (event.key !== "[" && event.key !== "]")) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      event.preventDefault();
+      if (event.key === "[") setPaneMode("edit");
+      else if (!tailorMode) void enterTailoring();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  useEffect(() => {
+    if (tailorMode && canTailor) completeStep("customize");
+  }, [canTailor, completeStep, tailorMode]);
+
+  const hasTailoringSession = Boolean(tailoring.view);
+  useEffect(() => {
+    if (hasTailoringSession) completeStep("job_details");
+  }, [completeStep, hasTailoringSession]);
+
+  // Finishing stores a fresh before/after review on the tailored CV.
+  const tailoringFinished = tailoring.view?.session.status === "ready";
+  useEffect(() => {
+    if (!tailoringFinished || cvKind !== "tailored" || !cvId) return;
+    void api
+      .getTailoredCv(cvId)
+      .then((detail) => setTailoringReview(detail.tailoring_review ?? null))
+      .catch(() => undefined);
+  }, [api, cvId, cvKind, tailoringFinished]);
 
   const renderSection = (section: EditorSection, index: number) => {
     const commonProps = {
@@ -2242,6 +2536,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     })();
 
     const highlighted = highlightedAiBlockIds.some((blockId) => sectionContainsBlock(section, blockId));
+    const locked = tailoringLockedBlockIds.some((blockId) => sectionContainsBlock(section, blockId));
 
     return (
       <DraggableSection
@@ -2250,6 +2545,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         index={index}
         moveSection={moveSection}
         highlighted={highlighted}
+        locked={locked}
       >
         {content}
       </DraggableSection>
@@ -2684,20 +2980,22 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 </span>
               )}
 
-              {cvKind === "master" && cvId && (
+              {canTailor && (
                 <button
-                  onClick={() => void requireProFeature("tailored_cv_generation").then(allowed => { if (allowed) { completeStep("customize"); navigate(`/app/tailor/${cvId}`); } })}
-                  data-onboarding="customize-btn"
+                  onClick={() => (tailorMode ? setPaneMode("edit") : void enterTailoring())}
+                  data-onboarding={cvKind === "master" ? "customize-btn" : undefined}
+                  aria-pressed={tailorMode}
                   className="min-h-10 px-4 py-2 rounded-lg font-medium flex items-center gap-2 border"
                   style={{
                     fontSize: "13px",
-                    background: "var(--color-teal-600)",
-                    color: "white",
+                    background: tailorMode ? "var(--color-teal-50)" : "var(--color-teal-600)",
+                    color: tailorMode ? "var(--color-teal-800)" : "white",
                     borderColor: "var(--color-teal-600)"
                   }}
                 >
-                  <Target size={14} />
-                  {t("Customize for a job")}</button>
+                  {tailorMode ? <PencilLine size={14} /> : <Target size={14} />}
+                  {tailorMode ? t("Back to editor") : cvKind === "master" ? t("Customize for a job") : t("Tailor for a job")}
+                </button>
               )}
 
               <button
@@ -2764,8 +3062,23 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           </DialogContent>
         </Dialog>
 
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-auto p-6 transition-all duration-300" style={{ background: "var(--color-background-secondary)" }}>
+        <div className="flex-1 flex overflow-hidden editor-pane-track relative">
+          <div
+            ref={editorPaneRef}
+            className="overflow-auto"
+            aria-hidden={tailorMode}
+            style={{
+              background: "var(--color-background-secondary)",
+              flexGrow: tailorMode ? 0 : 1,
+              flexShrink: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              padding: tailorMode ? 0 : "24px",
+              opacity: tailorMode ? 0 : 1,
+              transform: tailorMode ? "translateX(-48px)" : "none",
+              pointerEvents: tailorMode ? "none" : undefined
+            }}
+          >
             <div className="max-w-3xl mx-auto space-y-4">
               {headerSection ? renderSection(headerSection, 0) : null}
               {bodySections.map((section, index) => renderSection(section, index))}
@@ -2786,10 +3099,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           </div>
 
           <div
-            className="hidden lg:flex border-l overflow-auto transition-all duration-300 justify-center items-start"
+            className="hidden lg:flex border-l overflow-auto justify-center items-start"
             style={{
               borderColor: "var(--color-border-tertiary)",
               background: "#F8F9FA",
+              flexGrow: tailorMode ? 1 : 0,
               flexShrink: 0,
               width: "auto",
               minWidth: "600px",
@@ -2817,7 +3131,13 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                   </span>
                 </div>
               </div>
-              <div style={{ position: "relative" }}>
+              <div ref={previewContainerRef} style={{ position: "relative" }}>
+                <PreviewAnnotations
+                  containerRef={previewContainerRef}
+                  markers={previewMarkers}
+                  editable={!autoFitPreparing}
+                  onEdit={editFromPreview}
+                />
                 <div style={{ visibility: autoFitPreparing ? "hidden" : "visible" }}>
                   <CVPresentationPreview
                     presentation={renderingPreview?.presentation ?? null}
@@ -2846,6 +3166,59 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               </div>
             </div>
           </div>
+
+          {canTailor ? (
+            <div
+              ref={tailorPaneRef}
+              aria-hidden={!tailorMode}
+              className="border-l overflow-hidden"
+              style={{
+                borderColor: "var(--color-border-tertiary)",
+                flexShrink: 0,
+                width: tailorMode ? `${TAILOR_PANE_WIDTH}px` : 0,
+                opacity: tailorMode ? 1 : 0
+              }}
+            >
+              <div style={{ width: `${TAILOR_PANE_WIDTH}px`, height: "100%" }}>
+                {tailorMode || tailoring.view ? (
+                  <TailorPanel
+                    api={api}
+                    controller={tailoring}
+                    content={contentForTailoring}
+                    cvKind={cvKind}
+                    prefillJob={
+                      tailoringPrefill
+                        ? {
+                            job_title: tailoringPrefill.role ?? "",
+                            company_name: tailoringPrefill.company ?? "",
+                            job_description: tailoringPrefill.jobDescription ?? ""
+                          }
+                        : null
+                    }
+                    currentJob={tailoredJobData}
+                    onHighlight={(ids, tone) => setPreviewFocus(ids && ids.length ? { ids, tone: tone ?? "highlight" } : null)}
+                    onExport={() => void openExportDialog()}
+                    onCoverLetter={
+                      tailoring.view?.session.job_id
+                        ? () => navigate(`/app/cover-letter/${tailoring.view!.session.job_id}`)
+                        : null
+                    }
+                    onClose={() => setPaneMode("edit")}
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {canTailor ? (
+            <EdgeHandle
+              side={tailorMode ? "left" : "right"}
+              label={tailorMode ? t("Editor") : t("Tailor for a job")}
+              shortcut={tailorMode ? "⌘[" : "⌘]"}
+              icon={tailorMode ? <PencilLine size={14} /> : <Target size={14} />}
+              onClick={() => (tailorMode ? setPaneMode("edit") : void enterTailoring())}
+            />
+          ) : null}
         </div>
 
         {(() => {

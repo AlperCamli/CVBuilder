@@ -120,7 +120,11 @@ export type AiFlowType =
   | "improve"
   | "cv_parse"
   | "cover_letter_generation"
-  | "cv_translate";
+  | "cv_translate"
+  | "tailoring_analysis"
+  | "tailoring_block"
+  | "tailoring_skills"
+  | "tailoring_structure";
 
 export type AiRunStatus = "pending" | "completed" | "failed";
 
@@ -155,6 +159,11 @@ export interface AiRunRecord {
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
+  cached_input_tokens?: number | null;
+  reasoning_tokens?: number | null;
+  cost_usd?: number | null;
+  tailoring_session_id?: string | null;
+  parent_run_id?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -163,7 +172,9 @@ export type AiSuggestionActionType =
   | "summarize"
   | "improve"
   | "ats_optimize"
-  | "expand";
+  | "expand"
+  // Tailoring v2: tailoring cards, and their "Also add to my main CV" copies on the main CV.
+  | "tailor";
 
 export type AiSuggestionStatus = "pending" | "applied" | "rejected" | "expired";
 

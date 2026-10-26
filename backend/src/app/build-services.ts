@@ -90,6 +90,11 @@ import { createPlanCatalog } from "../modules/entitlements/plan-definitions";
 import { EntitlementsService } from "../modules/entitlements/entitlements.service";
 import { SupabaseUsageRepository, type UsageRepository } from "../modules/usage/usage.repository";
 import { UsageService } from "../modules/usage/usage.service";
+import { TailoringService } from "../modules/tailoring/tailoring.service";
+import {
+  SupabaseTailoringRepository,
+  type TailoringRepository
+} from "../modules/tailoring/tailoring.repository";
 
 export interface AppServices {
   authService: AuthService;
@@ -106,6 +111,7 @@ export interface AppServices {
   cvRevisionsService: CvRevisionsService;
   aiService: AiService;
   aiRepository: AiRepository;
+  tailoringService?: TailoringService;
   templatesService: TemplatesService;
   renderingService: RenderingService;
   filesService: FilesService;
@@ -129,6 +135,7 @@ export interface ServiceOverrides {
   tailoredCvRepository?: TailoredCvRepository;
   cvRevisionsRepository?: CvRevisionsRepository;
   aiRepository?: AiRepository;
+  tailoringRepository?: TailoringRepository;
   aiProvider?: AiProvider;
   aiPromptConfigRepository?: AiPromptConfigRepository;
   cvParser?: CvParser;
@@ -292,7 +299,19 @@ export const buildDefaultServices = (
     aiPromptResolver,
     billingService,
     privacyService,
-    new SupabaseCvLanguagesRepository(supabaseClients.serviceRoleClient)
+    new SupabaseCvLanguagesRepository(supabaseClients.serviceRoleClient),
+    { modelPricing: config.ai.modelPricing ?? {} }
+  );
+  const tailoringService = new TailoringService(
+    overrides?.tailoringRepository ?? new SupabaseTailoringRepository(supabaseClients.serviceRoleClient),
+    aiService,
+    aiRepository,
+    masterCvRepository,
+    tailoredCvRepository,
+    jobsRepository,
+    cvRevisionsService,
+    billingService,
+    { adminEmails: config.adminEmails ?? [], privacy: privacyService }
   );
   const importsService = new ImportsService(
     importsRepository,
@@ -335,6 +354,7 @@ export const buildDefaultServices = (
     cvRevisionsService,
     aiService,
     aiRepository,
+    tailoringService,
     templatesService,
     renderingService,
     filesService,

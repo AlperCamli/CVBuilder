@@ -34,6 +34,7 @@ export const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
 // Flows whose outputs are large enough to need the heavy output-token cap.
 export const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
+  "tailoring_analysis",
   "import_improve",
   "cv_parse",
   "cv_translate",

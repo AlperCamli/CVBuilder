@@ -12,6 +12,27 @@ import type {
 
 export type AiRunOwner = string | { guest_import_id: string };
 
+// Token counts reported by a provider. Cached input and reasoning tokens are subsets of
+// input_tokens / output_tokens; they are stored separately because they are priced differently.
+export interface AiTokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens?: number;
+  reasoning_tokens?: number;
+}
+
+export type AiRunUsagePatch = AiTokenUsage & { cost_usd?: number | null };
+
+const toUsageColumns = (usage: AiRunUsagePatch): Record<string, unknown> => ({
+  input_tokens: usage.input_tokens,
+  output_tokens: usage.output_tokens,
+  total_tokens: usage.total_tokens,
+  ...(usage.cached_input_tokens !== undefined ? { cached_input_tokens: usage.cached_input_tokens } : {}),
+  ...(usage.reasoning_tokens !== undefined ? { reasoning_tokens: usage.reasoning_tokens } : {}),
+  ...(usage.cost_usd !== undefined ? { cost_usd: usage.cost_usd } : {})
+});
+
 export interface CreateAiRunPayload {
   user_id: string | null;
   guest_import_id?: string | null;
@@ -23,6 +44,8 @@ export interface CreateAiRunPayload {
   master_cv_id?: string | null;
   tailored_cv_id?: string | null;
   job_id?: string | null;
+  tailoring_session_id?: string | null;
+  parent_run_id?: string | null;
   progress_stage?: AiRunProgressStage;
   input_payload: Record<string, unknown>;
 }
@@ -55,13 +78,13 @@ export interface UpdateAiSuggestionPayload {
 export interface AiRepository {
   completeTranslationRun?(userId: string, runId: string, output: Record<string, unknown>, maxAiActions: number | null, tokenUsage: { input_tokens: number; output_tokens: number; total_tokens: number } | null): Promise<AiRunRecord | null>;
   createRun(payload: CreateAiRunPayload): Promise<AiRunRecord>;
-  recordRunUsage?(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }): Promise<void>;
+  recordRunUsage?(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: AiRunUsagePatch }): Promise<void>;
   claimRunForExecution(userId: string, runId: string): Promise<AiRunRecord | null>;
   completeRun(
     userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
-    tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
+    tokenUsage?: AiRunUsagePatch | null
   ): Promise<AiRunRecord | null>;
   failRun(
     userId: AiRunOwner,
@@ -100,6 +123,8 @@ export interface AiRepository {
   listSuggestionsByMasterCv(userId: string, masterCvId: string, limit?: number): Promise<AiSuggestionRecord[]>;
   listAppliedSuggestionsByTailoredCv(userId: string, tailoredCvId: string): Promise<AiSuggestionRecord[]>;
   listAppliedSuggestionsByMasterCv(userId: string, masterCvId: string): Promise<AiSuggestionRecord[]>;
+  // Not owner-scoped: callers verify session ownership (or admin access) first.
+  listRunsByTailoringSession?(sessionId: string): Promise<AiRunRecord[]>;
 }
 
 const toAiRunRecord = (row: Record<string, unknown>): AiRunRecord => {
@@ -124,6 +149,11 @@ const toAiRunRecord = (row: Record<string, unknown>): AiRunRecord => {
     input_tokens: (row.input_tokens as number | null) ?? null,
     output_tokens: (row.output_tokens as number | null) ?? null,
     total_tokens: (row.total_tokens as number | null) ?? null,
+    cached_input_tokens: (row.cached_input_tokens as number | null) ?? null,
+    reasoning_tokens: (row.reasoning_tokens as number | null) ?? null,
+    cost_usd: row.cost_usd == null ? null : Number(row.cost_usd),
+    tailoring_session_id: (row.tailoring_session_id as string | null) ?? null,
+    parent_run_id: (row.parent_run_id as string | null) ?? null,
     started_at: String(row.started_at),
     completed_at: (row.completed_at as string | null) ?? null
   };
@@ -156,10 +186,10 @@ export class SupabaseAiRepository implements AiRepository {
     return query.is("user_id", null).eq("guest_import_id", owner.guest_import_id);
   }
 
-  async recordRunUsage(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }) {
+  async recordRunUsage(owner: AiRunOwner, runId: string, result: { provider: string; model_name: string; usage?: AiRunUsagePatch }) {
     const patch = {
       provider: result.provider, model_name: result.model_name,
-      ...(result.usage ? { input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens, total_tokens: result.usage.total_tokens } : {})
+      ...(result.usage ? toUsageColumns(result.usage) : {})
     };
     const { data, error } = await this.scopeRun(this.supabaseClient.from("ai_runs").update(patch)
       .eq("id", runId), owner).select("id").maybeSingle();
@@ -192,6 +222,8 @@ export class SupabaseAiRepository implements AiRepository {
         master_cv_id: payload.master_cv_id ?? null,
         tailored_cv_id: payload.tailored_cv_id ?? null,
         job_id: payload.job_id ?? null,
+        ...(payload.tailoring_session_id ? { tailoring_session_id: payload.tailoring_session_id } : {}),
+        ...(payload.parent_run_id ? { parent_run_id: payload.parent_run_id } : {}),
         input_payload: payload.input_payload,
         output_payload: null,
         error_message: null,
@@ -241,7 +273,7 @@ export class SupabaseAiRepository implements AiRepository {
     userId: AiRunOwner,
     runId: string,
     outputPayload: Record<string, unknown>,
-    tokenUsage?: { input_tokens: number; output_tokens: number; total_tokens: number } | null
+    tokenUsage?: AiRunUsagePatch | null
   ): Promise<AiRunRecord | null> {
     const { data, error } = await this.scopeRun(this.supabaseClient
       .from("ai_runs")
@@ -254,6 +286,7 @@ export class SupabaseAiRepository implements AiRepository {
         input_tokens: tokenUsage?.input_tokens ?? null,
         output_tokens: tokenUsage?.output_tokens ?? null,
         total_tokens: tokenUsage?.total_tokens ?? null,
+        ...(tokenUsage ? toUsageColumns(tokenUsage) : {}),
         completed_at: new Date().toISOString()
       })
       .eq("id", runId), userId)
@@ -469,6 +502,8 @@ export class SupabaseAiRepository implements AiRepository {
       .select("*")
       .eq("id", suggestionId)
       .eq("user_id", userId)
+      // Tailoring cards are owned by the tailoring session API, not the block-suggestion API.
+      .is("tailoring_session_id", null)
       .maybeSingle();
 
     if (error) {
@@ -564,6 +599,7 @@ export class SupabaseAiRepository implements AiRepository {
       .select("*")
       .eq("user_id", userId)
       .eq("tailored_cv_id", tailoredCvId)
+      .is("tailoring_session_id", null)
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -609,6 +645,7 @@ export class SupabaseAiRepository implements AiRepository {
       .eq("tailored_cv_id", tailoredCvId)
       .eq("status", "applied")
       .not("block_id", "is", null)
+      .is("tailoring_session_id", null)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -640,5 +677,21 @@ export class SupabaseAiRepository implements AiRepository {
     }
 
     return (data ?? []).map((row) => toAiSuggestionRecord(row as Record<string, unknown>));
+  }
+
+  async listRunsByTailoringSession(sessionId: string): Promise<AiRunRecord[]> {
+    const { data, error } = await this.supabaseClient
+      .from("ai_runs")
+      .select("*")
+      .eq("tailoring_session_id", sessionId)
+      .order("started_at", { ascending: true });
+
+    if (error) {
+      throw new InternalServerError("Failed to list tailoring session AI runs", {
+        reason: error.message
+      });
+    }
+
+    return (data ?? []).map((row) => toAiRunRecord(row as Record<string, unknown>));
   }
 }

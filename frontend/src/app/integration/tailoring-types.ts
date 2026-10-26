@@ -1,0 +1,195 @@
+// Mirrors backend/src/modules/tailoring/tailoring.types.ts (tailoring v2 session API).
+
+export type TailoringSessionStatus =
+  | "draft"
+  | "analyzing"
+  | "answering"
+  | "generating"
+  | "reviewing"
+  | "ready"
+  | "archived";
+
+export type RequirementStatus = "covered" | "weak" | "missing";
+export type RequirementDecision = "relevant" | "not_relevant";
+export type TailoringAnswerChoice = "yes" | "some" | "no";
+
+export interface TailoringRequirement {
+  id: string;
+  text: string;
+  keywords: string[];
+  importance: "must" | "nice";
+  weight: number;
+  status: RequirementStatus;
+  confidence: "high" | "medium" | "low";
+  evidence_block_ids: string[];
+  reason: string;
+}
+
+export interface TailoringQuestion {
+  id: string;
+  kind: "gap" | "metric";
+  text: string;
+  requirement_id: string | null;
+  target_block_id: string | null;
+}
+
+export interface TailoringAnalysis {
+  role_summary: string;
+  requirements: TailoringRequirement[];
+  questions: TailoringQuestion[];
+}
+
+export interface TailoringAnswer {
+  answer: TailoringAnswerChoice | null;
+  detail: string | null;
+  add_to_main: boolean;
+  answered_at: string;
+}
+
+export interface TailoringJob {
+  job_title: string;
+  company_name: string;
+  job_description: string;
+}
+
+export type TailoringTaskKind = "block" | "summary" | "skills" | "structure";
+export type TailoringTaskStatus = "waiting" | "ready" | "running" | "done" | "failed" | "skipped";
+
+export interface TailoringTask {
+  id: string;
+  kind: TailoringTaskKind;
+  block_id: string | null;
+  section_id: string | null;
+  status: TailoringTaskStatus;
+  depends_on_question_ids: string[];
+  error_message: string | null;
+  updated_at: string;
+}
+
+export type TailoringSuggestionKind = "rewrite" | "skills" | "new_section" | "reorder" | "hide_section";
+export type TailoringSuggestionStatus = "pending" | "applied" | "rejected" | "expired";
+
+export interface TailoringSuggestion {
+  id: string;
+  task_id: string | null;
+  kind: TailoringSuggestionKind;
+  block_id: string | null;
+  section_id: string | null;
+  before: Record<string, unknown> | null;
+  suggested: Record<string, unknown>;
+  rationale: string;
+  requirement_ids: string[];
+  add_to_main: boolean;
+  guard_notes: string[];
+  status: TailoringSuggestionStatus;
+  created_at: string;
+}
+
+export interface TailoringScore {
+  initial: number | null;
+  current: number | null;
+  potential: number | null;
+}
+
+export interface TailoringPreferences {
+  auto_apply: boolean;
+}
+
+export interface TailoringSessionView {
+  session: {
+    id: string;
+    tailored_cv_id: string;
+    job_id: string | null;
+    status: TailoringSessionStatus;
+    job: TailoringJob;
+    analysis: TailoringAnalysis | null;
+    requirement_decisions: Record<string, RequirementDecision>;
+    answers: Record<string, TailoringAnswer>;
+    questions_completed: boolean;
+    error_message: string | null;
+    created_at: string;
+    finished_at: string | null;
+  };
+  tasks: TailoringTask[];
+  suggestions: TailoringSuggestion[];
+  score: TailoringScore;
+  preferences: TailoringPreferences;
+  viewer: { is_admin: boolean };
+}
+
+export interface TailoringTaskRunResponse {
+  task: TailoringTask;
+  suggestions: TailoringSuggestion[];
+  session_status: TailoringSessionStatus;
+  score: TailoringScore;
+}
+
+// "Also add to my main CV": accepting writes the main CV block (with a block history
+// revision); undo reverts it only if the main CV block is unchanged since, otherwise the
+// revert is skipped. Older backends omit the revert flags (BackendApi defaults them to false).
+export interface TailoringSuggestionDecisionResponse {
+  suggestion: TailoringSuggestion;
+  score: TailoringScore;
+  master_cv_updated: boolean;
+  master_cv_reverted: boolean;
+  master_cv_revert_skipped: boolean;
+}
+
+// Raw response shape, before BackendApi fills in the optional flags.
+export type TailoringSuggestionDecisionPayload = Omit<
+  TailoringSuggestionDecisionResponse,
+  "master_cv_updated" | "master_cv_reverted" | "master_cv_revert_skipped"
+> &
+  Partial<Pick<TailoringSuggestionDecisionResponse, "master_cv_updated" | "master_cv_reverted" | "master_cv_revert_skipped">>;
+
+export type TailoringRefinement = "shorter" | "more_impact" | "more_keywords";
+
+export interface TailoringCostRun {
+  ai_run_id: string;
+  flow_type: string;
+  step: string;
+  status: string;
+  model_name: string;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  total_tokens: number;
+  cost_usd: number | null;
+  duration_ms: number | null;
+  started_at: string;
+}
+
+export interface TailoringCostReport {
+  session_id: string;
+  user_email: string | null;
+  job_title: string;
+  status: TailoringSessionStatus;
+  created_at: string;
+  totals: {
+    run_count: number;
+    failed_run_count: number;
+    input_tokens: number;
+    cached_input_tokens: number;
+    output_tokens: number;
+    reasoning_tokens: number;
+    total_tokens: number;
+    cost_usd: number | null;
+    cost_complete: boolean;
+  };
+  by_step: Array<{ step: string; run_count: number; total_tokens: number; cost_usd: number | null }>;
+  runs: TailoringCostRun[];
+}
+
+export interface TailoringAdminSessionSummary {
+  session_id: string;
+  user_email: string | null;
+  job_title: string;
+  company_name: string;
+  status: TailoringSessionStatus;
+  created_at: string;
+  run_count: number;
+  total_tokens: number;
+  cost_usd: number | null;
+  cost_complete: boolean;
+}

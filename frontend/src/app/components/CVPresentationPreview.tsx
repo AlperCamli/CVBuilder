@@ -62,6 +62,10 @@ interface BlockSpec {
   key: string;
   node: ReactNode;
   column: BlockColumn;
+  // Source CV section/block ids, exposed as data attributes so the editor can highlight,
+  // mark and link preview content (tailoring markers, hover edit).
+  sectionId?: string;
+  blockId?: string;
   /**
    * When true, this block must stay together with the next block on the same page.
    * Used for section titles so they never get orphaned at the bottom of a page.
@@ -285,6 +289,7 @@ function buildSectionBlocks(
     blocks.push({
       key: `${keyPrefix}sec-${section.id}`,
       column,
+      sectionId: section.id,
       node: (
         <div style={{ marginBottom: scaledPx(sectionSpacing) }}>
           <SectionTitle title={section.title} color={colors.heading} headingStyle={sectionHeadingStyle} />
@@ -302,6 +307,7 @@ function buildSectionBlocks(
   blocks.push({
     key: `${keyPrefix}sec-${section.id}-title`,
     column,
+    sectionId: section.id,
     keepWithNext: true,
     node: <SectionTitle title={section.title} color={colors.heading} headingStyle={sectionHeadingStyle} />
   });
@@ -310,6 +316,7 @@ function buildSectionBlocks(
     blocks.push({
       key: `${keyPrefix}sec-${section.id}-inline`,
       column,
+      sectionId: section.id,
       keepWithNext: true,
       node: (
         <p
@@ -332,6 +339,8 @@ function buildSectionBlocks(
     blocks.push({
       key: `${keyPrefix}item-${item.id}`,
       column,
+      sectionId: section.id,
+      blockId: item.id,
       node: (
         <div style={{ marginBottom: scaledPx(trailingMargin) }}>
           {style === "timeline" ? (
@@ -529,18 +538,18 @@ function buildSignatureSectionBlocks(
     // Use a content-only first block so the section label sits alongside its text.
     const bodyBlocks: BlockSpec[] = [];
     if (section.inline_text) bodyBlocks.push({
-      key: `${options.keyPrefix}${section.id}-intro`, column: options.column,
+      key: `${options.keyPrefix}${section.id}-intro`, column: options.column, sectionId: section.id,
       node: <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", lineHeight: 1.6, color: options.colors.body,
         marginBottom: scaledPx(section.items.length ? options.blockSpacing : options.sectionSpacing) }}>
         {renderPreviewText(section.inline_text)}</p>
     });
     section.items.forEach((item, index) => bodyBlocks.push({
-      key: `${options.keyPrefix}item-${item.id}`, column: options.column,
+      key: `${options.keyPrefix}item-${item.id}`, column: options.column, sectionId: section.id, blockId: item.id,
       node: <div style={{ marginBottom: scaledPx(index === section.items.length - 1 ? options.sectionSpacing : options.blockSpacing) }}>
         <DefaultItemBody item={item} colors={options.colors} />
       </div>
     }));
-    if (!bodyBlocks.length) bodyBlocks.push({ key: `${section.id}-empty`, column: options.column, node: null });
+    if (!bodyBlocks.length) bodyBlocks.push({ key: `${section.id}-empty`, column: options.column, sectionId: section.id, node: null });
     return bodyBlocks.map((block, index) => ({ ...block, node: <div style={{
       display: "grid", gridTemplateColumns: `${scaledPx(108)} minmax(0, 1fr)`, gap: scaledPx(18)
     }}>
@@ -904,14 +913,14 @@ export function CVPresentationPreview({
         }}
       >
         {built.headerBlocks.map((block) => (
-          <div key={block.key}>{block.node}</div>
+          <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
         ))}
         {built.isTwoColumn ? (
           <TwoColumnPageContent page={{ kind: "two-column", header: [], sidebar: built.sidebarBlocks, main: built.mainBlocks }} built={built} />
         ) : (
           <div>
             {built.singleBlocks.map((block) => (
-              <div key={block.key}>{block.node}</div>
+              <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
             ))}
           </div>
         )}
@@ -983,6 +992,7 @@ export function CVPresentationPreview({
         {pages.map((page, pageIndex) => (
           <div
             key={pageIndex}
+            data-cv-page={pageIndex}
             className="shadow-lg"
             style={{
               ...built.sheetBaseStyle,
@@ -997,7 +1007,7 @@ export function CVPresentationPreview({
               ) : (
                 <div>
                   {page.blocks.map((block) => (
-                    <div key={block.key}>{block.node}</div>
+                    <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
                   ))}
                 </div>
               )}
@@ -1023,7 +1033,7 @@ function TwoColumnPageContent({
   return (
     <>
       {page.header.map((block) => (
-        <div key={block.key}>{block.node}</div>
+        <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
       ))}
       <div
         className="grid"
@@ -1043,12 +1053,12 @@ function TwoColumnPageContent({
           }}
         >
           {page.sidebar.map((block) => (
-            <div key={block.key}>{block.node}</div>
+            <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
           ))}
         </aside>
         <main style={{ gridColumn: studio ? 1 : 2, gridRow: 1, minWidth: 0 }}>
           {page.main.map((block) => (
-            <div key={block.key}>{block.node}</div>
+            <div key={block.key} data-cv-section-id={block.sectionId} data-cv-block-id={block.blockId}>{block.node}</div>
           ))}
         </main>
       </div>

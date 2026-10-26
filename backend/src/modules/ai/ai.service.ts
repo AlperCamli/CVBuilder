@@ -100,9 +100,10 @@ import type {
   TailoredCvDraftJobSummary,
   TailoredCvDraftSummary
 } from "./ai.types";
-import type { AiRepository, AiRunOwner } from "./ai.repository";
+import type { AiRepository, AiRunOwner, AiRunUsagePatch } from "./ai.repository";
+import { computeRunCostUsd, type ModelPriceTable } from "./ai-cost";
 import type { AiPromptResolver } from "./prompts/prompt-resolver";
-import type { AiProvider } from "./provider/ai-provider";
+import type { AiProvider, AiProviderUsage } from "./provider/ai-provider";
 import {
   aiFollowUpQuestionsSchema,
   aiJobAnalysisSchema,
@@ -647,6 +648,8 @@ interface ExecuteFlowOptions {
   // Needed by calls that share a flow_type but have a stricter contract than the generic
   // template (e.g. the skills-pool call rides on block_suggest).
   force_user_prompt?: boolean;
+  tailoring_session_id?: string | null;
+  parent_run_id?: string | null;
 }
 
 interface ExecuteFlowResult<TOutput> {
@@ -695,11 +698,7 @@ interface RunFlowExecutionResult {
   output_payload: Record<string, unknown>;
   provider: string;
   model_name: string;
-  token_usage: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null;
+  token_usage: AiRunUsagePatch | null;
 }
 
 type TailoringRunInputPayload = JobAnalysisInput | FollowUpQuestionsInput | TailoredCvDraftInput;
@@ -756,7 +755,8 @@ export class AiService {
     private readonly promptResolver: AiPromptResolver,
     private readonly billingService: BillingService,
     private readonly privacy?: PrivacyService,
-    private readonly cvLanguages: CvLanguagesRepository = builtInCvLanguages
+    private readonly cvLanguages: CvLanguagesRepository = builtInCvLanguages,
+    private readonly options: { modelPricing?: ModelPriceTable } = {}
   ) {}
 
   async listTranslationLanguages() {
@@ -2312,6 +2312,33 @@ export class AiService {
     };
   }
 
+  // Entry point for the tailoring v2 session flows. Runs one model call with the shared
+  // run lifecycle (privacy checks, progress, usage/cost, schema validation) and links the
+  // run to its tailoring session for cost reporting.
+  async runTailoringSessionFlow<TOutput>(options: {
+    user_id: string;
+    flow_type: "tailoring_analysis" | "tailoring_block" | "tailoring_skills" | "tailoring_structure";
+    input_payload: Record<string, unknown>;
+    user_prompt: string;
+    tailored_cv_id: string;
+    job_id: string | null;
+    tailoring_session_id: string;
+    parent_run_id?: string | null;
+  }): Promise<{ ai_run: AiRunRecord; output: TOutput }> {
+    const executed = await this.executeFlow<TOutput>({
+      flow_type: options.flow_type,
+      user_id: options.user_id,
+      input_payload: options.input_payload,
+      user_prompt: options.user_prompt,
+      tailored_cv_id: options.tailored_cv_id,
+      job_id: options.job_id,
+      tailoring_session_id: options.tailoring_session_id,
+      parent_run_id: options.parent_run_id ?? null
+    });
+
+    return { ai_run: executed.ai_run, output: executed.output };
+  }
+
   async rejectSuggestion(session: SessionContext, suggestionId: string): Promise<SuggestionRejectResponse> {
     const suggestion = await this.requireSuggestion(session.appUser.id, suggestionId);
 
@@ -2446,6 +2473,8 @@ export class AiService {
       master_cv_id: options.master_cv_id ?? null,
       tailored_cv_id: options.tailored_cv_id ?? null,
       job_id: options.job_id ?? null,
+      tailoring_session_id: options.tailoring_session_id ?? null,
+      parent_run_id: options.parent_run_id ?? null,
       progress_stage: "queued",
       input_payload: {
         flow_input: options.input_payload,
@@ -2764,14 +2793,25 @@ export class AiService {
 
     let providerResult;
     let reported = false;
-    let receivedUsage: { input_tokens: number; output_tokens: number; total_tokens: number } | null = null;
-    const recordUsage = async (result: { provider: string; model_name: string; usage?: { input_tokens: number; output_tokens: number; total_tokens: number } }) => {
+    let receivedUsage: AiRunUsagePatch | null = null;
+    const recordUsage = async (result: { provider: string; model_name: string; usage?: AiProviderUsage }) => {
       reported = true;
-      if (result.usage) receivedUsage = {
-        input_tokens: (receivedUsage?.input_tokens ?? 0) + result.usage.input_tokens,
-        output_tokens: (receivedUsage?.output_tokens ?? 0) + result.usage.output_tokens,
-        total_tokens: (receivedUsage?.total_tokens ?? 0) + result.usage.total_tokens
-      };
+      if (result.usage) {
+        // Retries add up: every attempt the provider reported was billed.
+        const attemptCost = computeRunCostUsd(this.options.modelPricing ?? {}, result.model_name, result.usage);
+        const previousCost = receivedUsage?.cost_usd;
+        receivedUsage = {
+          input_tokens: (receivedUsage?.input_tokens ?? 0) + result.usage.input_tokens,
+          output_tokens: (receivedUsage?.output_tokens ?? 0) + result.usage.output_tokens,
+          total_tokens: (receivedUsage?.total_tokens ?? 0) + result.usage.total_tokens,
+          cached_input_tokens: (receivedUsage?.cached_input_tokens ?? 0) + (result.usage.cached_input_tokens ?? 0),
+          reasoning_tokens: (receivedUsage?.reasoning_tokens ?? 0) + (result.usage.reasoning_tokens ?? 0),
+          cost_usd:
+            attemptCost === null || previousCost === null
+              ? null
+              : Math.round(((previousCost ?? 0) + attemptCost) * 1_000_000) / 1_000_000
+        };
+      }
       await this.aiRepository.recordRunUsage?.(owner, options.ai_run_id, { ...result, usage: receivedUsage ?? undefined });
     };
     try {
@@ -2864,6 +2904,17 @@ export class AiService {
   }): Promise<ResolvedPromptSnapshot> {
     const definition = AI_FLOW_REGISTRY[options.flow_type];
     const modelName = this.aiProvider.resolveModelName(options.flow_type);
+    // Code-only flows never read ai_prompt_configs: the prompt in the registry and the
+    // user prompt built in code are exactly what the model receives.
+    if (definition.code_only) {
+      return {
+        prompt_key: definition.prompt_key,
+        prompt_version: definition.prompt_version,
+        system_prompt: definition.system_prompt,
+        user_prompt: options.user_prompt,
+        model_name: modelName
+      };
+    }
     const resolvedPrompt = await this.promptResolver.resolve({
       flow_type: options.flow_type,
       provider: this.aiProvider.providerName,

@@ -38,6 +38,26 @@ export const createGlobalRateLimiter = (config: AppConfig): RequestHandler => {
   });
 };
 
+// One tailoring session runs its block suggestions in parallel (and users tailor many
+// applications a day), so it gets its own per-user budget instead of the 10/min AI limit.
+export const createTailoringRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (request: Request): string => {
+      const userId = request.auth?.appUser.id;
+      return userId ? `tailoring:${userId}` : `tailoring-ip:${ipKeyGenerator(request.ip ?? "")}`;
+    },
+    handler: handleRateLimited
+  });
+};
+
 export const createAiRateLimiter = (config: AppConfig): RequestHandler => {
   if (config.appEnv === "test") {
     return passThrough;

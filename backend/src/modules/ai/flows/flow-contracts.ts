@@ -203,3 +203,86 @@ export const coverLetterOutputSchema = z
     content: z.string().trim().min(1)
   })
   .strict();
+
+// Tailoring v2 contracts. All properties are required (nullable where absent) so OpenAI
+// strict structured output can enforce them; ids are the short aliases from the compact CV.
+const tailoringAliasSchema = z.string().trim().min(1).max(32);
+
+export const tailoringRequirementOutputSchema = z
+  .object({
+    id: tailoringAliasSchema,
+    text: z.string().trim().min(1).max(220),
+    keywords: z.array(z.string().trim().min(1).max(60)).max(5),
+    importance: z.enum(["must", "nice"]),
+    weight: z.number().int().min(1).max(3),
+    status: z.enum(["covered", "weak", "missing"]),
+    confidence: z.enum(["high", "medium", "low"]),
+    evidence_block_ids: z.array(tailoringAliasSchema).max(6),
+    reason: z.string().trim().max(280)
+  })
+  .strict();
+
+export const tailoringQuestionOutputSchema = z
+  .object({
+    id: tailoringAliasSchema,
+    kind: z.enum(["gap", "metric"]),
+    text: z.string().trim().min(1).max(320),
+    requirement_id: tailoringAliasSchema.nullable(),
+    target_block_id: tailoringAliasSchema.nullable()
+  })
+  .strict();
+
+export const tailoringBlockBriefOutputSchema = z
+  .object({
+    block_id: tailoringAliasSchema,
+    requirement_ids: z.array(tailoringAliasSchema).max(8),
+    focus: z.string().trim().max(320),
+    terms: z.array(z.string().trim().min(1).max(60)).max(8),
+    avoid: z.string().trim().max(240)
+  })
+  .strict();
+
+export const tailoringAnalysisOutputSchema = z
+  .object({
+    role_summary: z.string().trim().max(400),
+    requirements: z.array(tailoringRequirementOutputSchema).min(1).max(15),
+    questions: z.array(tailoringQuestionOutputSchema).max(9),
+    block_briefs: z.array(tailoringBlockBriefOutputSchema).max(12)
+  })
+  .strict();
+
+export const tailoringBlockOutputSchema = z
+  .object({
+    changed: z.boolean(),
+    lines: z.array(z.string().trim().min(1).max(400)).max(8),
+    rationale: z.string().trim().max(280),
+    requirement_ids: z.array(tailoringAliasSchema).max(10)
+  })
+  .strict();
+
+// allowed_skill names the allowed_new_skills entry a new skill renders (it may be written
+// in the CV language while the entry is in the job language); null for current skills.
+export const tailoringSkillOutputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    allowed_skill: z.string().trim().min(1).max(60).nullable()
+  })
+  .strict();
+
+export const tailoringSkillsOutputSchema = z
+  .object({
+    changed: z.boolean(),
+    skills: z.array(tailoringSkillOutputSchema).max(30),
+    rationale: z.string().trim().max(280),
+    requirement_ids: z.array(tailoringAliasSchema).max(15)
+  })
+  .strict();
+
+export const tailoringStructureOutputSchema = z
+  .object({
+    changed: z.boolean(),
+    section_order: z.array(tailoringAliasSchema).max(30),
+    hide_section_ids: z.array(tailoringAliasSchema).max(5),
+    rationale: z.string().trim().max(280)
+  })
+  .strict();

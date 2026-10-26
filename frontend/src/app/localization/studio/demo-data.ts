@@ -11,6 +11,7 @@ import type {
 } from "../../integration/api-types";
 import { DEMO_TEMPLATES } from "../../pages/designs/product-demo-data";
 import { translateInLocale } from "../i18n";
+import { createDemoTailoring } from "./demo-tailoring";
 
 export type DemoState = "populated" | "empty" | "loading" | "error";
 export type DemoPlan = "free" | "monthly";
@@ -350,6 +351,7 @@ export function createDemoStore(
     jobs.splice(0);
     letters.clear();
   }
+  const tailoringDemo = createDemoTailoring({ masters, tailored });
   const preferences = {
     analytics: false,
     ai_processing: true,
@@ -590,6 +592,8 @@ export function createDemoStore(
           updated_at: stamp,
         })),
       };
+    const tailoringResult = await tailoringDemo.handle(method, path, body);
+    if (tailoringResult !== undefined) return tailoringResult;
     if (path === "/rendering/preview")
       return preview(
         body.current_content as CvContent,

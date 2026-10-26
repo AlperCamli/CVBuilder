@@ -2,10 +2,37 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config as loadDotEnvFile } from "dotenv";
 import { z } from "zod";
+import type { ModelPriceTable } from "../../modules/ai/ai-cost";
 
 const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
 const aiProviderSchema = z.enum(["mock", "gemini", "openai", "anthropic"]);
 const openaiReasoningEffortSchema = z.enum(["none", "minimal", "low", "medium", "high"]);
+
+const modelPriceSchema = z.object({
+  input: z.number().nonnegative(),
+  cached_input: z.number().nonnegative().optional(),
+  output: z.number().nonnegative()
+});
+
+const parseModelPricing = (raw: string | undefined): ModelPriceTable => {
+  if (!raw?.trim()) {
+    return {};
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("Invalid environment configuration: AI_MODEL_PRICING_JSON must be valid JSON");
+  }
+
+  const parsed = z.record(modelPriceSchema).safeParse(json);
+  if (!parsed.success) {
+    throw new Error("Invalid environment configuration: AI_MODEL_PRICING_JSON must map model names to {input, cached_input?, output}");
+  }
+
+  return parsed.data;
+};
 
 const optionalApiKey = z.preprocess(value => value === "" ? undefined : value, z.string().min(1).optional());
 
@@ -44,6 +71,10 @@ const envSchema = z
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
     AI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
     AI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
+    // JSON map of model name -> USD per 1M tokens, e.g. {"gpt-6-luna":{"input":0.4,"cached_input":0.1,"output":1.6}}.
+    AI_MODEL_PRICING_JSON: z.string().optional(),
+    // Comma-separated emails allowed to see internal admin data (AI token costs).
+    ADMIN_EMAILS: z.string().optional(),
     AI_RUN_STALE_AFTER_MS: z.coerce.number().int().min(60_000).max(1_800_000).default(300_000),
     AI_RUN_SWEEP_INTERVAL_MS: z.coerce.number().int().min(15_000).max(600_000).default(60_000),
     EXPORTS_STORAGE_BUCKET: z.string().min(1).default("exports"),
@@ -161,7 +192,9 @@ export interface AppConfig {
     maxOutputTokensHeavy: number;
     runStaleAfterMs: number;
     runSweepIntervalMs: number;
+    modelPricing?: ModelPriceTable;
   };
+  adminEmails?: string[];
   exports: {
     storageBucket: string;
     downloadUrlTtlSeconds: number;
@@ -296,8 +329,13 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       maxOutputTokensLight: parsed.data.AI_MAX_OUTPUT_TOKENS_LIGHT,
       maxOutputTokensHeavy: parsed.data.AI_MAX_OUTPUT_TOKENS_HEAVY,
       runStaleAfterMs: parsed.data.AI_RUN_STALE_AFTER_MS,
-      runSweepIntervalMs: parsed.data.AI_RUN_SWEEP_INTERVAL_MS
+      runSweepIntervalMs: parsed.data.AI_RUN_SWEEP_INTERVAL_MS,
+      modelPricing: parseModelPricing(parsed.data.AI_MODEL_PRICING_JSON)
     },
+    adminEmails: (parsed.data.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email.length > 0),
     exports: {
       storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,
       downloadUrlTtlSeconds: parsed.data.EXPORT_DOWNLOAD_URL_TTL_SECONDS

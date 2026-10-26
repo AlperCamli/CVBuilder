@@ -66,6 +66,7 @@ export const createApp = (options?: CreateAppOptions): Express => {
       options?.services?.cvRevisionsService ?? defaultServices?.cvRevisionsService!,
     aiService: options?.services?.aiService ?? defaultServices?.aiService!,
     aiRepository: options?.services?.aiRepository ?? defaultServices?.aiRepository!,
+    tailoringService: options?.services?.tailoringService ?? defaultServices?.tailoringService,
     templatesService: options?.services?.templatesService ?? defaultServices?.templatesService!,
     renderingService: options?.services?.renderingService ?? defaultServices?.renderingService!,
     filesService: options?.services?.filesService ?? defaultServices?.filesService!,

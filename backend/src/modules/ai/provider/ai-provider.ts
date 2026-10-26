@@ -24,15 +24,21 @@ export interface AiProviderRequest {
   onStage?: (stage: "parsing_output") => Promise<void> | void;
 }
 
+// cached_input_tokens / reasoning_tokens are subsets of input_tokens / output_tokens,
+// reported only by providers that expose them (currently OpenAI).
+export interface AiProviderUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens?: number;
+  reasoning_tokens?: number;
+}
+
 export interface AiProviderResult {
   provider: string;
   model_name: string;
   output_payload: Record<string, unknown>;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  };
+  usage?: AiProviderUsage;
 }
 
 export interface AiProvider {

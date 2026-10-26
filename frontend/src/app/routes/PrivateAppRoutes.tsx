@@ -23,6 +23,8 @@ import { Profile } from "../pages/Profile";
 import { Resumes } from "../pages/Resumes";
 import { TailorCV } from "../pages/TailorCV";
 import { TailoringFlow } from "../pages/TailoringFlow";
+import { TailorRedirect } from "../pages/TailorRedirect";
+import { AdminTailoringCosts } from "../pages/AdminTailoringCosts";
 import { UploadProcessing } from "../pages/UploadProcessing";
 
 export function AppShellRoute() {
@@ -86,6 +88,14 @@ export function TailorCVRoute() {
 
 export function TailoringFlowRoute() {
   return <TailoringFlow />;
+}
+
+export function TailorRedirectRoute() {
+  return <TailorRedirect />;
+}
+
+export function AdminTailoringCostsRoute() {
+  return <AdminTailoringCosts />;
 }
 
 export function JobTrackerRoute() {

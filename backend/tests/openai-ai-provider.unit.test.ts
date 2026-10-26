@@ -71,7 +71,7 @@ describe("OpenAiAiProvider", () => {
 
     expect(result.provider).toBe("openai");
     expect(result.output_payload).toEqual({ questions: [] });
-    expect(result.usage).toEqual({ input_tokens: 100, output_tokens: 20, total_tokens: 120 });
+    expect(result.usage).toEqual({ input_tokens: 100, output_tokens: 20, total_tokens: 120, cached_input_tokens: 0, reasoning_tokens: 0 });
     expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
 
     const call = chatCompletionsCreateMock.mock.calls[0][0];
@@ -296,7 +296,7 @@ describe("OpenAiAiProvider", () => {
     chatCompletionsCreateMock.mockResolvedValue({...successResponse, model: "actual-model", choices: [{message: {content: "invalid", refusal: null}, finish_reason: "length"}]});
     const onUsage = vi.fn(async () => {});
     await expect(provider.generate({...baseRequest, onUsage})).rejects.toBeInstanceOf(AiProviderError);
-    expect(onUsage).toHaveBeenCalledWith({provider: "openai", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120}});
+    expect(onUsage).toHaveBeenCalledWith({provider: "openai", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120, cached_input_tokens: 0, reasoning_tokens: 0}});
     expect(chatCompletionsCreateMock).toHaveBeenCalledTimes(1);
   });
 

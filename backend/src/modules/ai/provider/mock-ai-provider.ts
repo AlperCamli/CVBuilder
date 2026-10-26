@@ -589,6 +589,125 @@ const generateBlockSuggestions = (
   };
 };
 
+// Deterministic tailoring v2 outputs: enough structure to exercise every panel step locally.
+const mockRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const generateTailoringAnalysis = (input: Record<string, unknown>): Record<string, unknown> => {
+  const job = mockRecord(input.job);
+  const role = String(job.role ?? "the role");
+  const blocks = (Array.isArray(input.cv) ? input.cv : []).map(mockRecord);
+  const items = blocks.filter((block) => !["skills", "summary"].includes(String(block.section)) && block.text);
+  const first = items[0];
+  const second = items[1];
+  const words = String(job.description ?? "")
+    .split(/[^A-Za-z+#.]+/)
+    .filter((word) => word.length > 4)
+    .slice(0, 3);
+
+  return {
+    role_summary: `The ${role} role needs hands-on delivery and clear communication.`,
+    requirements: [
+      {
+        id: "r1",
+        text: `Relevant experience for ${role}`,
+        keywords: words.slice(0, 2),
+        importance: "must",
+        weight: 3,
+        status: first ? "covered" : "missing",
+        confidence: "high",
+        evidence_block_ids: first ? [String(first.id)] : [],
+        reason: first ? "Your recent role shows this directly." : "No matching experience was found."
+      },
+      {
+        id: "r2",
+        text: "Measurable results",
+        keywords: ["results"],
+        importance: "must",
+        weight: 2,
+        status: "weak",
+        confidence: "medium",
+        evidence_block_ids: second ? [String(second.id)] : [],
+        reason: "Results are mentioned without numbers."
+      },
+      {
+        id: "r3",
+        text: `Experience with ${words[2] ?? "stakeholder management"}`,
+        keywords: [words[2] ?? "stakeholder management"],
+        importance: "nice",
+        weight: 1,
+        status: "missing",
+        confidence: "medium",
+        evidence_block_ids: [],
+        reason: "Not mentioned in the CV."
+      }
+    ],
+    questions: [
+      {
+        id: "q1",
+        kind: "gap",
+        text: `Have you worked with ${words[2] ?? "stakeholder management"}?`,
+        requirement_id: "r3",
+        target_block_id: first ? String(first.id) : null
+      },
+      ...(first
+        ? [{ id: "q2", kind: "metric", text: "How many people or users did your work reach in this role?", requirement_id: "r2", target_block_id: String(first.id) }]
+        : [])
+    ],
+    block_briefs: items.slice(0, 3).map((block) => ({
+      block_id: String(block.id),
+      requirement_ids: ["r1", "r2"],
+      focus: `Show impact relevant to ${role}.`,
+      terms: words.slice(0, 2),
+      avoid: ""
+    }))
+  };
+};
+
+const generateTailoringBlock = (input: Record<string, unknown>): Record<string, unknown> => {
+  const block = mockRecord(input.block);
+  const role = String(mockRecord(input.job).role ?? "the role");
+  const facts = (Array.isArray(input.confirmed_facts) ? input.confirmed_facts : []).map(mockRecord);
+  if (block.kind === "summary" || block.kind === "new_summary") {
+    return {
+      changed: true,
+      lines: [`Professional focused on delivering results relevant to ${role}, with a track record of ownership and collaboration.`],
+      rationale: `Aims the summary at the ${role} role.`,
+      requirement_ids: ["r1"]
+    };
+  }
+
+  const lines = String(block.current_text ?? "")
+    .split(/\n+/)
+    .map((line) => line.replace(/^[\s•*-]+/, "").trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  if (lines.length === 0) {
+    return { changed: false, lines: [], rationale: "", requirement_ids: [] };
+  }
+  const factLine = facts.find((fact) => typeof fact.detail === "string" && fact.detail);
+  return {
+    changed: true,
+    lines: [`${lines[0]} in support of ${role} goals`, ...lines.slice(1), ...(factLine ? [String(factLine.detail)] : [])],
+    rationale: "Leads with the most job-relevant work.",
+    requirement_ids: ["r1", "r2"]
+  };
+};
+
+const generateTailoringSkills = (input: Record<string, unknown>): Record<string, unknown> => {
+  const current = (Array.isArray(input.current_skills) ? input.current_skills : []).map(String);
+  const allowed = (Array.isArray(input.allowed_new_skills) ? input.allowed_new_skills : []).map(String);
+  return {
+    changed: allowed.length > 0,
+    skills: [
+      ...allowed.slice(0, 3).map((skill) => ({ name: skill, allowed_skill: skill })),
+      ...current.map((skill) => ({ name: skill, allowed_skill: null }))
+    ],
+    rationale: "Puts the skills this job asks for first.",
+    requirement_ids: ["r1"]
+  };
+};
+
 export class MockAiProvider implements AiProvider {
   readonly providerName = "mock";
 
@@ -629,6 +748,24 @@ export class MockAiProvider implements AiProvider {
         break;
       case "cover_letter_generation":
         outputPayload = generateCoverLetter(request.input_payload);
+        break;
+      case "tailoring_analysis":
+        outputPayload = generateTailoringAnalysis(request.input_payload);
+        break;
+      case "tailoring_block":
+        outputPayload = generateTailoringBlock(request.input_payload);
+        break;
+      case "tailoring_skills":
+        outputPayload = generateTailoringSkills(request.input_payload);
+        break;
+      case "tailoring_structure":
+        outputPayload = {
+          changed: false,
+          section_order: (Array.isArray(request.input_payload.sections) ? request.input_payload.sections : [])
+            .map((section) => String((section as Record<string, unknown>).id)),
+          hide_section_ids: [],
+          rationale: "The current section order already fits this role."
+        };
         break;
       case "summary":
       case "improve":

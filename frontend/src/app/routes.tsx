@@ -133,6 +133,16 @@ const TailorCVRoute = lazyRoute(() =>
     default: TailorCVRoute,
   })),
 );
+const TailorRedirectRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ TailorRedirectRoute }) => ({
+    default: TailorRedirectRoute,
+  })),
+);
+const AdminTailoringCostsRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ AdminTailoringCostsRoute }) => ({
+    default: AdminTailoringCostsRoute,
+  })),
+);
 const TailoringFlowRoute = lazyRoute(() =>
   import("./routes/PrivateAppRoutes").then(({ TailoringFlowRoute }) => ({
     default: TailoringFlowRoute,
@@ -276,7 +286,10 @@ export function RouteElements({
         <Route path="create-cv" element={lazyElement(CreateCvRedirectRoute)} />
         <Route path="medical" element={lazyElement(MedicalCVRoute)} />
         <Route path="cv/:id" element={lazyElement(CVEditorRoute)} />
-        <Route path="tailor/:id" element={lazyElement(TailorCVRoute)} />
+        <Route path="tailor/:id" element={lazyElement(TailorRedirectRoute)} />
+        {/* Legacy page-based tailoring, kept until tailoring v2 has fully replaced it. */}
+        <Route path="tailor-legacy/:id" element={lazyElement(TailorCVRoute)} />
+        <Route path="admin/tailoring" element={lazyElement(AdminTailoringCostsRoute)} />
         <Route
           path="tailoring-flow/:id"
           element={lazyElement(TailoringFlowRoute)}

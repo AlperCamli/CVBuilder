@@ -1,6 +1,18 @@
 import type { BillingPrices } from "./regional-pricing";
 import type { ApiClient } from "./api-client";
 import type {
+  RequirementDecision,
+  TailoringAdminSessionSummary,
+  TailoringAnswerChoice,
+  TailoringCostReport,
+  TailoringPreferences,
+  TailoringRefinement,
+  TailoringSessionView,
+  TailoringSuggestionDecisionPayload,
+  TailoringSuggestionDecisionResponse,
+  TailoringTaskRunResponse
+} from "./tailoring-types";
+import type {
   JobStatus,
   CvAiBlockVersionsResponse,
   CvAiHistoryResponse,
@@ -843,6 +855,99 @@ export class BackendApi {
 
   createBillingPortal(payload: BillingPortalInput = {}): Promise<CreatePortalResponseData> {
     return this.client.post<CreatePortalResponseData, BillingPortalInput>("/billing/portal", payload);
+  }
+
+  // Tailoring v2 sessions (in-editor tailoring).
+  createTailoringSession(payload: {
+    cv_id: string;
+    job: { job_title: string; company_name?: string | null; job_description: string };
+  }): Promise<TailoringSessionView> {
+    return this.client.post<TailoringSessionView, typeof payload>("/ai/tailoring-sessions", payload);
+  }
+
+  getActiveTailoringSession(tailoredCvId: string): Promise<{ session: TailoringSessionView | null }> {
+    return this.client.get<{ session: TailoringSessionView | null }>(
+      `/ai/tailoring-sessions/active?tailored_cv_id=${encodeURIComponent(tailoredCvId)}`
+    );
+  }
+
+  getTailoringSession(sessionId: string): Promise<TailoringSessionView> {
+    return this.client.get<TailoringSessionView>(`/ai/tailoring-sessions/${sessionId}`);
+  }
+
+  analyzeTailoringSession(sessionId: string): Promise<TailoringSessionView> {
+    return this.client.post<TailoringSessionView>(`/ai/tailoring-sessions/${sessionId}/analyze`, {});
+  }
+
+  setTailoringRequirementDecision(
+    sessionId: string,
+    requirementId: string,
+    decision: RequirementDecision
+  ): Promise<TailoringSessionView> {
+    return this.client.put<TailoringSessionView, { decision: RequirementDecision }>(
+      `/ai/tailoring-sessions/${sessionId}/requirements/${encodeURIComponent(requirementId)}`,
+      { decision }
+    );
+  }
+
+  answerTailoringQuestion(
+    sessionId: string,
+    questionId: string,
+    payload: { answer: TailoringAnswerChoice | null; detail?: string | null; add_to_main?: boolean }
+  ): Promise<TailoringSessionView> {
+    return this.client.put<TailoringSessionView, typeof payload>(
+      `/ai/tailoring-sessions/${sessionId}/answers/${encodeURIComponent(questionId)}`,
+      payload
+    );
+  }
+
+  completeTailoringQuestions(sessionId: string): Promise<TailoringSessionView> {
+    return this.client.post<TailoringSessionView>(`/ai/tailoring-sessions/${sessionId}/questions/complete`, {});
+  }
+
+  runTailoringTask(
+    sessionId: string,
+    taskId: string,
+    payload: { regenerate?: boolean; refinement?: TailoringRefinement | null } = {}
+  ): Promise<TailoringTaskRunResponse> {
+    return this.client.post<TailoringTaskRunResponse, typeof payload>(
+      `/ai/tailoring-sessions/${sessionId}/tasks/${taskId}/run`,
+      payload
+    );
+  }
+
+  decideTailoringSuggestion(
+    sessionId: string,
+    suggestionId: string,
+    payload: { decision: "accept" | "reject" | "undo"; edited_value?: string | string[] | null }
+  ): Promise<TailoringSuggestionDecisionResponse> {
+    return this.client
+      .post<TailoringSuggestionDecisionPayload, typeof payload>(
+        `/ai/tailoring-sessions/${sessionId}/suggestions/${suggestionId}/decision`,
+        payload
+      )
+      .then((response) => ({
+        ...response,
+        master_cv_updated: response.master_cv_updated === true,
+        master_cv_reverted: response.master_cv_reverted === true,
+        master_cv_revert_skipped: response.master_cv_revert_skipped === true
+      }));
+  }
+
+  finishTailoringSession(sessionId: string): Promise<TailoringSessionView> {
+    return this.client.post<TailoringSessionView>(`/ai/tailoring-sessions/${sessionId}/finish`, {});
+  }
+
+  updateTailoringPreferences(payload: TailoringPreferences): Promise<TailoringPreferences> {
+    return this.client.patch<TailoringPreferences, TailoringPreferences>("/ai/tailoring-preferences", payload);
+  }
+
+  listAdminTailoringSessions(limit = 50): Promise<{ sessions: TailoringAdminSessionSummary[] }> {
+    return this.client.get<{ sessions: TailoringAdminSessionSummary[] }>(`/admin/tailoring-sessions?limit=${limit}`);
+  }
+
+  getAdminTailoringCost(sessionId: string): Promise<TailoringCostReport> {
+    return this.client.get<TailoringCostReport>(`/admin/tailoring-sessions/${sessionId}/cost`);
   }
 }
 

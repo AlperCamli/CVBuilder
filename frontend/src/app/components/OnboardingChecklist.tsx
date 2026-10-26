@@ -117,7 +117,8 @@ export function OnboardingChecklist() {
 
   const isAtStepTarget = (stepId: OnboardingStepId): boolean => {
     if (stepId === "customize" || stepId === "job_details") {
-      return location.pathname.startsWith("/app/tailor");
+      // Tailoring opens inside the editor (?tailor=1); /app/tailor redirects there.
+      return location.pathname.startsWith("/app/tailor") || new URLSearchParams(location.search).get("tailor") === "1";
     }
     if (stepId === "template" || stepId === "layout" || stepId === "export") {
       // The tailoring flow already ends in the editor — offering a "go there"

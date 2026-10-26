@@ -5,7 +5,9 @@ import { asyncHandler } from "../shared/utils/async-handler";
 import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports.routes";
 import type { Router } from "express";
 import type { AppConfig } from "../shared/config/env";
-import { createAiRateLimiter } from "../shared/middleware/rate-limit";
+import { createAiRateLimiter, createTailoringRateLimiter } from "../shared/middleware/rate-limit";
+import { TailoringController } from "../modules/tailoring/tailoring.controller";
+import { createTailoringRouter } from "../modules/tailoring/tailoring.routes";
 import { createAuthMiddleware } from "../modules/auth/auth.middleware";
 import { AiController } from "../modules/ai/ai.controller";
 import { createAiRouter } from "../modules/ai/ai.routes";
@@ -101,6 +103,16 @@ export const registerV1Routes = (
   router.use(createCoverLettersRouter(coverLettersController, authMiddleware));
   router.use(createCvRevisionsRouter(cvRevisionsController, authMiddleware));
   router.use(createAiRouter(aiController, authMiddleware, aiRateLimiter));
+  if (services.tailoringService) {
+    router.use(
+      createTailoringRouter(
+        new TailoringController(services.tailoringService),
+        services.tailoringService,
+        authMiddleware,
+        createTailoringRateLimiter(config)
+      )
+    );
+  }
   router.use(createTemplatesRouter(templatesController, authMiddleware));
   router.use(createRenderingRouter(renderingController, authMiddleware));
   router.use(createCvPhotosRouter(cvPhotosController, authMiddleware));

@@ -13,7 +13,7 @@ export const normalizeDocumentLanguage = (value: unknown): string | null => {
   return code.length <= 16 && /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/.test(code) ? code : null;
 };
 
-const documentLanguageName = (code: string): string => {
+export const documentLanguageName = (code: string): string => {
   try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; }
   catch { return code; }
 };
