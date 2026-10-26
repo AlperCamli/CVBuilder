@@ -92,6 +92,7 @@ export type PhotoPosition = "left" | "center" | "right";
 export interface PresentationItem {
   id: string;
   title: string | null;
+  secondary_title?: string | null;
   subtitle: string | null;
   date_range: string | null;
   location: string | null;
@@ -974,6 +975,7 @@ const narrativeParts = (
 
 const isEmptyPresentationItem = (item: PresentationItem): boolean =>
   !item.title &&
+  !item.secondary_title &&
   !item.subtitle &&
   !item.date_range &&
   !item.location &&
@@ -1263,6 +1265,16 @@ const medicalBlockToPresentationItem = (
   return null;
 };
 
+// Prefer the named title/organization fields over the generic derivation, whose
+// fallback can mistake a date or URL for the organization when field order varies.
+const TITLE_ORGANIZATION_FIELDS: Record<string, { title: string[]; organization: string[] }> = {
+  experience: { title: ["role", "job_title", "position", "title"], organization: ["company", "organization", "institution"] },
+  volunteer: { title: ["role", "position", "title"], organization: ["organization", "organisation", "company", "institution"] },
+  certifications: { title: ["name", "title", "certification", "certificate"], organization: ["issuer", "issuing_organization", "organization", "institution", "provider"] },
+  courses: { title: ["name", "title", "course"], organization: ["provider", "institution", "organization", "issuer"] },
+  projects: { title: ["title", "name", "project"], organization: ["institution", "organization", "company", "client"] }
+};
+
 const blockToPresentationItem = (sectionType: string, block: RenderingBlock): PresentationItem | null => {
   if (block.visibility !== "visible") {
     return null;
@@ -1275,8 +1287,11 @@ const blockToPresentationItem = (sectionType: string, block: RenderingBlock): Pr
     return medicalItem;
   }
 
-  const headline = normalizeLine(block.derived.headline);
-  let subheadline = normalizeLine(block.derived.subheadline);
+  const pairedFields = Object.hasOwn(TITLE_ORGANIZATION_FIELDS, sectionType) ? TITLE_ORGANIZATION_FIELDS[sectionType] : undefined;
+  const explicitTitle = pairedFields ? textByKey(block, pairedFields.title) : null;
+  const explicitOrganization = pairedFields ? textByKey(block, pairedFields.organization) : null;
+  const headline = explicitTitle ?? normalizeLine(block.derived.headline);
+  let subheadline = explicitOrganization ?? normalizeLine(block.derived.subheadline);
   const dateRange = normalizeLine(block.derived.date_range);
   const location = normalizeLine(block.derived.location);
   const metadataLine = buildMetadataLine(dateRange, location);
@@ -1573,11 +1588,12 @@ const mapSection = (
             ? `${startDate} - ${endDate}`
             : startDate || endDate || normalizeLine(block.derived.date_range);
 
-        const titleValue = degree || institution || normalizeLine(block.derived.headline);
-        const subtitleParts = [institution, fieldOfStudy]
-          .filter((value): value is string => Boolean(value))
-          .filter((value, index, values) => values.findIndex((item) => collapseForCompare(item) === collapseForCompare(value)) === index)
-          .filter((value) => !titleValue || collapseForCompare(value) !== collapseForCompare(titleValue));
+        const studyTitle = degree && fieldOfStudy && !collapseForCompare(degree).includes(collapseForCompare(fieldOfStudy))
+          ? `${degree}, ${fieldOfStudy}`
+          : degree || fieldOfStudy;
+        const titleValue = studyTitle || institution || normalizeLine(block.derived.headline);
+        const subtitle = institution && (!titleValue || collapseForCompare(institution) !== collapseForCompare(titleValue))
+          ? institution : null;
 
         const bodyParts: string[] = [];
         if (gpa) {
@@ -1592,7 +1608,7 @@ const mapSection = (
         const item: PresentationItem = {
           id: block.id,
           title: titleValue,
-          subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : null,
+          subtitle,
           date_range: dateRange,
           location: null,
           metadata_line: metadataLine,
@@ -1693,16 +1709,14 @@ const mapSection = (
         const email = textByKey(block, ["email"]);
         const phone = textByKey(block, ["phone", "telephone", "mobile"]);
 
-        const subtitleParts = [jobTitle, organization]
-          .filter((value): value is string => Boolean(value))
-          .filter((value, index, values) => values.findIndex((item) => collapseForCompare(item) === collapseForCompare(value)) === index);
-
+        const titleValue = name || jobTitle || organization || normalizeLine(block.derived.headline);
         const bodyParts = [email, phone].filter((value): value is string => Boolean(value));
 
         const item: PresentationItem = {
           id: block.id,
-          title: name || normalizeLine(block.derived.headline),
-          subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : null,
+          title: titleValue,
+          secondary_title: jobTitle && (!titleValue || collapseForCompare(jobTitle) !== collapseForCompare(titleValue)) ? jobTitle : null,
+          subtitle: organization && [titleValue, jobTitle].every(value => !value || collapseForCompare(organization) !== collapseForCompare(value)) ? organization : null,
           date_range: null,
           location: null,
           metadata_line: null,
@@ -1710,7 +1724,7 @@ const mapSection = (
           bullets: []
         };
 
-        if (!item.title && !item.subtitle && !item.body) {
+        if (!item.title && !item.secondary_title && !item.subtitle && !item.body) {
           return null;
         }
 

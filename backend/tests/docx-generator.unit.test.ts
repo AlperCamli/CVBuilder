@@ -22,6 +22,22 @@ describe("docx generator", () => {
     expect(fonts).toContain("Latin Modern Roman Italic");
   });
 
+  it("keeps reference names and roles bold with the organization on its own line", async () => {
+    const presentation = signaturePresentation("latex-academic-serif");
+    presentation.sections = [{ id: "references", type: "references", title: "References", inline_text: null, items: [{
+      id: "ref", title: "Jane Doe", secondary_title: "Research Director", subtitle: "Example University",
+      date_range: null, location: null, metadata_line: null, body: "jane@example.com", bullets: []
+    }] }];
+    const model = mapPresentationToExportDocument(presentation);
+    expect(model.sections[0].blocks[0].secondary_headline).toBe("Research Director");
+    const zip = await JSZip.loadAsync(await generateDocxDocument(model));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    for (const name of ["Jane Doe", "Research Director"]) {
+      expect(xml.split("</w:r>").find(run => run.includes(name))).toContain("<w:b/>");
+    }
+    expect(xml).toMatch(/Research Director[\s\S]*<\/w:p><w:p>[\s\S]*Example University/);
+  });
+
   it.each(["en", "tr"])("generates a %s DOCX with embedded fonts and correctly cased Unicode headings", async language => {
     const widePngDataUri =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAARSURBVAiZY/jPwPCfgeH/fwAP+QP9dhJt3wAAAABJRU5ErkJggg==";

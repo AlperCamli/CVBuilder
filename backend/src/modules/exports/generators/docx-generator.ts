@@ -423,12 +423,12 @@ export const generateDocxDocument = async (documentModel: ExportDocumentModel): 
         );
       }
 
-      if (block.headline) {
+      for (const headline of [block.headline, block.secondary_headline].filter((text): text is string => Boolean(text))) {
         body.push(
           new Paragraph({
             children: [
               new TextRun({
-                text: block.headline,
+                text: headline,
                 font: boldDocumentFont,
                 bold: true,
                 size: bodySize + 1

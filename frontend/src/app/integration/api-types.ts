@@ -425,6 +425,7 @@ export interface PresentationHeader {
 export interface PresentationItem {
   id: string;
   title: string | null;
+  secondary_title?: string | null;
   subtitle: string | null;
   date_range: string | null;
   location: string | null;

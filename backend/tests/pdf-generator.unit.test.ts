@@ -26,6 +26,17 @@ const collectLinkUris = (pdf: PDFDocument): string[] => {
 };
 
 describe("pdf generator", () => {
+  it.each(["latex-academic-serif", "horizon-rail", "ledger-split"])("preserves separate reference names, roles and organizations in %s exports", async slug => {
+    const presentation = signaturePresentation(slug);
+    presentation.sections.push({ id: "references", type: "references", title: "References", inline_text: null, items: [{
+      id: "ref", title: "Jane Doe", secondary_title: "Research Director", subtitle: "Example University",
+      date_range: "2024", location: null, metadata_line: "2024", body: "jane@example.com", bullets: []
+    }] });
+    const text = await extractPdfText(await generatePdfDocument(mapPresentationToExportDocument(presentation)));
+    expect(text).toMatch(/Jane Doe[\s\S]*Research Director[\s\S]*Example University/);
+    expect(text).toContain("jane@example.com");
+  });
+
   it("embeds the Academic Serif italic face and preserves date and location text", async () => {
     const presentation = signaturePresentation("latex-academic-serif");
     presentation.sections[1].items[0].metadata_line = "January 2022 – Present • San Francisco, California";

@@ -655,7 +655,7 @@ const buildDefaultItemBlock = (
   trailingMargin: number
 ): BlockShape => {
   const lines: PlacedLine[] = [];
-  const hasInlineMeta = Boolean(item.metadata_line && (item.headline || item.subheadline));
+  const hasInlineMeta = Boolean(item.metadata_line && (item.headline || item.secondary_headline || item.subheadline));
   const metaFont = style.academicEntryStyle ? style.fonts.italic : style.fonts.regular;
   const metaWidth = hasInlineMeta
     ? Math.min(width * 0.42, Math.max(...item.metadata_line!.split("\n").map(line =>
@@ -671,8 +671,8 @@ const buildDefaultItemBlock = (
   const bulletLH = style.bulletSize * 1.5;
 
   let leftY = 0;
-  if (item.headline) {
-    leftY += appendTextLines(lines, item.headline, {
+  for (const headline of [item.headline, item.secondary_headline].filter((text): text is string => Boolean(text))) {
+    leftY += appendTextLines(lines, headline, {
       font: style.fonts.bold,
       fontWeight: "bold",
       size: style.itemTitleSize,
@@ -798,8 +798,8 @@ const buildTimelineItemBlock = (
   }
 
   let contentY = 0;
-  if (item.headline) {
-    contentY += appendTextLines(lines, item.headline, {
+  for (const headline of [item.headline, item.secondary_headline].filter((text): text is string => Boolean(text))) {
+    contentY += appendTextLines(lines, headline, {
       font: style.fonts.bold,
       fontWeight: "bold",
       size: style.itemTitleSize,

@@ -202,6 +202,49 @@ describe("rendering presentation mapper", () => {
     expect(item.metadata_line).toContain("07/2025");
   });
 
+  it.each(standardModule.templateSlugs)("separates education and other title/organization entries for %s", slug => {
+    const cases = [
+      { type: "education", fields: { institution: "Example University", degree: "BSc", field_of_study: "Computer Science" }, title: "BSc, Computer Science", organization: "Example University" },
+      { type: "volunteer", fields: { organization: "Community Foundation", role: "Volunteer Coordinator" }, title: "Volunteer Coordinator", organization: "Community Foundation" },
+      { type: "certifications", fields: { date: "2024", issuer: "Certification Board", name: "Professional Certificate" }, title: "Professional Certificate", organization: "Certification Board" },
+      { type: "courses", fields: { date: "2024", provider: "Training Institute", name: "Leadership Course" }, title: "Leadership Course", organization: "Training Institute" },
+      { type: "projects", fields: { institution: "Research Lab", title: "Open Data Platform" }, title: "Open Data Platform", organization: "Research Lab" },
+      { type: "awards", fields: { issuer: "Engineering Society", title: "Research Award" }, title: "Research Award", organization: "Engineering Society" },
+      { type: "publications", fields: { publisher: "Science Journal", title: "Accessible Systems" }, title: "Accessible Systems", organization: "Science Journal" },
+      { type: "references", fields: { organization: "Example University", name: "Jane Doe", job_title: "Research Director", email: "jane@example.com" }, title: "Jane Doe", organization: "Example University" }
+    ];
+    const payload = renderingPayload();
+    payload.template.template!.slug = slug;
+    payload.sections = cases.map((entry, index) => ({
+      id: entry.type, type: entry.type, title: entry.type, order: index, meta: {}, plain_text: "",
+      blocks: [block({
+        id: entry.type, type: entry.type,
+        normalized_fields: Object.fromEntries(Object.entries(entry.fields).map(([key, value]) => [key, field(value, value)])),
+        derived: { headline: `${entry.title}, ${entry.organization}`, subheadline: "2024", date_range: "2020 - 2024", location: null, bullets: [] }
+      })]
+    }));
+    const presentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+    for (const entry of cases) {
+      const item = presentation.sections.find(section => section.type === entry.type)!.items[0];
+      expect(item.title, entry.type).toBe(entry.title);
+      expect(item.subtitle, entry.type).toBe(entry.organization);
+      if (entry.type === "references") {
+        expect(item.secondary_title).toBe("Research Director");
+        expect(item.body).toBe("jane@example.com");
+      }
+    }
+  });
+
+  it("keeps education subjects without repeating a subject already present in the degree", () => {
+    const payload = renderingPayload();
+    const education = payload.sections.find(section => section.type === "education")!.blocks[0];
+    education.normalized_fields.degree = field("BSc Computer Science", "BSc Computer Science");
+    education.normalized_fields.field_of_study = field("Computer Science", "Computer Science");
+    const item = mapRenderingPayloadToPresentation(payload, {}, null).sections.find(section => section.type === "education")!.items[0];
+    expect(item.title).toBe("BSc Computer Science");
+    expect(item.subtitle).toBe("Sabancı University");
+  });
+
   it("maps section titles, deduplicates inline lists, and preserves social/photo metadata", () => {
     const metadata: Record<string, CvJsonValue> = {
       full_name: "Alper Çamlı",
@@ -743,9 +786,21 @@ describe("rendering presentation mapper", () => {
     const reference = referencesSection?.items[0];
 
     expect(reference?.title).toBe("Jane Doe");
-    expect(reference?.subtitle).toBe("Lead Engineer • Acme Corp");
+    expect(reference?.secondary_title).toBe("Lead Engineer");
+    expect(reference?.subtitle).toBe("Acme Corp");
     expect(reference?.metadata_line).toBeNull();
     expect(reference?.body).toBe("jane@acme.com\n+1 202 555 0101");
+  });
+
+  it("does not repeat a reference role when the name is missing", () => {
+    const payload = renderingPayload();
+    payload.sections = [{ id: "references", type: "references", title: "References", order: 0, meta: {}, plain_text: "", blocks: [block({
+      id: "reference", type: "reference", normalized_fields: { job_title: field("Research Director", "Research Director"), organization: field("Example University", "Example University") }
+    })] }];
+    const item = mapRenderingPayloadToPresentation(payload, {}, null).sections[0].items[0];
+    expect(item.title).toBe("Research Director");
+    expect(item.secondary_title).toBeNull();
+    expect(item.subtitle).toBe("Example University");
   });
 
   it("maps medical clinical skills into competency-aware presentation items", () => {

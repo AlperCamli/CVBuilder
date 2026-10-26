@@ -203,11 +203,11 @@ function DefaultItemBody({ item, colors }: { item: PresentationItem; colors: Pre
     <div>
       <div style={{ display: "grid", gridTemplateColumns: item.metadata_line || item.date_range ? "minmax(0, 1fr) fit-content(42%)" : "minmax(0, 1fr)", gap: scaledPx(12), overflowWrap: "anywhere" }}>
         <div style={{ minWidth: 0 }}>
-          {item.title ? (
-            <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
-              {renderPreviewText(item.title)}
+          {[item.title, item.secondary_title].filter((title): title is string => Boolean(title)).map((title, index) => (
+            <h3 key={index} style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
+              {renderPreviewText(title)}
             </h3>
-          ) : null}
+          ))}
           {item.subtitle ? (
             <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body, fontStyle: "var(--cv-entry-font-style)" as CSSProperties["fontStyle"] }}>{renderPreviewText(item.subtitle)}</p>
           ) : null}
@@ -251,11 +251,11 @@ function TimelineItemBody({ item, colors }: { item: PresentationItem; colors: Pr
             background: `${colors.accent}55`
           }}
         />
-        {item.title ? (
-          <h3 style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
-            {renderPreviewText(item.title)}
+        {[item.title, item.secondary_title].filter((title): title is string => Boolean(title)).map((title, index) => (
+          <h3 key={index} style={{ fontSize: scaledPx(13), fontWeight: 600, color: colors.heading }}>
+            {renderPreviewText(title)}
           </h3>
-        ) : null}
+        ))}
         {item.subtitle ? (
           <p style={{ fontSize: "calc(var(--cv-body-size, 12px) * var(--cv-font-scale))", color: colors.body, fontStyle: "var(--cv-entry-font-style)" as CSSProperties["fontStyle"] }}>{renderPreviewText(item.subtitle)}</p>
         ) : null}

@@ -63,6 +63,7 @@ export interface ExportDocumentSocialLink {
 
 export interface ExportDocumentBlock {
   headline: string | null;
+  secondary_headline?: string | null;
   subheadline: string | null;
   metadata_line: string | null;
   bullets: string[];
@@ -102,6 +103,7 @@ const normalizeLine = (value: string | null | undefined): string | null => {
 const mapItemToBlock = (item: PresentationItem): ExportDocumentBlock => {
   return {
     headline: normalizeLine(item.title),
+    secondary_headline: normalizeLine(item.secondary_title),
     subheadline: normalizeLine(item.subtitle),
     metadata_line: normalizeLine(item.metadata_line),
     bullets: item.bullets.map((bullet) => bullet.trim()).filter((bullet) => bullet.length > 0),
@@ -172,6 +174,7 @@ export const mapPresentationToExportDocument = (
       blocks: section.items.map((item) => mapItemToBlock(item)).filter((block) => {
         return (
           block.headline !== null ||
+          Boolean(block.secondary_headline) ||
           block.subheadline !== null ||
           block.metadata_line !== null ||
           block.bullets.length > 0 ||
