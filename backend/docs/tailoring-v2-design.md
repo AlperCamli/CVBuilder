@@ -1,7 +1,8 @@
 # CV Tailoring v2 — Design
 
-> Status: **Implemented** (2026-10-27). Needs the migration
-> `20261027120000_tailoring_v2_sessions.sql` applied and `ADMIN_EMAILS` /
+> Status: **Implemented** (2026-10-27). Needs the migrations
+> `20261027120000_tailoring_v2_sessions.sql` and
+> `20261028120000_tailoring_task_rerun_for_answer.sql` applied and `ADMIN_EMAILS` /
 > `AI_MODEL_PRICING_JSON` configured before it works against a real database.
 > Legacy page-based flow is still reachable at `/app/tailor-legacy/:id`; `/app/tailor/:id`
 > now opens the editor in tailoring mode (see §9).
@@ -56,6 +57,45 @@
 >   the session, which a trigger archives and scrubs (snapshot, answers, analysis, cards,
 >   task briefs; only job title/company remain). Its `ai_runs` stay, with their payloads,
 >   like legacy runs. Account erasure still deletes everything (sessions before CVs).
+>
+> ### Follow-up after the first real-data test (2026-10-27)
+>
+> - **Block classification by section + field shape.** Real CVs use many block types per
+>   section (`experience/position`, `education/degree`, `projects/academic_project`, ...),
+>   not `*_item`. `buildCompactCv` now treats every non-header/reference/language block as
+>   an editable **item** when it has a non-empty string narrative field (first of
+>   `description`, `summary`, `details`, `responsibilities`, `highlights`, the renderer's
+>   body order) or an empty `description` string; narrative kept only in arrays
+>   (`bullets`, `description: [...]`) stays read-only context. Title/subtitle come from
+>   role/job_title/title/position/name or degree + field of study, and company/employer/
+>   organization/institution/issuer/...; dates are never titles. Summary and skills are
+>   recognised by section type; the rewrite writes back to the block's own field
+>   (`suggested.field` can be `summary`, `details`, `content`, `items`, ...). Skills lists
+>   are rewritten only when array-backed (`skills` or `items`); a skills section that is
+>   text-only or one-skill-per-block gets no skills task (no duplicate section).
+> - **Answers reach the rewrite.** The block prompt (v2-3) requires every confirmed fact
+>   to be reflected and a metric answer's exact figure to appear in a line. The number
+>   guard accepts equivalent forms of a source number ("1.5K" = "1,500", Turkish "1.500"
+>   = "1500", "%30" = "30 %", "2M" = "2 million"); other values are still rejected.
+> - **Rewrite after answers.** Answering (or changing) a question re-queues every task
+>   whose input includes it (its `depends_on_question_ids`, the block task of its target,
+>   the summary for gap questions without a target block or aimed at the summary, skills
+>   for every gap question): finished tasks go back to `ready` with `rerun_for_answer =
+>   true` (column added by `20261028120000_...`), running ones are re-queued when they
+>   finish. A `reviewing`/`ready` session moves to `generating` while they run and then
+>   back to `reviewing`, or to `ready` when it was finished before (`finished_at` set).
+>   Pending cards are replaced once the new ones are saved; applied cards stay applied.
+> - **Tailoring review removed.** `finish` and the legacy draft flows no longer compute
+>   `reviewTailoring`; `tailoring_review` left the API (the DB column stays, unused).
+> - **Refine with AI.** `POST /ai/tailoring-sessions/:sessionId/blocks/:blockId/refine`
+>   with `{ refinement?, instruction? }` (at least one) runs the block's task (creating one
+>   for an editable block the analysis skipped) as a regenerate and returns the normal
+>   task-run response. `runTask` accepts the same `refinement`
+>   (`shorter | more_impact | more_keywords | more_professional | improve`) and
+>   `instruction` (free text, max 500 chars) — sent to the model as `candidate_request`,
+>   which the prompts say never overrides the truth/language rules. Allowed any time
+>   after the analysis (409 before; 404 for a block that is not editable). Cost report
+>   steps: `(refine)` for instruction runs, `(quick fix)` for preset-only runs.
 >
 > The remainder of this document is the design as agreed before implementation.
 

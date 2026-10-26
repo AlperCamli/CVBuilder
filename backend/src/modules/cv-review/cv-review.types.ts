@@ -39,15 +39,3 @@ export interface CvReview {
   missing_keywords: string[];
   limitations: string[];
 }
-
-export interface TailoringReview {
-  version: "cv-review-v1";
-  before: CvReview;
-  after: CvReview;
-  score_change: number | null;
-  changes: Array<{ dimension: ReviewDimensionId; label: string; before: number; after: number; reason: string }>;
-  added_keywords: string[];
-  removed_keywords: string[];
-  changed_sections: string[];
-  summary: string;
-}

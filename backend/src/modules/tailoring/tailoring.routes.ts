@@ -9,9 +9,11 @@ import {
   adminSessionsQuerySchema,
   answerQuestionSchema,
   createTailoringSessionSchema,
+  refineBlockSchema,
   requirementDecisionSchema,
   runTaskSchema,
   suggestionDecisionSchema,
+  tailoringBlockParamsSchema,
   tailoringPreferencesSchema,
   tailoringQuestionParamsSchema,
   tailoringRequirementParamsSchema,
@@ -92,6 +94,12 @@ export const createTailoringRouter = (
     ...inference,
     validate({ params: tailoringTaskParamsSchema, body: runTaskSchema }),
     controller.runTask
+  );
+  router.post(
+    "/ai/tailoring-sessions/:sessionId/blocks/:blockId/refine",
+    ...inference,
+    validate({ params: tailoringBlockParamsSchema, body: refineBlockSchema }),
+    controller.refineBlock
   );
   router.post(
     "/ai/tailoring-sessions/:sessionId/suggestions/:suggestionId/decision",

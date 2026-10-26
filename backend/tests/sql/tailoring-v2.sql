@@ -18,6 +18,9 @@ begin
     values(u,t1,j,s1,'tailoring_block','mock','test','pending','{}',1200,0.0015) returning id into run1;
   update public.tailoring_sessions set analysis_run_id=run1 where id=s1;
   insert into public.tailoring_session_tasks(session_id,user_id,kind,block_id,status,brief) values(s1,u,'block','b1','done','{"focus":"Private"}') returning id into task;
+  if (select rerun_for_answer from public.tailoring_session_tasks where id=task) is distinct from false then
+    raise exception 'Tailoring task rerun_for_answer must default to false';
+  end if;
   insert into public.ai_suggestions(user_id,ai_run_id,tailored_cv_id,tailoring_session_id,tailoring_task_id,kind,action_type,suggested_content)
     values(u,run1,t1,s1,task,'rewrite','tailor','{"value":"Private rewrite"}');
   update public.tailored_cvs set is_deleted=true where id=t1;

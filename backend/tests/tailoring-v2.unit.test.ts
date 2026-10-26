@@ -12,8 +12,15 @@ import type { AiProvider, AiProviderRequest } from "../src/modules/ai/provider/a
 import { MockAiProvider } from "../src/modules/ai/provider/mock-ai-provider";
 import { buildStrictOpenAiResponseJsonSchema } from "../src/modules/ai/provider/openai-ai-provider";
 import { tailoringSkillsOutputSchema } from "../src/modules/ai/flows/flow-contracts";
-import { AI_FLOW_REGISTRY, TAILORING_LANGUAGE_RULE } from "../src/modules/ai/flows/flow-registry";
-import { buildCompactCv, toAnalysisCvPayload } from "../src/modules/tailoring/tailoring-compact-cv";
+import {
+  AI_FLOW_REGISTRY,
+  TAILORING_CONFIRMED_FACTS_RULE,
+  TAILORING_LANGUAGE_RULE,
+  TAILORING_REFINEMENT_RULE
+} from "../src/modules/ai/flows/flow-registry";
+import { buildCompactCv, isDateLike, toAnalysisCvPayload } from "../src/modules/tailoring/tailoring-compact-cv";
+import { refineBlockSchema, runTaskSchema, tailoringBlockParamsSchema } from "../src/modules/tailoring/tailoring.schemas";
+import { ConflictError, NotFoundError, ValidationError } from "../src/shared/errors/app-error";
 import {
   computeTailoringScore,
   guardGeneratedLines,
@@ -284,7 +291,14 @@ const JOB = {
     "We are hiring a payments engineer to build reliable payment APIs, work with Kafka streaming and mentor teammates across squads."
 };
 
-const createHarness = (options: { language?: string } = {}) => {
+const createHarness = (
+  options: {
+    language?: string;
+    content?: CvContent;
+    // Replaces the mock model's output for matching requests (undefined = use the mock).
+    override?: (request: AiProviderRequest) => Record<string, unknown> | undefined;
+  } = {}
+) => {
   const masters = new Map<string, MasterCvRecord>();
   const tailoredCvs = new Map<string, TailoredCvRecord>();
   const jobs = new Map<string, JobRecord>();
@@ -300,7 +314,7 @@ const createHarness = (options: { language?: string } = {}) => {
     language: options.language ?? "en",
     template_id: null,
     module_type: "standard",
-    current_content: cvContent(),
+    current_content: options.content ? structuredClone(options.content) : cvContent(),
     summary_text: null,
     source_type: "scratch",
     is_deleted: false,
@@ -437,8 +451,10 @@ const createHarness = (options: { language?: string } = {}) => {
     async generate(request) {
       requests.push(request);
       const result = await mock.generate(request);
+      const overridden = options.override?.(request);
       return {
         ...result,
+        ...(overridden ? { output_payload: overridden } : {}),
         model_name: "gpt-6-luna-2026-09-01",
         usage: { input_tokens: 1000, output_tokens: 200, total_tokens: 1200, cached_input_tokens: 400, reasoning_tokens: 50 }
       };
@@ -594,7 +610,9 @@ describe("TailoringService", () => {
 
     const finished = await harness.service.finish(session, created.session.id);
     expect(finished.session.status).toBe("ready");
-    expect(harness.tailoredCvs.get(tailored.id)?.tailoring_review).toBeTruthy();
+    // Finishing no longer computes a tailoring review.
+    expect(harness.tailoredCvs.get(tailored.id)?.ai_generation_status).toBe("completed");
+    expect(harness.tailoredCvs.get(tailored.id)).not.toHaveProperty("tailoring_review");
 
     const report = await harness.service.getCostReport(created.session.id);
     expect(report.totals.run_count).toBe(harness.requests.length);
@@ -723,5 +741,462 @@ describe("TailoringService", () => {
     const other = { ...session, appUser: { ...session.appUser, email: "someone@example.com" } };
     expect(harness.service.isAdmin(session)).toBe(true);
     expect(harness.service.isAdmin(other)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real CV shapes (block types and fields as found in master_cvs)
+// ---------------------------------------------------------------------------
+
+const block = (id: string, type: string, fields: Record<string, unknown>, order = 0) =>
+  ({ id, type, order, visibility: "visible", meta: {}, fields }) as CvContent["sections"][number]["blocks"][number];
+const section = (id: string, type: string, order: number, blocks: CvContent["sections"][number]["blocks"]) =>
+  ({ id, type, title: type, order, meta: {}, blocks }) as CvContent["sections"][number];
+
+const realCv = (): CvContent => ({
+  version: "v1",
+  language: "en",
+  metadata: {},
+  sections: [
+    section("hdr", "header", 0, [block("hdr-1", "profile", { full_name: "Ada", email: "ada@example.com", headline: "Engineer" })]),
+    section("sum", "summary", 1, [block("sum-1", "text", { text: "Data engineer with 3 years of pipeline work." })]),
+    section("exp", "experience", 2, [
+      block("exp-a", "experience", { role: "Data Engineer", company: "Acme", start_date: "Jan 2024", end_date: "", location: "Istanbul", description: "• Built ETL pipelines in Python\n• Maintained dashboards", current_role: true }, 0),
+      block("exp-b", "position", { role: "Analyst", job_title: "Analyst", company: "Beta", employer: "Beta", start_date: "2022", end_date: "2023", description: "Prepared weekly sales reports." }, 1),
+      block("exp-c", "work", { position: "Intern", company: "Gamma", start_date: "2021", end_date: "2021", description: "Cleaned survey data." }, 2),
+      block("exp-d", "entry", { role: "Developer", company: "Delta", dates: "2020", bullets: ["Shipped 4 features"] }, 3),
+      block("exp-e", "text", { role: "Assistant", company: "Epsilon" }, 4)
+    ]),
+    section("edu", "education", 3, [
+      block("edu-a", "education", { field_of_study: "Computer Science", institution: "Sabanci University", start_date: "Sep 2021", end_date: "DEC 2025", description: "Thesis on graph learning.", exchange_program: false, expected_graduation: true }, 0),
+      block("edu-b", "degree", { degree: "BSc", field_of_study: "Mathematics", institution: "METU", end_date: "2020" }, 1),
+      block("edu-c", "education", { degree: "İnşaat Mühendisliği", field_of_study: "İnşaat Mühendisliği", institution: "UWM", summary: "Exchange semester on structures.", start_date: "Şubat 2025", end_date: "Haziran 2025" }, 2)
+    ]),
+    section("prj", "projects", 4, [
+      block("prj-a", "projects", { title: "Apr 2026", subtitle: "AutoBEME", start_date: "Apr 2026", description: "Built an NLP market ensemble." }, 0),
+      block("prj-b", "academic_project", { name: "Graph study", description: ["Analysed 2 networks"] }, 1)
+    ]),
+    section("vol", "volunteer", 5, [
+      block("vol-a", "volunteer", { role: "Mentor", organization: "Code Club", description: "Mentored students weekly.", current_role: true }, 0),
+      block("vol-b", "organization_role", { role: "Lead", organization: "IEEE", description: ["Ran events"] }, 1)
+    ]),
+    section("skl", "skills", 6, [
+      block("skl-a", "skill_group", { category: "Technical", skills: ["Python", "SQL"] }, 0),
+      block("skl-b", "list", { items: ["Airflow"] }, 1),
+      block("skl-c", "skill", { name: "Excel", level: "Advanced" }, 2)
+    ]),
+    section("lang", "languages", 7, [block("lang-a", "language", { language: "English", proficiency: "C1" })]),
+    section("ref", "references", 8, [block("ref-a", "entry", { name: "Bob", email: "bob@example.com", organization: "Acme" })])
+  ]
+});
+
+describe("compact CV with real block types", () => {
+  const byId = () => new Map(buildCompactCv(realCv()).blocks.map((item) => [item.block_id, item]));
+
+  it("classifies narrative blocks by section and field shape, not by *_item block types", () => {
+    const blocks = byId();
+    expect(blocks.get("exp-a")).toMatchObject({ kind: "item", editable_field: "description", title: "Data Engineer", subtitle: "Acme" });
+    expect(blocks.get("exp-b")).toMatchObject({ kind: "item", editable_field: "description", title: "Analyst", subtitle: "Beta" });
+    expect(blocks.get("exp-c")).toMatchObject({ kind: "item", editable_field: "description", title: "Intern", subtitle: "Gamma" });
+    expect(blocks.get("vol-a")).toMatchObject({ kind: "item", title: "Mentor", subtitle: "Code Club" });
+    expect(blocks.get("prj-a")).toMatchObject({ kind: "item", title: "AutoBEME" });
+    // Narrative kept only in arrays, or no narrative at all: read-only context.
+    expect(blocks.get("exp-d")).toMatchObject({ kind: "other", editable_field: null, title: "Developer", text: "Shipped 4 features" });
+    expect(blocks.get("exp-e")).toMatchObject({ kind: "other", editable_field: null, title: "Assistant" });
+    expect(blocks.get("prj-b")).toMatchObject({ kind: "other", editable_field: null });
+    expect(blocks.get("vol-b")).toMatchObject({ kind: "other", editable_field: null });
+  });
+
+  it("titles education by degree and field of study and never by a date", () => {
+    const blocks = byId();
+    expect(blocks.get("edu-a")).toMatchObject({ kind: "item", editable_field: "description", title: "Computer Science", subtitle: "Sabanci University" });
+    expect(blocks.get("edu-b")).toMatchObject({ kind: "other", title: "BSc, Mathematics", subtitle: "METU" });
+    expect(blocks.get("edu-c")).toMatchObject({ kind: "item", editable_field: "summary", title: "İnşaat Mühendisliği", subtitle: "UWM" });
+    for (const info of blocks.values()) {
+      expect(info.title).not.toMatch(/^(DEC 2025|Apr 2026|2020|Haziran 2025)$/);
+    }
+  });
+
+  it("recognises summary and skills by section type and keeps header, contact and references out", () => {
+    const blocks = byId();
+    expect(blocks.get("sum-1")).toMatchObject({ kind: "summary", editable_field: "text" });
+    expect(blocks.get("skl-a")).toMatchObject({ kind: "skills", editable_field: "skills", skills: ["Python", "SQL"] });
+    expect(blocks.get("skl-b")).toMatchObject({ kind: "skills", editable_field: "items", skills: ["Airflow"] });
+    expect(blocks.get("skl-c")).toMatchObject({ kind: "other", editable_field: null, title: "Excel" });
+    expect(blocks.get("lang-a")).toMatchObject({ kind: "other", editable_field: null, title: "English", subtitle: "C1" });
+    expect(blocks.has("hdr-1")).toBe(false);
+    expect(blocks.has("ref-a")).toBe(false);
+    const payload = JSON.stringify(toAnalysisCvPayload(buildCompactCv(realCv())));
+    expect(payload).not.toContain("ada@example.com");
+    expect(payload).not.toContain("bob@example.com");
+
+    const paragraph = realCv();
+    paragraph.sections[1].blocks = [block("sum-p", "paragraph", { content: "Operations lead." })];
+    expect(buildCompactCv(paragraph).blocks[0]).toMatchObject({ kind: "summary", editable_field: "content", text: "Operations lead." });
+  });
+
+  it("keeps the model's briefs and metric targets for real experience blocks and plans their tasks", () => {
+    const compact = buildCompactCv(realCv());
+    const alias = (id: string) => compact.block_id_to_alias[id];
+    const analysis = normalizeAnalysisOutput(
+      {
+        role_summary: "Data role.",
+        requirements: [{ id: "r1", text: "Pipelines", keywords: ["ETL"], importance: "must", weight: 3, status: "weak", confidence: "high", evidence_block_ids: [alias("exp-a")], reason: "" }],
+        questions: [
+          { id: "q1", kind: "metric", text: "How many pipelines?", requirement_id: null, target_block_id: alias("exp-a") },
+          { id: "q2", kind: "metric", text: "How many reports?", requirement_id: null, target_block_id: alias("exp-b") },
+          { id: "q3", kind: "metric", text: "Read-only?", requirement_id: null, target_block_id: alias("exp-d") }
+        ],
+        block_briefs: [
+          { block_id: alias("exp-a"), requirement_ids: ["r1"], focus: "ETL", terms: ["ETL"], avoid: "" },
+          { block_id: alias("exp-c"), requirement_ids: [], focus: "Data", terms: [], avoid: "" },
+          { block_id: alias("edu-a"), requirement_ids: [], focus: "Thesis", terms: [], avoid: "" },
+          { block_id: alias("exp-d"), requirement_ids: [], focus: "Read-only", terms: [], avoid: "" }
+        ]
+      },
+      compact
+    );
+    expect(analysis.block_briefs.map((brief) => brief.block_id)).toEqual(["exp-a", "exp-c", "edu-a"]);
+    expect(analysis.questions.map((question) => question.target_block_id)).toEqual(["exp-a", "exp-b", null]);
+
+    const tasks = planTailoringTasks(analysis, compact, { session_id: "s", user_id: "u" });
+    expect(tasks.filter((task) => task.kind === "block").map((task) => [task.block_id, task.depends_on_question_ids])).toEqual([
+      ["exp-a", ["q1"]],
+      ["exp-c", []],
+      ["edu-a", []],
+      ["exp-b", ["q2"]]
+    ]);
+    expect(tasks.find((task) => task.kind === "skills")?.block_id).toBe("skl-a");
+  });
+
+  it("does not plan a new skills section when the existing one cannot be rewritten", () => {
+    const content = realCv();
+    content.sections[6].blocks = [block("skl-c", "skill", { name: "Excel", level: "Advanced" })];
+    const compact = buildCompactCv(content);
+    const analysis = normalizeAnalysisOutput({ role_summary: "", requirements: [], questions: [], block_briefs: [] }, compact);
+    expect(planTailoringTasks(analysis, compact, { session_id: "s", user_id: "u" }).map((task) => task.kind)).not.toContain("skills");
+  });
+
+  it("recognises dates in English and Turkish", () => {
+    for (const value of ["DEC 2025", "Apr 2026", "2022/2026", "Sept 2024 – Present", "Haziran 2025", "Feb. 2026", "Present", "Devam ediyor", "12/2020"]) {
+      expect(isDateLike(value), value).toBe(true);
+    }
+    for (const value of ["Data Engineer", "March Networks", "Computer Science", "AutoBEME"]) {
+      expect(isDateLike(value), value).toBe(false);
+    }
+  });
+});
+
+describe("number guard with the candidate's own number formats", () => {
+  const guard = (line: string, source: string) =>
+    guardGeneratedLines([line], { source_texts: [source], forbidden_terms: [] }).lines.length === 1;
+
+  it("accepts equivalent forms of a number from the sources", () => {
+    expect(guard("Onboarded 1,500 merchants", "about 1.5K merchants")).toBe(true);
+    expect(guard("Onboarded 1.5K merchants", "1,500 merchants")).toBe(true);
+    expect(guard("1500 kullanıcıya ulaştı", "1.500 kullanıcı")).toBe(true);
+    expect(guard("Cut costs by 30 %", "30%")).toBe(true);
+    expect(guard("Maliyetleri %30 azalttı", "30%")).toBe(true);
+    expect(guard("Grew revenue to 2 million", "€2M revenue")).toBe(true);
+    expect(guard("Reached 3 bin users", "3000 users")).toBe(true);
+  });
+
+  it("still rejects numbers whose value is not in the sources", () => {
+    expect(guard("Onboarded 2K merchants", "2 merchants")).toBe(false);
+    expect(guard("Cut costs by 45%", "30%")).toBe(false);
+    expect(guard("Onboarded 1,600 merchants", "1.5K merchants")).toBe(false);
+    // A lowercase "m" is a unit, not "million".
+    expect(guard("Laid 5 m of cable", "5000000 cables")).toBe(false);
+    expect(guard("Laid 5 m of cable", "5 m cable runs")).toBe(true);
+    expect(guard("Built 12 dashboards", "Built dashboards")).toBe(false);
+  });
+});
+
+describe("block prompt and confirmed facts", () => {
+  it("requires every confirmed fact and exact metric figures, and bounds candidate requests", () => {
+    const prompt = AI_FLOW_REGISTRY.tailoring_block.system_prompt;
+    expect(prompt).toContain(TAILORING_CONFIRMED_FACTS_RULE);
+    expect(prompt).toContain(TAILORING_REFINEMENT_RULE);
+    expect(TAILORING_CONFIRMED_FACTS_RULE).toMatch(/Reflect every confirmed fact/);
+    expect(TAILORING_CONFIRMED_FACTS_RULE).toMatch(/exact figure/);
+    expect(TAILORING_CONFIRMED_FACTS_RULE).toMatch(/Never invent/);
+    expect(TAILORING_REFINEMENT_RULE).toMatch(/never overrides the truth and language rules/);
+    expect(AI_FLOW_REGISTRY.tailoring_skills.system_prompt).toContain(TAILORING_REFINEMENT_RULE);
+    expect(AI_FLOW_REGISTRY.tailoring_block.prompt_version).toBe("v2-3");
+  });
+});
+
+describe("TailoringService with real CV shapes, answers and refine", () => {
+  const start = async (harness: ReturnType<typeof createHarness>) => {
+    const created = await harness.service.createSession(session, { cv_id: "master-1", job: JOB });
+    const analyzed = await harness.service.analyze(session, created.session.id);
+    return { sessionId: created.session.id, analyzed };
+  };
+  const runReady = async (harness: ReturnType<typeof createHarness>, sessionId: string) => {
+    const view = await harness.service.getSession(session, sessionId);
+    return Promise.all(
+      view.tasks.filter((task) => task.status === "ready").map((task) => harness.service.runTask(session, sessionId, task.id))
+    );
+  };
+
+  it("rewrites real experience blocks and puts a metric answer into the lines, surviving the guard", async () => {
+    // The model writes the candidate's "1.5K" as "1,500": an equivalent figure, kept.
+    const harness = createHarness({
+      content: realCv(),
+      override: (request) => {
+        if (request.flow_type !== "tailoring_block") return undefined;
+        const block = request.input_payload.block as { kind: string; current_text: string };
+        if (block.kind !== "item") return undefined;
+        const facts = request.input_payload.confirmed_facts as Array<{ kind: string; detail: string | null }>;
+        return {
+          changed: true,
+          lines: [
+            "Built ETL pipelines in Python for analytics teams",
+            ...(facts.some((fact) => fact.detail?.includes("1.5K")) ? ["Onboarded 1,500 merchants onto the pipelines"] : []),
+            "Cut processing time by 40%"
+          ],
+          rationale: "Adds the figure you confirmed.",
+          requirement_ids: ["r1"]
+        };
+      }
+    });
+    const { sessionId, analyzed } = await start(harness);
+    const blockTask = analyzed.tasks.find((task) => task.kind === "block" && task.block_id === "exp-a")!;
+    expect(blockTask.status).toBe("waiting");
+    const metric = analyzed.session.analysis!.questions.find((question) => question.kind === "metric")!;
+    expect(metric.target_block_id).toBe("exp-a");
+
+    await harness.service.answerQuestion(session, sessionId, metric.id, { answer: null, detail: "About 1.5K merchants", add_to_main: false });
+    await harness.service.completeQuestions(session, sessionId);
+    const results = await runReady(harness, sessionId);
+    const blockResult = results.find((result) => result.task.id === blockTask.id)!;
+    const value = String(blockResult.suggestions[0].suggested.value);
+    expect(blockResult.suggestions[0].suggested.field).toBe("description");
+    expect(value).toContain("• Onboarded 1,500 merchants onto the pipelines");
+    expect(value).not.toContain("40%");
+    expect(blockResult.suggestions[0].guard_notes).toHaveLength(1);
+
+    const request = harness.requests.find(
+      (item) => item.flow_type === "tailoring_block" && (item.input_payload.block as { title: string }).title === "Data Engineer"
+    )!;
+    expect(request.input_payload.confirmed_facts).toEqual([
+      { kind: "metric", question: metric.text, answer: null, detail: "About 1.5K merchants" }
+    ]);
+  });
+
+  it("accepts a new skills section with the skills the candidate picked", async () => {
+    const content = realCv();
+    content.sections = content.sections.filter((item) => item.type !== "skills");
+    const harness = createHarness({
+      content,
+      override: (request) =>
+        request.flow_type === "tailoring_skills"
+          ? {
+              changed: true,
+              skills: [{ name: "Python", allowed_skill: null }, { name: "ETL", allowed_skill: null }],
+              rationale: "Lists the tools your experience shows.",
+              requirement_ids: []
+            }
+          : undefined
+    });
+    const { sessionId } = await start(harness);
+    await harness.service.completeQuestions(session, sessionId);
+    await runReady(harness, sessionId);
+    const view = await harness.service.getSession(session, sessionId);
+    const card = view.suggestions.find((item) => item.kind === "new_section")!;
+    expect((card.suggested.section as { type: string }).type).toBe("skills");
+
+    const decided = await harness.service.decideSuggestion(session, sessionId, card.id, {
+      decision: "accept",
+      edited_value: ["ETL", "Looker"]
+    });
+    expect(decided.suggestion.status).toBe("applied");
+    expect(decided.suggestion.suggested.value).toEqual(["ETL", "Looker"]);
+    const section = decided.suggestion.suggested.section as { blocks: Array<{ fields: Record<string, unknown> }> };
+    expect(section.blocks[0].fields.skills).toEqual(["ETL", "Looker"]);
+  });
+
+  it("writes the summary into the field the block uses", async () => {
+    const content = realCv();
+    content.sections[1].blocks = [block("sum-p", "paragraph", { content: "Operations lead for data teams." })];
+    const harness = createHarness({ content });
+    const { sessionId, analyzed } = await start(harness);
+    const summaryTask = analyzed.tasks.find((task) => task.kind === "summary")!;
+    const result = await harness.service.runTask(session, sessionId, summaryTask.id);
+    expect(result.suggestions[0]).toMatchObject({ kind: "rewrite", block_id: "sum-p", before: { field: "content", value: "Operations lead for data teams." } });
+    expect(result.suggestions[0].suggested.field).toBe("content");
+  });
+
+  it("re-queues finished tasks when an answer arrives or changes and returns the session to reviewing", async () => {
+    const harness = createHarness();
+    const { sessionId, analyzed } = await start(harness);
+    const blockTask = analyzed.tasks.find((task) => task.kind === "block")!;
+    const metric = analyzed.session.analysis!.questions.find((question) => question.kind === "metric")!;
+
+    // Skip the questions: everything runs without the answers.
+    await harness.service.completeQuestions(session, sessionId);
+    await runReady(harness, sessionId);
+    let view = await harness.service.getSession(session, sessionId);
+    expect(view.session.status).toBe("reviewing");
+    const firstCard = view.suggestions.find((suggestion) => suggestion.task_id === blockTask.id)!;
+    expect(String(firstCard.suggested.value)).not.toContain("Served 12 merchants");
+
+    // The candidate answers afterwards: the block task is re-queued for the answer.
+    view = await harness.service.answerQuestion(session, sessionId, metric.id, { answer: null, detail: "Served 12 merchants", add_to_main: false });
+    expect(view.session.status).toBe("generating");
+    expect(view.tasks.find((task) => task.id === blockTask.id)).toMatchObject({ status: "ready", rerun_for_answer: true });
+    expect(view.tasks.filter((task) => task.rerun_for_answer).map((task) => task.kind)).toEqual(["block"]);
+    // Until it runs, the old card is still there.
+    expect(view.suggestions.map((suggestion) => suggestion.id)).toContain(firstCard.id);
+
+    const [rerun] = await runReady(harness, sessionId);
+    expect(rerun.task).toMatchObject({ id: blockTask.id, status: "done", rerun_for_answer: false });
+    expect(String(rerun.suggestions[0].suggested.value)).toContain("• Served 12 merchants");
+    expect(rerun.session_status).toBe("reviewing");
+    view = await harness.service.getSession(session, sessionId);
+    expect(view.suggestions.map((suggestion) => suggestion.id)).not.toContain(firstCard.id);
+
+    // The same answer again changes nothing.
+    view = await harness.service.answerQuestion(session, sessionId, metric.id, { answer: null, detail: "Served 12 merchants", add_to_main: true });
+    expect(view.tasks.every((task) => !task.rerun_for_answer)).toBe(true);
+    expect(view.session.status).toBe("reviewing");
+  });
+
+  it("keeps applied cards, uses the current text as before, and returns a finished session to ready", async () => {
+    const harness = createHarness();
+    const { sessionId, analyzed } = await start(harness);
+    const blockTask = analyzed.tasks.find((task) => task.kind === "block")!;
+    const gap = analyzed.session.analysis!.questions.find((question) => question.kind === "gap")!;
+    const metric = analyzed.session.analysis!.questions.find((question) => question.kind === "metric")!;
+    await harness.service.completeQuestions(session, sessionId);
+    await runReady(harness, sessionId);
+
+    let view = await harness.service.getSession(session, sessionId);
+    const applied = view.suggestions.find((suggestion) => suggestion.task_id === blockTask.id)!;
+    await harness.service.decideSuggestion(session, sessionId, applied.id, { decision: "accept" });
+    // The editor writes the accepted text; the rerun must start from it.
+    const tailored = harness.tailoredCvs.get(view.session.tailored_cv_id)!;
+    tailored.current_content.sections[2].blocks[0].fields.description = String(applied.suggested.value);
+    await harness.service.finish(session, sessionId);
+
+    // A gap answer re-queues the block it targets and the skills list (it changes their inputs).
+    view = await harness.service.answerQuestion(session, sessionId, gap.id, { answer: "yes", detail: null, add_to_main: false });
+    expect(view.session.status).toBe("generating");
+    expect(view.tasks.filter((task) => task.rerun_for_answer).map((task) => task.kind).sort()).toEqual(["block", "skills"]);
+    await harness.service.answerQuestion(session, sessionId, metric.id, { answer: null, detail: "Served 12 merchants", add_to_main: false });
+
+    const results = await runReady(harness, sessionId);
+    const rerun = results.find((result) => result.task.id === blockTask.id)!;
+    expect(rerun.suggestions.find((suggestion) => suggestion.status === "pending")?.before).toEqual({
+      field: "description",
+      value: String(applied.suggested.value)
+    });
+    view = await harness.service.getSession(session, sessionId);
+    expect(view.suggestions.find((suggestion) => suggestion.id === applied.id)?.status).toBe("applied");
+    expect(view.session.status).toBe("ready");
+  });
+
+  it("re-queues a task that was running when the answer arrived", async () => {
+    const harness = createHarness();
+    const { sessionId, analyzed } = await start(harness);
+    const blockTask = analyzed.tasks.find((task) => task.kind === "block")!;
+    const metric = analyzed.session.analysis!.questions.find((question) => question.kind === "metric")!;
+    await harness.service.completeQuestions(session, sessionId);
+
+    // The answer lands while the block's generation is in flight.
+    const original = harness.repository.createSuggestions.bind(harness.repository);
+    vi.spyOn(harness.repository, "createSuggestions").mockImplementationOnce(async (payloads) => {
+      await harness.service.answerQuestion(session, sessionId, metric.id, { answer: null, detail: "Served 12 merchants", add_to_main: false });
+      return original(payloads);
+    });
+    const first = await harness.service.runTask(session, sessionId, blockTask.id);
+    expect(first.task).toMatchObject({ status: "ready", rerun_for_answer: true });
+
+    const second = await harness.service.runTask(session, sessionId, blockTask.id);
+    expect(second.task).toMatchObject({ status: "done", rerun_for_answer: false });
+    expect(String(second.suggestions[0].suggested.value)).toContain("Served 12 merchants");
+  });
+
+  it("refines a block with a preset or the candidate's request, creating a task for an unplanned block", async () => {
+    const harness = createHarness({ content: realCv() });
+    const { sessionId, analyzed } = await start(harness);
+    // The mock analysis plans at most 3 item blocks; the volunteer block is not among them.
+    expect(analyzed.tasks.some((task) => task.block_id === "vol-a")).toBe(false);
+    await harness.service.completeQuestions(session, sessionId);
+    await runReady(harness, sessionId);
+    await harness.service.finish(session, sessionId);
+
+    const refined = await harness.service.refineBlock(session, sessionId, "vol-a", { instruction: "  Mention mentoring leadership  " });
+    expect(refined.task).toMatchObject({ kind: "block", block_id: "vol-a", section_id: "vol", status: "done" });
+    expect(refined.suggestions).toHaveLength(1);
+    expect(String(refined.suggestions[0].suggested.value)).toContain("refined as requested");
+    expect(refined.session_status).toBe("ready");
+    const request = harness.requests.at(-1)!;
+    expect(request.input_payload.candidate_request).toBe("Mention mentoring leadership");
+
+    // A second refine reuses the task and replaces its pending card.
+    const again = await harness.service.refineBlock(session, sessionId, "vol-a", { refinement: "more_professional" });
+    expect(again.task.id).toBe(refined.task.id);
+    expect(harness.requests.at(-1)!.input_payload.refinement).toMatch(/professional wording/);
+    const view = await harness.service.getSession(session, sessionId);
+    expect(view.suggestions.filter((suggestion) => suggestion.task_id === refined.task.id)).toHaveLength(1);
+
+    // Skills and summary blocks can be refined as well.
+    const skills = await harness.service.refineBlock(session, sessionId, "skl-b", { instruction: "Lead with tools" });
+    expect(skills.task).toMatchObject({ kind: "skills", block_id: "skl-b" });
+    expect(skills.suggestions[0]?.suggested.field).toBe("items");
+    const summary = await harness.service.refineBlock(session, sessionId, "sum-1", { refinement: "improve" });
+    expect(summary.task.kind).toBe("summary");
+    const after = await harness.service.getSession(session, sessionId);
+    expect(after.tasks.filter((task) => task.kind === "summary").map((task) => task.id)).toEqual([summary.task.id]);
+
+    // Cost report labels the runs.
+    const report = await harness.service.getCostReport(sessionId);
+    const steps = report.runs.map((run) => run.step);
+    expect(steps).toContain("Block: Mentor · Code Club (refine)");
+    expect(steps).toContain("Block: Mentor · Code Club (quick fix)");
+    expect(steps).toContain("Skills (refine)");
+    expect(report.by_step.map((step) => step.step)).toEqual(expect.arrayContaining(["Refinements", "Quick fixes"]));
+
+    await expect(harness.service.refineBlock(session, sessionId, "hdr-1", { instruction: "x" })).rejects.toThrow(NotFoundError);
+    await expect(harness.service.refineBlock(session, sessionId, "exp-d", { instruction: "x" })).rejects.toThrow(NotFoundError);
+    await expect(harness.service.refineBlock(session, sessionId, "nope", { instruction: "x" })).rejects.toThrow(NotFoundError);
+    await expect(harness.service.refineBlock(session, sessionId, "vol-a", { instruction: "   " })).rejects.toThrow(ValidationError);
+  });
+
+  it("refuses to refine before the analysis and passes an instruction through runTask", async () => {
+    const harness = createHarness();
+    const created = await harness.service.createSession(session, { cv_id: "master-1", job: JOB });
+    await expect(harness.service.refineBlock(session, created.session.id, "exp-1", { refinement: "shorter" })).rejects.toThrow(ConflictError);
+
+    const analyzed = await harness.service.analyze(session, created.session.id);
+    const summaryTask = analyzed.tasks.find((task) => task.kind === "summary")!;
+    const result = await harness.service.runTask(session, created.session.id, summaryTask.id, { instruction: "Mention payments" });
+    expect(result.suggestions).toHaveLength(1);
+    expect(harness.requests.at(-1)!.input_payload).toMatchObject({ candidate_request: "Mention payments" });
+  });
+});
+
+describe("tailoring request schemas", () => {
+  it("accepts the refine contract and rejects empty or oversized requests", () => {
+    expect(runTaskSchema.parse({ regenerate: true, refinement: "more_professional", instruction: "  tighter  " })).toEqual({
+      regenerate: true,
+      refinement: "more_professional",
+      instruction: "tighter"
+    });
+    expect(runTaskSchema.parse({ refinement: "improve", instruction: "" })).toMatchObject({ instruction: null });
+    expect(() => runTaskSchema.parse({ instruction: "x".repeat(501) })).toThrow();
+    expect(() => runTaskSchema.parse({ refinement: "louder" })).toThrow();
+    expect(refineBlockSchema.parse({ instruction: "Mention Kafka" })).toEqual({ instruction: "Mention Kafka" });
+    expect(() => refineBlockSchema.parse({})).toThrow();
+    expect(() => refineBlockSchema.parse({ refinement: null, instruction: "  " })).toThrow();
+    expect(tailoringBlockParamsSchema.parse({ sessionId: randomUUID(), blockId: "experience-1712345" }).blockId).toBe("experience-1712345");
+    expect(() => tailoringBlockParamsSchema.parse({ sessionId: randomUUID(), blockId: "x".repeat(129) })).toThrow();
+  });
+
+  it("adds the rerun_for_answer column in an additive migration", () => {
+    const sql = readFileSync(join(process.cwd(), "supabase", "migrations", "20261028120000_tailoring_task_rerun_for_answer.sql"), "utf-8");
+    expect(sql).toMatch(/add column if not exists rerun_for_answer boolean not null default false/i);
+    expect(sql).not.toMatch(/drop|delete|update /i);
   });
 });

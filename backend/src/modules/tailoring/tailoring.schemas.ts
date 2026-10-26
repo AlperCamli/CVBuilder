@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TAILORING_INSTRUCTION_MAX_CHARS, TAILORING_REFINEMENTS } from "./tailoring.types";
 
 const uuid = z.string().uuid();
 const shortId = z.string().trim().min(1).max(32);
@@ -12,6 +13,19 @@ export const tailoringSuggestionParamsSchema = z.object({ sessionId: uuid, sugge
 export const tailoringRequirementParamsSchema = z.object({ sessionId: uuid, requirementId: shortId }).strict();
 
 export const tailoringQuestionParamsSchema = z.object({ sessionId: uuid, questionId: shortId }).strict();
+
+// CV block ids are client-generated strings, not necessarily uuids.
+export const tailoringBlockParamsSchema = z.object({ sessionId: uuid, blockId: z.string().trim().min(1).max(128) }).strict();
+
+const refinementSchema = z.enum(TAILORING_REFINEMENTS).nullable().optional();
+// The candidate's own request; blank means none.
+const instructionSchema = z
+  .string()
+  .trim()
+  .max(TAILORING_INSTRUCTION_MAX_CHARS)
+  .nullable()
+  .optional()
+  .transform((value) => (value ? value : null));
 
 export const createTailoringSessionSchema = z
   .object({
@@ -43,10 +57,21 @@ export const answerQuestionSchema = z
 export const runTaskSchema = z
   .object({
     regenerate: z.boolean().optional(),
-    refinement: z.enum(["shorter", "more_impact", "more_keywords"]).nullable().optional()
+    refinement: refinementSchema,
+    instruction: instructionSchema
   })
   .strict()
   .default({});
+
+export const refineBlockSchema = z
+  .object({
+    refinement: refinementSchema,
+    instruction: instructionSchema
+  })
+  .strict()
+  .refine((value) => Boolean(value.refinement || value.instruction), {
+    message: "Choose a refinement or describe what to change."
+  });
 
 export const suggestionDecisionSchema = z
   .object({

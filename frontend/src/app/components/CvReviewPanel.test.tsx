@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CvReviewPanel, TailoringReviewPanel } from "./CvReviewPanel";
-import { reviewCv, reviewTailoring } from "../../../../backend/src/modules/cv-review/cv-review";
+import { CvReviewPanel } from "./CvReviewPanel";
+import { reviewCv } from "../../../../backend/src/modules/cv-review/cv-review";
 import type { CvContent } from "../integration/api-types";
 
 const content: CvContent = { version: "v1", language: "en", metadata: {}, sections: [{
@@ -37,18 +37,5 @@ describe("CV review presentation", () => {
     expect(html).toContain("Measurable achievements");
     expect(html).toContain("Name missing");
     expect(html).toContain("sum of (dimension score × weight)");
-  });
-
-  it("shows a score decrease honestly and labels the generation snapshot", () => {
-    const after = structuredClone(content);
-    after.sections[0].blocks[0].fields.description = "Responsible for internal reporting and maintenance of existing tools.";
-    const review = reviewTailoring(content, after, { job_title: "Developer", job_description: "Python reporting" });
-    const html = renderToStaticMarkup(<TailoringReviewPanel review={review} />);
-    expect(review.score_change).toBeLessThan(0);
-    expect(html).toContain("decreased");
-    expect(html).toContain("Before tailoring");
-    expect(html).toContain("Why the score changed");
-    expect(html).toContain("Later edits are not included");
-    expect(html).toContain("Job terms no longer covered");
   });
 });

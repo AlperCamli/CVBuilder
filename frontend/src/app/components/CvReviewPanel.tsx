@@ -2,7 +2,7 @@ import { reviewText } from "../localization/review-text";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
-import type { CvReview, TailoringReview } from "../integration/api-types";
+import type { CvReview } from "../integration/api-types";
 
 const strengthLabels: Record<string, string> = {
   "Text extraction quality": "Your CV text is clear and readable.",
@@ -119,31 +119,3 @@ export function CvReviewPanel({ review }: { review: CvReview }) {
   );
 }
 
-export function TailoringReviewPanel({ review }: { review: TailoringReview }) {
-  useTranslation();
-  return (
-    <div className="space-y-5 text-sm leading-6" style={{ color: "var(--color-text-primary)" }}>
-      <p>{reviewText(review.summary)}</p>
-      <div className="grid grid-cols-2 gap-3 text-center">
-        {[{ label: "Before tailoring", score: review.before.score }, { label: "After tailoring", score: review.after.score }].map(item => (
-          <div key={item.label} className="rounded-xl p-4" style={{ background: "var(--color-background-secondary)" }}>
-            <p style={{ color: "var(--color-text-secondary)" }}>{t(item.label)}</p>
-            <p className="text-3xl font-medium mt-1">{item.score === null ? t("Unavailable") : `${item.score}/100`}</p>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{t("This comparison was captured when the draft was generated. Both CVs use the same job criteria. Later edits are not included.")}</p>
-      {review.changed_sections.length ? <p><span className="font-medium">{t("Content changed in:")}{" "}</span>{review.changed_sections.map(type => type.replace(/_/g, " ")).join(", ")}{"."}</p> : null}
-      {review.changes.length ? <section aria-label={t("Why the score changed")}>
-        <h3 className="font-medium mb-2">{t("Why the score changed")}</h3>
-        <ul className="space-y-3">{review.changes.map(change => <li key={change.dimension} className="rounded-lg border p-3" style={{ borderColor: "var(--color-border-secondary)" }}>
-          <p className="font-medium">{change.label}{":"}{change.before} {"→"}{change.after}</p>
-          <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>{reviewText(change.reason)}</p>
-        </li>)}</ul>
-      </section> : null}
-      {review.added_keywords.length ? <p><span className="font-medium">{t("New job terms covered:")}{" "}</span>{review.added_keywords.join(", ")}{"."}</p> : null}
-      {review.removed_keywords.length ? <p><span className="font-medium">{t("Job terms no longer covered:")}{" "}</span>{review.removed_keywords.join(", ")}{"."}</p> : null}
-      <CvReviewPanel review={review.after} />
-    </div>
-  );
-}

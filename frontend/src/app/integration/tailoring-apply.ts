@@ -80,6 +80,27 @@ const sectionOf = (suggestion: TailoringSuggestion): CvSection | null => {
   return section && typeof section === "object" && Array.isArray(section.blocks) ? section : null;
 };
 
+// A new skills section accepted with an edited (or stored edited) skill list.
+const withSkillsOverride = (section: CvSection, value: unknown): CvSection => {
+  if (!Array.isArray(value) || section.blocks.length === 0) return section;
+  const [first, ...rest] = section.blocks;
+  const field = Array.isArray(first.fields.skills) ? "skills" : Array.isArray(first.fields.items) ? "items" : null;
+  if (!field) return section;
+  return { ...section, blocks: [{ ...first, fields: { ...first.fields, [field]: value.map((item) => String(item)) } }, ...rest] };
+};
+
+// Skills a "skills" or new skills-section suggestion would write (edited values win).
+export const tailoringSuggestedSkills = (suggestion: TailoringSuggestion): string[] | null => {
+  const list = (value: unknown): string[] => (Array.isArray(value) ? value.map((item) => String(item)) : []);
+  if (suggestion.kind === "skills") return list(suggestion.suggested.value);
+  if (suggestion.kind !== "new_section") return null;
+  const section = sectionOf(suggestion);
+  if (!section || section.type !== "skills") return null;
+  if (Array.isArray(suggestion.suggested.value)) return list(suggestion.suggested.value);
+  const fields = section.blocks[0]?.fields;
+  return list(Array.isArray(fields?.skills) ? fields?.skills : fields?.items);
+};
+
 // Returns the new content, or null when the suggestion's target no longer exists.
 export const applyTailoringSuggestion = (
   content: CvContent,
@@ -108,8 +129,9 @@ export const applyTailoringSuggestion = (
       const sections = sortedSections(content);
       const headerCount = sections.filter(isHeader).length;
       const insertAt = suggestion.suggested.position === "first" ? headerCount : sections.length;
+      const inserted = withSkillsOverride(clone(section), valueOverride ?? suggestion.suggested.value);
       const next = [...sections];
-      next.splice(insertAt, 0, clone(section));
+      next.splice(insertAt, 0, inserted);
       return { ...content, sections: reindex(next) };
     }
     case "reorder":

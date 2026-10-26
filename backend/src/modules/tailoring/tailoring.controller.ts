@@ -72,7 +72,21 @@ export class TailoringController {
       requireSession(request),
       request.params.sessionId,
       request.params.taskId,
-      { regenerate: request.body?.regenerate, refinement: request.body?.refinement ?? null }
+      {
+        regenerate: request.body?.regenerate,
+        refinement: request.body?.refinement ?? null,
+        instruction: request.body?.instruction ?? null
+      }
+    );
+    sendSuccess(response, data);
+  });
+
+  refineBlock = asyncHandler(async (request: Request, response: Response) => {
+    const data = await this.tailoringService.refineBlock(
+      requireSession(request),
+      request.params.sessionId,
+      request.params.blockId,
+      { refinement: request.body?.refinement ?? null, instruction: request.body?.instruction ?? null }
     );
     sendSuccess(response, data);
   });

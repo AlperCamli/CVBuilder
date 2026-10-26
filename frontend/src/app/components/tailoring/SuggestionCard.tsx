@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, History as HistoryIcon, Pencil, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
+import { useId, useState } from "react";
+import { Check, ChevronDown, ChevronUp, History as HistoryIcon, Loader2, MessageSquareText, Pencil, Plus, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
 import { translate as t } from "../../localization/i18n";
 import type { CvContent } from "../../integration/api-types";
 import type {
@@ -7,13 +7,87 @@ import type {
   TailoringRequirement,
   TailoringSuggestion
 } from "../../integration/tailoring-types";
-import { describeBlock, sectionTitle } from "./tailoring-labels";
+import { tailoringSuggestedSkills } from "../../integration/tailoring-apply";
+import { addCustomSkill, buildSkillChoices, selectedSkills, toggleSkillChoice, type SkillChoice } from "./skill-choices";
+import { describeBlock, refinableBlockKind, rewriteDisplay, sectionTitle } from "./tailoring-labels";
 
 const REFINEMENTS: Array<{ id: TailoringRefinement; label: string }> = [
   { id: "shorter", label: "Shorter" },
   { id: "more_impact", label: "More impact" },
-  { id: "more_keywords", label: "More job terms" }
+  { id: "more_keywords", label: "More job terms" },
+  { id: "more_professional", label: "More professional" }
 ];
+
+// Chip selection for a skills card: selected chips are included, "new" marks skills that
+// are not in the CV yet, and Enter in the input adds a custom skill.
+function SkillChipEditor({
+  choices,
+  showNewTags,
+  onChange,
+  onAdd
+}: {
+  choices: SkillChoice[];
+  showNewTags: boolean;
+  onChange: (choices: SkillChoice[]) => void;
+  onAdd: (name: string) => void;
+}) {
+  const [custom, setCustom] = useState("");
+  const hintId = useId();
+  const selectedCount = choices.filter((choice) => choice.selected).length;
+  const add = () => {
+    if (!custom.trim()) return;
+    onAdd(custom);
+    setCustom("");
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Skills to include")} aria-describedby={hintId}>
+        {choices.map((choice) => (
+          <button
+            key={choice.key}
+            type="button"
+            aria-pressed={choice.selected}
+            onClick={() => onChange(toggleSkillChoice(choices, choice.key))}
+            className="tailor-skill-chip"
+          >
+            {choice.selected ? <Check size={11} aria-hidden="true" /> : <Plus size={11} aria-hidden="true" />}
+            <span>{choice.name}</span>
+            {showNewTags && choice.isNew ? <span className="tailor-skill-chip-new">{t("new")}</span> : null}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input
+          value={custom}
+          onChange={(event) => setCustom(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              add();
+            }
+          }}
+          maxLength={80}
+          placeholder={t("Add a skill")}
+          aria-label={t("Add a skill")}
+          className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border"
+          style={{ fontSize: "12px", borderColor: "var(--color-border-secondary)", background: "var(--color-background-primary)" }}
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!custom.trim()}
+          className="px-2.5 py-1.5 rounded-lg border inline-flex items-center gap-1 disabled:opacity-50"
+          style={{ fontSize: "12px", borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}
+        >
+          <Plus size={12} /> {t("Add")}
+        </button>
+      </div>
+      <p id={hintId} style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+        {t("Select the skills to keep. {{count}} selected.", { count: selectedCount })}
+      </p>
+    </div>
+  );
+}
 
 const bulletLines = (value: unknown): string[] =>
   String(value ?? "")
@@ -30,6 +104,7 @@ export function SuggestionCard({
   stale,
   undoBlocked,
   refining,
+  answerStatus = null,
   onAccept,
   onReject,
   onUndo,
@@ -46,6 +121,8 @@ export function SuggestionCard({
   // Applied, but the user edited this part afterwards, so it can't be undone here.
   undoBlocked: boolean;
   refining: boolean;
+  // Regenerating because an answer changed ("updating"), or just regenerated ("updated").
+  answerStatus?: "updating" | "updated" | null;
   onAccept: (editedValue?: string | string[]) => void;
   onReject: () => void;
   onUndo: () => void;
@@ -58,13 +135,20 @@ export function SuggestionCard({
   const [showOriginal, setShowOriginal] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const editable = suggestion.kind === "rewrite" || suggestion.kind === "skills";
-  const isBulletField = suggestion.kind === "rewrite" && suggestion.suggested.field === "description";
+  const [skillChoices, setSkillChoices] = useState<SkillChoice[]>([]);
+  const suggestedSkills = tailoringSuggestedSkills(suggestion);
+  const currentSkills = suggestion.kind === "skills" ? asList(suggestion.before?.value) : [];
+  const isSkills = suggestedSkills !== null;
+  const editable = suggestion.kind === "rewrite" || isSkills;
+  // Bullets for item blocks, a paragraph for the summary, whatever field the card names.
+  const isBulletField = suggestion.kind === "rewrite" && rewriteDisplay(content, suggestion) === "bullets";
 
   const title = (() => {
     switch (suggestion.kind) {
       case "rewrite":
-        return suggestion.suggested.field === "text" ? t("Professional summary") : describeBlock(content, suggestion.block_id);
+        return refinableBlockKind(content, suggestion.block_id) === "summary" || !isBulletField
+          ? t("Professional summary")
+          : describeBlock(content, suggestion.block_id);
       case "skills":
         return t("Skills");
       case "new_section": {
@@ -81,15 +165,22 @@ export function SuggestionCard({
   })();
 
   const startEditing = () => {
-    const value = suggestion.suggested.value;
-    setDraft(suggestion.kind === "skills" ? asList(value).join(", ") : isBulletField ? bulletLines(value).join("\n") : String(value ?? ""));
+    if (isSkills) {
+      setSkillChoices(buildSkillChoices(suggestedSkills ?? [], currentSkills));
+    } else {
+      const value = suggestion.suggested.value;
+      setDraft(isBulletField ? bulletLines(value).join("\n") : String(value ?? ""));
+    }
     setEditing(true);
   };
 
+  const editedSkills = selectedSkills(skillChoices);
+  const canSubmitEdit = isSkills ? editedSkills.length > 0 : draft.trim().length > 0;
+
   const submitEdit = () => {
-    if (suggestion.kind === "skills") {
-      const skills = draft.split(",").map((item) => item.trim()).filter(Boolean);
-      if (skills.length > 0) onAccept(skills);
+    if (isSkills) {
+      if (editedSkills.length === 0) return;
+      onAccept(editedSkills);
     } else {
       const text = isBulletField
         ? draft.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => `• ${line.replace(/^[•*·-]\s*/, "")}`).join("\n")
@@ -112,20 +203,29 @@ export function SuggestionCard({
         : { border: "var(--color-border-secondary)", background: "var(--color-background-primary)" };
 
   const renderBody = () => {
+    if (editing && isSkills) {
+      return (
+        <SkillChipEditor
+          choices={skillChoices}
+          showNewTags={currentSkills.length > 0}
+          onChange={setSkillChoices}
+          onAdd={(name) => setSkillChoices((choices) => addCustomSkill(choices, name, currentSkills))}
+        />
+      );
+    }
+
     if (editing) {
       return (
         <div className="space-y-2">
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            rows={suggestion.kind === "skills" ? 3 : 6}
+            rows={6}
             className="w-full px-3 py-2 rounded-lg border resize-y"
             style={{ fontSize: "13px", lineHeight: 1.5, borderColor: "var(--color-border-secondary)" }}
             aria-label={t("Edit suggestion")}
           />
-          <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-            {suggestion.kind === "skills" ? t("Separate skills with commas.") : isBulletField ? t("One bullet point per line.") : null}
-          </p>
+          {isBulletField ? <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{t("One bullet point per line.")}</p> : null}
         </div>
       );
     }
@@ -167,12 +267,9 @@ export function SuggestionCard({
       );
     }
 
-    if (suggestion.kind === "skills" || (suggestion.kind === "new_section" && (suggestion.suggested.section as { type?: string })?.type === "skills")) {
-      const after =
-        suggestion.kind === "skills"
-          ? asList(suggestion.suggested.value)
-          : asList((suggestion.suggested.section as { blocks?: Array<{ fields?: { skills?: unknown } }> })?.blocks?.[0]?.fields?.skills);
-      const before = asList(suggestion.before?.value);
+    if (isSkills) {
+      const after = suggestedSkills ?? [];
+      const before = currentSkills;
       const beforeKeys = new Set(before.map((item) => item.toLowerCase()));
       const afterKeys = new Set(after.map((item) => item.toLowerCase()));
       return (
@@ -258,6 +355,16 @@ export function SuggestionCard({
         ) : null}
       </div>
 
+      {answerStatus === "updating" ? (
+        <p role="status" className="flex items-center gap-1.5" style={{ fontSize: "12px", color: "var(--color-teal-800)", fontWeight: 500 }}>
+          <Loader2 size={12} className="animate-spin" /> {t("Updating with your answer…")}
+        </p>
+      ) : answerStatus === "updated" && suggestion.status === "pending" ? (
+        <p className="inline-flex items-center gap-1 rounded-full px-2 py-0.5" style={{ fontSize: "11px", color: "var(--color-teal-800)", background: "var(--color-teal-50)", fontWeight: 500 }}>
+          <MessageSquareText size={11} /> {t("Updated with your answer")}
+        </p>
+      ) : null}
+
       {stale && suggestion.status === "pending" ? (
         <div className="rounded-md p-2 space-y-1.5" style={{ background: "var(--color-amber-50)", fontSize: "12px", color: "var(--color-amber-700)" }}>
           <p>{t("You edited this part after the suggestion was made.")}</p>
@@ -302,7 +409,7 @@ export function SuggestionCard({
           <div className="flex items-center gap-1.5">
             {editing ? (
               <>
-                <button type="button" onClick={submitEdit} className="px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1" style={{ fontSize: "12px", background: "var(--color-teal-600)", color: "white" }}>
+                <button type="button" onClick={submitEdit} disabled={!canSubmitEdit} className="px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1 disabled:opacity-50" style={{ fontSize: "12px", background: "var(--color-teal-600)", color: "white" }}>
                   <Check size={12} /> {t("Accept edited")}
                 </button>
                 <button type="button" onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>

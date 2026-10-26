@@ -63,6 +63,9 @@ export interface TailoringTask {
   status: TailoringTaskStatus;
   depends_on_question_ids: string[];
   error_message: string | null;
+  // The server re-queued this finished task because an answer it depends on changed.
+  // Older backends omit it (treated as false).
+  rerun_for_answer?: boolean;
   updated_at: string;
 }
 
@@ -142,7 +145,22 @@ export type TailoringSuggestionDecisionPayload = Omit<
 > &
   Partial<Pick<TailoringSuggestionDecisionResponse, "master_cv_updated" | "master_cv_reverted" | "master_cv_revert_skipped">>;
 
-export type TailoringRefinement = "shorter" | "more_impact" | "more_keywords";
+export type TailoringRefinement = "shorter" | "more_impact" | "more_keywords" | "more_professional" | "improve";
+
+// Free-text instructions for a task run or a block refine are capped at this length.
+export const TAILORING_INSTRUCTION_MAX_LENGTH = 500;
+
+export interface TailoringRunPayload {
+  regenerate?: boolean;
+  refinement?: TailoringRefinement | null;
+  instruction?: string | null;
+}
+
+// "Refine with AI" on one block (at least one of the two).
+export interface TailoringRefinePayload {
+  refinement?: TailoringRefinement | null;
+  instruction?: string | null;
+}
 
 export interface TailoringCostRun {
   ai_run_id: string;

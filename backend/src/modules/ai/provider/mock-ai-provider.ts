@@ -668,11 +668,16 @@ const generateTailoringBlock = (input: Record<string, unknown>): Record<string, 
   const block = mockRecord(input.block);
   const role = String(mockRecord(input.job).role ?? "the role");
   const facts = (Array.isArray(input.confirmed_facts) ? input.confirmed_facts : []).map(mockRecord);
+  // "Refine with AI": the candidate's request and the preset change the output visibly.
+  const request = typeof input.candidate_request === "string" ? input.candidate_request.trim() : "";
+  const shorter = typeof input.refinement === "string" && /shorter/i.test(input.refinement);
+  const refinedNote = request ? `Refined as you asked: "${request}".` : "";
   if (block.kind === "summary" || block.kind === "new_summary") {
+    const base = `Professional focused on delivering results relevant to ${role}, with a track record of ownership and collaboration.`;
     return {
       changed: true,
-      lines: [`Professional focused on delivering results relevant to ${role}, with a track record of ownership and collaboration.`],
-      rationale: `Aims the summary at the ${role} role.`,
+      lines: [request ? `${base} Refined as requested.` : shorter ? `Professional focused on results for ${role}.` : base],
+      rationale: refinedNote || `Aims the summary at the ${role} role.`,
       requirement_ids: ["r1"]
     };
   }
@@ -682,14 +687,18 @@ const generateTailoringBlock = (input: Record<string, unknown>): Record<string, 
     .map((line) => line.replace(/^[\s•*-]+/, "").trim())
     .filter(Boolean)
     .slice(0, 5);
-  if (lines.length === 0) {
+  // Every confirmed detail (e.g. a metric answer) becomes its own bullet, as the prompt asks.
+  const factLines = [
+    ...new Set(facts.map((fact) => (typeof fact.detail === "string" ? fact.detail.trim() : "")).filter(Boolean))
+  ];
+  if (lines.length === 0 && factLines.length === 0) {
     return { changed: false, lines: [], rationale: "", requirement_ids: [] };
   }
-  const factLine = facts.find((fact) => typeof fact.detail === "string" && fact.detail);
+  const rewritten = lines.length > 0 ? [`${lines[0]} in support of ${role} goals${request ? ", refined as requested" : ""}`, ...lines.slice(1)] : [];
   return {
     changed: true,
-    lines: [`${lines[0]} in support of ${role} goals`, ...lines.slice(1), ...(factLine ? [String(factLine.detail)] : [])],
-    rationale: "Leads with the most job-relevant work.",
+    lines: [...(shorter ? rewritten.slice(0, 2) : rewritten), ...factLines],
+    rationale: refinedNote || (factLines.length > 0 ? "Adds the figures you confirmed." : "Leads with the most job-relevant work."),
     requirement_ids: ["r1", "r2"]
   };
 };
@@ -697,6 +706,16 @@ const generateTailoringBlock = (input: Record<string, unknown>): Record<string, 
 const generateTailoringSkills = (input: Record<string, unknown>): Record<string, unknown> => {
   const current = (Array.isArray(input.current_skills) ? input.current_skills : []).map(String);
   const allowed = (Array.isArray(input.allowed_new_skills) ? input.allowed_new_skills : []).map(String);
+  const refining = typeof input.candidate_request === "string" || typeof input.refinement === "string";
+  if (refining && allowed.length === 0) {
+    // A refine without new terms reorders the current list so the change is visible.
+    return {
+      changed: current.length > 1,
+      skills: [...current].reverse().map((skill) => ({ name: skill, allowed_skill: null })),
+      rationale: "Reordered your skills as requested.",
+      requirement_ids: ["r1"]
+    };
+  }
   return {
     changed: allowed.length > 0,
     skills: [

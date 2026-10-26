@@ -8,17 +8,21 @@ import {
   planTailoringAutoApply,
   revertTailoringSuggestion
 } from "../../integration/tailoring-apply";
-import type {
-  RequirementDecision,
-  TailoringAnswerChoice,
-  TailoringRefinement,
-  TailoringSessionView,
-  TailoringSuggestion,
-  TailoringSuggestionDecisionResponse,
-  TailoringSuggestionStatus,
-  TailoringTask,
-  TailoringTaskRunResponse
+import {
+  TAILORING_INSTRUCTION_MAX_LENGTH,
+  type RequirementDecision,
+  type TailoringAnswerChoice,
+  type TailoringRefinePayload,
+  type TailoringRefinement,
+  type TailoringRunPayload,
+  type TailoringSessionView,
+  type TailoringSuggestion,
+  type TailoringSuggestionDecisionResponse,
+  type TailoringSuggestionStatus,
+  type TailoringTask
 } from "../../integration/tailoring-types";
+import { describeBlock } from "./tailoring-labels";
+import { applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
 
 // Bridge to the editor, read through a ref so async work always sees the latest state.
 export interface TailoringEditorBridge {
@@ -53,6 +57,17 @@ export interface TailoringNotice extends TailoringMessage {
   tone: "info" | "warning";
 }
 
+// A "Refine with AI" run on one block, as shown next to that block in the refine area.
+export interface TailoringRefineRun {
+  // "busy": the server is already running this block's task (shown as in progress).
+  status: "running" | "done" | "empty" | "failed" | "busy";
+  payload: TailoringRefinePayload;
+  message: string | null;
+  // Cards produced by refine runs on this block in this tab (kept after a decision so they
+  // can be undone there).
+  suggestionIds: string[];
+}
+
 export interface TailoringFailedTask {
   task: TailoringTask;
   message: string;
@@ -68,6 +83,7 @@ const ANALYSIS_POLL_MS = 5_000;
 export const TASK_SKIP_AFTER_FAILURES = 2;
 
 const TASK_FAILED = "This suggestion couldn't be prepared.";
+const REFINE_FAILED = "Couldn't refine this part of your CV.";
 const OFFLINE = "Couldn't reach the server. Check your connection and try again.";
 
 // Server validation/conflict messages are written for users (and already localized);
@@ -96,47 +112,6 @@ const saveFailedIssue = (text: string, retry: () => void): TailoringIssue => ({
   text,
   action: { label: "Try again", run: retry }
 });
-
-// Responses from parallel task runs can arrive out of order, so views are merged per entity:
-// the newer task wins, and suggestions missing from an older snapshot are kept.
-const mergeViews = (previous: TailoringSessionView | null, next: TailoringSessionView): TailoringSessionView => {
-  if (!previous || previous.session.id !== next.session.id) {
-    return next;
-  }
-  const previousTasks = new Map(previous.tasks.map((task) => [task.id, task]));
-  const nextTasks = new Map(next.tasks.map((task) => [task.id, task]));
-  // True when our copy of the task is newer than the snapshot we just received.
-  const isAhead = (taskId: string | null): boolean => {
-    const ours = taskId ? previousTasks.get(taskId) : undefined;
-    const theirs = taskId ? nextTasks.get(taskId) : undefined;
-    return Boolean(ours && theirs && ours.updated_at > theirs.updated_at);
-  };
-
-  const tasks = next.tasks.map((task) => (isAhead(task.id) ? previousTasks.get(task.id)! : task));
-  const nextSuggestionIds = new Set(next.suggestions.map((suggestion) => suggestion.id));
-  const kept = previous.suggestions.filter(
-    (suggestion) => !nextSuggestionIds.has(suggestion.id) && isAhead(suggestion.task_id)
-  );
-  return { ...next, tasks, suggestions: [...next.suggestions, ...kept] };
-};
-
-const applyTaskResult = (view: TailoringSessionView, result: TailoringTaskRunResponse): TailoringSessionView => {
-  const resultIds = new Set(result.suggestions.map((suggestion) => suggestion.id));
-  return {
-    ...view,
-    session: { ...view.session, status: result.session_status },
-    tasks: view.tasks.map((task) => (task.id === result.task.id ? result.task : task)),
-    // A re-run replaces the task's pending cards (the server expired them).
-    suggestions: [
-      ...view.suggestions.filter(
-        (suggestion) =>
-          !resultIds.has(suggestion.id) && !(suggestion.task_id === result.task.id && suggestion.status === "pending")
-      ),
-      ...result.suggestions
-    ],
-    score: result.score
-  };
-};
 
 // The local content change of a suggestion, undone again after its decision failed.
 // Works on the current content so changes made meanwhile (other cards) are kept.
@@ -177,11 +152,19 @@ export function useTailoringSession(options: {
   // Task runs that failed in this tab (HTTP error or a "failed" result), shown with Retry.
   const [taskFailures, setTaskFailures] = useState<Record<string, { message: string; attempts: number }>>({});
   const [skippedTaskIds, setSkippedTaskIds] = useState<string[]>([]);
+  const [refineRuns, setRefineRuns] = useState<Record<string, TailoringRefineRun>>({});
+  // Pending cards regenerated after an answer changed, marked until they are decided.
+  const [answerUpdatedIds, setAnswerUpdatedIds] = useState<string[]>([]);
+  // Block the "Refine with AI" area is focused on (set from the panel or the preview); the
+  // token changes on every request so asking again for the same block focuses it again.
+  const [refineRequest, setRefineRequest] = useState<{ blockId: string; token: number } | null>(null);
+  const refineTargetBlockId = refineRequest?.blockId ?? null;
   // The runner waits while the editor can't save (it must not generate from stale content).
   const [savePaused, setSavePaused] = useState(false);
   // The toggle wins for the rest of the session even if saving the preference failed.
   const [autoApplyOverride, setAutoApplyOverride] = useState<{ sessionId: string; value: boolean } | null>(null);
   const inflight = useRef(new Set<string>());
+  const refiningBlocks = useRef(new Set<string>());
   const failureCounts = useRef(new Map<string, number>());
   const failedRef = useRef(taskFailures);
   failedRef.current = taskFailures;
@@ -208,7 +191,8 @@ export function useTailoringSession(options: {
     start: (job: TailoringJobInput) => Promise<boolean>;
     finish: () => Promise<boolean>;
     decide: (suggestion: TailoringSuggestion, decision: "accept" | "reject" | "undo", editedValue?: string | string[]) => Promise<boolean>;
-    runTask: (task: TailoringTask, payload?: { regenerate?: boolean; refinement?: TailoringRefinement | null }) => Promise<void>;
+    runTask: (task: TailoringTask, payload?: TailoringRunPayload) => Promise<void>;
+    refineBlock: (blockId: string, payload: TailoringRefinePayload) => Promise<boolean>;
     answer: (questionId: string, payload: { answer: TailoringAnswerChoice | null; detail?: string | null; add_to_main?: boolean }) => Promise<void>;
     continueAfterQuestions: () => Promise<void>;
     setRequirementDecision: (requirementId: string, decision: RequirementDecision) => Promise<void>;
@@ -221,7 +205,7 @@ export function useTailoringSession(options: {
     setView((current) => {
       if (!current) return current;
       if (typeof next === "function") return next(current);
-      return current.session.id === next.session.id ? mergeViews(current, next) : current;
+      return current.session.id === next.session.id ? mergeTailoringViews(current, next) : current;
     });
   }, []);
 
@@ -265,6 +249,8 @@ export function useTailoringSession(options: {
     failedRef.current = {};
     setTaskFailures({});
     setSkippedTaskIds([]);
+    setRefineRuns({});
+    setAnswerUpdatedIds([]);
     analyzingSince.current = null;
   }, [view?.session.id]);
 
@@ -581,21 +567,40 @@ export function useTailoringSession(options: {
     [bridge, decideSuggestion]
   );
 
+  const announceAnswerUpdate = useCallback(
+    (task: TailoringTask, suggestions: TailoringSuggestion[]) => {
+      const ids = suggestions.filter((item) => item.status === "pending").map((item) => item.id);
+      // Nothing to announce when the answer didn't change this part.
+      if (ids.length === 0) return;
+      setAnswerUpdatedIds((current) => [...current.filter((id) => !ids.includes(id)), ...ids]);
+      const part = task.block_id ? describeBlock(bridge.current.getContent(), task.block_id) : "";
+      setNotice({
+        tone: "info",
+        text: part ? "Updated with your answer: {{part}}" : "A suggestion was updated with your answer.",
+        values: part ? { part } : undefined
+      });
+    },
+    [bridge]
+  );
+
   const runTask = useCallback(
-    async (task: TailoringTask, payload: { regenerate?: boolean; refinement?: TailoringRefinement | null } = {}) => {
+    async (task: TailoringTask, payload: TailoringRunPayload = {}) => {
       const current = viewRef.current;
       if (!current || inflight.current.has(task.id)) return;
+      // Re-queued by the server because an answer it depends on changed.
+      const forAnswer = task.rerun_for_answer === true && !payload.regenerate && !payload.refinement && !payload.instruction;
       inflight.current.add(task.id);
       setInflightTaskIds([...inflight.current]);
       clearTaskFailure(task.id);
       try {
         const result = await api.runTailoringTask(current.session.id, task.id, payload);
-        updateView((latestView) => applyTaskResult(latestView, result));
+        updateView((latestView) => applyTailoringTaskResult(latestView, result));
         if (result.task.status === "failed") {
           recordTaskFailure(task.id, result.task.error_message ?? TASK_FAILED);
         } else {
           failureCounts.current.delete(task.id);
         }
+        if (forAnswer && result.task.status !== "failed") announceAnswerUpdate(task, result.suggestions);
         if (autoApplyRef.current) await acceptSequentially(result.suggestions, "auto");
       } catch (taskError) {
         // Show what the server knows: the run may have finished (response lost), failed, or
@@ -619,7 +624,7 @@ export function useTailoringSession(options: {
         setInflightTaskIds([...inflight.current]);
       }
     },
-    [acceptSequentially, api, clearTaskFailure, recordTaskFailure, refetch, updateView]
+    [acceptSequentially, announceAnswerUpdate, api, clearTaskFailure, recordTaskFailure, refetch, updateView]
   );
 
   // Runner: start ready tasks (up to MAX_PARALLEL_TASKS at once) whenever the view changes.
@@ -675,7 +680,17 @@ export function useTailoringSession(options: {
         }
       }));
       try {
-        updateView(await api.answerTailoringQuestion(current.session.id, questionId, payload));
+        const saved = await api.answerTailoringQuestion(current.session.id, questionId, payload);
+        // Tasks the server re-queued for this answer run again even if they failed here before.
+        for (const task of saved.tasks) {
+          if (task.rerun_for_answer && task.status === "ready") {
+            failureCounts.current.delete(task.id);
+            clearTaskFailure(task.id);
+          }
+        }
+        const requeued = new Set(saved.tasks.filter((task) => task.rerun_for_answer && task.status === "ready").map((task) => task.id));
+        if (requeued.size > 0) setSkippedTaskIds((ids) => ids.filter((id) => !requeued.has(id)));
+        updateView(saved);
       } catch (answerError) {
         // Drop the optimistic answer so the card shows what was really saved.
         const refreshed = await refetch(current.session.id);
@@ -687,7 +702,7 @@ export function useTailoringSession(options: {
         });
       }
     },
-    [api, refetch, updateView]
+    [api, clearTaskFailure, refetch, updateView]
   );
 
   const continueAfterQuestions = useCallback(async () => {
@@ -763,6 +778,77 @@ export function useTailoringSession(options: {
     [acceptSequentially]
   );
 
+  // "Refine with AI" on one block: works any time after the analysis (also when finished).
+  // The result is a normal card; the task may be new, so it is merged into the task list.
+  const refineBlock = useCallback(
+    async (blockId: string, payload: TailoringRefinePayload): Promise<boolean> => {
+      const current = viewRef.current;
+      if (!current) return false;
+      const instruction = payload.instruction?.trim().slice(0, TAILORING_INSTRUCTION_MAX_LENGTH) || null;
+      const body: TailoringRefinePayload = { refinement: payload.refinement ?? null, instruction };
+      if (!body.refinement && !body.instruction) return false;
+      if (refiningBlocks.current.has(blockId)) return false;
+      const existing = current.tasks.find((task) => task.block_id === blockId && task.kind !== "structure") ?? null;
+      // A run of this block's task is already in flight; its card arrives first.
+      if (existing && inflight.current.has(existing.id)) return false;
+
+      refiningBlocks.current.add(blockId);
+      const setRun = (patch: Partial<TailoringRefineRun>) =>
+        setRefineRuns((runs) => ({
+          ...runs,
+          [blockId]: { status: "running", payload: body, message: null, suggestionIds: runs[blockId]?.suggestionIds ?? [], ...patch }
+        }));
+      setRun({ status: "running", message: null });
+      // Keeps the runner off this task while the refine regenerates it, and shows it as running.
+      if (existing) {
+        inflight.current.add(existing.id);
+        setInflightTaskIds([...inflight.current]);
+      }
+      try {
+        if (!(await flush())) {
+          setRun({ status: "failed", message: "Your latest edits couldn't be saved, so this part wasn't refined." });
+          return false;
+        }
+        const result = await api.refineTailoringBlock(current.session.id, blockId, body);
+        updateView((latestView) => applyTailoringTaskResult(latestView, result));
+        failureCounts.current.delete(result.task.id);
+        clearTaskFailure(result.task.id);
+        if (result.task.status === "failed") {
+          setRun({ status: "failed", message: result.task.error_message ?? REFINE_FAILED });
+          return false;
+        }
+        const ids = result.suggestions.map((item) => item.id);
+        setRefineRuns((runs) => ({
+          ...runs,
+          [blockId]: {
+            status: ids.length ? "done" : "empty",
+            payload: body,
+            message: null,
+            suggestionIds: [...(runs[blockId]?.suggestionIds ?? []).filter((id) => !ids.includes(id)), ...ids]
+          }
+        }));
+        if (autoApplyRef.current) await acceptSequentially(result.suggestions, "auto");
+        return true;
+      } catch (refineError) {
+        const refreshed = await refetch(current.session.id);
+        if (refreshed) updateView(refreshed);
+        if (isRefineBusyError(refineError)) {
+          setRun({ status: "busy", message: null });
+          return false;
+        }
+        setRun({ status: "failed", message: describeError(refineError, REFINE_FAILED) });
+        return false;
+      } finally {
+        refiningBlocks.current.delete(blockId);
+        if (existing) {
+          inflight.current.delete(existing.id);
+          setInflightTaskIds([...inflight.current]);
+        }
+      }
+    },
+    [acceptSequentially, api, clearTaskFailure, flush, refetch, updateView]
+  );
+
   const finish = useCallback(async (): Promise<boolean> => {
     const current = viewRef.current;
     if (!current) return false;
@@ -794,6 +880,7 @@ export function useTailoringSession(options: {
     finish,
     decide,
     runTask,
+    refineBlock,
     answer,
     continueAfterQuestions,
     setRequirementDecision,
@@ -842,6 +929,38 @@ export function useTailoringSession(options: {
     );
   }, [inflightTaskIds, skippedTaskIds, taskFailures, view?.tasks]);
 
+  const openRefine = useCallback(
+    (blockId: string) => setRefineRequest((current) => ({ blockId, token: (current?.token ?? 0) + 1 })),
+    []
+  );
+  const closeRefine = useCallback(() => setRefineRequest(null), []);
+
+  // Cards updated after an answer stay marked only while they are pending.
+  const answerUpdatedSuggestionIds = useMemo(
+    () =>
+      new Set(
+        answerUpdatedIds.filter((id) => view?.suggestions.some((item) => item.id === id && item.status === "pending"))
+      ),
+    [answerUpdatedIds, view?.suggestions]
+  );
+
+  // Finished tasks the server re-queued after an answer changed, until their new card arrives.
+  const answerRerunTaskIds = useMemo(
+    () =>
+      new Set(
+        (view?.tasks ?? [])
+          .filter(
+            (task) =>
+              task.rerun_for_answer === true &&
+              (task.status === "ready" || task.status === "running") &&
+              !taskFailures[task.id] &&
+              !skippedTaskIds.includes(task.id)
+          )
+          .map((task) => task.id)
+      ),
+    [skippedTaskIds, taskFailures, view?.tasks]
+  );
+
   return {
     view,
     loading,
@@ -866,11 +985,21 @@ export function useTailoringSession(options: {
     decide,
     acceptAll,
     refine: (task: TailoringTask, refinement: TailoringRefinement) => runTask(task, { refinement }),
+    refineBlock,
+    refineRuns,
+    answerUpdatedSuggestionIds,
+    answerRerunTaskIds,
     regenerate: (task: TailoringTask) => runTask(task, { regenerate: true }),
     retry: (task: TailoringTask) => runTask(task),
     skipTask,
     setAutoApply,
     finish,
+    // Block the "Refine with AI" area is focused on (set from the panel or the preview's
+    // "Refine with AI" button); closeRefine when the user closes it.
+    refineTargetBlockId,
+    refineFocusToken: refineRequest?.token ?? 0,
+    openRefine,
+    closeRefine,
     reset: () => {
       loadedForCv.current = null;
       setView(null);

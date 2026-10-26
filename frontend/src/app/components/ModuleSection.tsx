@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles } from "lucide-react";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
+import { useContext } from "react";
 import { AIVersionNavigator, type AiVersionNavigatorState } from "./CVSections";
+import { EditorItemHighlightContext, editorItemAnchorProps } from "./SpecializedSections";
 import type { FieldDescriptor, SectionTypeDefinition } from "../modules/cv-module.types";
 
 // Descriptor-driven editor for job-module section types (e.g. medical_uk). Field
@@ -66,6 +68,7 @@ export function ModuleSection({
 }: ModuleSectionProps) {
   useTranslation();
   const items = Array.isArray(data?.items) ? data.items : [];
+  const highlightedItemIds = useContext(EditorItemHighlightContext);
 
   const updateItemField = (index: number, key: string, value: unknown) => {
     const newItems = [...items];
@@ -266,6 +269,7 @@ export function ModuleSection({
           {items.map((item: any, index: number) => (
             <div
               key={item.id}
+              {...editorItemAnchorProps(item, highlightedItemIds)}
               className="p-3 rounded-lg border"
               style={{
                 borderColor: "var(--color-border-tertiary)",

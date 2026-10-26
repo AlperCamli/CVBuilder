@@ -313,7 +313,6 @@ export function createDemoStore(
           master_cv_id: source.id,
           job_id: job.id,
           job,
-          tailoring_review: null,
           ai_generation_status: "completed",
           last_exported_at: null,
           source_master_cv: source,

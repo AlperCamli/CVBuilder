@@ -70,23 +70,20 @@ text structure only. Parsing difficulty as a possible compatibility issue is
 consistent with [Greenhouse's documented parsing limitations](https://support.greenhouse.io/hc/en-us/articles/200989175-Unsuccessful-resume-parse);
 the scoring weights and thresholds are our own product policy.
 
-## Tailoring comparison and persistence
+## Tailoring comparison (removed)
 
-Both synchronous draft generation and asynchronous tailoring runs save
-`tailoring_review` with the final stabilized CV. The same target job and keywords
-are used for both sides. Each comparison includes before/after scores, changes
-by dimension with evidence, added/removed covered terms, and changed sections.
-Scores may increase, decrease or remain unchanged. Incomparable/unscorable
-reviews have a null delta. The editor's **Tailoring review** button opens this
-summary and the detailed after-review.
-
-This is a snapshot at generation time, explicitly labeled in the UI. Later edits
-do not silently rewrite the original comparison. No scores are backfilled for
-older tailored drafts.
+The before/after **tailoring review** (`reviewTailoring`, the `TailoringReview` type
+and the editor's Tailoring review panel) was removed on 2026-10-27. Neither the
+tailoring v2 `finish` step nor the legacy draft flows compute it any more, and
+`tailoring_review` is no longer part of tailored CV or draft API responses. The
+`tailored_cvs.tailoring_review` column is left in place (no destructive migration);
+it is neither written nor read. Legacy `__server_tailoring_review` envelopes in CV
+JSON are still stripped on every read and write. Tailoring v2 reports its own
+requirement-based match score instead (see `tailoring-v2-design.md`).
 
 Apply `supabase/migrations/20261006120000_cv_review_evidence.sql` **before deploying
 the backend**. It adds nullable `imports.review_context` and
-`tailored_cvs.tailoring_review` JSONB columns. Diagnostics are stored separately
+`tailored_cvs.tailoring_review` JSONB columns (the latter is now unused). Diagnostics are stored separately
 from editable CV JSON. Existing ownership-scoped repository reads/writes and
 table access policies apply; no new public endpoint or permission is introduced.
 
@@ -95,7 +92,7 @@ writes retry only that specific missing-column error. Evidence is temporarily
 stored in reserved server metadata inside the existing CV JSONB column. Reads
 extract that evidence and remove the envelope before returning CV content to
 clients, the editor or AI. Editor saves preserve the stored evidence and ignore
-client-supplied envelopes. Tailoring snapshots survive the same fallback. Once
+client-supplied envelopes. Once
 the column is available, a subsequent content save promotes the saved evidence
 to it. Other database failures still fail normally; fallback errors are not hidden.
 The migration also requests a PostgREST schema cache reload.
@@ -105,7 +102,7 @@ The migration also requests a PostgREST schema cache reload.
 `tests/cv-review.unit.test.ts` covers formula consistency, excluded dimensions,
 unsafe extraction, empty/hidden content, repeated statements, false numerical
 impact, contextual versus skills-only matching, technical term boundaries,
-medical/project CVs, language support, and positive/negative/unchanged tailoring.
+medical/project CVs and language support.
 Import service tests check persistence across fresh service instances and stale
 content cleanup after failure. Frontend render tests check failure presentation,
 partial scoring, evidence visibility and honest decreases. AI service tests verify

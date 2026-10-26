@@ -23,12 +23,13 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-import { useEffect, useState, useRef, type ReactNode } from "react";
+import { useContext, useEffect, useState, useRef, type ReactNode } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
 import { useAuth } from "../integration/auth-context";
 import { supabase } from "../integration/supabase-client";
+import { EditorItemHighlightContext, editorItemAnchorProps, useEditorItemAnchor } from "./SpecializedSections";
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = ["image/png", "image/jpeg"];
@@ -690,6 +691,7 @@ function ExperienceItem({
 }: ExperienceItemProps) {
   useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "EXPERIENCE_ITEM",
@@ -716,6 +718,7 @@ function ExperienceItem({
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -1008,6 +1011,7 @@ const DEGREE_SUGGESTIONS = [
 function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: EducationItemProps) {
   useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "EDUCATION_ITEM",
@@ -1035,6 +1039,7 @@ function EducationItem({ item, index, updateItem, removeItem, toggleItemVisibili
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -1442,6 +1447,7 @@ interface LanguageItemProps {
 function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem, proficiencyLevels }: LanguageItemProps) {
   useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "LANGUAGE_ITEM",
@@ -1468,6 +1474,7 @@ function LanguageItem({ item, index, updateItem, removeItem, toggleItemVisibilit
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -1683,6 +1690,7 @@ interface GenericSectionProps {
 export function GenericSection({ title, data, isHidden, onToggleVisibility, onRemove, onChange }: GenericSectionProps) {
   useTranslation();
   const items = data.items || [];
+  const highlightedItemIds = useContext(EditorItemHighlightContext);
 
   const addItem = () => {
     onChange({
@@ -1736,6 +1744,7 @@ export function GenericSection({ title, data, isHidden, onToggleVisibility, onRe
           {items.map((item: any, index: number) => (
             <div
               key={item.id}
+              {...editorItemAnchorProps(item, highlightedItemIds)}
               className="p-3 rounded-lg border space-y-2"
               style={{
                 borderColor: "var(--color-border-tertiary)",

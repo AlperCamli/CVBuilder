@@ -2,8 +2,26 @@ import { GripVertical, Eye, EyeOff, Trash2, Plus, ChevronUp, ChevronDown } from 
 import { CollapsibleItem } from "./CollapsibleItem";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
-import { useRef } from "react";
+import { createContext, useContext, useRef } from "react";
 import { useDrag, useDrop } from "react-dnd";
+
+// Block ids of editor item cards to glow, e.g. the item opened from the preview's pencil.
+export const EditorItemHighlightContext = createContext<readonly string[]>([]);
+
+// Anchor + glow attributes for an editor item card. `data-editor-block-id` (the item's
+// CV block id) lets the editor find the card; the highlight attribute is styled in index.css.
+export const editorItemAnchorProps = (item: any, highlightedIds: readonly string[]) => {
+  const blockId = String(item?.blockId || item?.id || "");
+  const highlighted =
+    highlightedIds.length > 0 &&
+    [item?.blockId, item?.id].some((value) => value !== undefined && value !== null && value !== "" && highlightedIds.includes(String(value)));
+  return {
+    "data-editor-block-id": blockId || undefined,
+    "data-editor-item-highlighted": highlighted ? "true" : undefined
+  };
+};
+
+export const useEditorItemAnchor = (item: any) => editorItemAnchorProps(item, useContext(EditorItemHighlightContext));
 
 // Certificates section with specialized fields
 interface CertificatesSectionProps {
@@ -26,6 +44,7 @@ interface CertificateItemProps {
 
 function CertificateItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: CertificateItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "CERTIFICATE_ITEM",
@@ -52,6 +71,7 @@ function CertificateItem({ item, index, updateItem, removeItem, toggleItemVisibi
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -249,6 +269,7 @@ interface CourseItemProps {
 
 function CourseItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: CourseItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "COURSE_ITEM",
@@ -275,6 +296,7 @@ function CourseItem({ item, index, updateItem, removeItem, toggleItemVisibility,
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -484,6 +506,7 @@ interface ProjectItemProps {
 
 function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: ProjectItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "PROJECT_ITEM",
@@ -510,6 +533,7 @@ function ProjectItem({ item, index, updateItem, removeItem, toggleItemVisibility
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -718,6 +742,7 @@ interface AwardItemProps {
 
 function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: AwardItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "AWARD_ITEM",
@@ -744,6 +769,7 @@ function AwardItem({ item, index, updateItem, removeItem, toggleItemVisibility, 
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -947,6 +973,7 @@ interface PublicationItemProps {
 
 function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: PublicationItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "PUBLICATION_ITEM",
@@ -973,6 +1000,7 @@ function PublicationItem({ item, index, updateItem, removeItem, toggleItemVisibi
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -1176,6 +1204,7 @@ interface ReferenceItemProps {
 
 function ReferenceItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: ReferenceItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "REFERENCE_ITEM",
@@ -1202,6 +1231,7 @@ function ReferenceItem({ item, index, updateItem, removeItem, toggleItemVisibili
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",
@@ -1427,6 +1457,7 @@ interface VolunteerItemProps {
 
 function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibility, toggleItemCollapsed, moveItem }: VolunteerItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const anchor = useEditorItemAnchor(item);
 
   const [{ isDragging }, drag] = useDrag({
     type: "VOLUNTEER_ITEM",
@@ -1453,6 +1484,7 @@ function VolunteerItem({ item, index, updateItem, removeItem, toggleItemVisibili
   return (
     <div
       ref={ref}
+      {...anchor}
       className="p-3 rounded-lg border space-y-2"
       style={{
         borderColor: "var(--color-border-tertiary)",

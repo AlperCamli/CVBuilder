@@ -10,7 +10,9 @@ export function PrivacyLinks() {
   useTranslation();
   return <nav aria-label={t("Support and privacy links")} className="privacy-links"><Link to={publicPath("/support")}>{t("Support")}</Link><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Cookie settings")}</button></nav>;
 }
-export function PrivacyControls() {
+// `showLinks` is off on full-height app pages (the CV editor) whose panes scroll internally;
+// the consent banner still renders there.
+export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = {}) {
   useTranslation();
   const [analyticsAvailable, setAnalyticsAvailable] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
@@ -102,7 +104,7 @@ export function PrivacyControls() {
     return () => { active = false; window.clearInterval(timer); window.removeEventListener("online", online); window.removeEventListener(ACCOUNT_READY_EVENT, accountReady); };
   }, []);
   return <>
-    <PrivacyLinks />
+    {showLinks && <PrivacyLinks />}
     {open && <aside className="privacy-banner" aria-label={t("Cookie preferences")}>
       <p><strong>{t("Help us improve jobspecificCV")}</strong></p>
       <p>{t("Essential cookies keep sign-in and uploads working. With your OK, we also use Google Analytics to see which pages and features help people most, so we can make the app better for you.")}</p>

@@ -87,6 +87,12 @@ export interface TailoringSessionRecord {
 }
 
 export type TailoringTaskKind = "block" | "summary" | "skills" | "structure";
+
+// Quick fixes / "Refine with AI" presets for a block, skills or summary run.
+export const TAILORING_REFINEMENTS = ["shorter", "more_impact", "more_keywords", "more_professional", "improve"] as const;
+export type TailoringRefinement = (typeof TAILORING_REFINEMENTS)[number];
+// Free-text "Refine with AI" request from the candidate (trimmed, at most this long).
+export const TAILORING_INSTRUCTION_MAX_CHARS = 500;
 export type TailoringTaskStatus = "waiting" | "ready" | "running" | "done" | "failed" | "skipped";
 
 export interface TailoringTaskRecord {
@@ -101,6 +107,9 @@ export interface TailoringTaskRecord {
   brief: TailoringBlockBrief | Record<string, never>;
   ai_run_id: string | null;
   attempts: number;
+  // Re-queued because a question it uses was answered (or re-answered) after it ran; the
+  // next run regenerates it with the answer. Cleared when that run starts.
+  rerun_for_answer: boolean;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -195,6 +204,8 @@ export interface TailoringTaskView {
   section_id: string | null;
   status: TailoringTaskStatus;
   depends_on_question_ids: string[];
+  // True while the task is re-queued to use a new answer and has not run yet.
+  rerun_for_answer: boolean;
   error_message: string | null;
   updated_at: string;
 }

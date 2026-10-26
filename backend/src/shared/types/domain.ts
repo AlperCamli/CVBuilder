@@ -1,5 +1,5 @@
 import type { GuestAnswers } from "../../modules/guest-imports/guest-imports.schemas";
-import type { ImportReviewContext, TailoringReview } from "../../modules/cv-review/cv-review.types";
+import type { ImportReviewContext } from "../../modules/cv-review/cv-review.types";
 import type { CvContent } from "../cv-content/cv-content.types";
 
 export type LocaleCode = "en" | "tr";
@@ -90,7 +90,6 @@ export interface MasterCvRecord {
 export type TailoredCvStatus = "draft" | "ready" | "exported" | "archived";
 
 export interface TailoredCvRecord {
-  tailoring_review?: TailoringReview | null;
   id: string;
   user_id: string;
   master_cv_id: string;

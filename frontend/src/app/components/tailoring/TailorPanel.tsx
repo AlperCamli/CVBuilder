@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -13,7 +13,9 @@ import {
   Download,
   FileText,
   Loader2,
+  ListChecks,
   RefreshCw,
+  Sparkles,
   Target,
   X,
   Zap
@@ -34,6 +36,7 @@ import type {
 } from "../../integration/tailoring-types";
 import { Switch } from "../ui/switch";
 import { AiStatusLine, AiWorkingBadge, ShimmerBlock } from "./ai-elements";
+import { RefineArea } from "./RefineArea";
 import { SuggestionCard } from "./SuggestionCard";
 import { TailoringCostDialog } from "./TailoringCostDialog";
 import { describeBlock, describeTask } from "./tailoring-labels";
@@ -339,6 +342,47 @@ function QuestionCard({
   );
 }
 
+// Answers can be changed after the questions step (review, finished, refine); the server
+// then re-queues the suggestions that used them, which update automatically.
+function AnswersDisclosure({
+  view,
+  content,
+  onAnswer
+}: {
+  view: TailoringSessionView;
+  content: CvContent;
+  onAnswer: (questionId: string, payload: { answer: "yes" | "some" | "no" | null; detail?: string | null; add_to_main?: boolean }) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const questions = view.session.analysis?.questions ?? [];
+  if (questions.length === 0) return null;
+  const answered = questions.filter((question) => view.session.answers[question.id]).length;
+  return (
+    <div>
+      <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="w-full flex items-center justify-between py-1">
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>
+          {t("Your answers")} <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>· {answered}/{questions.length} {t("answered")}</span>
+        </span>
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {expanded ? (
+        <div className="mt-1.5 space-y-2">
+          <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t("Change an answer and the suggestions that use it update automatically.")}</p>
+          {questions.map((question) => (
+            <QuestionCard
+              key={question.id}
+              question={question}
+              content={content}
+              answer={view.session.answers[question.id]}
+              onAnswer={(payload) => onAnswer(question.id, payload)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Warnings and notices
 // ---------------------------------------------------------------------------
@@ -455,7 +499,8 @@ export function TailorPanel({
   const { view, busy, issue, notice } = controller;
   const [retargeting, setRetargeting] = useState(false);
   const [showCost, setShowCost] = useState(false);
-  const [keepRefining, setKeepRefining] = useState(false);
+  // "flow": the guided steps (questions, suggestions, ready); "refine": Refine with AI.
+  const [tab, setTab] = useState<"flow" | "refine">("flow");
 
   useEffect(() => {
     if (!notice) return;
@@ -464,6 +509,33 @@ export function TailorPanel({
   }, [controller.clearNotice, notice]);
 
   const status = view?.session.status;
+  const refineAvailable =
+    Boolean(view?.session.analysis) && !retargeting && (status === "answering" || status === "generating" || status === "reviewing" || status === "ready");
+  const showRefine = refineAvailable && tab === "refine";
+
+  // A new session (re-tailoring) starts with the guided steps.
+  const sessionKey = view?.session.id;
+  useEffect(() => setTab("flow"), [sessionKey]);
+
+  // The preview's "Refine with AI" (or any openRefine) switches to the refine area.
+  const { refineTargetBlockId } = controller;
+  useEffect(() => {
+    if (refineTargetBlockId && refineAvailable) setTab("refine");
+  }, [refineAvailable, refineTargetBlockId]);
+
+  // Start at the top when the view changes (tab switch, or the finished summary appears);
+  // status changes inside the refine area keep its scroll position.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const summaryShown = !showRefine && status === "ready";
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [showRefine, summaryShown]);
+
+  const switchTab = (next: "flow" | "refine") => {
+    setTab(next);
+    if (next === "flow") controller.closeRefine();
+  };
+
   const runningTaskIds = new Set(controller.runningTasks.map((task) => task.id));
   const improvedIds = useMemo(
     () => new Set(view?.suggestions.filter((item) => item.status === "applied").flatMap((item) => item.requirement_ids) ?? []),
@@ -482,9 +554,22 @@ export function TailorPanel({
   const failedTasks = controller.failedTasks.filter((item) => !runningTaskIds.has(item.task.id));
   const settledTasks = view?.tasks.filter((task) => ["done", "skipped", "failed"].includes(task.status)).length ?? 0;
   const showQuestions = status === "answering";
-  const showReview = status === "generating" || status === "reviewing" || (status === "ready" && keepRefining);
+  const showReview = status === "generating" || status === "reviewing";
   // Auto-apply matters from the moment suggestions can arrive (they start during the questions).
-  const showAutoApply = Boolean(view) && !retargeting && (showQuestions || showReview);
+  const showAutoApply = Boolean(view) && !retargeting && (showQuestions || showReview || showRefine);
+  const answerPending = (taskId: string | null) => Boolean(taskId && controller.answerRerunTaskIds.has(taskId));
+  // Rerun tasks whose card is on screen show their state on the card instead.
+  const pendingTaskIds = new Set(pending.map((item) => item.task_id));
+  const runningCards = controller.runningTasks.filter((task) => !(answerPending(task.id) && pendingTaskIds.has(task.id)));
+  const renderRunning = (task: (typeof controller.runningTasks)[number]) => (
+    <div key={task.id} className="rounded-xl border p-3.5 space-y-2" style={{ borderColor: "var(--color-border-tertiary)" }}>
+      <AiWorkingBadge label={describeTask(content, task)} compact />
+      {answerPending(task.id) ? (
+        <p style={{ fontSize: "11px", color: "var(--color-teal-800)" }}>{t("Updating with your answer…")}</p>
+      ) : null}
+      <ShimmerBlock height={44} />
+    </div>
+  );
 
   const headerTitle = view ? view.session.job.job_title : t("Tailor for a job");
   const headerSubtitle = view?.session.job.company_name || (view ? null : currentJob?.company ?? null);
@@ -499,7 +584,14 @@ export function TailorPanel({
         requirements={view?.session.analysis?.requirements ?? []}
         stale={staleIds.has(suggestion.id)}
         undoBlocked={isTailoringUndoBlocked(content, suggestion)}
-        refining={Boolean(task && runningTaskIds.has(task.id))}
+        refining={Boolean(task && (runningTaskIds.has(task.id) || answerPending(task.id)))}
+        answerStatus={
+          task && answerPending(task.id) && suggestion.status === "pending"
+            ? "updating"
+            : controller.answerUpdatedSuggestionIds.has(suggestion.id)
+              ? "updated"
+              : null
+        }
         onAccept={(edited) => void controller.decide(suggestion, "accept", edited)}
         onReject={() => void controller.decide(suggestion, "reject")}
         onUndo={() => void controller.decide(suggestion, "undo")}
@@ -565,7 +657,23 @@ export function TailorPanel({
       return <AnalysisProgress />;
     }
 
-    if (status === "ready" && !keepRefining) {
+    if (showRefine) {
+      return (
+        <div className="space-y-4">
+          <RefineArea
+            view={view}
+            content={content}
+            controller={controller}
+            runningTaskIds={runningTaskIds}
+            renderSuggestion={renderSuggestion}
+            onHighlight={onHighlight}
+          />
+          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
+        </div>
+      );
+    }
+
+    if (status === "ready") {
       return (
         <div className="space-y-4">
           <div className="rounded-xl p-4 text-center space-y-1" style={{ background: "var(--color-teal-50)" }}>
@@ -587,9 +695,19 @@ export function TailorPanel({
               </button>
             ) : null}
           </div>
+          {runningCards.length > 0 || pending.length > 0 ? (
+            <div className="space-y-2.5">
+              <h3 style={{ fontSize: "13px", fontWeight: 600 }}>
+                {t("Updates")} {pending.length ? <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>· {pending.length} {t("to review")}</span> : null}
+              </h3>
+              {runningCards.map(renderRunning)}
+              {pending.map(renderSuggestion)}
+            </div>
+          ) : null}
+          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
           <div className="flex items-center justify-between" style={{ fontSize: "12px" }}>
-            <button type="button" onClick={() => setKeepRefining(true)} style={{ color: "var(--color-teal-700)", fontWeight: 500 }}>
-              {t("Keep refining")}
+            <button type="button" onClick={() => switchTab("refine")} className="inline-flex items-center gap-1" style={{ color: "var(--color-teal-700)", fontWeight: 500 }}>
+              <Sparkles size={12} /> {t("Keep refining")}
             </button>
             <button type="button" onClick={() => setRetargeting(true)} style={{ color: "var(--color-text-secondary)" }}>
               {t("Tailor for another job")}
@@ -612,6 +730,10 @@ export function TailorPanel({
             void controller.setRequirementDecision(requirement.id, restore ? "relevant" : "not_relevant")
           }
         />
+
+        {!showQuestions ? (
+          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
+        ) : null}
 
         {showQuestions ? (
           <div className="space-y-2.5">
@@ -644,12 +766,7 @@ export function TailorPanel({
             <h3 style={{ fontSize: "13px", fontWeight: 600 }}>
               {t("Suggestions")} {pending.length ? <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>· {pending.length} {t("to review")}</span> : null}
             </h3>
-            {controller.runningTasks.map((task) => (
-              <div key={task.id} className="rounded-xl border p-3.5 space-y-2" style={{ borderColor: "var(--color-border-tertiary)" }}>
-                <AiWorkingBadge label={describeTask(content, task)} compact />
-                <ShimmerBlock height={44} />
-              </div>
-            ))}
+            {runningCards.map(renderRunning)}
             {pending.map(renderSuggestion)}
             {failedTasks.map(({ task, message, attempts }) => (
               <div key={task.id} role="alert" className="rounded-xl border p-3 space-y-2" style={{ borderColor: "var(--color-red-200)", fontSize: "12px" }}>
@@ -691,8 +808,36 @@ export function TailorPanel({
     );
   })();
 
+  const finishButton = (
+    <button
+      type="button"
+      onClick={async () => {
+        if (await controller.finish()) switchTab("flow");
+      }}
+      disabled={busy === "finishing" || controller.runningTasks.length > 0}
+      className="flex-1 px-4 py-2.5 rounded-lg font-medium inline-flex items-center justify-center gap-2 disabled:opacity-60"
+      style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "white" }}
+    >
+      {busy === "finishing" ? <Loader2 size={14} className="animate-spin" /> : null}
+      {controller.runningTasks.length > 0 ? t("Preparing suggestions…") : t("Finish")}
+    </button>
+  );
+
   const footer = (() => {
     if (!view || retargeting || controller.loading) return null;
+    if (showRefine) {
+      if (status === "generating" || status === "reviewing") return <div className="flex gap-2">{finishButton}</div>;
+      return (
+        <button
+          type="button"
+          onClick={() => switchTab("flow")}
+          className="w-full px-4 py-2.5 rounded-lg border font-medium inline-flex items-center justify-center gap-2"
+          style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)" }}
+        >
+          {status === "ready" ? t("Done refining") : t("Back to the questions")}
+        </button>
+      );
+    }
     if (status === "answering") {
       return (
         <button
@@ -721,18 +866,7 @@ export function TailorPanel({
               <Check size={14} /> {t("Accept all")}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={async () => {
-              if (await controller.finish()) setKeepRefining(false);
-            }}
-            disabled={busy === "finishing" || controller.runningTasks.length > 0}
-            className="flex-1 px-4 py-2.5 rounded-lg font-medium inline-flex items-center justify-center gap-2 disabled:opacity-60"
-            style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "white" }}
-          >
-            {busy === "finishing" ? <Loader2 size={14} className="animate-spin" /> : null}
-            {controller.runningTasks.length > 0 ? t("Preparing suggestions…") : t("Finish")}
-          </button>
+          {finishButton}
         </div>
       );
     }
@@ -779,6 +913,33 @@ export function TailorPanel({
             <Switch id="tailor-auto-apply" checked={controller.autoApply} onCheckedChange={(checked) => void controller.setAutoApply(checked)} />
           </div>
         ) : null}
+        {refineAvailable ? (
+          <div className="tailor-tabs mt-2.5" role="tablist" aria-label={t("Tailoring views")}>
+            <button
+              type="button"
+              role="tab"
+              id="tailor-tab-flow"
+              aria-selected={!showRefine}
+              aria-controls="tailor-panel-body"
+              className="tailor-tab"
+              onClick={() => switchTab("flow")}
+            >
+              <ListChecks size={13} /> {status === "answering" ? t("Questions") : status === "ready" ? t("Summary") : t("Suggestions")}
+              {pending.length > 0 && status !== "answering" ? <span className="tailor-tab-count">{pending.length}</span> : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tailor-tab-refine"
+              aria-selected={showRefine}
+              aria-controls="tailor-panel-body"
+              className="tailor-tab"
+              onClick={() => switchTab("refine")}
+            >
+              <Sparkles size={13} /> {t("Refine with AI")}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {issue || notice || controller.savePaused ? (
@@ -797,7 +958,15 @@ export function TailorPanel({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">{body}</div>
+      <div
+        ref={bodyRef}
+        id="tailor-panel-body"
+        role={refineAvailable ? "tabpanel" : undefined}
+        aria-labelledby={refineAvailable ? (showRefine ? "tailor-tab-refine" : "tailor-tab-flow") : undefined}
+        className="flex-1 overflow-y-auto px-5 py-4 space-y-3"
+      >
+        {body}
+      </div>
 
       {footer ? <div className="px-5 py-3 border-t" style={{ borderColor: "var(--color-border-tertiary)" }}>{footer}</div> : null}
 

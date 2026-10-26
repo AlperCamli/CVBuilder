@@ -1,11 +1,16 @@
-import type { CvContent, CvJsonValue, MasterCvDetail, TailoredCvDetail } from "../../integration/api-types";
-import type {
-  TailoringAnalysis,
-  TailoringScore,
-  TailoringSessionView,
-  TailoringSuggestion,
-  TailoringTask
+import type { CvBlock, CvContent, CvJsonValue, MasterCvDetail, TailoredCvDetail } from "../../integration/api-types";
+import { ApiClientError } from "../../integration/api-error";
+import {
+  TAILORING_INSTRUCTION_MAX_LENGTH,
+  type TailoringAnalysis,
+  type TailoringRefinement,
+  type TailoringScore,
+  type TailoringSessionStatus,
+  type TailoringSessionView,
+  type TailoringSuggestion,
+  type TailoringTask
 } from "../../integration/tailoring-types";
+import { listRefinableBlocks } from "../../components/tailoring/tailoring-labels";
 
 // In-browser stand-in for the tailoring v2 session API, so the Language Studio (and local
 // UI review) can walk through the whole in-editor tailoring flow without a backend.
@@ -17,6 +22,32 @@ const firstBlock = (content: CvContent, type: string) =>
   content.sections.find((section) => section.type === type)?.blocks[0] ?? null;
 
 const STATUS_VALUE = { covered: 1, weak: 0.5, missing: 0 } as const;
+
+const REFINEMENTS = new Set<TailoringRefinement>(["shorter", "more_impact", "more_keywords", "more_professional", "improve"]);
+
+interface GenerateOptions {
+  refinement: TailoringRefinement | null;
+  instruction: string | null;
+}
+
+const bulletLines = (value: unknown): string[] =>
+  String(value ?? "")
+    .split(/\n+/)
+    .map((line) => line.replace(/^[\s•*·-]+/, "").trim())
+    .filter(Boolean);
+
+const sentence = (value: string): string => {
+  const trimmed = value.trim().replace(/[.!?]+$/, "");
+  return trimmed ? `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}` : "";
+};
+
+// Skills named in an instruction like "add Tableau, Power BI".
+const skillsFromInstruction = (instruction: string | null): string[] => {
+  const match = instruction?.match(/\b(?:add|include|ekle)\b\s+(.+)/i);
+  return match ? match[1].split(/,|\band\b|\bve\b/i).map((item) => item.trim().replace(/[.!]+$/, "")).filter(Boolean) : [];
+};
+
+const badRequest = (message: string) => new ApiClientError({ status: 400, code: "VALIDATION_ERROR", message });
 
 const scoreOf = (view: TailoringSessionView): TailoringScore => {
   const analysis = view.session.analysis;
@@ -51,6 +82,8 @@ export function createDemoTailoring(store: {
   tailored: Map<string, TailoredCvDetail>;
 }) {
   const sessions = new Map<string, TailoringSessionView>();
+  // Status a finished (or reviewing) session returns to after answer re-runs settle.
+  const resumeStatus = new Map<string, TailoringSessionStatus>();
   // "Also add to my main CV" writes, per suggestion, so undo can revert them.
   const masterWrites = new Map<string, { masterId: string; blockId: string; field: string; before: CvJsonValue; after: CvJsonValue }>();
   let autoApply = false;
@@ -75,7 +108,8 @@ export function createDemoTailoring(store: {
 
   const settle = (view: TailoringSessionView) => {
     if (view.session.status === "generating" && view.tasks.every((task) => ["done", "skipped", "failed"].includes(task.status))) {
-      view.session.status = "reviewing";
+      view.session.status = resumeStatus.get(view.session.id) ?? "reviewing";
+      resumeStatus.delete(view.session.id);
     }
   };
 
@@ -150,6 +184,7 @@ export function createDemoTailoring(store: {
       status: depends.length ? "waiting" : "ready",
       depends_on_question_ids: depends,
       error_message: null,
+      rerun_for_answer: false,
       updated_at: now()
     });
     view.session.analysis = analysis;
@@ -162,11 +197,13 @@ export function createDemoTailoring(store: {
     ];
   };
 
-  const generate = (view: TailoringSessionView, task: TailoringTask, content: CvContent, refinement?: string | null): TailoringSuggestion[] => {
+  const findBlock = (content: CvContent, blockId: string | null): CvBlock | null =>
+    blockId ? content.sections.flatMap((section) => section.blocks).find((item) => item.id === blockId) ?? null : null;
+
+  const generate = (view: TailoringSessionView, task: TailoringTask, content: CvContent, options: GenerateOptions): TailoringSuggestion[] => {
     const tr = content.language === "tr";
-    const block = task.block_id
-      ? content.sections.flatMap((section) => section.blocks).find((item) => item.id === task.block_id) ?? null
-      : null;
+    const { refinement, instruction } = options;
+    const block = findBlock(content, task.block_id);
     const base = {
       task_id: task.id,
       section_id: null,
@@ -177,12 +214,17 @@ export function createDemoTailoring(store: {
     };
     const metric = view.session.answers.q2?.detail;
     const tableau = view.session.answers.q1?.answer;
+    const knowsTableau = tableau === "yes" || tableau === "some";
+    const asked = instruction ? sentence(instruction) : "";
 
     if (task.kind === "structure") return [];
     if (task.kind === "skills" && block) {
       const current = Array.isArray(block.fields.skills) ? block.fields.skills.map(String) : [];
-      const added = tableau === "yes" || tableau === "some" ? ["Tableau"] : [];
-      const next = [...new Set(["SQL", ...added, ...current])];
+      const added = [...(knowsTableau ? ["Tableau"] : []), ...skillsFromInstruction(instruction)];
+      const lead = refinement === "more_keywords" ? ["SQL", "Reporting"] : ["SQL"];
+      let next = [...new Set([...lead, ...added, ...current])];
+      // "Shorter" keeps the job's skills and drops the rest.
+      if (refinement === "shorter") next = next.slice(0, Math.max(3, lead.length + added.length));
       if (next.join("|") === current.join("|")) return [];
       return [
         {
@@ -192,13 +234,29 @@ export function createDemoTailoring(store: {
           block_id: block.id,
           before: { field: "skills", value: current },
           suggested: { field: "skills", value: next },
-          rationale: tr ? "İlanın istediği becerileri öne alır." : "Puts the skills this job asks for first.",
-          requirement_ids: added.length ? ["r1", "r3"] : ["r1"]
+          rationale: asked
+            ? tr ? `İsteğinize göre: ${asked}.` : `As you asked: ${asked}.`
+            : tr ? "İlanın istediği becerileri öne alır." : "Puts the skills this job asks for first.",
+          requirement_ids: knowsTableau ? ["r1", "r3"] : ["r1"]
         }
       ];
     }
     if (task.kind === "summary" && block) {
       const role = view.session.job.job_title;
+      const variants: Record<string, string> = tr
+        ? {
+            default: `${role} rolüne odaklanan veri analisti; satış verilerini SQL ve Excel ile karar destekleyen raporlara dönüştürür.`,
+            shorter: `SQL ve Excel ile ${role} raporları hazırlayan veri analisti.`
+          }
+        : {
+            default: `Data analyst focused on ${role} work, turning sales data into decision-ready reports with SQL and Excel and partnering closely with business teams.`,
+            shorter: `Data analyst turning sales data into decision-ready ${role} reports with SQL and Excel.`,
+            more_impact: `Data analyst who cut reporting time by 30% by turning sales data into decision-ready ${role} reports with SQL and Excel.`,
+            more_professional: `Results-oriented data analyst specializing in ${role} reporting, delivering accurate, decision-ready insight from sales data with SQL and Excel.`,
+            more_keywords: `Data analyst for ${role} work: SQL reporting, Excel modelling${knowsTableau ? ", Tableau dashboards" : ""} and measurable business impact for sales teams.`,
+            improve: `Data analyst focused on ${role} work who turns sales data into clear, decision-ready reports with SQL and Excel.`
+          };
+      const text = `${variants[refinement ?? "default"] ?? variants.default}${asked ? ` ${asked}.` : ""}`;
       return [
         {
           ...base,
@@ -206,29 +264,36 @@ export function createDemoTailoring(store: {
           kind: "rewrite",
           block_id: block.id,
           before: { field: "text", value: String(block.fields.text ?? "") },
-          suggested: {
-            field: "text",
-            value: tr
-              ? `${role} rolüne odaklanan veri analisti; satış verilerini SQL ve Excel ile karar destekleyen raporlara dönüştürür.`
-              : refinement === "shorter"
-                ? `Data analyst turning sales data into decision-ready ${role} reports with SQL and Excel.`
-                : `Data analyst focused on ${role} work, turning sales data into decision-ready reports with SQL and Excel and partnering closely with business teams.`
-          },
-          rationale: tr ? "Özeti hedef role yöneltir." : "Aims your summary at the target role.",
+          suggested: { field: "text", value: text },
+          rationale: asked
+            ? tr ? `İsteğinize göre: ${asked}.` : `As you asked: ${asked}.`
+            : tr ? "Özeti hedef role yöneltir." : "Aims your summary at the target role.",
           requirement_ids: ["r1"]
         }
       ];
     }
     if (task.kind === "block" && block) {
-      const lines = [
-        tr
-          ? "SQL ile haftalık satış raporları hazırlayarak raporlama süresini %30 azalttı"
-          : "Built weekly SQL-based sales reports, reducing reporting time by 30%",
-        ...(metric ? [tr ? `Raporlar ${metric} tarafından kullanıldı` : `Reports used by ${metric}`] : []),
-        ...(tableau === "yes" || tableau === "some"
-          ? [tr ? "Satış ekipleri için Tableau panoları oluşturdu" : "Created Tableau dashboards for the sales teams"]
-          : [])
-      ];
+      const isExperience = block.id === firstBlock(content, "experience")?.id;
+      let lines = isExperience
+        ? [
+            tr
+              ? "SQL ile haftalık satış raporları hazırlayarak raporlama süresini %30 azalttı"
+              : "Built weekly SQL-based sales reports, reducing reporting time by 30%",
+            ...(metric ? [tr ? `Raporlar ${metric} tarafından kullanıldı` : `Reports used by ${metric}`] : []),
+            ...(knowsTableau ? [tr ? "Satış ekipleri için Tableau panoları oluşturdu" : "Created Tableau dashboards for the sales teams"] : [])
+          ]
+        : bulletLines(block.fields.description);
+      if (lines.length === 0) {
+        lines = [tr ? `${view.session.job.job_title} rolüyle ilgili çalışmalar` : `Work relevant to the ${view.session.job.job_title} role`];
+      }
+      if (refinement === "shorter") lines = lines.slice(0, 2).map((line) => line.split(/,|;/)[0]);
+      if (refinement === "more_impact") lines = lines.map((line, index) => (index === 0 && !/%|\d/.test(line) ? `${line}, improving decisions for the sales team` : line));
+      if (refinement === "more_professional") lines = lines.map((line) => line.replace(/^Built/, "Designed and delivered").replace(/^Created/, "Developed"));
+      if (refinement === "more_keywords") lines = [...lines, "Applied SQL reporting and stakeholder communication"];
+      if (refinement === "improve") lines = lines.map((line) => line.replace(/^Prepared/, "Produced"));
+      if (asked) lines = [...lines, asked];
+      const description = lines.map((line) => `• ${line}`).join("\n");
+      if (bulletLines(description).join("\n") === bulletLines(block.fields.description).join("\n")) return [];
       return [
         {
           ...base,
@@ -236,14 +301,46 @@ export function createDemoTailoring(store: {
           kind: "rewrite",
           block_id: block.id,
           before: { field: "description", value: String(block.fields.description ?? "") },
-          suggested: { field: "description", value: lines.map((line) => `• ${line}`).join("\n") },
-          rationale: tr ? "Sonuçları ve ilanın terimlerini öne çıkarır." : "Leads with results and the job's terms.",
-          requirement_ids: ["r1", "r2", ...(tableau === "yes" || tableau === "some" ? ["r3"] : [])],
-          add_to_main: Boolean(view.session.answers.q2?.add_to_main)
+          suggested: { field: "description", value: description },
+          rationale: asked
+            ? tr ? `İsteğinize göre: ${asked}.` : `As you asked: ${asked}.`
+            : tr ? "Sonuçları ve ilanın terimlerini öne çıkarır." : "Leads with results and the job's terms.",
+          requirement_ids: isExperience ? ["r1", "r2", ...(knowsTableau ? ["r3"] : [])] : ["r1"],
+          add_to_main: isExperience && Boolean(view.session.answers.q2?.add_to_main)
         }
       ];
     }
     return [];
+  };
+
+  // Runs one task like the backend: replaces its pending cards, settles the session.
+  const runDemoTask = async (view: TailoringSessionView, task: TailoringTask, options: GenerateOptions & { regenerate: boolean }) => {
+    const replacing = options.regenerate || Boolean(options.refinement) || Boolean(options.instruction) || task.rerun_for_answer === true;
+    touchTask(view, task.id, { status: "running" });
+    await wait(1400 + Math.random() * 1600);
+    const created = generate(view, task, store.tailored.get(view.session.tailored_cv_id)!.current_content, options);
+    // The previous pending card stays until its replacement exists.
+    if (replacing) {
+      view.suggestions = view.suggestions.filter((item) => !(item.task_id === task.id && item.status === "pending"));
+    }
+    view.suggestions = [...view.suggestions, ...created];
+    touchTask(view, task.id, { status: created.length || task.kind !== "structure" ? "done" : "skipped", rerun_for_answer: false });
+    settle(view);
+    const scored = withScore(view);
+    return {
+      task: view.tasks.find((item) => item.id === task.id),
+      suggestions: created,
+      session_status: view.session.status,
+      score: scored.score
+    };
+  };
+
+  const readOptions = (body: Record<string, unknown>): GenerateOptions => {
+    const refinement = body.refinement == null ? null : String(body.refinement);
+    if (refinement !== null && !REFINEMENTS.has(refinement as TailoringRefinement)) throw badRequest("Unknown refinement.");
+    const raw = body.instruction == null ? "" : String(body.instruction);
+    if (raw.length > TAILORING_INSTRUCTION_MAX_LENGTH) throw badRequest("Keep the instruction under 500 characters.");
+    return { refinement: refinement as TailoringRefinement | null, instruction: raw.trim() || null };
   };
 
   const sameValue = (left: unknown, right: unknown) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -321,7 +418,6 @@ export function createDemoTailoring(store: {
           master_cv_id: master.id,
           job_id: null,
           job: null,
-          tailoring_review: null,
           ai_generation_status: null,
           last_exported_at: null,
           source_master_cv: master
@@ -371,14 +467,27 @@ export function createDemoTailoring(store: {
     }
     if (action.startsWith("answers/")) {
       const questionId = action.split("/")[1];
-      view.session.answers[questionId] = {
+      const previous = view.session.answers[questionId];
+      const next = {
         answer: (body.answer as "yes" | "some" | "no" | null) ?? null,
         detail: (body.detail as string | null) ?? null,
         add_to_main: body.add_to_main === true,
         answered_at: now()
       };
+      view.session.answers[questionId] = next;
       for (const task of view.tasks.filter((item) => item.status === "waiting")) {
         if (task.depends_on_question_ids.every((id) => view.session.answers[id])) touchTask(view, task.id, { status: "ready" });
+      }
+      // A changed answer re-queues the finished tasks that used it.
+      const changed =
+        !previous || previous.answer !== next.answer || previous.detail !== next.detail || previous.add_to_main !== next.add_to_main;
+      const rerun = changed
+        ? view.tasks.filter((task) => task.status === "done" && task.depends_on_question_ids.includes(questionId))
+        : [];
+      for (const task of rerun) touchTask(view, task.id, { status: "ready", rerun_for_answer: true });
+      if (rerun.length > 0 && (view.session.status === "reviewing" || view.session.status === "ready")) {
+        resumeStatus.set(view.session.id, view.session.status);
+        view.session.status = "generating";
       }
       return withScore(view);
     }
@@ -393,22 +502,40 @@ export function createDemoTailoring(store: {
     if (taskMatch) {
       const task = view.tasks.find((item) => item.id === taskMatch[1]);
       if (!task) throw new Error("The requested item was not found.");
-      touchTask(view, task.id, { status: "running" });
-      if (body.regenerate || body.refinement) {
-        view.suggestions = view.suggestions.map((item) => (item.task_id === task.id && item.status === "pending" ? { ...item, status: "expired" } : item));
+      return runDemoTask(view, task, { ...readOptions(body), regenerate: body.regenerate === true });
+    }
+    // "Refine with AI" on one block: any time after the analysis; creates a task if needed.
+    const refineMatch = action.match(/^blocks\/([^/]+)\/refine$/);
+    if (refineMatch && method === "POST") {
+      const blockId = decodeURIComponent(refineMatch[1]);
+      if (!view.session.analysis || view.session.status === "draft" || view.session.status === "analyzing") {
+        throw new ApiClientError({ status: 409, code: "CONFLICT", message: "Wait for the job analysis to finish first." });
       }
-      await wait(1400 + Math.random() * 1600);
-      const created = generate(view, task, store.tailored.get(view.session.tailored_cv_id)!.current_content, body.refinement as string | null);
-      view.suggestions = [...view.suggestions.filter((item) => item.status !== "expired"), ...created];
-      touchTask(view, task.id, { status: created.length || task.kind !== "structure" ? "done" : "skipped" });
-      settle(view);
-      const scored = withScore(view);
-      return {
-        task: view.tasks.find((item) => item.id === task.id),
-        suggestions: created,
-        session_status: view.session.status,
-        score: scored.score
-      };
+      const options = readOptions(body);
+      if (!options.refinement && !options.instruction) throw badRequest("Pick a quick edit or tell the AI what to change.");
+      const editable = listRefinableBlocks(content!).find((item) => item.blockId === blockId);
+      if (!editable) {
+        throw new ApiClientError({ status: 404, code: "NOT_FOUND", message: "This part of your CV can't be refined here." });
+      }
+      let task = view.tasks.find((item) => item.block_id === blockId && item.kind !== "structure");
+      if (task?.status === "running") {
+        throw new ApiClientError({ status: 409, code: "CONFLICT", message: "This part of your CV is already being updated." });
+      }
+      if (!task) {
+        task = {
+          id: nextId("demo-task"),
+          kind: editable.kind === "item" ? "block" : editable.kind,
+          block_id: blockId,
+          section_id: editable.sectionId,
+          status: "ready",
+          depends_on_question_ids: [],
+          error_message: null,
+          rerun_for_answer: false,
+          updated_at: now()
+        };
+        view.tasks = [...view.tasks, task];
+      }
+      return runDemoTask(view, task, { ...options, regenerate: true });
     }
     const decisionMatch = action.match(/^suggestions\/([^/]+)\/decision$/);
     if (decisionMatch) {
@@ -425,6 +552,11 @@ export function createDemoTailoring(store: {
         };
       });
       const suggestion = view.suggestions.find((item) => item.id === decisionMatch[1])!;
+      // An edited new skills section stores the list in the section's skills block too.
+      if (suggestion.kind === "new_section" && Array.isArray(body.edited_value)) {
+        const section = suggestion.suggested.section as { blocks?: Array<{ fields: Record<string, unknown> }> } | undefined;
+        if (section?.blocks?.[0]) section.blocks[0].fields.skills = body.edited_value.map(String);
+      }
       return { suggestion, score: scoreOf(view), ...syncMasterCv(view, previous, suggestion, decision) };
     }
     if (action === "finish") {

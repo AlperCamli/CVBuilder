@@ -2,3 +2,14 @@
 @import './tailwind.css';
 @import './theme.css';
 @import './tailoring.css';
+
+/* Editor item card opened from the preview's pencil: same glow as the section highlight. */
+[data-editor-block-id] {
+  transition: box-shadow 240ms ease;
+}
+[data-editor-block-id][data-editor-item-highlighted="true"] {
+  box-shadow: 0 0 0 2px var(--color-teal-400), 0 0 18px rgba(20, 184, 166, 0.32);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-editor-block-id] { transition: none; }
+}

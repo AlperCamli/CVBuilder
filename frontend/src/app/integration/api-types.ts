@@ -499,7 +499,6 @@ export interface TailoredCvSourceMasterSummary {
 }
 
 export interface TailoredCvDetail extends TailoredCvSummary {
-  tailoring_review: TailoringReview | null;
   template_id: string | null;
   ai_generation_status: string | null;
   last_exported_at: string | null;
@@ -761,7 +760,6 @@ export interface TailoringRunResultResponse {
 }
 
 export interface TailoredCvDraftSummary {
-  tailoring_review: TailoringReview | null;
   id: string;
   title: string;
   language: string;
@@ -1191,14 +1189,3 @@ export interface CvReview {
   limitations: string[];
 }
 
-export interface TailoringReview {
-  version: "cv-review-v1";
-  before: CvReview;
-  after: CvReview;
-  score_change: number | null;
-  changes: Array<{ dimension: ReviewDimensionId; label: string; before: number; after: number; reason: string }>;
-  added_keywords: string[];
-  removed_keywords: string[];
-  changed_sections: string[];
-  summary: string;
-}

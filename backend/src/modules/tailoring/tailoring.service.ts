@@ -21,7 +21,6 @@ import type { AiRepository } from "../ai/ai.repository";
 import type { AiService } from "../ai/ai.service";
 import type { SessionContext } from "../ai/ai.types";
 import type { BillingService } from "../billing/billing.service";
-import { reviewTailoring } from "../cv-review/cv-review";
 import type { CvRevisionsService } from "../cv-revisions/cv-revisions.service";
 import type { JobsRepository } from "../jobs/jobs.repository";
 import type { MasterCvRepository } from "../master-cv/master-cv.repository";
@@ -30,6 +29,8 @@ import type { TailoredCvRepository } from "../tailored-cv/tailored-cv.repository
 import {
   buildCompactCv,
   firstLine,
+  isEditableBlock,
+  isSkillsSectionType,
   normalizeSectionType,
   PROTECTED_SECTION_TYPES,
   readSkillsField,
@@ -56,6 +57,8 @@ import type {
   TailoringCostReport,
   TailoringCostRun,
   TailoringPreferences,
+  TailoringQuestion,
+  TailoringRefinement,
   TailoringSessionRecord,
   TailoringSessionView,
   TailoringSuggestionDecisionResponse,
@@ -72,12 +75,46 @@ const TASK_STALE_AFTER_MS = 3 * 60_000;
 const ANALYSIS_STALE_AFTER_MS = 3 * 60_000;
 const JOB_DESCRIPTION_MAX_CHARS = 12_000;
 
-export type TailoringRefinement = "shorter" | "more_impact" | "more_keywords";
+export type { TailoringRefinement } from "./tailoring.types";
 
 const REFINEMENT_INSTRUCTIONS: Record<TailoringRefinement, string> = {
   shorter: "Make the lines shorter and tighter; keep the strongest points only.",
   more_impact: "Lead each line with the outcome or impact the facts already show.",
-  more_keywords: "Use more of the brief's job terms where the facts support them."
+  more_keywords: "Use more of the brief's job terms where the facts support them.",
+  more_professional:
+    "Use clear, confident, professional wording; keep every fact, number, name and the meaning of each line exactly as they are.",
+  improve: "Make the content generally stronger and more relevant for this job, using only the facts given."
+};
+
+export interface TailoringRunOptions {
+  regenerate?: boolean;
+  refinement?: TailoringRefinement | null;
+  // The candidate's own "Refine with AI" request (already trimmed and length-limited).
+  instruction?: string | null;
+}
+
+// Whether a task's model input includes this question's answer, i.e. whether the task must
+// be regenerated when the answer changes. Mirrors the inputs generateTaskSuggestions sends:
+// block tasks get the questions aimed at their block, the summary the ones aimed at it plus
+// gap questions without a target block, skills every gap answer (allowed / denied terms).
+export const taskUsesQuestion = (
+  task: Pick<TailoringTaskRecord, "kind" | "block_id" | "depends_on_question_ids">,
+  question: TailoringQuestion
+): boolean => {
+  if (task.depends_on_question_ids.includes(question.id)) return true;
+  switch (task.kind) {
+    case "block":
+      return task.block_id !== null && question.target_block_id === task.block_id;
+    case "summary":
+      return (
+        (task.block_id !== null && question.target_block_id === task.block_id) ||
+        (question.kind === "gap" && question.target_block_id === null)
+      );
+    case "skills":
+      return question.kind === "gap";
+    default:
+      return false;
+  }
 };
 
 const TERMINAL_TASK_STATUSES = new Set(["done", "failed", "skipped"]);
@@ -186,14 +223,19 @@ export const planTailoringTasks = (
     });
   }
 
-  const skillsBlock = compact.blocks.find((block) => block.kind === "skills");
-  push({
-    kind: "skills",
-    block_id: skillsBlock?.block_id ?? null,
-    section_id: skillsBlock?.section_id ?? null,
-    depends_on_question_ids: gapQuestionIds,
-    brief: {}
-  });
+  const skillsBlock = compact.blocks.find((block) => block.kind === "skills" && isEditableBlock(block));
+  // A skills section whose list cannot be rewritten (text or one block per skill) must not
+  // get a second, new skills section.
+  const hasSkillsSection = compact.sections.some((section) => isSkillsSectionType(section.type));
+  if (skillsBlock || !hasSkillsSection) {
+    push({
+      kind: "skills",
+      block_id: skillsBlock?.block_id ?? null,
+      section_id: skillsBlock?.section_id ?? null,
+      depends_on_question_ids: gapQuestionIds,
+      brief: {}
+    });
+  }
 
   if (compact.sections.length > 1) {
     push({ kind: "structure", block_id: null, section_id: null, depends_on_question_ids: [], brief: {} });
@@ -456,11 +498,16 @@ export class TailoringService {
       throw new NotFoundError("Question was not found");
     }
 
-    const updated =
+    const question = current.analysis.questions.find((item) => item.id === questionId)!;
+    const detail = input.detail?.trim() || null;
+    const previous = current.answers[questionId];
+    const answerChanged = !previous || previous.answer !== input.answer || (previous.detail ?? null) !== detail;
+
+    let updated =
       (await this.repository.mergeSessionJson(userId, sessionId, "answers", {
         [questionId]: {
           answer: input.answer,
-          detail: input.detail?.trim() || null,
+          detail,
           add_to_main: input.add_to_main,
           answered_at: new Date().toISOString()
         }
@@ -473,6 +520,28 @@ export class TailoringService {
       .filter((task) => task.depends_on_question_ids.every((id) => updated.answers[id]))
       .map((task) => task.id);
     await this.repository.markTasksReady(userId, sessionId, unlocked);
+
+    // Tasks that already ran without this answer are regenerated with it: finished ones go
+    // back to "ready" (the runner picks them up), running ones re-queue when they finish.
+    // Their pending cards are replaced once the new ones exist; applied cards stay applied.
+    if (answerChanged) {
+      const affected = tasks
+        .filter((task) => task.status !== "waiting" && task.status !== "ready")
+        .filter((task) => taskUsesQuestion(task, question));
+      const requeued = await this.repository.requeueTasksForAnswer(
+        userId,
+        sessionId,
+        affected.map((task) => task.id)
+      );
+      const rerunning = requeued.length > 0 || affected.some((task) => task.status === "running");
+      if (rerunning && (updated.status === "reviewing" || updated.status === "ready")) {
+        // Back to generating while they run; advanceWhenTasksSettled returns a finished
+        // session to "ready" (finished_at is kept) and any other to "reviewing".
+        await this.repository.claimSessionStatus(userId, sessionId, ["reviewing", "ready"], "generating");
+        await this.advanceWhenTasksSettled(userId, sessionId);
+        updated = (await this.repository.findSessionById(userId, sessionId)) ?? updated;
+      }
+    }
 
     return this.buildView(session, updated);
   }
@@ -506,16 +575,7 @@ export class TailoringService {
     }
 
     const tailored = await this.requireTailoredCv(userId, current.tailored_cv_id);
-    const keywords = current.analysis.requirements.flatMap((requirement) => requirement.keywords);
-    await this.tailoredCvRepository.updateById(userId, tailored.id, {
-      ai_generation_status: "completed",
-      tailoring_review: reviewTailoring(
-        current.base_snapshot,
-        tailored.current_content,
-        { job_title: current.job_snapshot.job_title, job_description: current.job_snapshot.job_description },
-        keywords
-      )
-    });
+    await this.tailoredCvRepository.updateById(userId, tailored.id, { ai_generation_status: "completed" });
 
     const updated = await this.repository.updateSession(userId, sessionId, {
       status: "ready",
@@ -536,7 +596,7 @@ export class TailoringService {
     session: SessionContext,
     sessionId: string,
     taskId: string,
-    options: { regenerate?: boolean; refinement?: TailoringRefinement | null } = {}
+    options: TailoringRunOptions = {}
   ): Promise<TailoringTaskRunResponse> {
     const userId = session.appUser.id;
     const current = await this.requireSession(userId, sessionId);
@@ -544,7 +604,8 @@ export class TailoringService {
       throw new ConflictError("Analyze the job before generating suggestions.");
     }
 
-    const regenerate = Boolean(options.regenerate || options.refinement);
+    const instruction = options.instruction?.trim() || null;
+    const regenerate = Boolean(options.regenerate || options.refinement || instruction);
     const claimed = await this.repository.claimTask(
       userId,
       sessionId,
@@ -568,7 +629,10 @@ export class TailoringService {
     let failure: unknown = null;
     try {
       const tailored = await this.requireTailoredCv(userId, current.tailored_cv_id);
-      const generated = await this.generateTaskSuggestions(userId, current, claimed, tailored, options.refinement ?? null);
+      const generated = await this.generateTaskSuggestions(userId, current, claimed, tailored, {
+        refinement: options.refinement ?? null,
+        instruction
+      });
       // Earlier pending cards of this task are replaced only once the new ones exist, so a
       // failed regenerate keeps them; a re-run of a stale task cannot duplicate them either.
       const created = await this.repository.createSuggestions(generated.suggestions);
@@ -577,7 +641,7 @@ export class TailoringService {
         claimed.id,
         created.map((suggestion) => suggestion.id)
       );
-      finished = await this.repository.updateTask(userId, claimed.id, {
+      finished = await this.repository.completeTask(userId, claimed.id, {
         status: generated.skipped ? "skipped" : "done",
         ai_run_id: generated.ai_run_id,
         error_message: null,
@@ -591,7 +655,7 @@ export class TailoringService {
         failure = error;
       }
       try {
-        finished = await this.repository.updateTask(userId, claimed.id, {
+        finished = await this.repository.completeTask(userId, claimed.id, {
           status: "failed",
           error_message: modelFailure ? TASK_MODEL_FAILED_MESSAGE : TASK_FAILED_MESSAGE,
           completed_at: new Date().toISOString()
@@ -615,10 +679,70 @@ export class TailoringService {
     return this.buildTaskResponse(userId, refreshed, finished ?? claimed);
   }
 
+  // "Refine with AI" for one CV block, any time after the analysis (also once "ready"):
+  // regenerates the block's task with a preset and/or the candidate's own request. A block
+  // the analysis did not plan (e.g. an experience it skipped, a second skills list) gets a
+  // new task, which the response carries so the client can add it to its task list.
+  async refineBlock(
+    session: SessionContext,
+    sessionId: string,
+    blockId: string,
+    input: { refinement?: TailoringRefinement | null; instruction?: string | null }
+  ): Promise<TailoringTaskRunResponse> {
+    const userId = session.appUser.id;
+    const current = await this.requireSession(userId, sessionId);
+    if (!current.analysis) {
+      throw new ConflictError("Analyze the job before refining this section.");
+    }
+    const refinement = input.refinement ?? null;
+    const instruction = input.instruction?.trim() || null;
+    if (!refinement && !instruction) {
+      throw new ValidationError("Choose how to refine this section or describe what to change.");
+    }
+
+    const tailored = await this.requireTailoredCv(userId, current.tailored_cv_id);
+    const info = buildCompactCv(tailored.current_content).blocks.find((block) => block.block_id === blockId);
+    if (!info || !isEditableBlock(info)) {
+      throw new NotFoundError("This section cannot be refined with AI.");
+    }
+    const kind = info.kind === "item" ? "block" : info.kind === "summary" ? "summary" : "skills";
+
+    const tasks = await this.repository.listTasks(userId, sessionId);
+    let task = tasks.find((item) => item.block_id === blockId && item.kind === kind);
+    if (!task) {
+      [task] = await this.repository.createTasks([
+        {
+          session_id: sessionId,
+          user_id: userId,
+          kind,
+          block_id: blockId,
+          section_id: info.section_id,
+          status: "ready",
+          depends_on_question_ids: [],
+          brief: current.analysis.block_briefs.find((brief) => brief.block_id === blockId) ?? {}
+        }
+      ]);
+      if (!task) {
+        throw new InternalServerError("The refine task could not be created");
+      }
+    } else if (task.status === "running" && Date.parse(task.started_at ?? "") >= Date.now() - TASK_STALE_AFTER_MS) {
+      throw new ConflictError("This section is being updated. Try again in a moment.");
+    } else if (task.status === "waiting") {
+      // An explicit request runs now; a later answer re-queues it (rerun_for_answer).
+      await this.repository.markTasksReady(userId, sessionId, [task.id]);
+    }
+
+    return this.runTask(session, sessionId, task.id, { regenerate: true, refinement, instruction });
+  }
+
+  // When every task has settled, a generating session moves on: to "ready" when it was
+  // finished before (an answer re-queued tasks after Finish), otherwise to "reviewing".
   private async advanceWhenTasksSettled(userId: string, sessionId: string): Promise<void> {
     const tasks = await this.repository.listTasks(userId, sessionId);
     if (tasks.length > 0 && tasks.every((task) => TERMINAL_TASK_STATUSES.has(task.status))) {
-      await this.repository.claimSessionStatus(userId, sessionId, ["generating"], "reviewing");
+      const record = await this.repository.findSessionById(userId, sessionId);
+      if (record?.status !== "generating") return;
+      await this.repository.claimSessionStatus(userId, sessionId, ["generating"], record.finished_at ? "ready" : "reviewing");
     }
   }
 
@@ -627,7 +751,7 @@ export class TailoringService {
     session: TailoringSessionRecord,
     task: TailoringTaskRecord,
     tailored: TailoredCvRecord,
-    refinement: TailoringRefinement | null
+    request: { refinement: TailoringRefinement | null; instruction: string | null }
   ): Promise<{ suggestions: CreateTailoringSuggestionPayload[]; ai_run_id: string | null; skipped: boolean }> {
     const content = tailored.current_content;
     const compact = buildCompactCv(content);
@@ -649,6 +773,12 @@ export class TailoringService {
     const cvLanguage = cvLanguageOf(tailored);
     const forbidden = forbiddenTermsFromAnswers(analysis, session.answers);
     const knownRequirementIds = new Set(analysis.requirements.map((requirement) => requirement.id));
+    // "Refine with AI": a preset and/or the candidate's own words. Both are requests within
+    // the truth rules, never instructions that override them (see the flow prompts).
+    const refinementPayload = {
+      ...(request.refinement ? { refinement: REFINEMENT_INSTRUCTIONS[request.refinement] } : {}),
+      ...(request.instruction ? { candidate_request: request.instruction } : {})
+    };
     const base = {
       user_id: userId,
       tailored_cv_id: tailored.id,
@@ -660,7 +790,7 @@ export class TailoringService {
       return this.generateStructureSuggestions(userId, session, compact, content, job, relevantRequirements, base);
     }
     if (task.kind === "skills") {
-      return this.generateSkillsSuggestions(userId, session, task, compact, content, job, cvLanguage, relevantRequirements, forbidden, knownRequirementIds, base);
+      return this.generateSkillsSuggestions(userId, session, task, compact, content, job, cvLanguage, relevantRequirements, forbidden, knownRequirementIds, base, refinementPayload);
     }
 
     // Narrative: an item block, the existing summary, or a new summary.
@@ -674,8 +804,13 @@ export class TailoringService {
     }
 
     const info = task.block_id ? compact.blocks.find((item) => item.block_id === task.block_id) : undefined;
+    if (block && (!info || !isEditableBlock(info) || info.kind !== (task.kind === "summary" ? "summary" : "item"))) {
+      // The block is hidden, emptied or no longer holds rewritable text.
+      return { suggestions: [], ai_run_id: null, skipped: true };
+    }
     const kind = task.kind === "summary" ? (block ? "summary" : "new_summary") : "item";
-    const field = kind === "item" ? "description" : "text";
+    // The field the block keeps its narrative in (description, summary, content, ...).
+    const field = info?.editable_field ?? "text";
     const currentText = block ? String(block.fields[field] ?? "").trim() : "";
 
     const relatedQuestions = analysis.questions.filter((question) =>
@@ -686,7 +821,7 @@ export class TailoringService {
     const confirmedFacts = relatedQuestions.flatMap((question) => {
       const answer = session.answers[question.id];
       if (!answer || answer.answer === "no" || (!answer.answer && !answer.detail)) return [];
-      return [{ question: question.text, answer: answer.answer, detail: answer.detail }];
+      return [{ kind: question.kind, question: question.text, answer: answer.answer, detail: answer.detail }];
     });
     const addToMain = relatedQuestions.some((question) => session.answers[question.id]?.add_to_main === true);
 
@@ -725,7 +860,7 @@ export class TailoringService {
         confirmed_facts: confirmedFacts,
         other_blocks: otherBlocks,
         ...(kind === "new_summary" ? { cv_overview: toAnalysisCvPayload(compact) } : {}),
-        ...(refinement ? { refinement: REFINEMENT_INSTRUCTIONS[refinement] } : {})
+        ...refinementPayload
       }
     });
 
@@ -822,16 +957,24 @@ export class TailoringService {
     requirements: Array<Record<string, unknown>>,
     forbidden: string[],
     knownRequirementIds: Set<string>,
-    base: Pick<CreateTailoringSuggestionPayload, "user_id" | "tailored_cv_id" | "tailoring_session_id" | "tailoring_task_id">
+    base: Pick<CreateTailoringSuggestionPayload, "user_id" | "tailored_cv_id" | "tailoring_session_id" | "tailoring_task_id">,
+    refinementPayload: Record<string, string>
   ) {
     const analysis = session.analysis!;
     let currentSkills: string[] = [];
+    // The list field of the block (skills or items); a new section uses "skills".
+    let listField = "skills";
     if (task.block_id) {
+      const info = compact.blocks.find((item) => item.block_id === task.block_id);
+      if (!info || info.kind !== "skills" || !info.editable_field) {
+        return { suggestions: [], ai_run_id: null, skipped: true };
+      }
       try {
         currentSkills = readSkillsField(findBlockInCvContent(content, task.block_id).block.fields);
       } catch {
         return { suggestions: [], ai_run_id: null, skipped: true };
       }
+      listField = info.editable_field;
     }
 
     const currentKeys = new Set(currentSkills.map((skill) => skill.toLowerCase()));
@@ -872,7 +1015,8 @@ export class TailoringService {
         job,
         requirements,
         current_skills: currentSkills,
-        allowed_new_skills: allowedNewSkills
+        allowed_new_skills: allowedNewSkills,
+        ...refinementPayload
       }
     });
 
@@ -941,8 +1085,8 @@ export class TailoringService {
           ai_run_id: ai_run.id,
           kind: "skills" as const,
           block_id: task.block_id,
-          before_content: { field: "skills", value: currentSkills },
-          suggested_content: { field: "skills", value: guarded.lines },
+          before_content: { field: listField, value: currentSkills },
+          suggested_content: { field: listField, value: guarded.lines },
           rationale: output.rationale,
           requirement_ids: requirementIds,
           meta
@@ -1069,7 +1213,7 @@ export class TailoringService {
         if (typeof input.edited_value !== "string") {
           throw new ValidationError("Edit this suggestion as text.");
         }
-      } else if (suggestion.kind === "skills") {
+      } else if (suggestion.kind === "skills" || isNewSkillsSection(suggestion)) {
         if (!Array.isArray(input.edited_value)) {
           throw new ValidationError("Edit this suggestion as a list of skills.");
         }
@@ -1077,6 +1221,10 @@ export class TailoringService {
         throw new ValidationError("Only text and skills suggestions can be edited.");
       }
       suggestedContent = { ...suggestion.suggested_content, value: input.edited_value, edited: true };
+      // A new skills section stores the edited list in its block too, so the section stays whole.
+      if (suggestion.kind === "new_section" && Array.isArray(input.edited_value)) {
+        suggestedContent.section = withSectionSkills(suggestion.suggested_content.section, input.edited_value);
+      }
     }
 
     const transition =
@@ -1436,6 +1584,7 @@ export class TailoringService {
       section_id: task.section_id,
       status: task.status,
       depends_on_question_ids: task.depends_on_question_ids,
+      rerun_for_answer: task.rerun_for_answer,
       error_message: task.error_message,
       updated_at: task.updated_at
     };
@@ -1478,17 +1627,31 @@ export class TailoringService {
 
 const roundUsd = (value: number): number => Math.round(value * 1_000_000) / 1_000_000;
 
+const isNewSkillsSection = (suggestion: TailoringSuggestionRecord): boolean =>
+  suggestion.kind === "new_section" && asRecord(suggestion.suggested_content.section).type === "skills";
+
+// Writes an edited skill list into a new skills section's first block (skills or items field).
+const withSectionSkills = (rawSection: unknown, skills: string[]): Record<string, unknown> => {
+  const section = asRecord(rawSection);
+  const blocks = Array.isArray(section.blocks) ? section.blocks.map(asRecord) : [];
+  if (blocks.length === 0) return section;
+  const [first, ...rest] = blocks;
+  const fields = asRecord(first.fields);
+  const field = Array.isArray(fields.items) && !Array.isArray(fields.skills) ? "items" : "skills";
+  return { ...section, blocks: [{ ...first, fields: { ...fields, [field]: skills } }, ...rest] };
+};
+
 const describeRunStep = (flowType: string, flowInput: Record<string, unknown>): string => {
   switch (flowType) {
     case "tailoring_analysis":
       return "Match analysis";
     case "tailoring_skills":
-      return "Skills";
+      return `Skills${runSuffix(flowInput)}`;
     case "tailoring_structure":
       return "Section order";
     case "tailoring_block": {
       const block = asRecord(flowInput.block);
-      const refined = typeof flowInput.refinement === "string" ? " (quick fix)" : "";
+      const refined = runSuffix(flowInput);
       if (block.kind === "summary" || block.kind === "new_summary") return `Summary${refined}`;
       const title = [block.title, block.subtitle].filter((part) => typeof part === "string" && part).join(" · ");
       return `Block: ${title || "untitled"}${refined}`;
@@ -1498,9 +1661,18 @@ const describeRunStep = (flowType: string, flowInput: Record<string, unknown>): 
   }
 };
 
+// Runs with the candidate's own request are "(refine)"; preset-only runs "(quick fix)".
+const runSuffix = (flowInput: Record<string, unknown>): string =>
+  typeof flowInput.candidate_request === "string"
+    ? " (refine)"
+    : typeof flowInput.refinement === "string"
+      ? " (quick fix)"
+      : "";
+
 const stepGroup = (flowType: string, step: string): string => {
+  if (step.endsWith("(refine)")) return "Refinements";
+  if (step.endsWith("(quick fix)")) return "Quick fixes";
   if (flowType === "tailoring_block") {
-    if (step.endsWith("(quick fix)")) return "Quick fixes";
     return step.startsWith("Summary") ? "Summary" : "Block rewrites";
   }
   return step;

@@ -63,10 +63,18 @@ export interface TailoringRepository {
   deleteTasks(userId: string, sessionId: string): Promise<void>;
   listTasks(userId: string, sessionId: string): Promise<TailoringTaskRecord[]>;
   findTask(userId: string, sessionId: string, taskId: string): Promise<TailoringTaskRecord | null>;
-  // Claims a runnable task: ready/failed, or running but started before staleBeforeIso.
+  // Claims a runnable task: ready/failed, done/skipped when allowDone (regenerate), or
+  // running but started before staleBeforeIso. Clears rerun_for_answer (the run uses the answers).
   claimTask(userId: string, sessionId: string, taskId: string, staleBeforeIso: string, allowDone: boolean): Promise<TailoringTaskRecord | null>;
   updateTask(userId: string, taskId: string, payload: UpdateTailoringTaskPayload): Promise<TailoringTaskRecord | null>;
+  // Ends a run with `payload`, unless an answer re-queued the task while it ran
+  // (rerun_for_answer set again): then the task goes back to "ready" for another run.
+  completeTask(userId: string, taskId: string, payload: UpdateTailoringTaskPayload): Promise<TailoringTaskRecord | null>;
   markTasksReady(userId: string, sessionId: string, taskIds: string[]): Promise<void>;
+  // An answer changed: finished tasks (done/failed/skipped) go back to "ready" with
+  // rerun_for_answer; running ones only get the flag (completeTask re-queues them).
+  // Returns the ids that were moved back to "ready".
+  requeueTasksForAnswer(userId: string, sessionId: string, taskIds: string[]): Promise<string[]>;
 
   createSuggestions(payloads: CreateTailoringSuggestionPayload[]): Promise<TailoringSuggestionRecord[]>;
   listSuggestions(userId: string, sessionId: string): Promise<TailoringSuggestionRecord[]>;
@@ -138,6 +146,7 @@ const toTaskRecord = (row: Record<string, unknown>): TailoringTaskRecord => ({
   brief: asRecord(row.brief) as TailoringTaskRecord["brief"],
   ai_run_id: (row.ai_run_id as string | null) ?? null,
   attempts: Number(row.attempts ?? 0),
+  rerun_for_answer: row.rerun_for_answer === true,
   error_message: (row.error_message as string | null) ?? null,
   started_at: (row.started_at as string | null) ?? null,
   completed_at: (row.completed_at as string | null) ?? null,
@@ -314,7 +323,7 @@ export class SupabaseTailoringRepository implements TailoringRepository {
     const runnable =
       current.status === "ready" ||
       current.status === "failed" ||
-      (allowDone && current.status === "done") ||
+      (allowDone && (current.status === "done" || current.status === "skipped")) ||
       (current.status === "running" && (current.started_at ?? "") < staleBeforeIso);
     if (!runnable) return null;
 
@@ -325,7 +334,8 @@ export class SupabaseTailoringRepository implements TailoringRepository {
         status: "running",
         attempts: current.attempts + 1,
         started_at: new Date().toISOString(),
-        error_message: null
+        error_message: null,
+        rerun_for_answer: false
       })
       .eq("id", taskId)
       .eq("user_id", userId)
@@ -347,6 +357,79 @@ export class SupabaseTailoringRepository implements TailoringRepository {
       .maybeSingle();
     if (error) fail("Failed to update tailoring task", error.message);
     return data ? toTaskRecord(data as Record<string, unknown>) : null;
+  }
+
+  async completeTask(userId: string, taskId: string, payload: UpdateTailoringTaskPayload): Promise<TailoringTaskRecord | null> {
+    const { data, error } = await this.db
+      .from("tailoring_session_tasks")
+      .update(payload)
+      .eq("id", taskId)
+      .eq("user_id", userId)
+      .eq("status", "running")
+      .eq("rerun_for_answer", false)
+      .select("*")
+      .maybeSingle();
+    if (error) fail("Failed to update tailoring task", error.message);
+    if (data) return toTaskRecord(data as Record<string, unknown>);
+
+    // Re-queued by an answer during the run (or no longer running): keep the flag and let
+    // the runner pick it up again.
+    const current = await this.updateTaskWhere(userId, taskId, { ...payload, status: "ready" }, { status: "running", rerun_for_answer: true });
+    return current ?? this.findTaskById(userId, taskId);
+  }
+
+  private async updateTaskWhere(
+    userId: string,
+    taskId: string,
+    payload: UpdateTailoringTaskPayload,
+    where: { status: TailoringTaskStatus; rerun_for_answer: boolean }
+  ): Promise<TailoringTaskRecord | null> {
+    const { data, error } = await this.db
+      .from("tailoring_session_tasks")
+      .update(payload)
+      .eq("id", taskId)
+      .eq("user_id", userId)
+      .eq("status", where.status)
+      .eq("rerun_for_answer", where.rerun_for_answer)
+      .select("*")
+      .maybeSingle();
+    if (error) fail("Failed to update tailoring task", error.message);
+    return data ? toTaskRecord(data as Record<string, unknown>) : null;
+  }
+
+  private async findTaskById(userId: string, taskId: string): Promise<TailoringTaskRecord | null> {
+    const { data, error } = await this.db
+      .from("tailoring_session_tasks")
+      .select("*")
+      .eq("id", taskId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) fail("Failed to load tailoring task", error.message);
+    return data ? toTaskRecord(data as Record<string, unknown>) : null;
+  }
+
+  async requeueTasksForAnswer(userId: string, sessionId: string, taskIds: string[]): Promise<string[]> {
+    if (taskIds.length === 0) return [];
+    const { data, error } = await this.db
+      .from("tailoring_session_tasks")
+      .update({ status: "ready", rerun_for_answer: true, error_message: null })
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .in("status", ["done", "failed", "skipped"])
+      .in("id", taskIds)
+      .select("id");
+    if (error) fail("Failed to re-queue tailoring tasks", error.message);
+
+    const { error: runningError } = await this.db
+      .from("tailoring_session_tasks")
+      .update({ rerun_for_answer: true })
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .eq("status", "running")
+      .in("id", taskIds);
+    if (runningError) fail("Failed to re-queue tailoring tasks", runningError.message);
+
+    return (data ?? []).map((row) => String((row as Record<string, unknown>).id));
   }
 
   async markTasksReady(userId: string, sessionId: string, taskIds: string[]): Promise<void> {

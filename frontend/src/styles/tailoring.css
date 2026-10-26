@@ -53,6 +53,138 @@
   animation: tailor-message-in 180ms ease-out;
 }
 
+/* Skills card editing: toggleable chips (selected = included). */
+.tailor-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px dashed var(--color-border-secondary);
+  background: var(--color-background-primary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.tailor-skill-chip:hover {
+  border-color: var(--color-teal-200);
+  color: var(--color-text-primary);
+}
+
+.tailor-skill-chip[aria-pressed="true"] {
+  border-style: solid;
+  border-color: var(--color-teal-200);
+  background: var(--color-teal-50);
+  color: var(--color-teal-900);
+}
+
+.tailor-skill-chip:focus-visible,
+.tailor-refine-chip:focus-visible,
+.tailor-tab:focus-visible,
+.tailor-refine-row:focus-visible {
+  outline: 2px solid var(--color-teal-400);
+  outline-offset: 2px;
+}
+
+.tailor-skill-chip-new {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-teal-600);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Panel tabs: guided suggestions / "Refine with AI". */
+.tailor-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--color-background-secondary);
+}
+
+.tailor-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.tailor-tab[aria-selected="true"] {
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.tailor-tab-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-teal-600);
+  color: white;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+/* "Refine with AI" block list. */
+.tailor-refine-item {
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 12px;
+  background: var(--color-background-primary);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+  scroll-margin: 12px;
+}
+
+.tailor-refine-item:hover,
+.tailor-refine-item[data-open="true"] {
+  border-color: var(--color-teal-200);
+}
+
+.tailor-refine-item[data-open="true"] {
+  box-shadow: 0 1px 3px rgba(15, 110, 86, 0.08);
+}
+
+.tailor-refine-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.tailor-refine-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-primary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.tailor-refine-chip:hover:not(:disabled) {
+  background: var(--color-teal-50);
+  border-color: var(--color-teal-200);
+  color: var(--color-teal-800);
+}
+
+.tailor-refine-chip:disabled {
+  opacity: 0.5;
+}
+
 .editor-pane-track > * {
   transition:
     width 420ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -72,6 +204,11 @@
   .ai-working-marker,
   .tailor-message {
     animation: none;
+  }
+  .tailor-skill-chip,
+  .tailor-refine-item,
+  .tailor-refine-chip {
+    transition: none;
   }
   .editor-pane-track > *,
   .editor-edge-handle {

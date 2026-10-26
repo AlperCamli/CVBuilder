@@ -4,17 +4,72 @@ import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 // Builds the compact, token-lean view of a CV that the tailoring model calls see:
 // header/contact data, references, hidden and empty blocks are left out, and block ids are
 // replaced by short aliases (b1, b2, ...) that the model cannot mangle.
+//
+// Blocks are classified by their (normalized) section type and field shape, never by exact
+// block type: real CVs use many block types per section (experience/position, education/
+// degree, projects/academic_project, ...), so a type allow-list silently made most of them
+// read-only.
 
-const EXCLUDED_SECTION_TYPES = new Set(["header", "contact", "contact_info", "personal_info", "references"]);
-const ITEM_BLOCK_TYPES = new Set([
-  "experience_item",
-  "project_item",
-  "volunteer_item",
-  "education_item",
-  "award_item",
-  "publication_item",
-  "course_item"
+const EXCLUDED_SECTION_TYPES = new Set([
+  "header",
+  "contact",
+  "contact_info",
+  "contact_information",
+  "personal_info",
+  "personal_information",
+  "personal_details",
+  "references",
+  "reference",
+  "referees"
 ]);
+const SUMMARY_SECTION_TYPES = new Set([
+  "summary",
+  "professional_summary",
+  "profile",
+  "about",
+  "about_me",
+  "objective",
+  "career_objective",
+  "personal_statement"
+]);
+const SKILLS_SECTION_TYPES = new Set([
+  "skills",
+  "technical_skills",
+  "soft_skills",
+  "key_skills",
+  "core_skills",
+  "core_competencies",
+  "competencies"
+]);
+// Sections whose blocks are facts/labels, never narrative to rewrite.
+const READ_ONLY_SECTION_TYPES = new Set(["languages", "language", "interests", "hobbies"]);
+const EDUCATION_SECTION_TYPES = new Set(["education", "medical_qualifications"]);
+
+// String fields an item block's narrative may live in, in the order the renderer picks its
+// body (rendering-presentation pickBodyText); includes every field ai.service bulletizes for
+// item blocks (description, responsibilities, highlights).
+export const ITEM_NARRATIVE_FIELDS = ["description", "summary", "details", "responsibilities", "highlights"] as const;
+// Narrative content that may also be stored as arrays (read-only context for tailoring).
+const ITEM_CONTEXT_FIELDS = [...ITEM_NARRATIVE_FIELDS, "bullets", "achievements", "notes", "text", "content"];
+const SUMMARY_TEXT_FIELDS = ["text", "content", "summary", "description"] as const;
+
+const TITLE_FIELDS = ["role", "job_title", "title", "position", "name", "course", "course_name", "language"];
+const SUBTITLE_FIELDS = [
+  "company",
+  "employer",
+  "organization",
+  "institution",
+  "school",
+  "university",
+  "issuer",
+  "publisher",
+  "provider",
+  "event",
+  "subtitle",
+  "proficiency",
+  "level"
+];
+
 // Sections the structure suggestion may never hide.
 export const PROTECTED_SECTION_TYPES = new Set(["summary", "experience", "education", "skills"]);
 
@@ -26,9 +81,10 @@ export interface CompactBlockInfo {
   section_id: string;
   section_type: string;
   block_type: string;
+  // item / summary / skills blocks are editable; "other" blocks are read-only context.
   kind: CompactBlockKind;
   // The single field tailoring may rewrite (null = read-only context).
-  editable_field: "description" | "text" | "skills" | null;
+  editable_field: string | null;
   title: string;
   subtitle: string;
   text: string;
@@ -86,66 +142,135 @@ export const readSkillsField = (fields: Record<string, CvJsonValue>): string[] =
     .filter(Boolean);
 };
 
-const joinParts = (...parts: string[]): string => parts.filter(Boolean).join(", ");
-
-const describeBlock = (
-  block: CvBlock,
-  sectionType: string
-): Pick<CompactBlockInfo, "kind" | "editable_field" | "title" | "subtitle" | "text" | "skills"> => {
-  const fields = block.fields;
-  const type = block.type;
-
-  if (sectionType === "skills" || type === "skills") {
-    return { kind: "skills", editable_field: "skills", title: "", subtitle: "", text: "", skills: readSkillsField(fields) };
+// The array field a skills block keeps its list in. Only array-backed lists are rewritten:
+// a skills card's value is a list, so writing it into a text field would break the block.
+export const skillsListField = (fields: Record<string, CvJsonValue>): "skills" | "items" | null => {
+  if (Array.isArray(fields.skills) && (strList(fields.skills).length > 0 || !Array.isArray(fields.items))) {
+    return "skills";
   }
-
-  if (sectionType === "summary" || type === "summary") {
-    return { kind: "summary", editable_field: "text", title: "", subtitle: "", text: str(fields.text), skills: [] };
+  if (Array.isArray(fields.items)) {
+    return "items";
   }
+  return null;
+};
 
-  const description = str(fields.description);
-  switch (type) {
-    case "experience_item":
-      return { kind: "item", editable_field: "description", title: str(fields.role), subtitle: str(fields.company), text: description, skills: [] };
-    case "volunteer_item":
-      return { kind: "item", editable_field: "description", title: str(fields.role), subtitle: str(fields.organization), text: description, skills: [] };
-    case "project_item":
-      return { kind: "item", editable_field: "description", title: str(fields.title), subtitle: str(fields.subtitle), text: description, skills: [] };
-    case "education_item":
-      return {
-        kind: "item",
-        editable_field: "description",
-        title: joinParts(str(fields.degree), str(fields.field_of_study)),
-        subtitle: str(fields.institution),
-        text: description,
-        skills: []
-      };
-    case "award_item":
-      return { kind: "item", editable_field: "description", title: str(fields.name), subtitle: str(fields.issuer), text: description, skills: [] };
-    case "publication_item":
-      return { kind: "item", editable_field: "description", title: str(fields.title), subtitle: str(fields.publisher), text: description, skills: [] };
-    case "course_item":
-      return { kind: "item", editable_field: "description", title: str(fields.title), subtitle: str(fields.institution), text: description, skills: [] };
-    case "certification_item":
-      return { kind: "other", editable_field: null, title: str(fields.name), subtitle: "", text: "", skills: [] };
-    case "language_item":
-      return { kind: "other", editable_field: null, title: str(fields.language), subtitle: str(fields.proficiency), text: "", skills: [] };
-    default: {
-      // Unknown/module block types are read-only context: keep their visible text.
-      const values = Object.values(fields).flatMap((value) =>
-        Array.isArray(value) ? strList(value) : [str(value)]
-      ).filter(Boolean);
-      return {
-        kind: ITEM_BLOCK_TYPES.has(type) ? "item" : "other",
-        editable_field: null,
-        title: values[0] ?? "",
-        subtitle: values[1] ?? "",
-        text: values.slice(2).join(" ").slice(0, 600),
-        skills: []
-      };
+const MONTH_OR_STATUS =
+  "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|" +
+  "ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık|oca|şub|nis|haz|tem|ağu|eyl|eki|kas|ara|" +
+  "present|current|now|ongoing|today|günümüz|halen|devam ediyor|devam";
+const DATE_PART = `(?:(?:\\d{1,2}[./-]){0,2}\\d{4}|\\d{1,2}[./-]\\d{2,4}|(?:${MONTH_OR_STATUS})\\.?(?:\\s*\\d{1,2},?)?(?:\\s*\\d{4})?|\\d{4}\\s*(?:${MONTH_OR_STATUS})\\.?)`;
+const DATE_LIKE_RE = new RegExp(`^${DATE_PART}(?:\\s*(?:[–—-]|to|until|/)\\s*${DATE_PART})?$`, "iu");
+
+// Dates (and imports that put a date into the title field) are never titles.
+export const isDateLike = (value: string): boolean => DATE_LIKE_RE.test(value.trim());
+
+const firstText = (fields: Record<string, CvJsonValue>, keys: readonly string[], exclude: string[] = []): string => {
+  for (const key of keys) {
+    const value = str(fields[key]);
+    if (value && !isDateLike(value) && !exclude.includes(value)) {
+      return value;
     }
   }
+  return "";
 };
+
+const joinDistinct = (...parts: string[]): string => {
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (part && !kept.some((existing) => existing.toLowerCase() === part.toLowerCase())) kept.push(part);
+  }
+  return kept.join(", ");
+};
+
+const titleOf = (fields: Record<string, CvJsonValue>, sectionType: string): { title: string; subtitle: string } => {
+  const study = firstText(fields, ["field_of_study", "study_field", "major"]);
+  const degree = firstText(fields, ["degree", "qualification", "program"]);
+  let title: string;
+  if (EDUCATION_SECTION_TYPES.has(sectionType) || degree || study) {
+    title = joinDistinct(degree, study) || firstText(fields, TITLE_FIELDS);
+  } else {
+    title = firstText(fields, TITLE_FIELDS);
+  }
+  const subtitle = firstText(fields, SUBTITLE_FIELDS, title ? [title] : []);
+  // Imports sometimes put a date in the title slot: the subtitle then names the entry.
+  return title ? { title, subtitle } : { title: subtitle, subtitle: "" };
+};
+
+const contextText = (fields: Record<string, CvJsonValue>): string => {
+  const parts: string[] = [];
+  for (const key of ITEM_CONTEXT_FIELDS) {
+    const value = fields[key];
+    const texts = Array.isArray(value) ? strList(value) : [str(value)];
+    for (const text of texts) {
+      if (text && !parts.includes(text)) parts.push(text);
+    }
+  }
+  return parts.join("\n").slice(0, 600);
+};
+
+// The string field an item's narrative is rewritten in, or null when the block has none
+// (or keeps its narrative only in arrays, which a text rewrite would duplicate).
+const itemEditableField = (fields: Record<string, CvJsonValue>): string | null => {
+  for (const key of ITEM_NARRATIVE_FIELDS) {
+    if (typeof fields[key] === "string" && str(fields[key])) {
+      return key;
+    }
+  }
+  const hasArrayNarrative = ITEM_CONTEXT_FIELDS.some((key) => strList(fields[key]).length > 0);
+  if (hasArrayNarrative) {
+    return null;
+  }
+  return typeof fields.description === "string" ? "description" : null;
+};
+
+type DescribedBlock = Pick<CompactBlockInfo, "kind" | "editable_field" | "title" | "subtitle" | "text" | "skills">;
+
+export const describeBlock = (block: CvBlock, sectionType: string): DescribedBlock => {
+  const fields = block.fields ?? {};
+  const type = normalizeSectionType(block.type ?? "");
+
+  if (SKILLS_SECTION_TYPES.has(sectionType) || (type === "skills" && !SUMMARY_SECTION_TYPES.has(sectionType))) {
+    const listField = skillsListField(fields);
+    const skills = readSkillsField(fields);
+    if (listField) {
+      return { kind: "skills", editable_field: listField, title: str(fields.category), subtitle: "", text: "", skills };
+    }
+    // Text-backed lists, one-skill-per-block entries and grouped arrays stay read-only.
+    const { title, subtitle } = titleOf(fields, sectionType);
+    const grouped = Object.values(fields).flatMap((value) => (Array.isArray(value) ? strList(value) : []));
+    return {
+      kind: "other",
+      editable_field: null,
+      title: title || str(fields.category),
+      subtitle: subtitle || str(fields.details),
+      text: "",
+      skills: skills.length > 0 ? skills : grouped.slice(0, 40)
+    };
+  }
+
+  if (SUMMARY_SECTION_TYPES.has(sectionType) || type === "summary") {
+    const field = SUMMARY_TEXT_FIELDS.find((key) => typeof fields[key] === "string" && str(fields[key])) ?? "text";
+    return { kind: "summary", editable_field: field, title: "", subtitle: "", text: str(fields[field]), skills: [] };
+  }
+
+  const { title, subtitle } = titleOf(fields, sectionType);
+  const editableField = READ_ONLY_SECTION_TYPES.has(sectionType) ? null : itemEditableField(fields);
+  if (editableField) {
+    return { kind: "item", editable_field: editableField, title, subtitle, text: str(fields[editableField]), skills: [] };
+  }
+
+  // Read-only context: its title and visible narrative, never dates.
+  const fallbackTitle =
+    title ||
+    Object.values(fields)
+      .map((value) => str(value))
+      .find((value) => value && !isDateLike(value) && value.length <= 120) ||
+    "";
+  return { kind: "other", editable_field: null, title: fallbackTitle, subtitle, text: contextText(fields), skills: [] };
+};
+
+export const isEditableBlock = (block: Pick<CompactBlockInfo, "kind" | "editable_field">): boolean =>
+  block.kind !== "other" && block.editable_field !== null;
 
 export const buildCompactCv = (content: CvContent): CompactCv => {
   const blocks: CompactBlockInfo[] = [];
@@ -214,6 +339,8 @@ export const buildCompactCv = (content: CvContent): CompactCv => {
     alias_to_section_id: aliasToSectionId
   };
 };
+
+export const isSkillsSectionType = (sectionType: string): boolean => SKILLS_SECTION_TYPES.has(sectionType);
 
 // The analysis input: only the parts a recruiter-style match needs, empty values omitted.
 export const toAnalysisCvPayload = (compact: CompactCv): Array<Record<string, unknown>> =>

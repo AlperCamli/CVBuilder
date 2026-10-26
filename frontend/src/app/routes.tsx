@@ -194,13 +194,15 @@ export function RouteContents({ guidedJourney }: { guidedJourney?: ComponentType
     /^\/designs\/guided-journey\/(editor|languages)\/?$/.test(pathname) ||
     /^\/designs\/template-order\/?$/.test(pathname)
   );
+  // Pages that render the CV editor fill the viewport and scroll inside their panes.
+  const editorRoute = /^\/app\/(cv\/[^/]+|medical|tailor\/[^/]+)\/?$/.test(pathname);
   return (
     <>
       {!reviewTool && <LanguageChooser />}
       {!reviewTool && <AnalyticsNavigation />}
       <RouteSeo />
       <RouteElements guidedJourney={guidedJourney} />
-      {!reviewTool && <PrivacyControls />}
+      {!reviewTool && <PrivacyControls showLinks={!editorRoute} />}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import type { CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
 import type { ParseCvFileDiagnostics } from "../imports/parsers/cv-parser";
-import type { CvReview, ReviewCheck, ReviewDimension, ReviewDimensionId, TailoringReview } from "./cv-review.types";
+import type { CvReview, ReviewCheck, ReviewDimension, ReviewDimensionId } from "./cv-review.types";
 
 export const REVIEW_WEIGHTS = { ats: 20, sections: 15, relevance: 20, keywords: 15, quality: 15, impact: 10, formatting: 5 } as const;
 const LABELS: Record<ReviewDimensionId, string> = {
@@ -153,22 +153,4 @@ export function reviewCv(input: ReviewInput): CvReview {
   const improvements = assessed.flatMap(d => d.checks.filter(c => c.points < c.max_points).map(c => ({ priority: d.weight * (1 - c.points / c.max_points), suggestion: c.suggestion }))).sort((a, b) => b.priority - a.priority).map(c => c.suggestion);
   const status = weight === 100 ? "complete" : "partial";
   return { version: "cv-review-v1", status, score, assessed_weight: weight, summary: `${score >= 80 ? "Strong CV foundation" : score >= 60 ? "Good foundation with room to improve" : "Several areas need attention"}. ${status === "partial" ? "This score covers only the dimensions we could assess." : "All seven review dimensions were assessed."}`, dimensions, strengths, improvements: [...new Set(improvements)].slice(0, 6), matched_keywords: matched, missing_keywords: missing, limitations };
-}
-
-export function reviewTailoring(beforeContent: CvContent, afterContent: CvContent, job: NonNullable<ReviewInput["job"]>, keywords: string[] = []): TailoringReview {
-  // Both sides use the same target and available dimensions. No claim about the original file's layout.
-  const before = reviewCv({ content: beforeContent, job, keywords });
-  const after = reviewCv({ content: afterContent, job, keywords });
-  const changes = after.dimensions.flatMap(d => {
-    const previous = before.dimensions.find(b => b.id === d.id);
-    if (d.score === null || previous?.score === null || previous?.score === undefined || previous.score === d.score) return [];
-    const evidence = d.checks.filter(c => previous.checks.find(p => p.id === c.id)?.points !== c.points).map(c => c.evidence).join(" ");
-    return [{ dimension: d.id, label: d.label, before: previous.score, after: d.score, reason: evidence }];
-  });
-  const added = after.matched_keywords.filter(k => !before.matched_keywords.includes(k));
-  const removed = before.matched_keywords.filter(k => !after.matched_keywords.includes(k));
-  const sectionText = (section: CvSection) => section.blocks.filter(b => b.visibility !== "hidden").map(b => flattenFields(b.fields)).join("\n");
-  const changedSections = [...new Set([...beforeContent.sections, ...afterContent.sections].map(s => s.type))].filter(type => beforeContent.sections.filter(s => s.type === type).map(sectionText).join("\n") !== afterContent.sections.filter(s => s.type === type).map(sectionText).join("\n"));
-  const scoreChange = before.score !== null && after.score !== null && before.assessed_weight === after.assessed_weight ? after.score - before.score : null;
-  return { version: "cv-review-v1", before, after, score_change: scoreChange, changes, added_keywords: added, removed_keywords: removed, changed_sections: changedSections, summary: scoreChange === null ? "A reliable score comparison is unavailable." : scoreChange > 0 ? `Tailoring increased the review score by ${scoreChange} points against the same job criteria.` : scoreChange < 0 ? `The review score decreased by ${Math.abs(scoreChange)} points. Review the changes before applying.` : "Tailoring changed the wording without changing the overall review score." };
 }

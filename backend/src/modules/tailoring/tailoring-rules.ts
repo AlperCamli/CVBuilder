@@ -147,6 +147,108 @@ const normalizeNumber = (raw: string): string => raw.replace(/,(?=\d{3}\b)/g, ""
 export const extractNumbers = (text: string): Set<string> =>
   new Set((text.match(NUMBER_RE) ?? []).map(normalizeNumber));
 
+// A number with an optional magnitude word right after it ("1.5K", "2 million", "3 bin").
+// Case-sensitive on purpose: a lone "m" or "b" is usually a unit (metres, bytes), so only
+// "M" / "B" count as million / billion.
+const NUMBER_TOKEN_RE =
+  /(\d+(?:[.,]\d+)*)(?:\s?(K|k|M|Mn|mn|MM|B|Bn|bn|thousand|million|billion|bin|milyon|milyar|Mio|Mrd)(?![\p{L}\p{N}]))?/gu;
+
+const MAGNITUDE: Record<string, number> = {
+  k: 1e3,
+  thousand: 1e3,
+  bin: 1e3,
+  m: 1e6,
+  mn: 1e6,
+  mm: 1e6,
+  million: 1e6,
+  milyon: 1e6,
+  mio: 1e6,
+  b: 1e9,
+  bn: 1e9,
+  billion: 1e9,
+  milyar: 1e9,
+  mrd: 1e9
+};
+
+const canonicalValue = (value: number): string => String(Math.round(value * 1e6) / 1e6);
+
+// Every value a written number can mean: "1,500" and "1.500" (Turkish/German thousands) are
+// 1500, "1.5" / "1,5" (decimal comma) are 1.5; "1.500" is ambiguous and yields both.
+const numberReadings = (raw: string): number[] => {
+  const separators = raw.match(/[.,]/g) ?? [];
+  if (separators.length === 0) return [Number(raw)];
+  const hasDot = raw.includes(".");
+  const hasComma = raw.includes(",");
+  if (hasDot && hasComma) {
+    // The last separator is the decimal one, the others group thousands.
+    const decimal = raw.lastIndexOf(".") > raw.lastIndexOf(",") ? "." : ",";
+    const grouping = decimal === "." ? "," : ".";
+    return [Number(raw.split(grouping).join("").replace(decimal, "."))];
+  }
+  const separator = hasDot ? "." : ",";
+  const readings: number[] = [];
+  if (/^\d{1,3}(?:[.,]\d{3})+$/.test(raw)) {
+    readings.push(Number(raw.split(separator).join("")));
+  }
+  if (separators.length === 1) {
+    readings.push(Number(raw.replace(separator, ".")));
+  }
+  return readings.filter((value) => Number.isFinite(value));
+};
+
+interface NumberToken {
+  // Written form (thousands commas dropped), with its magnitude word when it has one.
+  raw: string;
+  base_raw: string;
+  // Values it means, with and without its magnitude word.
+  values: string[];
+  base_values: string[];
+  scaled: boolean;
+}
+
+const numberTokens = (text: string): NumberToken[] =>
+  [...text.matchAll(NUMBER_TOKEN_RE)].map((match) => {
+    const digits = match[1];
+    const suffix = match[2]?.toLowerCase() ?? "";
+    const multiplier = suffix ? MAGNITUDE[suffix] ?? 1 : 1;
+    const readings = numberReadings(digits);
+    const baseRaw = normalizeNumber(digits);
+    return {
+      raw: `${baseRaw}${suffix}`,
+      base_raw: baseRaw,
+      values: readings.map((value) => canonicalValue(value * multiplier)),
+      base_values: readings.map((value) => canonicalValue(value)),
+      scaled: Boolean(suffix)
+    };
+  });
+
+export interface AllowedNumbers {
+  raw: Set<string>;
+  values: Set<string>;
+}
+
+// Numbers the sources allow, by written form and by value, so the candidate's "1.5K" also
+// licenses "1,500", "1.500" (Turkish thousands) licenses "1500" and "%30" licenses "30 %".
+// A source number licenses its plain digits too ("1.5K" -> "1.5", as before). Only equal
+// values pass: a number whose value is not in the sources is still rejected.
+export const allowedNumberSet = (texts: string[]): AllowedNumbers => {
+  const raw = new Set<string>();
+  const values = new Set<string>();
+  for (const token of numberTokens(texts.join("\n"))) {
+    raw.add(token.raw);
+    raw.add(token.base_raw);
+    for (const value of [...token.values, ...token.base_values]) values.add(value);
+  }
+  return { raw, values };
+};
+
+// Numbers in a generated line that the sources do not support. A scaled number ("2K") is
+// judged by its scaled value only, so "2" in a source never licenses "2K".
+export const unsupportedNumbers = (line: string, allowed: AllowedNumbers): string[] =>
+  numberTokens(line)
+    .filter((token) => !allowed.raw.has(token.raw) && !token.values.some((value) => allowed.values.has(value)))
+    .map((token) => token.raw);
+
 export interface LineGuardContext {
   // Text the candidate already wrote or confirmed; numbers in it are allowed.
   source_texts: string[];
@@ -160,14 +262,14 @@ export interface LineGuardResult {
 }
 
 export const guardGeneratedLines = (lines: string[], context: LineGuardContext): LineGuardResult => {
-  const allowedNumbers = extractNumbers(context.source_texts.join("\n"));
+  const allowedNumbers = allowedNumberSet(context.source_texts);
   const sourceText = context.source_texts.join("\n");
   const forbidden = context.forbidden_terms.filter((term) => term && !containsTerm(sourceText, term));
   const kept: string[] = [];
   const notes: string[] = [];
 
   for (const line of lines) {
-    const unsupported = [...extractNumbers(line)].filter((number) => !allowedNumbers.has(number));
+    const unsupported = unsupportedNumbers(line, allowedNumbers);
     if (unsupported.length > 0) {
       notes.push(`Removed a line with numbers not in your CV or answers (${unsupported.join(", ")}).`);
       continue;

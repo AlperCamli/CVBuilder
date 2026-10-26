@@ -96,6 +96,7 @@ export class InMemoryTailoringRepository implements TailoringRepository {
         ...payload,
         ai_run_id: null,
         attempts: 0,
+        rerun_for_answer: false,
         error_message: null,
         started_at: null,
         completed_at: null,
@@ -130,10 +131,10 @@ export class InMemoryTailoringRepository implements TailoringRepository {
     const runnable =
       task.status === "ready" ||
       task.status === "failed" ||
-      (allowDone && task.status === "done") ||
+      (allowDone && (task.status === "done" || task.status === "skipped")) ||
       (task.status === "running" && (task.started_at ?? "") < staleBeforeIso);
     if (!runnable) return null;
-    Object.assign(task, { status: "running", attempts: task.attempts + 1, started_at: now(), error_message: null });
+    Object.assign(task, { status: "running", attempts: task.attempts + 1, started_at: now(), error_message: null, rerun_for_answer: false });
     return { ...task };
   }
 
@@ -142,6 +143,32 @@ export class InMemoryTailoringRepository implements TailoringRepository {
     if (!task || task.user_id !== userId) return null;
     Object.assign(task, payload, { updated_at: now() });
     return { ...task };
+  }
+
+  async completeTask(userId: string, taskId: string, payload: UpdateTailoringTaskPayload) {
+    const task = this.tasks.get(taskId);
+    if (!task || task.user_id !== userId) return null;
+    if (task.status === "running" && !task.rerun_for_answer) {
+      Object.assign(task, payload, { updated_at: now() });
+    } else if (task.status === "running") {
+      Object.assign(task, payload, { status: "ready", updated_at: now() });
+    }
+    return { ...task };
+  }
+
+  async requeueTasksForAnswer(userId: string, sessionId: string, taskIds: string[]) {
+    const moved: string[] = [];
+    for (const id of taskIds) {
+      const task = this.tasks.get(id);
+      if (!task || task.user_id !== userId || task.session_id !== sessionId) continue;
+      if (["done", "failed", "skipped"].includes(task.status)) {
+        Object.assign(task, { status: "ready", rerun_for_answer: true, error_message: null, updated_at: now() });
+        moved.push(id);
+      } else if (task.status === "running") {
+        task.rerun_for_answer = true;
+      }
+    }
+    return moved;
   }
 
   async markTasksReady(userId: string, sessionId: string, taskIds: string[]) {

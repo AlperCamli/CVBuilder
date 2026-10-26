@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import { SupabaseImportsRepository } from "../src/modules/imports/imports.repository";
 import { SupabaseTailoredCvRepository } from "../src/modules/tailored-cv/tailored-cv.repository";
-import { reviewCv, reviewTailoring } from "../src/modules/cv-review/cv-review";
+import { reviewCv } from "../src/modules/cv-review/cv-review";
 import type { ImportReviewContext } from "../src/modules/cv-review/cv-review.types";
 import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 
@@ -17,7 +17,6 @@ const context: ImportReviewContext = { warnings: [], diagnostics: {
   quality: { score: 100, confidence: "high", low_confidence: false, natural_language_ratio: 1, symbol_ratio: 0, repeated_token_ratio: 0, entropy_ratio: 1 }
 } };
 const rawText = "Built Python reporting tools for 200 users and reduced errors by 20%.";
-const comparison = reviewTailoring(content, content, { job_title: "Engineer", job_description: "Python reporting tools" });
 
 function database(table: "imports" | "tailored_cvs", migrated = false) {
   const column = table === "imports" ? "review_context" : "tailoring_review";
@@ -132,26 +131,26 @@ describe("CV review persistence during schema rollout", () => {
     expect(db.requests.filter(r => r.method === "PATCH")).toHaveLength(0);
   });
 
-  it("persists tailoring snapshots without the new column and keeps them through later edits", async () => {
+  it("saves tailored CV content without a tailoring review and strips legacy review envelopes", async () => {
     const db = database("tailored_cvs");
-    const saved = await new SupabaseTailoredCvRepository(db.client).updateById("owner", "record", { current_content: content, tailoring_review: comparison });
-    expect(saved?.tailoring_review).toEqual(comparison);
-    expect(saved?.current_content).toEqual(content);
-    const fresh = new SupabaseTailoredCvRepository(db.client);
-    expect((await fresh.findById("owner", "record"))?.tailoring_review).toEqual(comparison);
-    const edited = await fresh.updateById("owner", "record", { current_content: { ...content, metadata: { __server_tailoring_review: { score_change: 99 } } } });
-    expect(edited?.tailoring_review).toEqual(comparison);
+    const repo = new SupabaseTailoredCvRepository(db.client);
+    const edited = await repo.updateById("owner", "record", { current_content: { ...content, metadata: { __server_tailoring_review: { score_change: 99 } } } });
     expect(edited?.current_content.metadata).toEqual({});
+    expect((db.row().current_content as CvContent).metadata).toEqual({});
+    const patches = db.requests.filter(r => r.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0].payload).not.toHaveProperty("tailoring_review");
     for (const request of db.requests) {
       expect(request.url.searchParams.get("user_id")).toBe("eq.owner");
       expect(request.url.searchParams.get("is_deleted")).toBe("eq.false");
     }
+    expect(await repo.updateById("intruder", "record", { title: "Stolen" })).toBeNull();
   });
 
   it("removes client-supplied review envelopes when creating a tailored CV", async () => {
     const db = database("tailored_cvs");
     const created = await new SupabaseTailoredCvRepository(db.client).create({ user_id: "owner", master_cv_id: "master", job_id: null, title: "CV", language: "en", template_id: null, module_type: "standard", status: "draft", current_content: { ...content, metadata: { __server_tailoring_review: { score_change: 99 } } } });
-    expect(created.tailoring_review).toBeNull();
+    expect(created).not.toHaveProperty("tailoring_review");
     expect((db.row().current_content as CvContent).metadata).toEqual({});
   });
 });

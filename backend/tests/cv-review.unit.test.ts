@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CvContent, CvSection } from "../src/shared/cv-content/cv-content.types";
 import type { ParseCvFileDiagnostics } from "../src/modules/imports/parsers/cv-parser";
-import { extractJobKeywords, reviewCv, reviewTailoring } from "../src/modules/cv-review/cv-review";
+import { extractJobKeywords, reviewCv } from "../src/modules/cv-review/cv-review";
 
 const section = (type: string, fields: Record<string, string | string[]>): CvSection => ({ id: type, type, title: type, order: 0, meta: {}, blocks: [{ id: `${type}-block`, type, order: 0, visibility: "visible", fields, meta: {} }] });
 const cv = (): CvContent => ({ version: "v1", language: "en", metadata: {}, sections: [
@@ -133,17 +133,5 @@ describe("evidence-based CV review", () => {
 
   it("does not apply English wording rules to another language", () => {
     expect(dimension(reviewCv({ content: { ...cv(), language: "tr" } }), "quality").score).toBeNull();
-  });
-
-  it("reports a real before/after comparison, including decreased and unchanged scores", () => {
-    const before = cv(); before.sections[1].blocks[0].fields.description = "Responsible for internal reporting and maintenance of existing tools.";
-    const positive = reviewTailoring(before, cv(), job);
-    expect(positive.score_change).toBeGreaterThan(0);
-    expect(positive.before.assessed_weight).toBe(positive.after.assessed_weight);
-    expect(positive.changed_sections).toEqual(["experience"]);
-    expect(positive.changes.some(c => c.dimension === "quality")).toBe(true);
-    expect(reviewTailoring(cv(), before, job).score_change).toBeLessThan(0);
-    expect(reviewTailoring(cv(), cv(), job).score_change).toBe(0);
-    expect(reviewTailoring(cv(), cv(), job).changes).toEqual([]);
   });
 });

@@ -6,7 +6,8 @@ import type {
   TailoringAnswerChoice,
   TailoringCostReport,
   TailoringPreferences,
-  TailoringRefinement,
+  TailoringRefinePayload,
+  TailoringRunPayload,
   TailoringSessionView,
   TailoringSuggestionDecisionPayload,
   TailoringSuggestionDecisionResponse,
@@ -908,10 +909,18 @@ export class BackendApi {
   runTailoringTask(
     sessionId: string,
     taskId: string,
-    payload: { regenerate?: boolean; refinement?: TailoringRefinement | null } = {}
+    payload: TailoringRunPayload = {}
   ): Promise<TailoringTaskRunResponse> {
-    return this.client.post<TailoringTaskRunResponse, typeof payload>(
+    return this.client.post<TailoringTaskRunResponse, TailoringRunPayload>(
       `/ai/tailoring-sessions/${sessionId}/tasks/${taskId}/run`,
+      payload
+    );
+  }
+
+  // Refines one editable block; the returned task may be new (created for this block).
+  refineTailoringBlock(sessionId: string, blockId: string, payload: TailoringRefinePayload): Promise<TailoringTaskRunResponse> {
+    return this.client.post<TailoringTaskRunResponse, TailoringRefinePayload>(
+      `/ai/tailoring-sessions/${sessionId}/blocks/${encodeURIComponent(blockId)}/refine`,
       payload
     );
   }

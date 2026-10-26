@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Logger } from "pino";
-import { embeddedReview, updateWithReviewFallback, withoutReviewMetadata } from "../cv-review/cv-review.persistence";
+import { withoutReviewMetadata } from "../cv-review/cv-review.persistence";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type { CvContent, CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import type { TailoredCvRecord, TailoredCvStatus } from "../../shared/types/domain";
@@ -20,7 +20,6 @@ export interface TailoredCvCreatePayload {
 }
 
 export interface TailoredCvUpdatePayload {
-  tailoring_review?: TailoredCvRecord["tailoring_review"];
   title?: string;
   language?: string;
   template_id?: string | null;
@@ -94,7 +93,6 @@ const toTailoredCvRecord = (row: Record<string, unknown>): TailoredCvRecord => {
     template_id: row.template_id ? String(row.template_id) : null,
     module_type: row.module_type ? String(row.module_type) : "standard",
     current_content: withoutReviewMetadata(row.current_content as CvContent)!,
-    tailoring_review: (row.tailoring_review ?? embeddedReview(row.current_content as CvContent, "tailoring_review")) as TailoredCvRecord["tailoring_review"],
     status: row.status as TailoredCvStatus,
     ai_generation_status: (row.ai_generation_status as string | null) ?? null,
     last_exported_at: (row.last_exported_at as string | null) ?? null,
@@ -181,14 +179,24 @@ export class SupabaseTailoredCvRepository implements TailoredCvRepository {
     };
 
     if (payload.current_content) {
-      updatePayload.current_content = toDbContent(payload.current_content);
+      // Legacy server envelopes (e.g. the removed tailoring review) never reach storage again.
+      updatePayload.current_content = toDbContent(withoutReviewMetadata(payload.current_content)!);
     }
 
-    const data = await updateWithReviewFallback({
-      client: this.supabaseClient, table: "tailored_cvs", userId, id: tailoredCvId,
-      payload: updatePayload, reviewColumn: "tailoring_review", contentColumn: "current_content",
-      errorMessage: "Failed to update tailored CV", logger: this.logger
-    });
+    const { data, error } = await this.supabaseClient
+      .from("tailored_cvs")
+      .update(updatePayload)
+      .eq("id", tailoredCvId)
+      .eq("user_id", userId)
+      .eq("is_deleted", false)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to update tailored CV", {
+        reason: error.message
+      });
+    }
 
     if (!data) {
       return null;

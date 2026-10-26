@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { TailoringReviewPanel } from "../components/CvReviewPanel";
 import { AddContentModal } from "../components/AddContentModal";
 import type { ContentType } from "../components/AddContentModal";
 import { AIBlockInstructionBubble } from "../components/AIBlockInstructionBubble";
@@ -83,7 +82,8 @@ import {
   AwardsSection,
   PublicationsSection,
   ReferencesSection,
-  VolunteerSection
+  VolunteerSection,
+  EditorItemHighlightContext
 } from "../components/CVSections";
 import { toast } from "sonner";
 import { useAuth } from "../integration/auth-context";
@@ -97,7 +97,6 @@ import type {
   MasterCvDetail,
   RenderingPreviewResponse,
   TailoredCvDetail,
-  TailoringReview,
   TemplateDetail,
   TemplateSummary
 } from "../integration/api-types";
@@ -535,8 +534,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const isUploadedFlow = Boolean(location.state?.isUploaded);
   const isAiImprovedFlow = Boolean(location.state?.aiImproved);
   const isTailoredFlow = Boolean(location.state?.isTailored);
-  const [tailoringReview, setTailoringReview] = useState<TailoringReview | null>(null);
-  const [showTailoringReview, setShowTailoringReview] = useState(false);
   const [cvKind, setCvKind] = useState<"master" | "tailored">("master");
   const [cvId, setCvId] = useState<string | null>(null);
   const [title, setTitle] = useState("CV");
@@ -579,6 +576,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiBlockVersions, setAiBlockVersions] = useState<Record<string, AiBlockVersionChain>>({});
   const [highlightedAiBlockIds, setHighlightedAiBlockIds] = useState<string[]>([]);
+  // Item cards glowing after "Edit in editor" from the preview (by CV block id).
+  const [highlightedItemIds, setHighlightedItemIds] = useState<string[]>([]);
   const [showSkillsPoolDialog, setShowSkillsPoolDialog] = useState(false);
   const [skillsPoolSectionId, setSkillsPoolSectionId] = useState<string | null>(null);
   const [skillsPoolLoading, setSkillsPoolLoading] = useState(false);
@@ -697,7 +696,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const hydrateFromMaster = (master: MasterCvDetail) => {
     const nextModuleType = master.module_type ?? DEFAULT_MODULE_ID;
-    setTailoringReview(null);
     setCvKind("master");
     setCvId(master.id);
     setModuleType(nextModuleType);
@@ -715,7 +713,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   const hydrateFromTailored = (tailored: TailoredCvDetail) => {
     const nextModuleType = tailored.module_type ?? DEFAULT_MODULE_ID;
-    setTailoringReview(tailored.tailoring_review ?? null);
     setCvKind("tailored");
     setCvId(tailored.id);
     setModuleType(nextModuleType);
@@ -2353,7 +2350,21 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     setPaneMode("tailor");
   };
 
-  // Pencil on a preview section: slide the editor back and bring that section into view.
+  // Maps a hovered preview chunk to its CV block: an item's own block, or the block a
+  // section shows as inline text / a preview-only item (summary, skills) when it has one.
+  const resolvePreviewBlockId = useCallback(
+    (sectionId: string, previewBlockId: string | null) => {
+      const section = contentForTailoring.sections.find((item) => item.id === sectionId);
+      if (!section) return previewBlockId;
+      if (previewBlockId && section.blocks.some((block) => block.id === previewBlockId)) return previewBlockId;
+      const visible = section.blocks.filter((block) => block.visibility !== "hidden");
+      return visible.length === 1 ? visible[0].id : null;
+    },
+    [contentForTailoring]
+  );
+
+  // Pencil on a preview item/section: slide the editor back, bring the item's card (or the
+  // section) into view and make it glow.
   const editFromPreview = ({ sectionId, blockId }: { sectionId: string | null; blockId: string | null }) => {
     const target = sections.find(
       (section) =>
@@ -2364,21 +2375,57 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     const wasTailoring = tailorMode;
     setPaneMode("edit");
     if (!target) return;
+    // Expand the item if its card is collapsed, so the scroll lands on its fields.
+    if (blockId) {
+      setSections((prev) =>
+        prev.map((section) => {
+          if (section.id !== target.id) return section;
+          const items = Array.isArray(section.data?.items) ? (section.data.items as Record<string, unknown>[]) : null;
+          if (!items?.some((item) => item.collapsed && matchesBlockReference(item, blockId))) return section;
+          return {
+            ...section,
+            data: {
+              ...section.data,
+              items: items.map((item) => (matchesBlockReference(item, blockId) ? { ...item, collapsed: false } : item))
+            }
+          };
+        })
+      );
+    }
     window.setTimeout(() => {
-      const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(target.id) : target.id;
-      const element = document.querySelector(`[data-editor-section-id="${escaped}"]`);
       const pane = editorPaneRef.current;
-      // Scroll only the editor pane, never the page around it.
+      const escape = (value: string) => (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(value) : value);
+      const sectionElement = pane?.querySelector<HTMLElement>(`[data-editor-section-id="${escape(target.id)}"]`) ?? null;
+      const itemElement = blockId
+        ? sectionElement?.querySelector<HTMLElement>(`[data-editor-block-id="${escape(blockId)}"]`) ?? null
+        : null;
+      const element = itemElement ?? sectionElement;
+      // Scroll only the editor pane, never the page around it. An item card is centred
+      // when it fits; anything taller is aligned to the top.
       if (element && pane) {
-        pane.scrollBy({ top: element.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16, behavior: "smooth" });
+        const paneRect = pane.getBoundingClientRect();
+        const rect = element.getBoundingClientRect();
+        const offset = itemElement && rect.height < paneRect.height - 32 ? (paneRect.height - rect.height) / 2 : 16;
+        pane.scrollBy({ top: rect.top - paneRect.top - offset, behavior: "smooth" });
       }
       const flashId = blockId ?? getSectionFirstBlockId(target);
       if (flashId) {
         setHighlightedAiBlockIds([flashId]);
         window.setTimeout(() => setHighlightedAiBlockIds((current) => current.filter((id) => id !== flashId)), 1600);
       }
-    }, wasTailoring ? 440 : 0);
+      if (itemElement && blockId) {
+        setHighlightedItemIds([blockId]);
+        window.setTimeout(() => setHighlightedItemIds((current) => current.filter((id) => id !== blockId)), 2400);
+      }
+    }, wasTailoring ? 440 : 60);
   };
+
+  const refineFromPreview =
+    tailorMode && tailoring.view?.session.analysis
+      ? ({ blockId }: { sectionId: string | null; blockId: string | null }) => {
+          if (blockId) tailoring.openRefine(blockId);
+        }
+      : undefined;
 
   useEffect(() => {
     const state = location.state as { openTailoring?: boolean } | null;
@@ -2428,16 +2475,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   useEffect(() => {
     if (hasTailoringSession) completeStep("job_details");
   }, [completeStep, hasTailoringSession]);
-
-  // Finishing stores a fresh before/after review on the tailored CV.
-  const tailoringFinished = tailoring.view?.session.status === "ready";
-  useEffect(() => {
-    if (!tailoringFinished || cvKind !== "tailored" || !cvId) return;
-    void api
-      .getTailoredCv(cvId)
-      .then((detail) => setTailoringReview(detail.tailoring_review ?? null))
-      .catch(() => undefined);
-  }, [api, cvId, cvKind, tailoringFinished]);
 
   const renderSection = (section: EditorSection, index: number) => {
     const commonProps = {
@@ -2755,10 +2792,11 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
 
   return (
     <DndProvider backend={HTML5Backend}>
-      {location.state?.onboardingAction === "improve" && <p role="status" className="p-4 bg-teal-50 text-teal-900">{t("Add your experience to your new CV, then use the AI tools to improve it.")}</p>}
       {/* The bubble is portalled outside this element; lock CV controls during the
-          request so a late AI response cannot replace newer manual edits. */}
-      <div className="h-screen flex flex-col" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
+          request so a late AI response cannot replace newer manual edits. The editor fills
+          the viewport exactly; its panes scroll, the page never does. */}
+      <div className="h-screen flex flex-col overflow-hidden" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
+        {location.state?.onboardingAction === "improve" && <p role="status" className="p-4 bg-teal-50 text-teal-900 shrink-0">{t("Add your experience to your new CV, then use the AI tools to improve it.")}</p>}
         <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto">
@@ -3014,12 +3052,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                 <Lightbulb size={14} />
                 {t("Tips")}</button>
 
-              {cvKind === "tailored" && tailoringReview ? (
-                <button type="button" onClick={() => setShowTailoringReview(true)} className="px-3 py-1.5 rounded-lg border text-sm font-medium" style={{ borderColor: "var(--color-teal-200)", color: "var(--color-teal-700)", background: "var(--color-teal-50)" }}>
-                  {t("Tailoring review ·")}{" "}{tailoringReview.after.score ?? "Unavailable"}{tailoringReview.after.score !== null ? "/100" : ""}
-                </button>
-              ) : null}
-
               {cvKind === "tailored" && (
                 <button
                   onClick={() => void openRevisionDialog()}
@@ -3052,17 +3084,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           </div>
         </div>
 
-        <Dialog open={showTailoringReview} onOpenChange={setShowTailoringReview}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("What tailoring changed")}</DialogTitle>
-              <DialogDescription>{t("Your CV before and after tailoring, evaluated against the same job description.")}</DialogDescription>
-            </DialogHeader>
-            {tailoringReview ? <TailoringReviewPanel review={tailoringReview} /> : null}
-          </DialogContent>
-        </Dialog>
-
-        <div className="flex-1 flex overflow-hidden editor-pane-track relative">
+        <div className="flex-1 min-h-0 flex overflow-hidden editor-pane-track relative">
           <div
             ref={editorPaneRef}
             className="overflow-auto"
@@ -3080,8 +3102,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             }}
           >
             <div className="max-w-3xl mx-auto space-y-4">
-              {headerSection ? renderSection(headerSection, 0) : null}
-              {bodySections.map((section, index) => renderSection(section, index))}
+              <EditorItemHighlightContext.Provider value={highlightedItemIds}>
+                {headerSection ? renderSection(headerSection, 0) : null}
+                {bodySections.map((section, index) => renderSection(section, index))}
+              </EditorItemHighlightContext.Provider>
 
               <button
                 onClick={() => setShowAddContentModal(true)}
@@ -3137,6 +3161,8 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
                   markers={previewMarkers}
                   editable={!autoFitPreparing}
                   onEdit={editFromPreview}
+                  onRefine={refineFromPreview}
+                  resolveBlockId={resolvePreviewBlockId}
                 />
                 <div style={{ visibility: autoFitPreparing ? "hidden" : "visible" }}>
                   <CVPresentationPreview

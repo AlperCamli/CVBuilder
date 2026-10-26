@@ -48,26 +48,24 @@ function setup() {
   return { service, internal, billing, input, getSaved: () => saved };
 }
 
-describe("tailoring review persistence", () => {
-  it("returns and persists a comparison against the final post-processed synchronous draft", async () => {
+// The tailoring review (before/after score comparison) was removed; the legacy draft flow
+// must still produce and save its draft without computing or returning one.
+describe("legacy tailored draft without the tailoring review", () => {
+  it("saves the post-processed synchronous draft without a review", async () => {
     const { service, input, getSaved, billing } = setup();
     const result = await service.generateTailoredCvDraft({ appUser: { id: "user" } } as SessionContext, input);
-    const review = result.tailored_cv.tailoring_review!;
-    expect(review).toEqual(getSaved().tailoring_review);
-    expect(review.score_change).toBeGreaterThan(0);
-    expect(review.added_keywords).toContain("python");
-    expect(review.changed_sections).toContain("skills");
+    expect(result.tailored_cv).not.toHaveProperty("tailoring_review");
+    expect(getSaved()).not.toHaveProperty("tailoring_review");
     expect(result.tailored_cv.current_content.sections.some(s => s.type === "skills")).toBe(true);
     expect(billing.recordTailoredCvGenerationUsage).toHaveBeenCalledTimes(1);
   });
 
-  it("includes the same persisted comparison in asynchronous run completion", async () => {
+  it("completes the asynchronous run without a review", async () => {
     const { internal, input, getSaved, billing } = setup();
     const result = await internal.executeTailoringDraftRun("user", { id: "run", input_payload: {} } as AiRunRecord, input, { prompt_key: "test", prompt_version: "1" });
     const tailored = (result.output_payload as { tailored_cv: TailoredCvRecord }).tailored_cv;
-    expect(tailored.tailoring_review).toEqual(getSaved().tailoring_review);
-    expect(tailored.tailoring_review?.score_change).toBeGreaterThan(0);
-    expect(tailored.tailoring_review?.changes.some(change => change.dimension === "quality")).toBe(true);
+    expect(tailored).not.toHaveProperty("tailoring_review");
+    expect(getSaved()).not.toHaveProperty("tailoring_review");
     expect(billing.recordTailoredCvGenerationUsage).toHaveBeenCalledTimes(1);
   });
 });

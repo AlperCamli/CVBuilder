@@ -6,7 +6,8 @@ import {
   isTailoringSuggestionStale,
   isTailoringUndoBlocked,
   planTailoringAutoApply,
-  revertTailoringSuggestion
+  revertTailoringSuggestion,
+  tailoringSuggestedSkills
 } from "./tailoring-apply";
 import type { TailoringSuggestion } from "./tailoring-types";
 
@@ -213,5 +214,95 @@ describe("tailoring suggestions on CV content", () => {
     const editedLater = applyTailoringSuggestion(applied, rewrite, "• Typed by the user")!;
     expect(isTailoringUndoBlocked(editedLater, rewrite)).toBe(true);
     expect(isTailoringUndoBlocked(editedLater, { ...rewrite, status: "rejected" })).toBe(false);
+  });
+
+  it("applies an edited skill list to a skills card and to a new skills section", () => {
+    const skills = suggestion({
+      kind: "skills",
+      block_id: "skills-b",
+      before: { field: "skills", value: ["Go"] },
+      suggested: { field: "skills", value: ["Go", "SQL", "Kafka"] }
+    });
+    expect(tailoringSuggestedSkills(skills)).toEqual(["Go", "SQL", "Kafka"]);
+    const edited = applyTailoringSuggestion(content(), skills, ["SQL", "Go"])!;
+    expect(edited.sections[1].blocks[0].fields.skills).toEqual(["SQL", "Go"]);
+
+    const newSection = suggestion({
+      kind: "new_section",
+      suggested: {
+        position: "last",
+        section: {
+          id: "new-skills",
+          type: "skills",
+          title: "Skills",
+          order: 0,
+          meta: {},
+          blocks: [{ id: "new-skills-b", type: "skills", order: 0, visibility: "visible", meta: {}, fields: { skills: ["SQL", "Tableau"] } }]
+        }
+      }
+    });
+    expect(tailoringSuggestedSkills(newSection)).toEqual(["SQL", "Tableau"]);
+    const added = applyTailoringSuggestion(content(), newSection, ["Tableau"])!;
+    expect(added.sections.find((item) => item.id === "new-skills")!.blocks[0].fields.skills).toEqual(["Tableau"]);
+    // An edit stored on the card (after reload) is used too.
+    const stored = { ...newSection, suggested: { ...newSection.suggested, value: ["SQL"] } };
+    expect(tailoringSuggestedSkills(stored)).toEqual(["SQL"]);
+    expect(applyTailoringSuggestion(content(), stored)!.sections.find((item) => item.id === "new-skills")!.blocks[0].fields.skills).toEqual(["SQL"]);
+    expect(revertTailoringSuggestion(added, newSection)!.sections.some((item) => item.id === "new-skills")).toBe(false);
+    expect(tailoringSuggestedSkills(suggestion({ kind: "rewrite" }))).toBeNull();
+  });
+
+  it("writes back to whatever field the card names (summary, highlights, items)", () => {
+    const base: CvContent = {
+      ...content(),
+      sections: [
+        {
+          id: "sum-s",
+          type: "summary",
+          title: null,
+          order: 0,
+          meta: {},
+          blocks: [{ id: "sum-b", type: "profile", order: 0, visibility: "visible", meta: {}, fields: { summary: "Old summary" } }]
+        },
+        {
+          id: "job-s",
+          type: "experience",
+          title: null,
+          order: 1,
+          meta: {},
+          blocks: [{ id: "job-b", type: "job", order: 0, visibility: "visible", meta: {}, fields: { title: "Analyst", highlights: "• Old" } }]
+        },
+        {
+          id: "sk-s",
+          type: "skills",
+          title: null,
+          order: 2,
+          meta: {},
+          blocks: [{ id: "sk-b", type: "skills", order: 0, visibility: "visible", meta: {}, fields: { items: ["Go"] } }]
+        }
+      ]
+    };
+    const summary = suggestion({ block_id: "sum-b", before: { field: "summary", value: "Old summary" }, suggested: { field: "summary", value: "New summary" } });
+    const bullets = suggestion({ id: "s2", block_id: "job-b", before: { field: "highlights", value: "• Old" }, suggested: { field: "highlights", value: "• New" } });
+    const skills = suggestion({ id: "s3", kind: "skills", block_id: "sk-b", before: { field: "items", value: ["Go"] }, suggested: { field: "items", value: ["Go", "SQL"] } });
+
+    expect(isTailoringSuggestionStale(base, summary)).toBe(false);
+    let next = applyTailoringSuggestion(base, summary)!;
+    next = applyTailoringSuggestion(next, bullets)!;
+    next = applyTailoringSuggestion(next, skills, ["SQL"])!;
+    expect(next.sections[0].blocks[0].fields).toEqual({ summary: "New summary" });
+    expect(next.sections[1].blocks[0].fields).toEqual({ title: "Analyst", highlights: "• New" });
+    expect(next.sections[2].blocks[0].fields).toEqual({ items: ["SQL"] });
+    expect(revertTailoringSuggestion(next, bullets)!.sections[1].blocks[0].fields.highlights).toBe("• Old");
+
+    const newSection = suggestion({
+      id: "s4",
+      kind: "new_section",
+      suggested: {
+        section: { id: "n", type: "skills", title: null, order: 0, meta: {}, blocks: [{ id: "nb", type: "skills", order: 0, visibility: "visible", meta: {}, fields: { items: ["SQL", "Go"] } }] }
+      }
+    });
+    expect(tailoringSuggestedSkills(newSection)).toEqual(["SQL", "Go"]);
+    expect(applyTailoringSuggestion(content(), newSection, ["Go"])!.sections.find((item) => item.id === "n")!.blocks[0].fields).toEqual({ items: ["Go"] });
   });
 });
