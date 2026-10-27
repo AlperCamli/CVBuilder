@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import request from "supertest";
+import { createApp } from "../src/app/create-app";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Logger } from "pino";
 import type { StripeGateway } from "../src/modules/billing/stripe-gateway";
 import { MonetizationBackfillService } from "../src/modules/monetization/monetization-backfill.service";
 import type { MonetizationRefreshService } from "../src/modules/monetization/monetization-refresh.service";
+import { createTestConfig } from "./helpers/in-memory";
 
 const details = { trial_start: null, trial_end: null, canceled_at: null, ended_at: null, cancellation_reason: null, cancellation_feedback: null, unit_amount: 999, currency: "usd", billing_interval: "week" };
 
@@ -64,5 +67,11 @@ describe("monetization backfill", () => {
     const late = setup();
     expect(await late.service.run({ budgetMs: -1 })).toMatchObject({ complete: false, subscriptions: 0, invoices: 0 });
     expect(late.refresh.refresh).not.toHaveBeenCalled();
+  });
+
+  it("exposes the refresh and backfill crons behind the cron secret", async () => {
+    const config = createTestConfig();
+    const app = createApp({ config: { ...config, billing: { ...config.billing, stripeSecretKey: "sk_test_routes" } } });
+    for (const path of ["refresh", "backfill"]) await request(app).get(`/api/v1/billing/analytics/${path}`).expect(401);
   });
 });

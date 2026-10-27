@@ -72,7 +72,11 @@ export const createApp = (options?: CreateAppOptions): Express => {
     filesService: options?.services?.filesService ?? defaultServices?.filesService!,
     cvPhotosService: options?.services?.cvPhotosService ?? defaultServices?.cvPhotosService!,
     exportsService: options?.services?.exportsService ?? defaultServices?.exportsService!,
-    billingService: options?.services?.billingService ?? defaultServices?.billingService!
+    billingService: options?.services?.billingService ?? defaultServices?.billingService!,
+    monetizationRefreshService:
+      options?.services?.monetizationRefreshService ?? defaultServices?.monetizationRefreshService,
+    monetizationBackfillService:
+      options?.services?.monetizationBackfillService ?? defaultServices?.monetizationBackfillService
   };
 
   const app = express();
