@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Logger } from "pino";
+import { AppError } from "../../shared/errors/app-error";
 import type { BillingService } from "../billing/billing.service";
 import type { StripeGateway } from "../billing/stripe-gateway";
 import type { MonetizationRefreshResult, MonetizationRefreshService } from "./monetization-refresh.service";
@@ -16,6 +17,7 @@ export interface MonetizationBackfillResult {
   locked_subscriptions: number;
   invoices: number;
   skipped_invoices: number;
+  missing_customers: number;
   fx_from: string | null;
   refresh: MonetizationRefreshResult | null;
 }
@@ -39,7 +41,19 @@ export class MonetizationBackfillService {
     private readonly logger: Logger
   ) {}
 
+  // Production hides 500 details, so the failing step and item are logged here.
   async run(options: { dryRun?: boolean; budgetMs?: number } = {}): Promise<MonetizationBackfillResult> {
+    const at: { step: string; item: string | null } = { step: "read_subscriptions", item: null };
+    try {
+      return await this.execute(options, at);
+    } catch (error) {
+      const details = error instanceof AppError ? error.details : undefined;
+      this.logger.error({ ...at, reason: error instanceof Error ? error.message : "unknown", details }, "monetization_backfill_failed");
+      throw error;
+    }
+  }
+
+  private async execute(options: { dryRun?: boolean; budgetMs?: number }, at: { step: string; item: string | null }): Promise<MonetizationBackfillResult> {
     const dryRun = options.dryRun ?? false;
     const deadline = Date.now() + (options.budgetMs ?? Number.POSITIVE_INFINITY);
     const outOfTime = () => Date.now() > deadline;
@@ -49,14 +63,16 @@ export class MonetizationBackfillService {
     const customers = [...new Set(rows.map(row => row.provider_customer_id))];
     const result: MonetizationBackfillResult = {
       complete: false, dry_run: dryRun, customers: customers.length, subscriptions: 0, locked_subscriptions: 0,
-      invoices: 0, skipped_invoices: 0, fx_from: null, refresh: null
+      invoices: 0, skipped_invoices: 0, missing_customers: 0, fx_from: null, refresh: null
     };
 
     // 1. Descriptive subscription columns, for rows not filled yet.
+    at.step = "subscriptions";
     for (const row of rows) {
       const id = row.provider_subscription_id;
       if (!id || id.startsWith("lifetime_") || row.billing_interval) continue;
       if (outOfTime()) return this.finish(result);
+      at.item = row.id;
       const details = (await this.gateway.retrieveSubscription(id).catch(() => null))?.details;
       if (!details) continue;
       if (!dryRun) {
@@ -70,17 +86,24 @@ export class MonetizationBackfillService {
 
     // 2. Every invoice of every known customer not imported yet, through the webhook path.
     if (this.gateway.listInvoiceIds) {
+      at.step = "invoices"; at.item = null;
       const imported = new Set((await this.readAll<{ provider_invoice_id: string }>("billing_invoices", "provider_invoice_id")).map(row => row.provider_invoice_id));
       for (const customer of customers) {
         if (outOfTime()) return this.finish(result);
-        for (const invoiceId of await this.gateway.listInvoiceIds(customer)) {
+        at.item = customer;
+        // Customers deleted in Stripe (or created in another mode) have nothing to import.
+        const invoiceIds = await this.gateway.listInvoiceIds(customer);
+        if (!invoiceIds) { result.missing_customers++; continue; }
+        for (const invoiceId of invoiceIds) {
           if (imported.has(invoiceId)) continue;
+          at.item = invoiceId;
           if (dryRun || await this.billingService.syncInvoice(invoiceId)) result.invoices++; else result.skipped_invoices++;
         }
       }
     }
 
     // 3. Catalogs, internal accounts, and monthly FX back to the first subscription.
+    at.step = "refresh"; at.item = null;
     const first = rows.reduce((min, row) => (row.created_at < min ? row.created_at : min), new Date().toISOString());
     result.fx_from = first.slice(0, 7);
     if (!dryRun) {

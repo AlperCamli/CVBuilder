@@ -111,7 +111,7 @@ export interface StripeInvoiceSummary {
 export interface StripeGateway {
   retrieveInvoice?(invoiceId: string): Promise<StripeInvoiceSummary | null>;
   retrieveChargeInvoiceId?(chargeId: string): Promise<string | null>;
-  listInvoiceIds?(customerId: string): Promise<string[]>;
+  listInvoiceIds?(customerId: string): Promise<string[] | null>;
   retrieveCheckoutSession?(sessionId: string): Promise<StripeCheckoutSessionSummary | null>;
   hasBillableSubscription?(customerId: string): Promise<boolean>;
   expireCheckoutSession?(sessionId: string): Promise<void>;
@@ -287,11 +287,16 @@ export class StripeBillingGateway implements StripeGateway {
     return typeof charge.invoice === "string" ? charge.invoice : charge.invoice?.id ?? null;
   }
 
-  // Non-draft invoices of a customer, oldest pages included.
-  async listInvoiceIds(customerId: string): Promise<string[]> {
+  // Non-draft invoices of a customer, oldest pages included; null when Stripe has no such customer.
+  async listInvoiceIds(customerId: string): Promise<string[] | null> {
     const ids: string[] = [];
-    for await (const invoice of this.stripe.invoices.list({ customer: customerId, limit: 100 })) {
-      if (invoice.status !== "draft") ids.push(invoice.id);
+    try {
+      for await (const invoice of this.stripe.invoices.list({ customer: customerId, limit: 100 })) {
+        if (invoice.status !== "draft") ids.push(invoice.id);
+      }
+    } catch (error) {
+      if (error instanceof Error && /No such customer/i.test(error.message)) return null;
+      throw error;
     }
     return ids;
   }

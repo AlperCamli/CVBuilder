@@ -33,16 +33,16 @@ const setup = () => {
   });
   const gateway = {
     retrieveSubscription: vi.fn(async () => ({ id: "sub_1", customer_id: "cus_1", status: "active", details })),
-    listInvoiceIds: vi.fn(async (customer: string) => (customer === "cus_1" ? ["in_old", "in_new"] : ["in_other"]))
+    listInvoiceIds: vi.fn(async (customer: string): Promise<string[] | null> => (customer === "cus_1" ? ["in_old", "in_new"] : ["in_other"]))
   };
   const billing = { syncInvoice: vi.fn(async (id: string) => id !== "in_other") };
   const refresh = {
     refresh: vi.fn(async () => ({ prices: 1, plans: 1, fx_months: [], internal_accounts: 0, failures: [] })),
     refreshFxMonths: vi.fn(async (months: Date[]) => months.map(month => month.toISOString().slice(0, 10)))
   };
-  const logger = { info: vi.fn() } as unknown as Logger;
-  const service = new MonetizationBackfillService(db, gateway as unknown as StripeGateway, billing, refresh as unknown as MonetizationRefreshService, logger);
-  return { service, updates, gateway, billing, refresh };
+  const logger = { info: vi.fn(), error: vi.fn() };
+  const service = new MonetizationBackfillService(db, gateway as unknown as StripeGateway, billing, refresh as unknown as MonetizationRefreshService, logger as unknown as Logger);
+  return { service, updates, gateway, billing, refresh, logger };
 };
 
 describe("monetization backfill", () => {
@@ -57,6 +57,13 @@ describe("monetization backfill", () => {
     expect(result).toMatchObject({ complete: true, customers: 2, subscriptions: 1, invoices: 1, skipped_invoices: 1, fx_from: "2026-08" });
   });
 
+  it("skips customers that no longer exist in Stripe", async () => {
+    const { service, gateway, billing } = setup();
+    gateway.listInvoiceIds.mockResolvedValueOnce(null);
+    expect(await service.run()).toMatchObject({ complete: true, missing_customers: 1, invoices: 0, skipped_invoices: 1 });
+    expect(billing.syncInvoice.mock.calls.map(([id]) => id)).toEqual(["in_other"]);
+  });
+
   it("writes nothing on a dry run and stops early when the time budget is spent", async () => {
     const dry = setup();
     expect(await dry.service.run({ dryRun: true })).toMatchObject({ complete: true, subscriptions: 1, invoices: 2, refresh: null });
@@ -67,6 +74,13 @@ describe("monetization backfill", () => {
     const late = setup();
     expect(await late.service.run({ budgetMs: -1 })).toMatchObject({ complete: false, subscriptions: 0, invoices: 0 });
     expect(late.refresh.refresh).not.toHaveBeenCalled();
+  });
+
+  it("logs the failing step and item, since production hides 500 details", async () => {
+    const { service, billing, logger } = setup();
+    billing.syncInvoice.mockRejectedValueOnce(new Error("violates check constraint"));
+    await expect(service.run()).rejects.toThrow("violates check constraint");
+    expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ step: "invoices", item: "in_new", reason: "violates check constraint" }), "monetization_backfill_failed");
   });
 
   it("exposes the refresh and backfill crons behind the cron secret", async () => {
