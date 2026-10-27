@@ -1,11 +1,11 @@
 import { privacyChoicesSchema } from "../privacy/privacy.routes";
 import { Router, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
-import { timingSafeEqual } from "node:crypto";
 import { validate } from "../../shared/validation/validate";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import { sendSuccess } from "../../shared/http/response";
 import { UnauthorizedError } from "../../shared/errors/app-error";
+import { requireCronSecret } from "../../shared/middleware/cron-auth";
 import type { GuestImportsService } from "./guest-imports.service";
 import {
   guestAnswersSchema,
@@ -37,16 +37,8 @@ export function createGuestImportsRouter(
     req.get("X-Guest-Token") ?? "";
   router.get(
     "/guest-imports/cleanup",
-    asyncHandler(async (req, res) => {
-      const expected = process.env.CRON_SECRET;
-      const supplied = req.get("Authorization") ?? "";
-      const bearer = expected ? `Bearer ${expected}` : "";
-      if (
-        !bearer ||
-        supplied.length !== bearer.length ||
-        !timingSafeEqual(Buffer.from(supplied), Buffer.from(bearer))
-      )
-        throw new UnauthorizedError();
+    requireCronSecret,
+    asyncHandler(async (_req, res) => {
       sendSuccess(res, { removed: await service.cleanup() });
     }),
   );

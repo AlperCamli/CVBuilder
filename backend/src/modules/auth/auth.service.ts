@@ -2,13 +2,15 @@ import type { PrivacyService } from "../privacy/privacy.service";
 import { ForbiddenError } from "../../shared/errors/app-error";
 import { InvalidTokenError } from "../../shared/errors/app-error";
 import type { UsersRepository } from "../users/users.repository";
+import type { MonetizationRepository } from "../monetization/monetization.repository";
 import type { AuthenticatedRequestContext, AuthProvider } from "./auth.types";
 
 export class AuthService {
   constructor(
     private readonly authProvider: AuthProvider,
     private readonly usersRepository: UsersRepository,
-    private readonly privacy?: PrivacyService
+    private readonly privacy?: PrivacyService,
+    private readonly activity?: Pick<MonetizationRepository, "recordUserActivity">
   ) {}
 
   async authenticate(accessToken: string): Promise<AuthenticatedRequestContext> {
@@ -22,6 +24,7 @@ export class AuthService {
     const appUser = await this.usersRepository.ensureByAuthIdentity(identity);
 
     if ((appUser as unknown as { deletion_requested_at?: string }).deletion_requested_at) throw new ForbiddenError("Account deletion has been requested.");
+    await this.activity?.recordUserActivity(appUser.id);
     return {
       authUser: identity,
       appUser

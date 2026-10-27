@@ -90,6 +90,11 @@ import { createPlanCatalog } from "../modules/entitlements/plan-definitions";
 import { EntitlementsService } from "../modules/entitlements/entitlements.service";
 import { SupabaseUsageRepository, type UsageRepository } from "../modules/usage/usage.repository";
 import { UsageService } from "../modules/usage/usage.service";
+import {
+  SupabaseMonetizationRepository,
+  type MonetizationRepository
+} from "../modules/monetization/monetization.repository";
+import { MonetizationRefreshService } from "../modules/monetization/monetization-refresh.service";
 import { TailoringService } from "../modules/tailoring/tailoring.service";
 import {
   SupabaseTailoringRepository,
@@ -118,6 +123,7 @@ export interface AppServices {
   cvPhotosService: CvPhotosService;
   exportsService: ExportsService;
   billingService: BillingService;
+  monetizationRefreshService?: MonetizationRefreshService;
 }
 
 export interface ServiceOverrides {
@@ -147,6 +153,7 @@ export interface ServiceOverrides {
   entitlementsService?: EntitlementsService;
   usageService?: UsageService;
   billingService?: BillingService;
+  monetizationRepository?: MonetizationRepository;
 }
 
 export const buildDefaultServices = (
@@ -225,6 +232,20 @@ export const buildDefaultServices = (
         : null
       : overrides.stripeGateway;
 
+  const monetizationRepository =
+    overrides?.monetizationRepository ?? new SupabaseMonetizationRepository(supabaseClients.serviceRoleClient, logger);
+  const marketPrices = {
+    GLOBAL: { weekly: config.billing.stripeWeeklyPriceId, monthly: config.billing.stripeMonthlyPriceId, annual: config.billing.stripeAnnualPriceId },
+    TR: { weekly: config.billing.tryWeeklyPriceId ?? null, monthly: config.billing.tryMonthlyPriceId ?? null, annual: config.billing.tryAnnualPriceId ?? null }
+  };
+  const monetizationRefreshService = new MonetizationRefreshService(monetizationRepository, stripeGateway, entitlementsService, {
+    prices: marketPrices,
+    legacyPrices: { pro: config.billing.stripeProPriceId, lifetime: config.billing.stripeLifetimePriceId },
+    historicalPrices: config.billing.historicalPrices ?? {},
+    trialDays: config.billing.trialPeriodDays,
+    adminEmails: config.adminEmails ?? []
+  });
+
   const billingService =
     overrides?.billingService ??
     new BillingService(
@@ -237,10 +258,7 @@ export const buildDefaultServices = (
         regionalPricing: new RegionalPricingService(supabaseClients.serviceRoleClient, stripeGateway, {
           secret: config.billing.quoteSecret ?? null, productId: config.billing.productId ?? null,
           productIds: { weekly: config.billing.weeklyProductId ?? null, monthly: config.billing.monthlyProductId ?? null, annual: config.billing.annualProductId ?? null },
-          prices: {
-            GLOBAL: { weekly: config.billing.stripeWeeklyPriceId, monthly: config.billing.stripeMonthlyPriceId, annual: config.billing.stripeAnnualPriceId },
-            TR: { weekly: config.billing.tryWeeklyPriceId ?? null, monthly: config.billing.tryMonthlyPriceId ?? null, annual: config.billing.tryAnnualPriceId ?? null }
-          },
+          prices: marketPrices,
           portals: { GLOBAL: config.billing.usdPortalConfigurationId ?? null, TR: config.billing.tryPortalConfigurationId ?? null },
           historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
         }),
@@ -250,12 +268,13 @@ export const buildDefaultServices = (
         checkoutCancelUrl: config.billing.checkoutCancelUrl,
         portalReturnUrl: config.billing.portalReturnUrl,
         stripeWebhookSecret: config.billing.stripeWebhookSecret,
-        trialPeriodDays: config.billing.trialPeriodDays
+        trialPeriodDays: config.billing.trialPeriodDays,
+        monetization: monetizationRepository
       }
     );
 
   const privacyService = new PrivacyService(supabaseClients.serviceRoleClient, stripeGateway, logger);
-  const authService = new AuthService(authProvider, usersRepository, privacyService);
+  const authService = new AuthService(authProvider, usersRepository, privacyService, monetizationRepository);
   const usersService = new UsersService(usersRepository, billingService);
   const dashboardService = new DashboardService(usersService, dashboardRepository);
   const systemService = new SystemService(config, databaseHealthChecker);
@@ -360,6 +379,7 @@ export const buildDefaultServices = (
     filesService,
     cvPhotosService,
     exportsService,
-    billingService
+    billingService,
+    monetizationRefreshService
   };
 };

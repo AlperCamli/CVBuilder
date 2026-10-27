@@ -221,3 +221,8 @@ Environment variables (see `src/shared/config/env.ts`):
 - no deep billing analytics pipeline
 - storage usage is incremented on successful exports; deletion reconciliation is deferred
 - lifetime purchases cannot be refunded via the in-app billing portal (handle manually in Stripe Dashboard)
+
+## Monetization Tracking
+
+Invoices, subscription history, checkout attempts, paywall denials, activity, FX rates and the
+price/plan catalogs are recorded for analysis only; see `docs/monetization-tracking.md`.

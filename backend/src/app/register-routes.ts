@@ -39,6 +39,7 @@ import { ExportsController } from "../modules/exports/exports.controller";
 import { createExportsRouter } from "../modules/exports/exports.routes";
 import { BillingController } from "../modules/billing/billing.controller";
 import { createBillingRouter } from "../modules/billing/billing.routes";
+import { createMonetizationRouter } from "../modules/monetization/monetization.routes";
 import type { AppServices } from "./build-services";
 
 export const registerV1Routes = (
@@ -74,6 +75,7 @@ export const registerV1Routes = (
     }));
   }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
+  if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService));
   // Onboarding may claim/read an import and save account answers before activation.
   // Existing users retain their manual CV workspace; creation, AI, tailoring and exports stay paid.
   router.use((req, res, next) => {
@@ -84,7 +86,7 @@ export const registerV1Routes = (
     if (!applicationRoute && !importMutation) { next(); return; }
     authMiddleware(req, res, error => {
       if (error) { next(error); return; }
-      void services.billingService.assertSubscriptionAccess(req.auth!.appUser.id, isExistingCvWorkspaceRequest(req.method, req.path)).then(() => next(), next);
+      void services.billingService.assertSubscriptionAccess(req.auth!.appUser.id, isExistingCvWorkspaceRequest(req.method, req.path), { action: "app_access", surface: path.split("/")[1] }).then(() => next(), next);
     });
   });
   if (services.privacyService) router.use((req, res, next) => {

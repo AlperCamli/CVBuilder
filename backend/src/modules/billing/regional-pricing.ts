@@ -211,7 +211,8 @@ export class RegionalPricingService {
       .eq("checkout_nonce", nonce);
     if (error) throw new InternalServerError("Could not save checkout session");
   }
-  async cancelCheckout(userId: string): Promise<void> {
+  // Returns the expired session id, or null when nothing was pending.
+  async cancelCheckout(userId: string): Promise<string | null> {
     const { data, error } = await this.db
       .from("billing_markets")
       .select("checkout_nonce,checkout_session_id,checkout_expires_at")
@@ -224,7 +225,7 @@ export class RegionalPricingService {
       !data.checkout_session_id ||
       Date.parse(data.checkout_expires_at) < Date.now()
     )
-      return;
+      return null;
     if (!this.gateway?.expireCheckoutSession)
       throw new BillingConfigurationError(
         "Checkout cancellation is unavailable",
@@ -243,6 +244,7 @@ export class RegionalPricingService {
       .eq("checkout_nonce", data.checkout_nonce);
     if (result.error)
       throw new InternalServerError("Could not release checkout session");
+    return data.checkout_session_id;
   }
 
   async portal(userId: string): Promise<string> {

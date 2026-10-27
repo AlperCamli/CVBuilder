@@ -12,6 +12,23 @@ export interface SyncSubscriptionInput {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  // Analysis-only columns, written when the caller has them.
+  tracking?: SubscriptionTrackingFields;
+}
+
+export interface SubscriptionTrackingFields {
+  trial_start?: string | null;
+  trial_end?: string | null;
+  canceled_at?: string | null;
+  ended_at?: string | null;
+  cancellation_reason?: string | null;
+  cancellation_feedback?: string | null;
+  unit_amount?: number | null;
+  currency?: string | null;
+  billing_interval?: string | null;
+  // Lets the history trigger attribute changes to the Stripe event and its time.
+  last_provider_event_id?: string | null;
+  last_provider_event_at?: string | null;
 }
 
 export interface TrialTransitionGrant { redeemed_at: string | null; }
@@ -299,7 +316,8 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
           status: input.status,
           current_period_start: input.current_period_start,
           current_period_end: input.current_period_end,
-          cancel_at_period_end: input.cancel_at_period_end
+          cancel_at_period_end: input.cancel_at_period_end,
+          ...input.tracking
         })
         .eq("id", existing.id)
         .select("*")
@@ -325,7 +343,8 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
         status: input.status,
         current_period_start: input.current_period_start,
         current_period_end: input.current_period_end,
-        cancel_at_period_end: input.cancel_at_period_end
+        cancel_at_period_end: input.cancel_at_period_end,
+        ...input.tracking
       })
       .select("*")
       .single();

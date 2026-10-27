@@ -50,3 +50,4 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/guest-onboarding-service-role.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/onboarding-funnel-metrics.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/tailoring-v2.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/monetization-tracking.sql"

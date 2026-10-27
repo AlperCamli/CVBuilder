@@ -33,12 +33,14 @@ import type {
   TrialTransitionGrant,
   SyncSubscriptionInput
 } from "./subscriptions.repository";
-import type {
-  StripeCheckoutSessionSummary,
-  StripeGateway,
-  StripeSubscriptionSummary,
-  StripeWebhookEvent
+import {
+  toSubscriptionDetails,
+  type StripeCheckoutSessionSummary,
+  type StripeGateway,
+  type StripeSubscriptionSummary,
+  type StripeWebhookEvent
 } from "./stripe-gateway";
+import type { CheckoutOutcome, DenialReason, MonetizationRepository } from "../monetization/monetization.repository";
 
 interface BillingServiceOptions {
   requireSubscription?: boolean;
@@ -49,7 +51,22 @@ interface BillingServiceOptions {
   portalReturnUrl: string;
   stripeWebhookSecret: string | null;
   trialPeriodDays: number;
+  monetization?: MonetizationRepository;
 }
+
+// Which gate refused the request, for paywall analysis.
+export interface DeniedGate {
+  action: GatedAction | "app_access";
+  surface?: string;
+}
+
+const checkoutRejection = (error: unknown): CheckoutOutcome => {
+  const reason = error instanceof ConflictError ? error.details?.reason : undefined;
+  if (reason === "checkout_pending") return "rejected_pending";
+  if (reason === "subscription_active") return "rejected_active";
+  if (reason === "pricing_changed") return "rejected_pricing_changed";
+  return "failed";
+};
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -108,6 +125,8 @@ const parseCheckoutSessionFromWebhookObject = (
   return {
     id,
     url: typeof row.url === "string" ? row.url : null,
+    amount_total: typeof row.amount_total === "number" ? row.amount_total : null,
+    currency: typeof row.currency === "string" ? row.currency : null,
     customer_id: resolveObjectId(row.customer),
     subscription_id: resolveObjectId(row.subscription),
     metadata: normalizeMetadata(row.metadata),
@@ -140,6 +159,7 @@ const parseSubscriptionFromWebhookObject = (object: unknown): StripeSubscription
     customer_id: customerId,
     status: typeof row.status === "string" ? row.status : "inactive",
     trial_start: toIsoFromUnixSeconds(row.trial_start),
+    details: toSubscriptionDetails(row),
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
     current_period_start: toIsoFromUnixSeconds(row.current_period_start),
     current_period_end: toIsoFromUnixSeconds(row.current_period_end),
@@ -158,7 +178,11 @@ export class BillingService {
     private readonly options: BillingServiceOptions
   ) {}
 
-  async cancelCheckout(userId: string) { await this.options.regionalPricing?.cancelCheckout(userId); return { cancelled: true }; }
+  async cancelCheckout(userId: string) {
+    const sessionId = await this.options.regionalPricing?.cancelCheckout(userId);
+    if (sessionId) await this.options.monetization?.resolveCheckoutAttempt(sessionId, "canceled");
+    return { cancelled: true };
+  }
 
   async getPrices(country: string | null, userId?: string) {
     if (!this.options.regionalPricing) throw new BillingConfigurationError("Regional pricing is not configured");
@@ -238,11 +262,12 @@ export class BillingService {
   }
 
   async assertActionAllowed(userId: string, action: GatedAction): Promise<void> {
-    await this.assertSubscriptionAccess(userId);
+    await this.assertSubscriptionAccess(userId, false, { action });
     const snapshot = await this.getSnapshot(userId);
     const decision = this.entitlementsService.evaluateAction(action, snapshot.entitlements);
 
     if (!decision.allowed) {
+      await this.options.monetization?.recordEntitlementDenial({ user_id: userId, plan_code: snapshot.current_plan.plan_code, action, reason: "free_limit" });
       throw new EntitlementExceededError(decision.reason ?? "Usage limit exceeded", {
         action,
         plan_code: snapshot.current_plan.plan_code,
@@ -252,13 +277,25 @@ export class BillingService {
     }
   }
 
-  async assertSubscriptionAccess(userId: string, allowExistingCvWorkspace = false): Promise<void> {
+  async assertSubscriptionAccess(userId: string, allowExistingCvWorkspace = false, gate: DeniedGate = { action: "app_access" }): Promise<void> {
     if (!this.options.requireSubscription) return;
     const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
     if (!this.subscriptionAllowsAccess(subscription)) {
       if (allowExistingCvWorkspace && await this.subscriptionsRepository.getTrialTransitionGrant(userId)) return;
+      await this.options.monetization?.recordEntitlementDenial({
+        user_id: userId,
+        plan_code: this.entitlementsService.resolveEffectivePlanCode(subscription),
+        action: gate.action,
+        surface: gate.surface,
+        reason: this.denialReason(subscription)
+      });
       throw new ForbiddenError("Activate your 3-day free trial or purchase Pro to continue.", { reason: "subscription_required" });
     }
+  }
+
+  private denialReason(subscription: SubscriptionRecord | null): DenialReason {
+    if (!subscription?.provider_subscription_id) return "no_subscription";
+    return subscription.status === "trialing" ? "trial_expired" : "subscription_inactive";
   }
 
   private subscriptionAllowsAccess(subscription: SubscriptionRecord | null): boolean {
@@ -306,6 +343,42 @@ export class BillingService {
     input: CreateCheckoutInput,
     country: string | null = null
   ): Promise<CreateCheckoutResponseData> {
+    const trialRequested = input.with_trial !== false;
+    try {
+      const { response, market } = await this.openCheckoutSession(userId, input, country);
+      await this.options.monetization?.recordCheckoutAttempt({
+        user_id: userId,
+        plan_code: response.plan_code,
+        market,
+        currency: response.currency ?? null,
+        amount: response.amount ?? null,
+        trial_requested: trialRequested,
+        trial_applied: response.trial_applied,
+        checkout_session_id: response.checkout_session_id,
+        outcome: "open"
+      });
+      return response;
+    } catch (error) {
+      await this.options.monetization?.recordCheckoutAttempt({
+        user_id: userId,
+        plan_code: input.plan_code.trim().toLowerCase().slice(0, 40),
+        market: null,
+        currency: null,
+        amount: null,
+        trial_requested: trialRequested,
+        trial_applied: false,
+        checkout_session_id: null,
+        outcome: checkoutRejection(error)
+      });
+      throw error;
+    }
+  }
+
+  private async openCheckoutSession(
+    userId: string,
+    input: CreateCheckoutInput,
+    country: string | null
+  ): Promise<{ response: CreateCheckoutResponseData; market: string | null }> {
     const user = await this.requireUser(userId);
     const stripeGateway = this.requireStripeGateway();
     const plan = this.requirePurchasablePlan(input.plan_code);
@@ -313,7 +386,7 @@ export class BillingService {
     const successUrl = this.validateReturnUrl(input.success_url, this.options.checkoutSuccessUrl);
     const cancelUrl = this.validateReturnUrl(input.cancel_url, this.options.checkoutCancelUrl);
     const active = await this.subscriptionsRepository.getCurrentForUser(userId);
-    if (active && ["active", "trialing"].includes(active.status)) throw new ConflictError("You already have an active subscription. Manage it in the billing portal.");
+    if (active && ["active", "trialing"].includes(active.status)) throw new ConflictError("You already have an active subscription. Manage it in the billing portal.", { reason: "subscription_active" });
     const regional = this.options.regionalPricing ? await this.options.regionalPricing.resolveCheckout(userId, country, input.pricing_quote, plan.code as PurchasePlan) : null;
     if (!regional && !plan.stripe_price_id) {
       throw new BillingConfigurationError("Stripe price id is missing for requested plan", {
@@ -323,7 +396,7 @@ export class BillingService {
 
     const customerId = await this.ensureStripeCustomerId(user);
     // Also consult Stripe: webhook delivery may lag behind a completed Checkout.
-    if (await stripeGateway.hasBillableSubscription?.(customerId)) throw new ConflictError("You already have a subscription. Manage it in the billing portal.");
+    if (await stripeGateway.hasBillableSubscription?.(customerId)) throw new ConflictError("You already have a subscription. Manage it in the billing portal.", { reason: "subscription_active" });
 
     // Only grant a free trial when: the plan supports one, trials are enabled,
     // the caller did not explicitly opt out (`with_trial: false`), and the user
@@ -367,13 +440,16 @@ export class BillingService {
     }
 
     return {
-      ...(regional ? { currency: regional.currency, amount: regional.amount } : {}),
-      checkout_url: checkoutSession.url,
-      checkout_session_id: checkoutSession.id,
-      plan_code: plan.code,
-      plan_name: plan.name,
-      trial_applied: trialPeriodDays !== null,
-      trial_period_days: trialPeriodDays
+      market: regional?.market ?? null,
+      response: {
+        ...(regional ? { currency: regional.currency, amount: regional.amount } : {}),
+        checkout_url: checkoutSession.url,
+        checkout_session_id: checkoutSession.id,
+        plan_code: plan.code,
+        plan_name: plan.name,
+        trial_applied: trialPeriodDays !== null,
+        trial_period_days: trialPeriodDays
+      }
     };
   }
 
@@ -435,23 +511,98 @@ export class BillingService {
   private async processWebhookEvent(event: StripeWebhookEvent): Promise<boolean> {
     switch (event.type) {
       case "checkout.session.completed":
-        return this.handleCheckoutSessionCompleted(event.object);
+        return this.handleCheckoutSessionCompleted(event.object, event);
+      case "checkout.session.expired":
+        return this.handleCheckoutSessionExpired(event.object);
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted":
-        return this.handleSubscriptionUpdated(event.object);
+        return this.handleSubscriptionUpdated(event.object, event);
+      case "invoice.finalized":
+      case "invoice.paid":
+      case "invoice.payment_failed":
+      case "invoice.voided":
+      case "invoice.marked_uncollectible":
+        return this.handleInvoiceEvent(event.object);
+      case "charge.refunded":
+        return this.handleChargeRefunded(event.object);
       default:
         return false;
     }
   }
 
-  private async handleCheckoutSessionCompleted(object: unknown): Promise<boolean> {
+  private async handleCheckoutSessionExpired(object: unknown): Promise<boolean> {
+    const session = parseCheckoutSessionFromWebhookObject(object);
+    if (!session || !this.options.monetization) return false;
+    await this.options.monetization.resolveCheckoutAttempt(session.id, "expired");
+    return true;
+  }
+
+  private async handleInvoiceEvent(object: unknown): Promise<boolean> {
+    const invoiceId = resolveObjectId(object);
+    return invoiceId ? this.syncInvoice(invoiceId) : false;
+  }
+
+  private async handleChargeRefunded(object: unknown): Promise<boolean> {
+    const charge = asRecord(object);
+    const chargeId = typeof charge.id === "string" ? charge.id : null;
+    const invoiceId = resolveObjectId(charge.invoice)
+      ?? (chargeId ? await this.requireStripeGateway().retrieveChargeInvoiceId?.(chargeId) ?? null : null);
+    return invoiceId ? this.syncInvoice(invoiceId) : false;
+  }
+
+  // Re-reads the invoice from Stripe so out-of-order events still store the latest state.
+  // Public for the one-off backfill script; webhooks are the normal path.
+  async syncInvoice(invoiceId: string): Promise<boolean> {
+    const monetization = this.options.monetization;
+    const stripeGateway = this.requireStripeGateway();
+    if (!monetization || !stripeGateway.retrieveInvoice) return false;
+    const invoice = await stripeGateway.retrieveInvoice(invoiceId);
+    if (!invoice) return false;
+
+    const subscription = invoice.subscription_id
+      ? await this.subscriptionsRepository.findByProviderSubscriptionId(this.options.provider, invoice.subscription_id)
+      : null;
+    let userId: string | null = subscription?.user_id ?? invoice.metadata.app_user_id ?? null;
+    if (!userId && invoice.customer_id) {
+      userId = (await this.subscriptionsRepository.findByProviderCustomerId(this.options.provider, invoice.customer_id))?.user_id ?? null;
+    }
+    const owner = userId ? await this.usersRepository.getById(userId) : null;
+    // Erased accounts keep only the anonymised rows archived at erasure.
+    if (!owner || (owner as unknown as { deletion_requested_at?: string }).deletion_requested_at) return false;
+
+    await monetization.upsertInvoice({
+      user_id: owner.id,
+      subscription_id: subscription?.id ?? null,
+      provider_invoice_id: invoice.id,
+      provider_subscription_id: invoice.subscription_id,
+      status: invoice.status,
+      currency: invoice.currency,
+      amount_subtotal: invoice.amount_subtotal,
+      amount_discount: invoice.amount_discount,
+      amount_tax: invoice.amount_tax,
+      amount_total: invoice.amount_total,
+      amount_paid: invoice.amount_paid,
+      amount_refunded: invoice.amount_refunded,
+      billing_reason: invoice.billing_reason,
+      // Unknown prices stay null rather than being reported as the free plan.
+      plan_code: ((code: PlanCode) => code === "free" ? null : code)(this.resolvePlanCodeFromPrices(invoice.price_ids)),
+      period_start: invoice.period_start,
+      period_end: invoice.period_end,
+      paid_at: invoice.paid_at,
+      created_at: invoice.created_at
+    });
+    return true;
+  }
+
+  private async handleCheckoutSessionCompleted(object: unknown, event?: StripeWebhookEvent): Promise<boolean> {
     const stripeGateway = this.requireStripeGateway();
     const session = parseCheckoutSessionFromWebhookObject(object);
 
     if (!session) {
       return false;
     }
+    await this.options.monetization?.resolveCheckoutAttempt(session.id, "completed");
 
     const metadataUserId = (session.metadata.app_user_id as string | undefined) ?? null;
     let userId = metadataUserId;
@@ -492,7 +643,7 @@ export class BillingService {
     if (session.mode === "payment") {
       const metadataPlanCode = (session.metadata.plan_code as string | undefined) ?? null;
       if (metadataPlanCode === "lifetime") {
-        await this.recordLifetimePurchase(userId, session);
+        await this.recordLifetimePurchase(userId, session, event);
         return true;
       }
 
@@ -509,15 +660,17 @@ export class BillingService {
     }
 
     if (!(await this.usersRepository.getById(userId))) return false;
-    await this.syncStripeSubscription(userId, subscription);
+    await this.syncStripeSubscription(userId, subscription, event);
     return true;
   }
 
   private async recordLifetimePurchase(
     userId: string,
-    session: ParsedWebhookCheckoutSession
+    session: ParsedWebhookCheckoutSession,
+    event?: StripeWebhookEvent
   ): Promise<void> {
-    await this.subscriptionsRepository.upsertProviderSubscription({
+    const purchasedAt = event?.created ?? new Date().toISOString();
+    const purchase = await this.subscriptionsRepository.upsertProviderSubscription({
       user_id: userId,
       provider: this.options.provider,
       provider_customer_id: session.customer_id,
@@ -526,11 +679,41 @@ export class BillingService {
       status: "active",
       current_period_start: new Date().toISOString(),
       current_period_end: null,
-      cancel_at_period_end: false
+      cancel_at_period_end: false,
+      tracking: {
+        unit_amount: session.amount_total ?? null,
+        currency: session.currency ?? null,
+        billing_interval: "one_time",
+        ...(event ? { last_provider_event_id: event.id, last_provider_event_at: event.created ?? null } : {})
+      }
     });
+    // One-time payments have no Stripe invoice; record the charge as its own row
+    // after access is granted, so a failed write cannot block the purchase.
+    if (session.amount_total !== null && session.amount_total !== undefined && session.currency) {
+      await this.options.monetization?.upsertInvoice({
+        user_id: userId,
+        subscription_id: purchase.id,
+        provider_invoice_id: `lifetime_${session.id}`,
+        provider_subscription_id: `lifetime_${session.id}`,
+        status: "paid",
+        currency: session.currency,
+        amount_subtotal: session.amount_total,
+        amount_discount: 0,
+        amount_tax: 0,
+        amount_total: session.amount_total,
+        amount_paid: session.amount_total,
+        amount_refunded: 0,
+        billing_reason: "one_time_purchase",
+        plan_code: "lifetime",
+        period_start: purchasedAt,
+        period_end: null,
+        paid_at: purchasedAt,
+        created_at: purchasedAt
+      });
+    }
   }
 
-  private async handleSubscriptionUpdated(object: unknown): Promise<boolean> {
+  private async handleSubscriptionUpdated(object: unknown, event?: StripeWebhookEvent): Promise<boolean> {
     const stripeGateway = this.requireStripeGateway();
     const subscription = parseSubscriptionFromWebhookObject(object);
 
@@ -566,11 +749,11 @@ export class BillingService {
     }
 
     if (!(await this.usersRepository.getById(userId))) return false;
-    await this.syncStripeSubscription(userId, subscription);
+    await this.syncStripeSubscription(userId, subscription, event);
     return true;
   }
 
-  private async syncStripeSubscription(userId: string, subscription: StripeSubscriptionSummary): Promise<void> {
+  private async syncStripeSubscription(userId: string, subscription: StripeSubscriptionSummary, event?: StripeWebhookEvent): Promise<void> {
     const owner = await this.usersRepository.getById(userId);
     if (!owner || (owner as unknown as { deletion_requested_at?: string }).deletion_requested_at) return;
     const mappedPlanCode = this.resolvePlanCodeFromPrices(subscription.price_ids);
@@ -590,7 +773,11 @@ export class BillingService {
       status: subscription.status,
       current_period_start: subscription.current_period_start,
       current_period_end: subscription.current_period_end,
-      cancel_at_period_end: subscription.cancel_at_period_end
+      cancel_at_period_end: subscription.cancel_at_period_end,
+      tracking: {
+        ...subscription.details,
+        ...(event ? { last_provider_event_id: event.id, last_provider_event_at: event.created ?? null } : {})
+      }
     };
 
     // Only verified provider data redeems the grant. Abandoned/failed checkout does not.

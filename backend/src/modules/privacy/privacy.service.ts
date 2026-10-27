@@ -11,7 +11,7 @@ import { isOwnedStorageLocation } from "../files/storage-ownership";
 
 const iso = (ms = Date.now()) => new Date(ms).toISOString();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-const OWNED_TABLES = ["users", "master_cvs", "tailored_cvs", "jobs", "job_status_history", "cover_letters", "cover_letter_exports", "exports", "imports", "files", "ai_runs", "ai_suggestions", "tailoring_sessions", "tailoring_session_tasks", "cv_block_revisions", "subscriptions", "usage_counters", "privacy_receipts"];
+const OWNED_TABLES = ["users", "master_cvs", "tailored_cvs", "jobs", "job_status_history", "cover_letters", "cover_letter_exports", "exports", "imports", "files", "ai_runs", "ai_suggestions", "tailoring_sessions", "tailoring_session_tasks", "cv_block_revisions", "subscriptions", "usage_counters", "privacy_receipts", "subscription_events", "billing_invoices", "checkout_attempts", "entitlement_denials", "user_activity_days"];
 class MaintenanceYield extends Error {}
 const withinBudget = (deadline: number) => { if (Date.now() >= deadline - 500) throw new MaintenanceYield(); };
 type StoredObject = { bucket: string; path: string };
@@ -251,6 +251,8 @@ export class PrivacyService {
     if (job.step === "database") {
       withinBudget(deadline);
       check((await this.db.from("job_status_history").delete().eq("changed_by_user_id", userId)).error);
+      // Keeps anonymised billing history and deletes the subscriptions; safe to repeat on resume.
+      check((await this.db.rpc("archive_billing_history", { p_user: userId })).error);
       const tables = ["cover_letter_exports", "exports", "imports", "cv_block_revisions", "ai_suggestions", "tailoring_session_tasks", "tailoring_sessions", "ai_runs", "cover_letters", "tailored_cvs", "jobs", "master_cvs", "files", "usage_counters", "subscriptions"];
       for (let index = Number(job.manifest.database_cursor ?? 0); index < tables.length; index++) {
         withinBudget(deadline);
