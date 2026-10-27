@@ -299,7 +299,7 @@ const createHarness = (
     language?: string;
     content?: CvContent;
     // Replaces the mock model's output for matching requests (undefined = use the mock).
-    override?: (request: AiProviderRequest) => Record<string, unknown> | undefined;
+    override?: (request: AiProviderRequest, mockOutput: Record<string, unknown>) => Record<string, unknown> | undefined;
     // Active ai_prompt_configs rows (DB prompt overrides) for non-code-only flows.
     promptRows?: Array<Record<string, unknown>>;
   } = {}
@@ -457,7 +457,7 @@ const createHarness = (
     async generate(request) {
       requests.push(request);
       const result = await mock.generate(request);
-      const overridden = options.override?.(request);
+      const overridden = options.override?.(request, result.output_payload);
       return {
         ...result,
         ...(overridden ? { output_payload: overridden } : {}),
@@ -996,6 +996,26 @@ describe("TailoringService with real CV shapes, answers and refine", () => {
     expect(request.input_payload.confirmed_facts).toEqual([
       { kind: "metric", question: metric.text, answer: null, detail: "About 1.5K merchants" }
     ]);
+  });
+
+  it("repairs an analysis that breaks the schema's length limits instead of failing it", async () => {
+    // Seen with a Turkish job post: requirement keywords over 60 characters failed the whole run.
+    const longKeyword = "Raporlama süreçlerinin uçtan uca yönetimi ve departmanlar arası koordinasyon";
+    const harness = createHarness({
+      content: realCv(),
+      override: (request, mockOutput) => {
+        if (request.flow_type !== "tailoring_analysis") return undefined;
+        const output = structuredClone(mockOutput) as { requirements: Array<Record<string, unknown>> };
+        output.requirements[0].keywords = [longKeyword, "SQL"];
+        output.requirements[0].reason = "Kanıt ".repeat(80);
+        return output;
+      }
+    });
+    const { analyzed } = await start(harness);
+    const requirement = analyzed.session.analysis!.requirements[0];
+    expect(requirement.keywords).toEqual(["SQL"]);
+    expect(requirement.reason.length).toBeLessThanOrEqual(280);
+    expect(analyzed.session.status).not.toBe("draft");
   });
 
   it("accepts a new skills section with the skills the candidate picked", async () => {

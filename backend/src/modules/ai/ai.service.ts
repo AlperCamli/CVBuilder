@@ -64,6 +64,7 @@ import {
 import { cvParseOutputSchema } from "./flows/flow-contracts";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceJobAnalysisOutputPayload } from "./job-analysis-output-coercion";
+import { clampToSchemaLimits } from "./flows/clamp-to-schema";
 import { coerceTailoredDraftOutputPayload } from "./tailored-draft-output-coercion";
 import { stabilizeTailoredDraftFromMaster } from "./tailored-draft-empty-field-recovery";
 import { evaluateTailoredDraftMasterDivergence } from "./tailored-draft-master-divergence";
@@ -2878,7 +2879,9 @@ export class AiService {
         ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
         : options.flow_type === "job_analysis"
           ? coerceJobAnalysisOutputPayload(providerResult.output_payload)
-          : providerResult.output_payload;
+          : options.flow_type.startsWith("tailoring_")
+            ? clampToSchemaLimits(definition.output_schema, providerResult.output_payload)
+            : providerResult.output_payload;
 
     await this.updateRunStage(owner, options.ai_run_id, "validating_output");
     const parsed = definition.output_schema.safeParse(outputPayloadForValidation);
