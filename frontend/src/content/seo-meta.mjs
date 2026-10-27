@@ -78,33 +78,33 @@ export const WEB_APPLICATION_JSON_LD = {
 // Shared with the visible guided page so its structured FAQ cannot drift.
 export const GUIDED_JOURNEY_FAQ_ITEMS = [
   {
-    question: "Can I start without a card?",
-    answer: "You can complete onboarding before entering card details. Existing users can view and manually edit saved CVs for free. Creating a new CV, exporting, AI tools, and tailoring require an active trial or Pro subscription. The 3-day trial requires a card and renews weekly unless cancelled before it ends.",
+    question: "Can I look around before adding a card?",
+    answer: "Yes. You can answer a few quick questions and see your CV take shape without entering any card details. When you’re ready to create, tailor and download, start your 3-day free trial: you add a card at secure Stripe checkout, pay nothing today and can cancel anytime. If you don’t cancel before the trial ends, Weekly Pro renews weekly at the price shown. Already have an account? You can always view and edit your saved CVs for free.",
   },
   {
-    question: "How is the Pro trial different?",
-    answer: "Eligible users can try Weekly Pro free for 3 days. A card is required at checkout. It then renews at the displayed regional Weekly price unless cancelled before the trial ends. The trial applies to Weekly, not Monthly. Checkout confirms eligibility and terms.",
+    question: "Why do you ask for a card for the free trial?",
+    answer: "It keeps the trial fair for everyone and lets you carry on with Pro without interruption if you love it. You won’t be charged during the 3 days, and payments are handled securely by Stripe — we never see or store your card number. Cancel from your account before the trial ends and you won’t pay anything. The trial is for Weekly Pro and eligible users; checkout confirms your eligibility and terms.",
   },
   {
     question: "Can I review the changes?",
-    answer: "Always. Select the keywords that fit, review suggestions, and edit your CV before exporting. Your experience stays the source of truth.",
+    answer: "Always. You choose the keywords that fit, review every suggestion and edit your CV before you download it. Your real experience always comes first.",
   },
 ];
 
 export const GUIDED_JOURNEY_FAQ_ITEMS_TR = [
-  { question: "Kart olmadan başlayabilir miyim?", answer: "Kart bilgilerinizi girmeden başlangıç adımlarını tamamlayabilirsiniz. Mevcut kullanıcılar kayıtlı CV’lerini ücretsiz görüntüleyebilir ve elle düzenleyebilir. Yeni CV oluşturma, dışa aktarma, yapay zekâ araçları ve işe uyarlama için aktif bir deneme veya Pro aboneliği gerekir. 3 günlük deneme için kart gerekir; deneme bitmeden iptal edilmezse abonelik haftalık yenilenir." },
-  { question: "Pro denemesi nasıl farklı?", answer: "Uygun kullanıcılar Haftalık Pro’yu 3 gün ücretsiz deneyebilir. Ödeme sırasında kart gerekir. Deneme bitmeden iptal edilmezse gösterilen bölgesel Haftalık fiyatla yenilenir. Deneme Aylık plana uygulanmaz. Uygunluk ve koşullar ödeme sırasında doğrulanır." },
-  { question: "Değişiklikleri inceleyebilir miyim?", answer: "Her zaman. Uygun anahtar kelimeleri seçin, önerileri inceleyin ve dışa aktarmadan önce özgeçmişinizi düzenleyin. Deneyiminiz her zaman temel alınır." }
+  { question: "Kart eklemeden önce uygulamayı tanıyabilir miyim?", answer: "Elbette. Birkaç kısa soruyu yanıtlayıp kart bilgisi girmeden CV’nin şekillendiğini görebilirsin. CV oluşturmaya, uyarlamaya ve indirmeye hazır olduğunda 3 günlük ücretsiz denemeni başlat: kartını güvenli Stripe ödeme sayfasında eklersin, bugün hiçbir ödeme yapmazsın ve istediğin zaman iptal edebilirsin. Deneme bitmeden iptal etmezsen Haftalık Pro, gösterilen fiyatla haftalık olarak yenilenir. Zaten hesabın var mı? Kayıtlı CV’lerini her zaman ücretsiz görüntüleyip düzenleyebilirsin." },
+  { question: "Ücretsiz deneme için neden kart istiyorsunuz?", answer: "Böylece deneme herkes için adil kalıyor ve Pro’yu sevdiysen hiç ara vermeden devam edebiliyorsun. 3 gün boyunca senden ücret alınmaz. Ödemeler Stripe tarafından güvenle işlenir; kart numaranı biz hiçbir zaman görmeyiz ve saklamayız. Deneme bitmeden hesabından iptal edersen hiçbir ödeme yapmazsın. Deneme, Haftalık Pro’da ve uygun kullanıcılar için geçerlidir; uygunluk ve koşullar ödeme sayfasında netleşir." },
+  { question: "Değişiklikleri inceleyebilir miyim?", answer: "Her zaman. Sana uyan anahtar kelimeleri sen seçersin, her öneriyi incelersin ve indirmeden önce CV’ni düzenlersin. Gerçek deneyimin her zaman önce gelir." }
 ];
 
 function guidedJourneyRoute(pricing, locale = "en", primary = false) {
   const path = primary ? (locale === "tr" ? (pricing ? "/tr/pricing" : "/tr") : (pricing ? "/pricing" : "/")) : (pricing ? "/guided-journey/pricing" : "/guided-journey");
-  const title = locale === "tr" ? (pricing ? "Fiyatlandırma | jobspecificCV" : "İşe Özel Özgeçmişinizi Dakikalar İçinde Hazırlayın | jobspecificCV") : pricing
+  const title = locale === "tr" ? (pricing ? "Fiyatlandırma | jobspecificCV" : "İşe Özel CV’ni Dakikalar İçinde Hazırla | jobspecificCV") : pricing
     ? "Guided Journey Pricing | jobspecificCV"
     : "Tailor Your CV in Minutes — Guided Journey | jobspecificCV";
-  const description = locale === "tr" ? (pricing ? "Ücretsiz başlayın veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "Özgeçmişinizi yükleyin, iş ilanına göre uyarlayın ve her değişikliği inceleyin. Türkçe veya İngilizce özgeçmiş oluşturun.") : pricing
-    ? "Compare Weekly, Monthly, and Annual Pro with regional billing totals. Start a 3-day trial with card activation or purchase Pro directly."
-    : "Try the interactive CV demo with a friendly guide. Tailor your CV to a job description, review every change, and start a 3-day trial.";
+  const description = locale === "tr" ? (pricing ? "3 günlük ücretsiz denemeyle başlayın veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "CV’ni yükle, iş ilanına göre uyarla ve her değişikliği kendin incele. Türkçe veya İngilizce CV’ni dakikalar içinde hazırla.") : pricing
+    ? "Compare Weekly, Monthly and Annual Pro with prices for your region. Try Weekly Pro free for 3 days, or choose a plan that fits your job search."
+    : "Try the interactive CV demo with a friendly guide. Tailor your CV to any job, review every change, and try it free for 3 days.";
   return {
     path,
     language: locale,

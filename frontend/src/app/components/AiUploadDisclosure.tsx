@@ -10,7 +10,7 @@ export function AiUploadDisclosure({config, checked = true, disabled = false, on
 }) {
   useTranslation();
   const hintId = useId();
-  const provider = config?.ai_provider ?? "our configured AI provider";
+  const provider = config?.ai_provider ?? t("our configured AI provider");
   const policy = config?.processors.find(row => row.name === provider);
   const details = <>
     {extraDetails}

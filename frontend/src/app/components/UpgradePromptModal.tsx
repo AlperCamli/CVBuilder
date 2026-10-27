@@ -410,7 +410,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                                   card.code === "weekly" ? "var(--color-teal-50)" : "var(--color-teal-800)"
                               }}
                             >
-                              {badge}
+                              {t(badge)}
                             </span>
                           ) : null}
                         </div>

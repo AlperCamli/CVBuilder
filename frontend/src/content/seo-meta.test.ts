@@ -17,7 +17,7 @@ describe("public and guided journey SEO", () => {
     const pricing = routes.find((route) => route.path === "/pricing")!;
     expect(home.includeInSitemap).toBe(true);
     expect(pricing.includeInSitemap).toBe(true);
-    expect(pricing.description).toContain("regional billing totals");
+    expect(pricing.description).toContain("prices for your region");
     expect(JSON.stringify(pricing)).not.toMatch(/Lifetime|\"price\":\"10\"/);
   });
   it("indexes Turkish routes with reciprocal language links and shared guided assets", () => {

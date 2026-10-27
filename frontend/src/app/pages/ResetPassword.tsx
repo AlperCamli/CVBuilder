@@ -226,7 +226,7 @@ export function ResetPassword() {
             className="font-semibold"
             style={{ fontSize: "20px", color: "var(--color-text-primary)" }}
           >
-            {t("ResumÃ©")}</span>
+            {t("jobspecificCV")}</span>
         </Link>
 
         <div

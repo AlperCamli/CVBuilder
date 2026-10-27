@@ -170,7 +170,7 @@ try {
     const f = await fixture({ pricesUnavailable: true });
     try {
       await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1`, { waitUntil: "networkidle0" });
-      await waitText(f.page, "Pricing is temporarily unavailable");
+      await waitText(f.page, "We can’t show prices right now.");
       assert(await f.page.$("h1"), "unavailable pricing must reveal recovery");
       assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 0);
       console.log("PASS automatic checkout with unavailable prices reveals recovery without creating a session");
@@ -209,9 +209,9 @@ try {
       assert(JSON.stringify(f.master.current_content).includes("Manual Candidate"));
       await f.page.reload({ waitUntil: "networkidle0" });
       await f.page.waitForFunction(() => document.querySelector('input[placeholder="Full name"]')?.value === "Manual Candidate");
-      for (const label of ["Export", "Improve with AI", ...(!savedTailored ? ["Customize for a job"] : [])]) {
+      for (const label of ["Export", "Improve with AI", ...(!savedTailored ? ["Tailor for a job"] : [])]) {
         await clickText(f.page, label);
-        await waitText(f.page, label === "Export" ? "You need Pro to export your CV" : label === "Improve with AI" ? "You need Pro to use AI tools" : "You need Pro to tailor your CV");
+        await waitText(f.page, label === "Export" ? "Export your CV with Pro" : label === "Improve with AI" ? "Unlock AI tools with Pro" : "Tailor your CV with Pro");
         await clickText(f.page, "Not now");
         await f.page.waitForSelector('[role="dialog"]', { hidden: true });
         assert.equal(new URL(f.page.url()).pathname, `/app/cv/${f.cvId}`);
@@ -222,13 +222,13 @@ try {
         await f.page.screenshot({ path: new URL("existing-user-manual-editor.png", output).pathname, fullPage: true });
         await f.page.goto(`${base}/app/resumes`, { waitUntil: "networkidle0" });
         await waitText(f.page, "My Main CV");
-        await clickText(f.page, "Customize for a job");
-        await waitText(f.page, "You need Pro to tailor your CV");
+        await clickText(f.page, "Tailor for a job");
+        await waitText(f.page, "Tailor your CV with Pro");
         await f.page.waitForFunction(path => location.pathname === path, {}, `/app/cv/${f.cvId}`);
         await clickText(f.page, "Not now");
         await f.page.waitForSelector('[role="dialog"]', { hidden: true });
-        await clickText(f.page, "Customize for a job");
-        await waitText(f.page, "You need Pro to tailor your CV");
+        await clickText(f.page, "Tailor for a job");
+        await waitText(f.page, "Tailor your CV with Pro");
         await clickText(f.page, "Start weekly plan");
         await waitText(f.page, "Test payment details");
         const checkout = f.requests.findLast(row => row.path === "/billing/checkout").body;
@@ -302,8 +302,8 @@ try {
       assert.equal(await f.page.$("#trial-transition-heading"), null);
       assert.equal(await f.page.$('[role="dialog"]'), null);
       await clickText(f.page, "Export");
-      await waitText(f.page, "You need Pro to export your CV");
-      await waitText(f.page, "Start your 3-day free trial or choose Pro to continue.");
+      await waitText(f.page, "Export your CV with Pro");
+      await waitText(f.page, "Start your 3-day free trial to unlock it — nothing to pay today. Or pick a Pro plan.");
       await f.page.screenshot({ path: new URL("premium-popup-desktop.png", output).pathname, fullPage: true });
       await f.page.setViewport({ width: 390, height: 1100 });
       await f.page.waitForFunction(() => document.querySelector("aside").getBoundingClientRect().right <= 1);
@@ -323,12 +323,12 @@ try {
     try {
       await f.page.goto(`${base}/app/cv-score?source=guest&import=${f.importId}`, { waitUntil: "networkidle0" });
       await f.page.evaluate(() => localStorage.setItem("cv-builder:onboarding-template", JSON.stringify({ slug: "mosaic-columns-rose", expires_at: Date.now() + 86400000 })));
-      await clickText(f.page, { editor: "Continue to CV editor", tailor: "Customize for a job", improve: "Improve with AI" }[action]);
-      await waitText(f.page, "Activate your 3-day free trial");
+      await clickText(f.page, { editor: "Continue to CV editor", tailor: "Tailor for a job", improve: "Improve with AI" }[action]);
+      await waitText(f.page, "Start your 3-day free trial");
       assert.equal(f.requests.filter(row => row.path.endsWith("create-master-cv")).length, 0);
       assert.match(new URL(f.page.url()).searchParams.get("next"), new RegExp(`action=${action}`));
       await f.page.reload({ waitUntil: "networkidle0" });
-      await clickText(f.page, "Activate 3-day free trial");
+      await clickText(f.page, "Start 3-day free trial");
       await waitText(f.page, "Test payment details");
       await clickText(f.page, "Activate subscription");
       const target = action === "editor" ? `/app/cv/${f.cvId}` : action === "tailor" ? `/app/tailor/${f.cvId}` : "/app/ai-improving";
@@ -382,7 +382,7 @@ try {
       assert(await f.page.$('a[href="/support#contact"][target="_blank"]'));
       assert(await f.page.$('a[href^="mailto:contact@jobspecificcv.com?"]'));
       await clickText(f.page, "Start my 3-day free trial");
-      await clickText(f.page, "Activate 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
+      await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
       await f.page.waitForSelector(".ob-create-zone");
       assert.equal(f.requests.filter(row => row.path === "/billing/checkout").length, 2);
       console.log("PASS failed purchase -> trial activation -> upload/create");
@@ -401,7 +401,7 @@ try {
       await clickText(f.page, "See my CV score");
       await waitText(f.page, "Not scored yet.");
       assert.equal(f.requests.filter(row => row.path === "/master-cvs" && row.method === "POST").length, 0);
-      await clickText(f.page, "Continue to CV editor"); await clickText(f.page, "Activate 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
+      await clickText(f.page, "Continue to CV editor"); await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
       await f.page.waitForFunction(path => location.pathname === path, {}, `/app/cv/${f.cvId}`);
       assert.equal(f.master.template_id, f.templateId);
       assert.equal(f.requests.filter(row => row.path === "/master-cvs" && row.method === "POST").length, 1);
@@ -421,7 +421,7 @@ try {
       for (let question = 1; question <= 4; question++) { await waitText(f.page, `Question ${question} of 4`); await clickText(f.page, "Skip"); }
       await clickText(f.page, "See my CV score"); await waitText(f.page, "Your CV Score");
       assert(f.requests.find(row => row.path.endsWith("/claim")));
-      await clickText(f.page, "Customize for a job"); await clickText(f.page, "Activate 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
+      await clickText(f.page, "Tailor for a job"); await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
       await f.page.waitForFunction(path => location.pathname === path, {}, `/app/tailor/${f.cvId}`);
       assert.equal(f.master.template_id, f.templateId);
       console.log("PASS upload -> four questions -> claim/score -> trial -> selected tailoring path");
@@ -462,7 +462,7 @@ try {
     try {
       await f.page.goto(`${base}/app/checkout?plan=monthly&trial=0&auto=1`, { waitUntil: "networkidle0" });
       await waitText(f.page, "Having trouble purchasing?"); await clickText(f.page, "Start Free Trial");
-      await clickText(f.page, "Activate 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
+      await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
       await f.page.waitForSelector(".ob-create-zone");
       console.log("PASS checkout API error -> trial activation -> upload/create");
     } finally { await f.close(); }
@@ -471,7 +471,7 @@ try {
     const f = await fixture();
     try {
       await f.page.goto(`${base}/app/cv/${f.cvId}`, { waitUntil: "networkidle0" });
-      await waitText(f.page, "Activate your 3-day free trial");
+      await waitText(f.page, "Start your 3-day free trial");
       assert.equal(f.requests.filter(row => row.path.startsWith("/master-cvs")).length, 0);
       await f.page.goto(`${base}/app/checkout?checkout=success&session_id=cs_forged&next=${encodeURIComponent(`/app/cv/${f.cvId}`)}`, { waitUntil: "networkidle0" });
       await waitText(f.page, "Checkout session not found");

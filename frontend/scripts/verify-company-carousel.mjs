@@ -60,7 +60,7 @@ try {
     await page.waitForFunction(() => document.querySelector(".gj-rail")?.dataset.context === "companies");
     await page.waitForFunction(() => Array.from(document.querySelectorAll(".gj-company-group:first-child img")).every((image) => image.complete && image.naturalWidth > 0));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    assert.equal(await page.$eval("#companies h2", (el) => el.textContent), language === "tr" ? "Önde gelen şirketlerin çalışanları jobspecificCV kullanıyor:" : "Employees from Best Companies uses jobspecificCV:");
+    assert.equal(await page.$eval("#companies h2", (el) => el.textContent), language === "tr" ? "Önde gelen şirketlerin çalışanları jobspecificCV kullanıyor:" : "People at leading companies use jobspecificCV:");
     const expected = responseMarket === "TR" && !pricingFailure ? "Amazon,Accenture,Coca-Cola,Jotform,Trendyol,QNB,Akbank" : "Amazon,Accenture,Coca-Cola,Jotform";
     await page.waitForFunction((expected) => Array.from(document.querySelectorAll(".gj-company-group:first-child img")).map((image) => image.alt).join(",") === expected, {}, expected);
     assert.equal(pricingRequests, 1, "Carousel and pricing must share one pricing request");

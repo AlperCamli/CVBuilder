@@ -113,7 +113,7 @@ export function AiExperienceGate({ children }: { children: ReactNode }) {
         {t(
           "JobSpecificCV uses AI to analyze and improve your CV. Relevant CV text, task instructions and applicable guidance are sent to",
         )}{" "}
-        {current?.config.ai_provider ?? "the configured AI provider"}
+        {current?.config.ai_provider ?? t("our configured AI provider")}
         {"."}
       </p>
       <p>

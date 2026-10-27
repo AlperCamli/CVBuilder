@@ -39,7 +39,7 @@ describe("independent locale, document language and currency", () => {
     const content: CvContent = { version: "v1", language: "en", metadata: {}, sections: [{ id: "summary", type: "summary", title: null, order: 0, meta: {}, blocks: [] }] };
     await i18n.changeLanguage("tr");
     expect(injectPreviewPlaceholders(content, "standard").metadata.full_name).toBe("⟪Your Name⟫");
-    expect(injectPreviewPlaceholders({ ...content, language: "tr" }, "standard").metadata.full_name).toBe("⟪Adınız Soyadınız⟫");
+    expect(injectPreviewPlaceholders({ ...content, language: "tr" }, "standard").metadata.full_name).toBe("⟪Ad Soyad⟫");
     expect(content.metadata).toEqual({});
     expect(content.sections[0].blocks).toEqual([]);
   });

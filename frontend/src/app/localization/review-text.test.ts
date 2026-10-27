@@ -11,7 +11,7 @@ it("renders generated review text through editable templates and keeps job terms
     "3/5 terim bulundu. Eksik: C++, AWS.",
   );
   expect(reviewText("high extraction confidence (82/100).")).toBe(
-    "yüksek metin çıkarma güveni (82/100).",
+    "Metin okuma güveni: yüksek (82/100).",
   );
 });
 it("preserves the original English wording and example facts", async () => {

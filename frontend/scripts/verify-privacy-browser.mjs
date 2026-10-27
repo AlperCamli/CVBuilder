@@ -146,7 +146,7 @@ async function scenario(method, acceptAnalytics = false) {
   await page.reload({ waitUntil: 'networkidle0' }); await waitText(page, 'Question 2 of 4');
   assert.deepEqual(answers, firstAnswers, 'refresh must not overwrite server answers with an empty local record');
   await page.click('input[aria-label="AI processing for this upload"]');
-  await waitText(page, 'Enable AI to continue'); assert.equal(preferences.ai_processing, false);
+  await waitText(page, 'Turn on AI to continue'); assert.equal(preferences.ai_processing, false);
   await page.click('input[aria-label="AI processing for this upload"]');
   await waitText(page, 'Question 2 of 4'); assert.equal(preferences.ai_processing, true);
   const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem('cv-builder:guest-import')));
@@ -173,7 +173,7 @@ async function scenario(method, acceptAnalytics = false) {
   await page.click('.privacy-panel input[type=checkbox]');
   await waitText(page, 'AI-dependent features are paused');
   await page.goto(`${base}/app/cv/${cvId}`, { waitUntil: 'networkidle0' });
-  await waitText(page, 'Enable AI to continue');
+  await waitText(page, 'Turn on AI to continue');
   assert.equal(preferences.ai_processing, false);
   await clickText(page, 'Enable AI & continue');
   await waitText(page, 'Imported CV'); assert.equal(preferences.ai_processing, true);

@@ -40,7 +40,7 @@ describe("company employment claims", () => {
     expect(hasVerifiedEmployment([verified, pending[1]])).toBe(false);
     expect(hasVerifiedEmployment([{ ...verified, employmentEvidence: { reference: " ", verifiedOn: "2026-10-24" } }])).toBe(false);
     const html = renderToStaticMarkup(<CompanyCarousel companies={pending} />);
-    expect(html).toContain("Make your next move count.");
+    expect(html).toContain("Apply to the companies you have in mind.");
     expect(html).not.toContain("Employees from Best Companies");
     expect(html).not.toContain("now work at these companies");
     for (const company of COMPANIES) expect(html).toContain(`alt="${company.name}"`);
@@ -49,18 +49,18 @@ describe("company employment claims", () => {
   });
   it("allows the requested employment copy only for a fully evidenced list", () => {
     expect(hasVerifiedEmployment(COMPANIES)).toBe(true);
-    expect(renderToStaticMarkup(<CompanyCarousel />)).toContain("Employees from Best Companies uses jobspecificCV:");
+    expect(renderToStaticMarkup(<CompanyCarousel />)).toContain("People at leading companies use jobspecificCV:");
     expect(hasVerifiedEmployment([verified])).toBe(true);
     const html = renderToStaticMarkup(<CompanyCarousel companies={[verified]} />);
-    expect(html).toContain("Employees from Best Companies uses jobspecificCV:");
+    expect(html).toContain("People at leading companies use jobspecificCV:");
     expect(html).toContain("now work at these companies");
     expect(html).not.toContain("internal/customer-story");
   });
   it("localizes the carousel and claim copy in Turkish", async () => {
     await i18n.changeLanguage("tr");
     const html = renderToStaticMarkup(<CompanyCarousel companies={pending} />);
-    expect(html).toContain("Kariyerindeki bir sonraki adıma hazırlan.");
-    expect(html).not.toContain("Make your next move count.");
+    expect(html).toContain("Hedeflediğin şirketlere başvur.");
+    expect(html).not.toContain("Apply to the companies you have in mind.");
     expect(renderToStaticMarkup(<CompanyCarousel companies={[verified]} />)).toContain("Önde gelen şirketlerin çalışanları");
   });
 });

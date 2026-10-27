@@ -58,7 +58,7 @@ export function CvReviewPanel({ review }: { review: CvReview }) {
         <section aria-label={t("Strengths")} className="rounded-xl p-4" style={{ background: "var(--color-teal-50)", border: "1px solid var(--color-teal-100)" }}>
           <h2 className="font-medium text-base mb-3 flex items-center gap-2" style={{ color: "var(--color-teal-700)" }}><CheckCircle2 size={18} /> {t("Strengths")}</h2>
           <ul className="space-y-2 text-sm leading-6">
-            {conciseStrengths.map(strength => <li key={strength} className="flex items-start gap-2"><CheckCircle2 size={16} className="mt-1 shrink-0" style={{ color: "var(--color-teal-600)" }} /><span>{strengthLabels[strength] ?? strength}</span></li>)}
+            {conciseStrengths.map(strength => <li key={strength} className="flex items-start gap-2"><CheckCircle2 size={16} className="mt-1 shrink-0" style={{ color: "var(--color-teal-600)" }} /><span>{t(strengthLabels[strength] ?? strength)}</span></li>)}
           </ul>
         </section>
       ) : null}

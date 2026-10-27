@@ -741,7 +741,7 @@ function ExperienceItem({
           {isCollapsed && (
             <div className="flex-1 min-w-0" style={{ fontSize: "13px", color: "var(--color-text-primary)" }}>
               <div className="truncate font-medium">
-                {item.role || "Untitled Position"} {item.company && `at ${item.company}`}
+                {item.role || t("Untitled Position")} {item.company && t("at {{company}}", { company: item.company })}
               </div>
               <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 {item.startDate || "Start Date"} {"-"}{item.currentRole ? t("Present") : (item.endDate || "End Date")}

@@ -537,7 +537,7 @@ function OnboardingFlow() {
                     {uploading ? t("Uploading your CV…") : t("Drop your CV here")}
                   </strong>
                   <span>
-                    {t("or")}{" "}<b>{t("browse files")}</b> {" "}{t("on your device")}</span>
+                    {t("or")}{" "}<b>{t("browse files on your device")}</b></span>
                   <small>{t("PDF or DOCX · up to 20 MB")}</small>
                 </button>
                 <button type="button" className="ob-create-zone" disabled={uploading || busy} onClick={() => void startNewCv()}>

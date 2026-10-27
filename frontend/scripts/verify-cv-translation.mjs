@@ -130,7 +130,7 @@ try {
   await frame.waitForSelector("#translation-language option[value=de]");
   await frame.select("#translation-language", "de");
   await click(frame, "Translate");
-  await frame.waitForFunction(() => document.querySelector('dialog[open] [role="alert"]')?.textContent.includes("Failed to load CV preview"));
+  await frame.waitForFunction(() => document.querySelector('dialog[open] [role="alert"]')?.textContent.includes("We couldn’t load the CV preview."));
   const callsBeforePreviewRetry = await frame.evaluate(() => window.translationCalls.length);
   await frame.evaluate(() => { window.translationPreviewFailure = false; });
   await click(frame, "Retry");
@@ -174,7 +174,7 @@ try {
   assert.match(comparison, /200 Berichte erstellt/);
   assert.match(comparison, /Work Experience/);
   assert.match(comparison, /No AI action was charged/);
-  assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Create translated master")), false);
+  assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Create translated main CV")), false);
   assert.equal(await frame.$$eval("dialog[open] button", buttons => buttons.some(button => button.textContent.trim() === "Replace existing CV")), false);
   assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");
   await page.screenshot({ path: join(artifacts, "number-comparison.png"), fullPage: true });
@@ -195,7 +195,7 @@ try {
   await frame.waitForSelector(`${previewSelector} .shadow-lg`);
   await frame.evaluate(() => { window.translationExistingId = "demo-master-de"; });
   const executions = await frame.evaluate(() => window.translationCalls.filter(call => call.path.endsWith("/execute")).length);
-  await click(frame, "Create translated master");
+  await click(frame, "Create translated main CV");
   await frame.waitForFunction(() => [...document.querySelectorAll('dialog[open] button')].some(button => button.textContent.trim() === "Replace existing CV"));
   assert.notEqual(await frame.$(`${previewSelector} .shadow-lg`), null);
   assert.equal(await frame.evaluate(() => window.existingCvText), "Original master");

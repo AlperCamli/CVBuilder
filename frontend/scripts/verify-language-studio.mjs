@@ -203,7 +203,7 @@ try {
   );
   assert.equal(await page.$("dialog[open]"), null);
   await preview().waitForFunction(() =>
-    document.querySelector("h1").textContent.includes("Özgeçmişinizi"),
+    document.querySelector("h1").textContent.includes("CV’ni her"),
   );
   const custom = "Hayalindeki işe ilk adım — ıİğĞşŞöÖüÜçÇ";
   await value(page, "#ls-translation", custom);
