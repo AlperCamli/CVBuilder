@@ -149,6 +149,18 @@ function CertificateItem({ item, index, updateItem, removeItem, toggleItemVisibi
               borderColor: "var(--color-border-secondary)",
             }}
           />
+          <BulletTextarea
+            rows={3}
+            placeholder="Description (optional)"
+            value={item.description || ""}
+            onValueChange={(next) => updateItem(index, { ...item, description: next })}
+            className="w-full px-2 py-1.5 rounded border resize-y min-h-[80px]"
+            style={{
+              fontSize: "13px",
+              lineHeight: "1.6",
+              borderColor: "var(--color-border-secondary)",
+            }}
+          />
         </div>
       )}
     </div>
@@ -161,7 +173,7 @@ export function CertificatesSection({ data, isHidden, onToggleVisibility, onRemo
   const addItem = () => {
     onChange({
       ...data,
-      items: [...items, { id: Date.now(), name: "", url: "", verificationId: "", hidden: false, collapsed: false }],
+      items: [...items, { id: Date.now(), name: "", url: "", verificationId: "", description: "", hidden: false, collapsed: false }],
     });
   };
 

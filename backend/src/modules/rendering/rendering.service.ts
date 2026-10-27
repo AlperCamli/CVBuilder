@@ -16,6 +16,7 @@ import type {
   SectionRenderingContext,
   SessionContext
 } from "./rendering.types";
+import { NARRATIVE_BULLET_FIELD_KEYS } from "../../shared/cv-content/narrative-fields";
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -55,8 +56,9 @@ const keyMatches = (key: string, accepted: string[]): boolean => {
   return accepted.some((item) => normalized === item || normalized.includes(item));
 };
 
-// Narrative string fields whose "• "-marked lines should render as a bullet list.
-const NARRATIVE_BULLET_KEYS = ["description", "responsibilities", "highlights", "details", "notes"];
+// Narrative string fields whose "• "-marked lines should render as a bullet list (the
+// shared narrative rule's field keys).
+const NARRATIVE_BULLET_KEYS = [...NARRATIVE_BULLET_FIELD_KEYS];
 
 export class RenderingService {
   constructor(private readonly templatesService: TemplatesService) {}

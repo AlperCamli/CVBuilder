@@ -29,6 +29,7 @@ import {
   tailoringSuggestionTargets
 } from "../../integration/tailoring-apply";
 import type {
+  TailoringAnswerPayload,
   TailoringQuestion,
   TailoringRequirement,
   TailoringSessionView,
@@ -40,6 +41,8 @@ import { RefineArea } from "./RefineArea";
 import { SuggestionCard } from "./SuggestionCard";
 import { TailoringCostDialog } from "./TailoringCostDialog";
 import { describeBlock, describeTask } from "./tailoring-labels";
+import { orderTailoringQuestions } from "./open-metric";
+import { OpenMetricQuestion, QuestionCard } from "./TailoringQuestions";
 import {
   TASK_SKIP_AFTER_FAILURES,
   type TailoringIssue,
@@ -263,83 +266,32 @@ function RequirementChecklist({
 // Questions
 // ---------------------------------------------------------------------------
 
-function QuestionCard({
+// One question card: the open number question has its own form.
+function QuestionItem({
   question,
+  view,
   content,
-  answer,
+  updatingBlockIds,
   onAnswer
 }: {
   question: TailoringQuestion;
+  view: TailoringSessionView;
   content: CvContent;
-  answer: TailoringSessionView["session"]["answers"][string] | undefined;
-  onAnswer: (payload: { answer: "yes" | "some" | "no" | null; detail?: string | null; add_to_main?: boolean }) => void;
+  updatingBlockIds: Set<string>;
+  onAnswer: (questionId: string, payload: TailoringAnswerPayload) => Promise<boolean>;
 }) {
-  const [detail, setDetail] = useState(answer?.detail ?? "");
-  const [addToMain, setAddToMain] = useState(answer?.add_to_main ?? false);
-  const choice = answer?.answer ?? null;
-  const target = question.target_block_id ? describeBlock(content, question.target_block_id) : null;
-  const needsDetail = question.kind === "metric" || choice === "yes" || choice === "some";
-
-  return (
-    <div className="rounded-xl border p-3.5 space-y-2.5" style={{ borderColor: answer ? "var(--color-teal-200)" : "var(--color-border-secondary)", background: "var(--color-background-primary)" }}>
-      <div>
-        <p style={{ fontSize: "13px", fontWeight: 500, lineHeight: 1.45 }}>{question.text}</p>
-        {target ? <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{t("For")}: {target}</p> : null}
-      </div>
-      {question.kind === "gap" ? (
-        <div className="flex gap-1.5">
-          {(["yes", "some", "no"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onAnswer({ answer: value, detail: value === "no" ? null : detail || null, add_to_main: addToMain })}
-              className="px-3 py-1.5 rounded-lg border font-medium"
-              style={{
-                fontSize: "12px",
-                borderColor: choice === value ? "var(--color-teal-400)" : "var(--color-border-secondary)",
-                background: choice === value ? "var(--color-teal-50)" : "var(--color-background-primary)",
-                color: choice === value ? "var(--color-teal-800)" : "var(--color-text-secondary)"
-              }}
-            >
-              {value === "yes" ? t("Yes") : value === "some" ? t("Some") : t("No")}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {needsDetail ? (
-        <div className="space-y-2">
-          <input
-            value={detail}
-            onChange={(event) => setDetail(event.target.value)}
-            onBlur={() => {
-              if (question.kind === "metric" ? detail.trim() : choice) {
-                onAnswer({ answer: question.kind === "metric" ? null : choice, detail: detail.trim() || null, add_to_main: addToMain });
-              }
-            }}
-            placeholder={question.kind === "metric" ? t("e.g. 12 enterprise clients, 30% faster") : t("Where and how? One short line (optional)")}
-            className="w-full px-3 py-2 rounded-lg border"
-            style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)" }}
-          />
-          {question.kind === "metric" ? (
-            <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>{t("Only numbers you give us are used. The AI never makes up figures.")}</p>
-          ) : null}
-          {question.target_block_id ? (
-            <label className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              <input
-                type="checkbox"
-                checked={addToMain}
-                onChange={(event) => {
-                  setAddToMain(event.target.checked);
-                  if (answer) onAnswer({ answer: answer.answer, detail: detail.trim() || null, add_to_main: event.target.checked });
-                }}
-              />
-              {t("Also add this to my main CV")}
-            </label>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
+  const answer = view.session.answers[question.id];
+  if (question.kind === "metric_open") {
+    return (
+      <OpenMetricQuestion
+        content={content}
+        answer={answer}
+        updating={(answer?.entries ?? []).some((entry) => updatingBlockIds.has(entry.target_block_id))}
+        onAnswer={(payload) => onAnswer(question.id, payload)}
+      />
+    );
+  }
+  return <QuestionCard question={question} content={content} answer={answer} onAnswer={(payload) => onAnswer(question.id, payload)} />;
 }
 
 // Answers can be changed after the questions step (review, finished, refine); the server
@@ -347,14 +299,16 @@ function QuestionCard({
 function AnswersDisclosure({
   view,
   content,
+  updatingBlockIds,
   onAnswer
 }: {
   view: TailoringSessionView;
   content: CvContent;
-  onAnswer: (questionId: string, payload: { answer: "yes" | "some" | "no" | null; detail?: string | null; add_to_main?: boolean }) => void;
+  updatingBlockIds: Set<string>;
+  onAnswer: (questionId: string, payload: TailoringAnswerPayload) => Promise<boolean>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const questions = view.session.analysis?.questions ?? [];
+  const questions = orderTailoringQuestions(view.session.analysis?.questions ?? []);
   if (questions.length === 0) return null;
   const answered = questions.filter((question) => view.session.answers[question.id]).length;
   return (
@@ -369,12 +323,13 @@ function AnswersDisclosure({
         <div className="mt-1.5 space-y-2">
           <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t("Change an answer and the suggestions that use it update automatically.")}</p>
           {questions.map((question) => (
-            <QuestionCard
+            <QuestionItem
               key={question.id}
               question={question}
+              view={view}
               content={content}
-              answer={view.session.answers[question.id]}
-              onAnswer={(payload) => onAnswer(question.id, payload)}
+              updatingBlockIds={updatingBlockIds}
+              onAnswer={onAnswer}
             />
           ))}
         </div>
@@ -548,7 +503,7 @@ export function TailorPanel({
 
   const pending = view?.suggestions.filter((item) => item.status === "pending") ?? [];
   const decided = view?.suggestions.filter((item) => item.status !== "pending") ?? [];
-  const questions = view?.session.analysis?.questions ?? [];
+  const questions = orderTailoringQuestions(view?.session.analysis?.questions ?? []);
   const unansweredCount = questions.filter((question) => !view?.session.answers[question.id]).length;
   const waitingTasks = view?.tasks.filter((task) => task.status === "waiting") ?? [];
   const failedTasks = controller.failedTasks.filter((item) => !runningTaskIds.has(item.task.id));
@@ -558,6 +513,10 @@ export function TailorPanel({
   // Auto-apply matters from the moment suggestions can arrive (they start during the questions).
   const showAutoApply = Boolean(view) && !retargeting && (showQuestions || showReview || showRefine);
   const answerPending = (taskId: string | null) => Boolean(taskId && controller.answerRerunTaskIds.has(taskId));
+  // Blocks whose rewrite is being updated with an answer (shown on the open number question).
+  const answerUpdatingBlockIds = new Set(
+    (view?.tasks ?? []).filter((task) => task.block_id && answerPending(task.id)).map((task) => task.block_id!)
+  );
   // Rerun tasks whose card is on screen show their state on the card instead.
   const pendingTaskIds = new Set(pending.map((item) => item.task_id));
   const runningCards = controller.runningTasks.filter((task) => !(answerPending(task.id) && pendingTaskIds.has(task.id)));
@@ -668,7 +627,7 @@ export function TailorPanel({
             renderSuggestion={renderSuggestion}
             onHighlight={onHighlight}
           />
-          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
+          <AnswersDisclosure view={view} content={content} updatingBlockIds={answerUpdatingBlockIds} onAnswer={controller.answer} />
         </div>
       );
     }
@@ -704,7 +663,7 @@ export function TailorPanel({
               {pending.map(renderSuggestion)}
             </div>
           ) : null}
-          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
+          <AnswersDisclosure view={view} content={content} updatingBlockIds={answerUpdatingBlockIds} onAnswer={controller.answer} />
           <div className="flex items-center justify-between" style={{ fontSize: "12px" }}>
             <button type="button" onClick={() => switchTab("refine")} className="inline-flex items-center gap-1" style={{ color: "var(--color-teal-700)", fontWeight: 500 }}>
               <Sparkles size={12} /> {t("Keep refining")}
@@ -732,7 +691,7 @@ export function TailorPanel({
         />
 
         {!showQuestions ? (
-          <AnswersDisclosure view={view} content={content} onAnswer={(questionId, payload) => void controller.answer(questionId, payload)} />
+          <AnswersDisclosure view={view} content={content} updatingBlockIds={answerUpdatingBlockIds} onAnswer={controller.answer} />
         ) : null}
 
         {showQuestions ? (
@@ -744,12 +703,13 @@ export function TailorPanel({
               </p>
             </div>
             {questions.map((question) => (
-              <QuestionCard
+              <QuestionItem
                 key={question.id}
                 question={question}
+                view={view}
                 content={content}
-                answer={view.session.answers[question.id]}
-                onAnswer={(payload) => void controller.answer(question.id, payload)}
+                updatingBlockIds={answerUpdatingBlockIds}
+                onAnswer={controller.answer}
               />
             ))}
             {controller.runningTasks.length > 0 || settledTasks > 0 ? (

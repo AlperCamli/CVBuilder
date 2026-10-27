@@ -634,7 +634,7 @@ const generateTailoringAnalysis = (input: Record<string, unknown>): Record<strin
         id: "r3",
         text: `Experience with ${words[2] ?? "stakeholder management"}`,
         keywords: [words[2] ?? "stakeholder management"],
-        importance: "nice",
+        importance: "must",
         weight: 1,
         status: "missing",
         confidence: "medium",
@@ -642,18 +642,27 @@ const generateTailoringAnalysis = (input: Record<string, unknown>): Record<strin
         reason: "Not mentioned in the CV."
       }
     ],
-    questions: [
-      {
-        id: "q1",
-        kind: "gap",
-        text: `Have you worked with ${words[2] ?? "stakeholder management"}?`,
-        requirement_id: "r3",
-        target_block_id: first ? String(first.id) : null
-      },
-      ...(first
-        ? [{ id: "q2", kind: "metric", text: "How many people or users did your work reach in this role?", requirement_id: "r2", target_block_id: String(first.id) }]
-        : [])
-    ],
+    // Follows the analysis limits: at most 3 gap questions (must-haves the CV does not show,
+    // aimed at one block) and 2 number questions (one per relevant block). The open number
+    // question ("q_open_metric") is added by code, not by the model.
+    questions: first
+      ? [
+          {
+            id: "q1",
+            kind: "gap",
+            text: `${first.subtitle ? `At ${String(first.subtitle)}, did` : "Did"} you work with ${words[2] ?? "stakeholder management"}?`,
+            requirement_id: "r3",
+            target_block_id: String(first.id)
+          },
+          {
+            id: "q2",
+            kind: "metric",
+            text: `Roughly how many people or users did your work reach${first.subtitle ? ` at ${String(first.subtitle)}` : " in this role"}?`,
+            requirement_id: "r2",
+            target_block_id: String(first.id)
+          }
+        ]
+      : [],
     block_briefs: items.slice(0, 3).map((block) => ({
       block_id: String(block.id),
       requirement_ids: ["r1", "r2"],

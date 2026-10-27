@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { TAILORING_INSTRUCTION_MAX_CHARS, TAILORING_REFINEMENTS } from "./tailoring.types";
+import {
+  OPEN_METRIC_DETAIL_MAX_CHARS,
+  OPEN_METRIC_MAX_ENTRIES,
+  TAILORING_INSTRUCTION_MAX_CHARS,
+  TAILORING_REFINEMENTS
+} from "./tailoring.types";
 
 const uuid = z.string().uuid();
 const shortId = z.string().trim().min(1).max(32);
@@ -46,11 +51,20 @@ export const requirementDecisionSchema = z
   .object({ decision: z.enum(["relevant", "not_relevant"]) })
   .strict();
 
+// entries: only for the open number question (kind metric_open), one figure per CV block.
+export const openMetricEntrySchema = z
+  .object({
+    target_block_id: z.string().trim().min(1).max(128),
+    detail: z.string().trim().min(1).max(OPEN_METRIC_DETAIL_MAX_CHARS)
+  })
+  .strict();
+
 export const answerQuestionSchema = z
   .object({
     answer: z.enum(["yes", "some", "no"]).nullable(),
     detail: z.string().trim().max(1000).nullable().optional(),
-    add_to_main: z.boolean().optional()
+    add_to_main: z.boolean().optional(),
+    entries: z.array(openMetricEntrySchema).max(OPEN_METRIC_MAX_ENTRIES).optional()
   })
   .strict();
 

@@ -41,18 +41,26 @@ export const TAILORING_REFINEMENT_RULE =
 export const TAILORING_LANGUAGE_RULE =
   "Language: write all CV output in cv_language.name (the language of the CV, code cv_language.code), even when the job description, requirements, brief terms, confirmed_facts or these instructions are in another language. Never switch to the job posting's language. Translate job terms into cv_language unless they are proper nouns or names of products, tools, technologies, certifications or acronyms; keep those, and every number, exactly as written. In these tailoring flows, keeping job-posting keywords exact applies only to such names.";
 
+// Specific, concrete wording for every rewritten line (the truth rules still decide what
+// may be said; this decides how).
+export const TAILORING_WRITING_RULE =
+  "Writing: each line is an action plus the concrete details the CV gives (tools, systems, clients, products, scope, stakeholders) plus the outcome when it is known. Reuse the specific names already in the CV instead of general words. No filler or clichés such as \"responsible for\", \"helped with\", \"various\", \"results-driven\", \"team player\", \"dynamic\" (or their equivalents in cv_language). Start each line with a different strong verb; never repeat the same opening verb.";
+
+export const TAILORING_SUMMARY_RULE =
+  "For kind summary or new_summary: return exactly 1 line containing a 2-3 sentence professional summary aimed at the role, without the candidate's name, built from the candidate's actual field, experience and strongest proofs (named employers, tools, scope or confirmed figures from the input), with no clichés or generic self-praise. For new_summary use only facts from other_blocks and cv_overview.";
+
 const definitions: AiFlowDefinition[] = [
   {
     flow_type: "tailoring_analysis",
     prompt_key: "tailoring-analysis",
-    prompt_version: "v2-2",
+    prompt_version: "v2-3",
     code_only: true,
     system_prompt: [
       "You assess how well a candidate's CV matches a job posting and plan how to tailor it.",
       "Input: job (role, company, description) and cv, a compact list of CV blocks; each block has a short id.",
       "1) requirements: extract at most 15 requirements, most important first; merge duplicates. text is a short requirement. keywords are 1-5 terms exactly as written in the job description. importance is must or nice. weight is 1-3 (3 = critical for the role).",
       "2) Judge each requirement against the CV only: covered = clearly demonstrated; weak = implied or mentioned without substance; missing = no evidence. Be strict: never assume experience that the CV does not show. evidence_block_ids lists only ids from cv. confidence reflects how sure you are. reason is one short sentence.",
-      "3) questions: at most 6 gap questions (kind gap) for the most important missing or weak requirements, each a short yes/no question asking whether the candidate has that experience, with requirement_id set and target_block_id set to the block where it most likely belongs (or null). Then at most 3 metric questions (kind metric) for the most relevant experience or project blocks that lack numbers, asking for one concrete figure (team size, users, percentage, revenue, time saved); requirement_id may be null, target_block_id is required. Never answer questions yourself.",
+      "3) questions: ask few, specific questions; zero questions is fine. Gap questions (kind gap): at most 3, only for an important (importance must) requirement that is weak or missing, and only when a yes would change the rewrite of one specific block. Never ask about something the CV already shows or about a nice-to-have. Each gap question asks exactly one thing about one experience and names it (for example \"At Shell, did you lead supplier negotiations?\"); set requirement_id and target_block_id to the block the answer would change. Metric questions (kind metric): at most 2, only for the 1-2 blocks most relevant to this job, at most one per block, each asking for one figure about that block's actual work as described in the CV (for example \"Roughly how many shipments a week did you coordinate at Missafir?\"), never a generic question; word it so a rough estimate is fine (roughly, about, approximately); requirement_id may be null, target_block_id is required. Never answer questions yourself.",
       "4) block_briefs: for each experience, project, volunteer, education or other narrative block with text, or the summary, worth rewriting for this job (skip unrelated blocks; at most 10), give requirement_ids it should strengthen, focus (one sentence), terms (job terms to use only where truthful) and avoid (content other blocks already cover).",
       "5) role_summary: one sentence describing what the role needs.",
       "Output strict JSON only."
@@ -62,7 +70,7 @@ const definitions: AiFlowDefinition[] = [
   {
     flow_type: "tailoring_block",
     prompt_key: "tailoring-block",
-    prompt_version: "v2-3",
+    prompt_version: "v2-4",
     code_only: true,
     system_prompt: [
       "You rewrite exactly one CV block so it is more relevant for the target job while staying completely truthful.",
@@ -71,8 +79,9 @@ const definitions: AiFlowDefinition[] = [
       TAILORING_CONFIRMED_FACTS_RULE,
       TAILORING_REFINEMENT_RULE,
       `${TAILORING_LANGUAGE_RULE} This applies to every entry of lines.`,
-      "For kind item: return 3-6 lines, each one achievement or responsibility starting with a strong action verb, at most 25 words, without bullet characters. Put the most job-relevant line first.",
-      "For kind summary or new_summary: return exactly 1 line containing a 2-3 sentence professional summary aimed at the role, without the candidate's name. For new_summary use only facts from other_blocks.",
+      TAILORING_WRITING_RULE,
+      "For kind item: return 3-5 lines (3-5 strong lines beat more weak ones), the most job-relevant first, each one achievement or responsibility, at most 25 words, without bullet characters.",
+      TAILORING_SUMMARY_RULE,
       "If the block already fits the job well and there are no confirmed_facts, refinement or candidate_request, return changed false with an empty lines array.",
       "rationale: one short sentence telling the candidate what changed and why. requirement_ids: ids of requirements this rewrite strengthens.",
       "Output strict JSON only."

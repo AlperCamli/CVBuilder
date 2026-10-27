@@ -108,7 +108,7 @@ import {
   getSectionFirstBlockId,
   type EditorSection
 } from "../integration/cv-mappers";
-import { looksLikeBulletAnswer, normalizeToBullets } from "../integration/bulletText";
+import { bulletizeNarrativeFields } from "../integration/narrative-fields";
 import { injectPreviewPlaceholders } from "../integration/preview-placeholders";
 import { trackCvExported } from "../integration/analytics";
 import { buildCvExportFilename, triggerBlobDownload } from "../integration/export-filenames";
@@ -475,46 +475,6 @@ interface SkillPoolState {
   refreshCountValue: number;
 }
 
-// String narrative fields edited as bullet lists, per block type. Array-shaped bullet
-// fields (e.g. medical duties/outcomes) are not listed: the bulletizer only handles strings.
-const NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE: Record<string, string[]> = {
-  experience_item: ["description", "responsibilities", "highlights"],
-  education_item: ["description", "responsibilities", "highlights"],
-  project_item: ["description", "responsibilities", "highlights"],
-  volunteer_item: ["description", "responsibilities", "highlights"],
-  award_item: ["description", "responsibilities", "highlights"],
-  publication_item: ["description", "responsibilities", "highlights"],
-  // medical_uk textarea fields using the "• " bullet convention
-  medical_qualification: ["notes"],
-  career_gap: ["explanation"],
-  additional_skill: ["context"],
-  teaching_activity: ["evaluation"]
-};
-
-// Frontend safety net mirroring the backend: normalize AI bullet answers into the "• "
-// convention so applied suggestions show clean bullets immediately. Summary/skills untouched.
-const bulletizeNarrativeBlock = (block: CvBlock): CvBlock => {
-  const narrativeKeys = NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE[block.type];
-  if (!narrativeKeys) {
-    return block;
-  }
-
-  let changed = false;
-  const fields = { ...block.fields };
-  for (const key of narrativeKeys) {
-    const value = fields[key];
-    if (typeof value === "string" && looksLikeBulletAnswer(value)) {
-      const normalized = normalizeToBullets(value);
-      if (normalized !== value) {
-        fields[key] = normalized;
-        changed = true;
-      }
-    }
-  }
-
-  return changed ? { ...block, fields } : block;
-};
-
 interface CVEditorProps {
   forcedModuleType?: string;
   forcedTitle?: string;
@@ -803,11 +763,14 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         }
 
         didReplace = true;
-        return bulletizeNarrativeBlock({
+        // Frontend safety net mirroring the backend: AI bullet answers are normalized into
+        // the "• " convention per the shared narrative rule (section type + field shape,
+        // any block type), so applied suggestions show clean bullets immediately.
+        return bulletizeNarrativeFields({
           ...block,
           ...updatedBlock,
           id: block.id
-        });
+        }, section.type);
       })
     }));
 
@@ -2256,6 +2219,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   // -------------------------------------------------------------------------
   const tailorMode = paneMode === "tailor";
   const canTailor = moduleType === DEFAULT_MODULE_ID && Boolean(cvId);
+  // A tailoring link to a CV that can't be tailored (e.g. a medical CV) opens the editor.
+  useEffect(() => {
+    if (!loading && !canTailor && paneMode === "tailor") setPaneMode("edit");
+  }, [canTailor, loading, paneMode]);
   // Tailoring needs Pro. The buttons check it before opening the panel; links that open the
   // editor already in tailoring mode (?tailor=1 / openTailoring) are verified here, and the
   // session stays closed (no analysis runs) until access is confirmed. Without Pro the usual

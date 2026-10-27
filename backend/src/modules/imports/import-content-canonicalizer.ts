@@ -1,4 +1,5 @@
 import type { CvBlock, CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
+import { normalizeNarrativeLists } from "../../shared/cv-content/narrative-fields";
 
 const PROFICIENCY_LEVELS = new Set(
   ["Native", "Professional", "Advanced", "Intermediate", "Basic", "Limited"].map((value) =>
@@ -707,7 +708,9 @@ const canonicalizeSections = (sections: CvSection[]): CvSection[] => {
     const nextBlocks: CvBlock[] = [];
 
     for (const block of section.blocks) {
-      const baseFields = { ...block.fields };
+      // New imports store narrative bullets as text only ("• a\n• b" in the narrative field;
+      // a list that duplicates the text is dropped, extra list items are appended).
+      const baseFields = normalizeNarrativeLists({ ...block.fields }, { sectionType, blockType: block.type });
       const fields =
         sectionType === "awards"
           ? canonicalizeAwardFields(baseFields)

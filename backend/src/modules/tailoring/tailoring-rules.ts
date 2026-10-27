@@ -1,3 +1,4 @@
+import { EXPERIENCE_LIKE_SECTION_TYPES } from "../../shared/cv-content/narrative-fields";
 import type { CompactCv } from "./tailoring-compact-cv";
 import type {
   RequirementDecision,
@@ -9,12 +10,30 @@ import type {
   TailoringScore,
   TailoringSuggestionRecord
 } from "./tailoring.types";
+import { OPEN_METRIC_QUESTION_ID } from "./tailoring.types";
 
 // Deterministic rules around the tailoring model calls. The model judges; code enforces
 // truthfulness and computes the score so the same inputs always give the same result.
 
-const MAX_GAP_QUESTIONS = 6;
-const MAX_METRIC_QUESTIONS = 3;
+// Few, specific questions: a gap question only for a must-have the CV does not show yet,
+// aimed at the block whose rewrite the answer changes; a number question only for the most
+// job-relevant work blocks, one per block. The open number question is added by code.
+export const MAX_GAP_QUESTIONS = 3;
+export const MAX_METRIC_QUESTIONS = 2;
+// English placeholder; the panel shows its own translated text for this question.
+export const OPEN_METRIC_QUESTION_TEXT = "Is there any number you'd like to add to your experience?";
+
+// The open number question is offered when the CV has work the candidate can quantify.
+export const hasOpenMetricTargets = (compact: CompactCv): boolean =>
+  compact.blocks.some((block) => block.kind === "item" && block.editable_field !== null && EXPERIENCE_LIKE_SECTION_TYPES.has(block.section_type));
+
+export const openMetricQuestion = (): TailoringQuestion => ({
+  id: OPEN_METRIC_QUESTION_ID,
+  kind: "metric_open",
+  text: OPEN_METRIC_QUESTION_TEXT,
+  requirement_id: null,
+  target_block_id: null
+});
 
 const normalizeText = (text: string): string =>
   text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
@@ -53,6 +72,7 @@ export const normalizeAnalysisOutput = (
   const editableBlockIds = new Set(
     compact.blocks.filter((block) => block.kind === "item" || block.kind === "summary").map((block) => block.block_id)
   );
+  const itemBlockIds = new Set(compact.blocks.filter((block) => block.kind === "item").map((block) => block.block_id));
 
   const usedRequirementIds = new Set<string>();
   const requirementIdMap = new Map<string, string>();
@@ -81,9 +101,10 @@ export const normalizeAnalysisOutput = (
     };
   });
 
-  const usedQuestionIds = new Set<string>();
-  let gapCount = 0;
-  let metricCount = 0;
+  const usedQuestionIds = new Set<string>([OPEN_METRIC_QUESTION_ID]);
+  const requirementById = new Map(requirements.map((requirement) => [requirement.id, requirement]));
+  const gapRequirementIds = new Set<string>();
+  const metricBlockIds = new Set<string>();
   const questions: TailoringQuestion[] = [];
   for (const question of output.questions) {
     const requirementId = question.requirement_id
@@ -92,11 +113,34 @@ export const normalizeAnalysisOutput = (
     const targetBlockId = toBlockId(question.target_block_id);
 
     if (question.kind === "gap") {
-      if (!requirementId || gapCount >= MAX_GAP_QUESTIONS) continue;
-      gapCount += 1;
+      // Only a must-have the CV does not already show, once, for a block whose rewrite the
+      // answer changes.
+      const requirement = requirementId ? requirementById.get(requirementId) : undefined;
+      if (
+        !requirement ||
+        requirement.importance !== "must" ||
+        requirement.status === "covered" ||
+        !targetBlockId ||
+        !editableBlockIds.has(targetBlockId) ||
+        gapRequirementIds.has(requirement.id) ||
+        gapRequirementIds.size >= MAX_GAP_QUESTIONS
+      ) {
+        continue;
+      }
+      gapRequirementIds.add(requirement.id);
+    } else if (question.kind === "metric") {
+      // About one work block's actual work, at most one per block.
+      if (
+        !targetBlockId ||
+        !itemBlockIds.has(targetBlockId) ||
+        metricBlockIds.has(targetBlockId) ||
+        metricBlockIds.size >= MAX_METRIC_QUESTIONS
+      ) {
+        continue;
+      }
+      metricBlockIds.add(targetBlockId);
     } else {
-      if (!targetBlockId || metricCount >= MAX_METRIC_QUESTIONS) continue;
-      metricCount += 1;
+      continue;
     }
 
     questions.push({
@@ -104,8 +148,11 @@ export const normalizeAnalysisOutput = (
       kind: question.kind,
       text: question.text.trim(),
       requirement_id: requirementId,
-      target_block_id: targetBlockId && editableBlockIds.has(targetBlockId) ? targetBlockId : null
+      target_block_id: targetBlockId
     });
+  }
+  if (hasOpenMetricTargets(compact)) {
+    questions.push(openMetricQuestion());
   }
 
   const seenBriefBlocks = new Set<string>();

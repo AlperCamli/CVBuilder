@@ -291,3 +291,50 @@ describe("AiService medical block suggestions", () => {
     );
   });
 });
+
+describe("AiService block suggestions on real standard block types", () => {
+  const standardCv = (blocks: CvBlock[], sectionType = "experience") => {
+    const cv = createMedicalMasterCv();
+    cv.module_type = "standard";
+    cv.current_content.sections = [
+      { id: "exp-section", type: sectionType, title: "Experience", order: 0, meta: {}, blocks }
+    ];
+    return cv;
+  };
+
+  it("folds a list-only block into text, asks for bullet lines and stores bullets", async () => {
+    const current: CvBlock = {
+      id: "position-block", type: "position", order: 0, visibility: "visible",
+      fields: { role: "Ops Specialist", company: "Missafir", responsibilities: ["Coordinated shipments", "Ran audits"] }, meta: {}
+    };
+    const { service, createSuggestions } = makeService(standardCv([current]));
+    const executeFlow = spyExecuteFlow(service, {
+      suggested_block: { fields: { description: "Coordinated 40 weekly shipments with carriers\nRan monthly stock audits" } }
+    });
+
+    const applied = await service.suggestBlock(session, { master_cv_id: "master-1", block_id: current.id, action_type: "improve" });
+    const flowInput = executeFlow.mock.calls[0]![0];
+    expect((flowInput.input_payload as { block: CvBlock }).block.fields).toEqual({
+      role: "Ops Specialist", company: "Missafir", description: "• Coordinated shipments\n• Ran audits"
+    });
+    expect(flowInput.input_payload).toMatchObject({ editable_fields: ["description"] });
+    expect(String(flowInput.system_prompt_suffix)).toMatch(/bullet lines, one achievement or responsibility per line/);
+
+    expect((applied.updated_block as CvBlock).fields).toEqual({
+      role: "Ops Specialist", company: "Missafir", description: "• Coordinated 40 weekly shipments with carriers\n• Ran monthly stock audits"
+    });
+    // Version history keeps the real previous block.
+    expect(createSuggestions.mock.calls[0]![0][0]).toMatchObject({ before_content: current });
+  });
+
+  it("asks for one paragraph on summary blocks and leaves their text as written", async () => {
+    const current: CvBlock = {
+      id: "summary-block", type: "text", order: 0, visibility: "visible", fields: { text: "Ops specialist." }, meta: {}
+    };
+    const { service } = makeService(standardCv([current], "summary"));
+    const executeFlow = spyExecuteFlow(service, { suggested_block: { fields: { text: "Operations specialist.\nCoordinates shipments." } } });
+    const applied = await service.suggestBlock(session, { master_cv_id: "master-1", block_id: current.id, action_type: "improve" });
+    expect(String(executeFlow.mock.calls[0]![0].system_prompt_suffix)).toMatch(/one paragraph/);
+    expect((applied.updated_block as CvBlock).fields.text).toBe("Operations specialist.\nCoordinates shipments.");
+  });
+});

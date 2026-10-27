@@ -25,9 +25,14 @@ export interface TailoringRequirement {
   reason: string;
 }
 
+// "gap": yes / some / no for a requirement (at most 3). "metric": one specific number for a
+// CV item (at most 2; approximate answers are fine, skipping is easy). "metric_open": the
+// one open "any number to add?" question, answered with `entries` (no task waits on it).
+export type TailoringQuestionKind = "gap" | "metric" | "metric_open";
+
 export interface TailoringQuestion {
   id: string;
-  kind: "gap" | "metric";
+  kind: TailoringQuestionKind;
   text: string;
   requirement_id: string | null;
   target_block_id: string | null;
@@ -39,11 +44,35 @@ export interface TailoringAnalysis {
   questions: TailoringQuestion[];
 }
 
+// The open number question's id (kind "metric_open").
+export const TAILORING_OPEN_METRIC_QUESTION_ID = "q_open_metric";
+// Limits of an answer's `entries` (enforced by the server with a 400).
+export const TAILORING_ANSWER_ENTRIES_MAX = 5;
+export const TAILORING_ANSWER_ENTRY_DETAIL_MAX_LENGTH = 300;
+
+// One figure for one CV item, e.g. { target_block_id: "<experience block>", detail: "~40 shipments a week" }.
+// The target must be an editable item block (experience, project, volunteering, …) of the CV.
+export interface TailoringAnswerEntry {
+  target_block_id: string;
+  detail: string;
+}
+
 export interface TailoringAnswer {
   answer: TailoringAnswerChoice | null;
   detail: string | null;
   add_to_main: boolean;
+  // Only on the open number question; an empty list means skipped.
+  entries?: TailoringAnswerEntry[];
   answered_at: string;
+}
+
+// PUT /ai/tailoring-sessions/:sessionId/answers/:questionId. The open number question sends
+// { answer: null, detail: null, entries, add_to_main? }.
+export interface TailoringAnswerPayload {
+  answer: TailoringAnswerChoice | null;
+  detail?: string | null;
+  add_to_main?: boolean;
+  entries?: TailoringAnswerEntry[];
 }
 
 export interface TailoringJob {

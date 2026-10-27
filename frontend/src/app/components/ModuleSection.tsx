@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import { GripVertical, Eye, EyeOff, Trash2, Plus, Sparkles } from "lucide-react";
 import { DateInputHelper } from "./DateInputHelper";
 import { BulletTextarea } from "./BulletTextarea";
-import { useContext } from "react";
+import { useContext, type ComponentProps } from "react";
 import { AIVersionNavigator, type AiVersionNavigatorState } from "./CVSections";
 import { EditorItemHighlightContext, editorItemAnchorProps } from "./SpecializedSections";
 import type { FieldDescriptor, SectionTypeDefinition } from "../modules/cv-module.types";
+import { isNarrativeEditorField, narrativeTextFromValue } from "../integration/narrative-fields";
 
 // Descriptor-driven editor for job-module section types (e.g. medical_uk). Field
 // values live in each item's rawFields so cv-mappers round-trips them into block
@@ -41,12 +42,23 @@ const asText = (value: unknown): string => {
   return "";
 };
 
+// "bullets"-kind fields are stored as arrays but edited as "• " lines. While the user
+// types, the raw text is kept in rawFields (so Enter, spaces and empty bullets survive);
+// cv-mappers turns it back into an array (markers stripped, blank lines dropped) on save.
 const asLines = (value: unknown): string => {
   if (Array.isArray(value)) {
-    return value.map((entry) => asText(entry)).filter((entry) => entry.length > 0).join("\n");
+    return narrativeTextFromValue(value);
   }
   return asText(value);
 };
+
+function PlainTextarea({
+  value,
+  onValueChange,
+  ...rest
+}: Omit<ComponentProps<"textarea">, "value" | "onChange"> & { value: string; onValueChange: (next: string) => void }) {
+  return <textarea {...rest} value={value} onChange={(e) => onValueChange(e.target.value)} />;
+}
 
 const titleizeOption = (value: string): string =>
   value
@@ -180,16 +192,7 @@ export function ModuleSection({
             rows={6}
             placeholder={field.placeholder ?? field.label}
             value={asLines(value)}
-            onValueChange={(next) =>
-              updateItemField(
-                index,
-                field.key,
-                next
-                  .split("\n")
-                  .map((line) => line.replace(/^[-•*]\s*/, "").trim())
-                  .filter((line) => line.length > 0)
-              )
-            }
+            onValueChange={(next) => updateItemField(index, field.key, next)}
             className="w-full px-2 py-1.5 rounded border resize-y min-h-[140px]"
             style={{ ...inputStyle, lineHeight: "1.6" }}
           />
@@ -198,16 +201,22 @@ export function ModuleSection({
     }
 
     if (field.kind === "textarea") {
-      // Same bullet-list behavior as the standard module's description inputs: Enter
-      // starts a "• " bullet, Backspace at a marker removes it. The raw string (with
-      // markers) is stored; rendering splits it via the shared bullet convention.
+      // Narrative text fields (shared rule in narrative-fields.ts: qualification notes,
+      // career-gap explanation, additional-skill context, teaching evaluation) get the same
+      // bullet-list behavior as the standard descriptions; the raw "• " string is stored.
+      // Other textareas (e.g. other registrations, interests) stay plain multi-line text.
+      const isBulletField = isNarrativeEditorField(
+        { sectionType: definition.type, blockType: item?.blockType ?? definition.blockType },
+        field.key
+      );
+      const TextareaComponent = isBulletField ? BulletTextarea : PlainTextarea;
       return (
         <div key={field.key}>
           <label className="block mb-1" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
             {t(field.label)}
             {field.required ? " *" : ""}
           </label>
-          <BulletTextarea
+          <TextareaComponent
             rows={6}
             placeholder={field.placeholder ?? field.label}
             value={asText(value)}

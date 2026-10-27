@@ -3,7 +3,7 @@ import type { ApiClient } from "./api-client";
 import type {
   RequirementDecision,
   TailoringAdminSessionSummary,
-  TailoringAnswerChoice,
+  TailoringAnswerPayload,
   TailoringCostReport,
   TailoringPreferences,
   TailoringRefinePayload,
@@ -894,7 +894,7 @@ export class BackendApi {
   answerTailoringQuestion(
     sessionId: string,
     questionId: string,
-    payload: { answer: TailoringAnswerChoice | null; detail?: string | null; add_to_main?: boolean }
+    payload: TailoringAnswerPayload
   ): Promise<TailoringSessionView> {
     return this.client.put<TailoringSessionView, typeof payload>(
       `/ai/tailoring-sessions/${sessionId}/answers/${encodeURIComponent(questionId)}`,

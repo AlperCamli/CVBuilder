@@ -11,7 +11,7 @@ import {
 import {
   TAILORING_INSTRUCTION_MAX_LENGTH,
   type RequirementDecision,
-  type TailoringAnswerChoice,
+  type TailoringAnswerPayload,
   type TailoringRefinePayload,
   type TailoringRefinement,
   type TailoringRunPayload,
@@ -22,7 +22,7 @@ import {
   type TailoringTask
 } from "../../integration/tailoring-types";
 import { describeBlock } from "./tailoring-labels";
-import { applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
+import { answerCreatedTasks, applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
 
 // Bridge to the editor, read through a ref so async work always sees the latest state.
 export interface TailoringEditorBridge {
@@ -155,6 +155,11 @@ export function useTailoringSession(options: {
   const [refineRuns, setRefineRuns] = useState<Record<string, TailoringRefineRun>>({});
   // Pending cards regenerated after an answer changed, marked until they are decided.
   const [answerUpdatedIds, setAnswerUpdatedIds] = useState<string[]>([]);
+  // Tasks the server created for an answer (a figure for a block that had no task), until
+  // they have run once: shown and announced like re-runs for an answer.
+  const [answerCreatedTaskIds, setAnswerCreatedTaskIds] = useState<string[]>([]);
+  const answerCreatedRef = useRef(answerCreatedTaskIds);
+  answerCreatedRef.current = answerCreatedTaskIds;
   // Block the "Refine with AI" area is focused on (set from the panel or the preview); the
   // token changes on every request so asking again for the same block focuses it again.
   const [refineRequest, setRefineRequest] = useState<{ blockId: string; token: number } | null>(null);
@@ -193,7 +198,7 @@ export function useTailoringSession(options: {
     decide: (suggestion: TailoringSuggestion, decision: "accept" | "reject" | "undo", editedValue?: string | string[]) => Promise<boolean>;
     runTask: (task: TailoringTask, payload?: TailoringRunPayload) => Promise<void>;
     refineBlock: (blockId: string, payload: TailoringRefinePayload) => Promise<boolean>;
-    answer: (questionId: string, payload: { answer: TailoringAnswerChoice | null; detail?: string | null; add_to_main?: boolean }) => Promise<void>;
+    answer: (questionId: string, payload: TailoringAnswerPayload) => Promise<boolean>;
     continueAfterQuestions: () => Promise<void>;
     setRequirementDecision: (requirementId: string, decision: RequirementDecision) => Promise<void>;
     savePreference: (enabled: boolean) => Promise<void>;
@@ -251,6 +256,7 @@ export function useTailoringSession(options: {
     setSkippedTaskIds([]);
     setRefineRuns({});
     setAnswerUpdatedIds([]);
+    setAnswerCreatedTaskIds([]);
     analyzingSince.current = null;
   }, [view?.session.id]);
 
@@ -588,7 +594,11 @@ export function useTailoringSession(options: {
       const current = viewRef.current;
       if (!current || inflight.current.has(task.id)) return;
       // Re-queued by the server because an answer it depends on changed.
-      const forAnswer = task.rerun_for_answer === true && !payload.regenerate && !payload.refinement && !payload.instruction;
+      const forAnswer =
+        (task.rerun_for_answer === true || answerCreatedRef.current.includes(task.id)) &&
+        !payload.regenerate &&
+        !payload.refinement &&
+        !payload.instruction;
       inflight.current.add(task.id);
       setInflightTaskIds([...inflight.current]);
       clearTaskFailure(task.id);
@@ -600,7 +610,10 @@ export function useTailoringSession(options: {
         } else {
           failureCounts.current.delete(task.id);
         }
-        if (forAnswer && result.task.status !== "failed") announceAnswerUpdate(task, result.suggestions);
+        if (forAnswer && result.task.status !== "failed") {
+          announceAnswerUpdate(task, result.suggestions);
+          setAnswerCreatedTaskIds((ids) => ids.filter((id) => id !== task.id));
+        }
         if (autoApplyRef.current) await acceptSequentially(result.suggestions, "auto");
       } catch (taskError) {
         // Show what the server knows: the run may have finished (response lost), failed, or
@@ -660,9 +673,9 @@ export function useTailoringSession(options: {
   }, [flush, open, runTask, savePaused, view, inflightTaskIds, taskFailures, skippedTaskIds]);
 
   const answer = useCallback(
-    async (questionId: string, payload: { answer: TailoringAnswerChoice | null; detail?: string | null; add_to_main?: boolean }) => {
+    async (questionId: string, payload: TailoringAnswerPayload): Promise<boolean> => {
       const current = viewRef.current;
-      if (!current) return;
+      if (!current) return false;
       setIssue(null);
       updateView((latestView) => ({
         ...latestView,
@@ -674,6 +687,7 @@ export function useTailoringSession(options: {
               answer: payload.answer,
               detail: payload.detail ?? null,
               add_to_main: payload.add_to_main ?? false,
+              ...(payload.entries ? { entries: payload.entries } : {}),
               answered_at: new Date().toISOString()
             }
           }
@@ -690,7 +704,12 @@ export function useTailoringSession(options: {
         }
         const requeued = new Set(saved.tasks.filter((task) => task.rerun_for_answer && task.status === "ready").map((task) => task.id));
         if (requeued.size > 0) setSkippedTaskIds((ids) => ids.filter((id) => !requeued.has(id)));
+        // A figure for a block without a task makes the server create one; it merges in as a
+        // new task (mergeTailoringViews) and the runner starts it.
+        const created = answerCreatedTasks(viewRef.current ?? current, saved);
+        if (created.length > 0) setAnswerCreatedTaskIds((ids) => [...ids.filter((id) => !created.includes(id)), ...created]);
         updateView(saved);
+        return true;
       } catch (answerError) {
         // Drop the optimistic answer so the card shows what was really saved.
         const refreshed = await refetch(current.session.id);
@@ -700,6 +719,7 @@ export function useTailoringSession(options: {
           text: describeError(answerError, "Couldn't save your answer."),
           action: { label: "Retry", run: () => void latest.current?.answer(questionId, payload) }
         });
+        return false;
       }
     },
     [api, clearTaskFailure, refetch, updateView]
@@ -951,14 +971,14 @@ export function useTailoringSession(options: {
         (view?.tasks ?? [])
           .filter(
             (task) =>
-              task.rerun_for_answer === true &&
+              (task.rerun_for_answer === true || answerCreatedTaskIds.includes(task.id)) &&
               (task.status === "ready" || task.status === "running") &&
               !taskFailures[task.id] &&
               !skippedTaskIds.includes(task.id)
           )
           .map((task) => task.id)
       ),
-    [skippedTaskIds, taskFailures, view?.tasks]
+    [answerCreatedTaskIds, skippedTaskIds, taskFailures, view?.tasks]
   );
 
   return {

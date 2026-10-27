@@ -2,7 +2,10 @@ import type { CvBlock, CvContent, CvJsonValue, MasterCvDetail, TailoredCvDetail 
 import { ApiClientError } from "../../integration/api-error";
 import {
   TAILORING_INSTRUCTION_MAX_LENGTH,
+  TAILORING_OPEN_METRIC_QUESTION_ID,
   type TailoringAnalysis,
+  type TailoringAnswer,
+  type TailoringQuestion,
   type TailoringRefinement,
   type TailoringScore,
   type TailoringSessionStatus,
@@ -11,6 +14,13 @@ import {
   type TailoringTask
 } from "../../integration/tailoring-types";
 import { listRefinableBlocks } from "../../components/tailoring/tailoring-labels";
+import {
+  changedEntryBlockIds,
+  editableItemBlockIds,
+  entryDetailsForBlock,
+  hasOpenMetricTargets,
+  validateAnswerEntries
+} from "../../components/tailoring/open-metric";
 
 // In-browser stand-in for the tailoring v2 session API, so the Language Studio (and local
 // UI review) can walk through the whole in-editor tailoring flow without a backend.
@@ -46,6 +56,16 @@ const skillsFromInstruction = (instruction: string | null): string[] => {
   const match = instruction?.match(/\b(?:add|include|ekle)\b\s+(.+)/i);
   return match ? match[1].split(/,|\band\b|\bve\b/i).map((item) => item.trim().replace(/[.!]+$/, "")).filter(Boolean) : [];
 };
+
+// Like the analysis prompt: at most 3 yes/no gap questions and 2 specific number questions,
+// plus the open number question when the CV has an experience / project / volunteering item.
+const MAX_GAP_QUESTIONS = 3;
+const MAX_METRIC_QUESTIONS = 2;
+
+const capQuestions = (questions: TailoringQuestion[]): TailoringQuestion[] => [
+  ...questions.filter((question) => question.kind === "gap").slice(0, MAX_GAP_QUESTIONS),
+  ...questions.filter((question) => question.kind === "metric").slice(0, MAX_METRIC_QUESTIONS)
+];
 
 const badRequest = (message: string) => new ApiClientError({ status: 400, code: "VALIDATION_ERROR", message });
 
@@ -84,6 +104,8 @@ export function createDemoTailoring(store: {
   const sessions = new Map<string, TailoringSessionView>();
   // Status a finished (or reviewing) session returns to after answer re-runs settle.
   const resumeStatus = new Map<string, TailoringSessionStatus>();
+  // Running tasks whose answer changed meanwhile: re-queued when they finish.
+  const rerunWhenDone = new Set<string>();
   // "Also add to my main CV" writes, per suggestion, so undo can revert them.
   const masterWrites = new Map<string, { masterId: string; blockId: string; field: string; before: CvJsonValue; after: CvJsonValue }>();
   let autoApply = false;
@@ -153,9 +175,20 @@ export function createDemoTailoring(store: {
           confidence: "medium",
           evidence_block_ids: [],
           reason: tr ? "CV'de geçmiyor." : "Not mentioned in your CV."
+        },
+        {
+          id: "r4",
+          text: tr ? "Teknik olmayan paydaşlara sunum" : "Presenting to non-technical stakeholders",
+          keywords: ["stakeholders"],
+          importance: "nice",
+          weight: 1,
+          status: "weak",
+          confidence: "low",
+          evidence_block_ids: experience ? [experience.id] : [],
+          reason: tr ? "Ekiplerle iş birliği var, sunum belirtilmemiş." : "Collaboration is mentioned, presenting is not."
         }
       ],
-      questions: [
+      questions: capQuestions([
         {
           id: "q1",
           kind: "gap",
@@ -171,11 +204,35 @@ export function createDemoTailoring(store: {
                 text: tr ? "Raporlarınızı kaç kişi kullanıyordu?" : "How many people used your reports?",
                 requirement_id: "r2",
                 target_block_id: experience.id
+              },
+              {
+                id: "q4",
+                kind: "metric" as const,
+                text: tr ? "Haftada kabaca kaç rapor hazırlıyordunuz?" : "Roughly how many reports did you deliver a week?",
+                requirement_id: "r2",
+                target_block_id: experience.id
               }
             ]
-          : [])
-      ]
+          : []),
+        {
+          id: "q3",
+          kind: "gap",
+          text: tr ? "Bulgularınızı teknik olmayan ekiplere sundunuz mu?" : "Have you presented findings to non-technical teams?",
+          requirement_id: "r4",
+          target_block_id: experience?.id ?? null
+        }
+      ])
     };
+    // The open number question; no task waits on it.
+    if (hasOpenMetricTargets(content)) {
+      analysis.questions.push({
+        id: TAILORING_OPEN_METRIC_QUESTION_ID,
+        kind: "metric_open",
+        text: "Is there any number you'd like to add to your experience?",
+        requirement_id: null,
+        target_block_id: null
+      });
+    }
     const task = (kind: TailoringTask["kind"], blockId: string | null, depends: string[]): TailoringTask => ({
       id: nextId("demo-task"),
       kind,
@@ -191,8 +248,8 @@ export function createDemoTailoring(store: {
     view.session.status = "answering";
     view.tasks = [
       task("summary", summary?.id ?? null, []),
-      ...(experience ? [task("block", experience.id, ["q1", "q2"])] : []),
-      task("skills", skills?.id ?? null, ["q1"]),
+      ...(experience ? [task("block", experience.id, ["q1", "q2", "q3", "q4"])] : []),
+      task("skills", skills?.id ?? null, ["q1", "q3"]),
       task("structure", null, [])
     ];
   };
@@ -213,6 +270,11 @@ export function createDemoTailoring(store: {
       created_at: now()
     };
     const metric = view.session.answers.q2?.detail;
+    const weekly = view.session.answers.q4?.detail;
+    const presents = ["yes", "some"].includes(view.session.answers.q3?.answer ?? "");
+    // Figures from the open number question for this block, one bullet each.
+    const figures = task.block_id ? entryDetailsForBlock(view.session.answers, task.block_id).map(sentence) : [];
+    const openAnswer: TailoringAnswer | undefined = view.session.answers[TAILORING_OPEN_METRIC_QUESTION_ID];
     const tableau = view.session.answers.q1?.answer;
     const knowsTableau = tableau === "yes" || tableau === "some";
     const asked = instruction ? sentence(instruction) : "";
@@ -280,9 +342,12 @@ export function createDemoTailoring(store: {
               ? "SQL ile haftalık satış raporları hazırlayarak raporlama süresini %30 azalttı"
               : "Built weekly SQL-based sales reports, reducing reporting time by 30%",
             ...(metric ? [tr ? `Raporlar ${metric} tarafından kullanıldı` : `Reports used by ${metric}`] : []),
-            ...(knowsTableau ? [tr ? "Satış ekipleri için Tableau panoları oluşturdu" : "Created Tableau dashboards for the sales teams"] : [])
+            ...(weekly ? [tr ? `Haftada ${weekly} rapor hazırladı` : `Delivered ${weekly} reports a week`] : []),
+            ...(knowsTableau ? [tr ? "Satış ekipleri için Tableau panoları oluşturdu" : "Created Tableau dashboards for the sales teams"] : []),
+            ...(presents ? [tr ? "Bulguları teknik olmayan ekiplere sundu" : "Presented findings to non-technical teams"] : [])
           ]
         : bulletLines(block.fields.description);
+      lines = [...lines, ...figures.filter((figure) => !lines.includes(figure))];
       if (lines.length === 0) {
         lines = [tr ? `${view.session.job.job_title} rolüyle ilgili çalışmalar` : `Work relevant to the ${view.session.job.job_title} role`];
       }
@@ -305,8 +370,12 @@ export function createDemoTailoring(store: {
           rationale: asked
             ? tr ? `İsteğinize göre: ${asked}.` : `As you asked: ${asked}.`
             : tr ? "Sonuçları ve ilanın terimlerini öne çıkarır." : "Leads with results and the job's terms.",
-          requirement_ids: isExperience ? ["r1", "r2", ...(knowsTableau ? ["r3"] : [])] : ["r1"],
-          add_to_main: isExperience && Boolean(view.session.answers.q2?.add_to_main)
+          requirement_ids: isExperience
+            ? ["r1", "r2", ...(knowsTableau ? ["r3"] : []), ...(presents ? ["r4"] : [])]
+            : figures.length ? ["r2"] : ["r1"],
+          add_to_main:
+            (isExperience && Boolean(view.session.answers.q2?.add_to_main || view.session.answers.q4?.add_to_main)) ||
+            (figures.length > 0 && Boolean(openAnswer?.add_to_main))
         }
       ];
     }
@@ -325,6 +394,7 @@ export function createDemoTailoring(store: {
     }
     view.suggestions = [...view.suggestions, ...created];
     touchTask(view, task.id, { status: created.length || task.kind !== "structure" ? "done" : "skipped", rerun_for_answer: false });
+    if (rerunWhenDone.delete(task.id)) touchTask(view, task.id, { status: "ready", rerun_for_answer: true });
     settle(view);
     const scored = withScore(view);
     return {
@@ -466,15 +536,60 @@ export function createDemoTailoring(store: {
       return withScore(view);
     }
     if (action.startsWith("answers/")) {
-      const questionId = action.split("/")[1];
+      const questionId = decodeURIComponent(action.split("/")[1]);
+      const question = view.session.analysis?.questions.find((item) => item.id === questionId);
+      if (!question) throw new ApiClientError({ status: 404, code: "NOT_FOUND", message: "Question was not found" });
       const previous = view.session.answers[questionId];
-      const next = {
+      const next: TailoringAnswer = {
         answer: (body.answer as "yes" | "some" | "no" | null) ?? null,
-        detail: (body.detail as string | null) ?? null,
+        detail: typeof body.detail === "string" ? body.detail.trim() || null : null,
         add_to_main: body.add_to_main === true,
         answered_at: now()
       };
+      if (question.kind !== "metric_open" && body.entries !== undefined) throw badRequest("Only the open number question takes entries.");
+      if (question.kind === "metric_open" && (next.answer !== null || next.detail)) {
+        throw badRequest("Answer the open number question with entries only.");
+      }
+      if (question.kind === "metric_open") {
+        const checked = validateAnswerEntries(body.entries ?? [], editableItemBlockIds(content!));
+        if (checked.error !== null) throw badRequest(checked.error);
+        next.entries = checked.entries;
+      }
       view.session.answers[questionId] = next;
+      // Each figure is a confirmed fact for its block: re-run the block tasks whose figures
+      // changed and create a task for a block that had none.
+      const entryBlocks = new Set(changedEntryBlockIds(previous?.entries, next.entries));
+      const requeued: string[] = [];
+      for (const blockId of entryBlocks) {
+        const existing = view.tasks.find((item) => item.block_id === blockId && item.kind !== "structure" && item.kind !== "skills");
+        if (!existing) {
+          const editable = listRefinableBlocks(content!).find((item) => item.blockId === blockId);
+          view.tasks = [
+            ...view.tasks,
+            {
+              id: nextId("demo-task"),
+              kind: "block",
+              block_id: blockId,
+              section_id: editable?.sectionId ?? null,
+              status: "ready",
+              depends_on_question_ids: [],
+              error_message: null,
+              rerun_for_answer: false,
+              updated_at: now()
+            }
+          ];
+          requeued.push(blockId);
+        } else if (existing.status === "running") {
+          rerunWhenDone.add(existing.id);
+        } else if (existing.status !== "waiting" && existing.status !== "ready") {
+          touchTask(view, existing.id, { status: "ready", rerun_for_answer: true });
+          requeued.push(blockId);
+        }
+      }
+      if (requeued.length > 0 && (view.session.status === "reviewing" || view.session.status === "ready")) {
+        resumeStatus.set(view.session.id, view.session.status);
+        view.session.status = "generating";
+      }
       for (const task of view.tasks.filter((item) => item.status === "waiting")) {
         if (task.depends_on_question_ids.every((id) => view.session.answers[id])) touchTask(view, task.id, { status: "ready" });
       }

@@ -66,7 +66,8 @@
 >   an editable **item** when it has a non-empty string narrative field (first of
 >   `description`, `summary`, `details`, `responsibilities`, `highlights`, the renderer's
 >   body order) or an empty `description` string; narrative kept only in arrays
->   (`bullets`, `description: [...]`) stays read-only context. Title/subtitle come from
+>   (`bullets`, `description: [...]`) stays read-only context (superseded 2026-10-28: lists
+>   are folded into text first, see the follow-up below). Title/subtitle come from
 >   role/job_title/title/position/name or degree + field of study, and company/employer/
 >   organization/institution/issuer/...; dates are never titles. Summary and skills are
 >   recognised by section type; the rewrite writes back to the block's own field
@@ -96,6 +97,53 @@
 >   which the prompts say never overrides the truth/language rules. Allowed any time
 >   after the analysis (409 before; 404 for a block that is not editable). Cost report
 >   steps: `(refine)` for instruction runs, `(quick fix)` for preset-only runs.
+>
+> ### Follow-up: one bullet rule, list conversion, fewer questions (2026-10-28)
+>
+> - **One narrative rule** — `shared/cv-content/narrative-fields.ts` decides, from section
+>   type + block type + fields, which field holds a block's bullet narrative
+>   (`narrativeBulletField`: first non-empty of description, summary, details, notes,
+>   responsibilities, highlights; medical notes / explanation / context / evaluation; never
+>   summary, skills, languages, interests, header, references; certifications only with a
+>   description). Used by the compact CV, the "Improve with AI" bulletizer (now any block
+>   type, by section — not `*_item`), the import canonicalizer and rendering. Education,
+>   award and publication descriptions with "• " lines now render as bullets (plain text
+>   stays a paragraph). `block_suggest` gets a code-owned output-format rule appended to the
+>   system prompt (bullet lines for narrative items, one paragraph for summaries), so the
+>   DB prompt rows cannot drop it.
+> - **List-kind bullets -> text** (`normalizeNarrativeLists`; rules in the module header,
+>   mirrored by the editor when it loads a CV): list only -> "• a\n• b" in the narrative
+>   field; text + duplicate list -> list dropped; text + extra items -> missing items appended
+>   as bullets; lists removed; idempotent; medical `duties` / `outcomes` /
+>   `management_role.description` arrays untouched. Applied by new imports, the compact CV
+>   (so the 17 list-only blocks are rewritable and a card's "before" equals the editor's
+>   block), "Also add to my main CV" (the folded lists are removed from the main CV block and
+>   restored on undo, `master_update.removed_fields`), block_suggest input, the skills-pool
+>   context and translation input. No backfill. `npx tsx scripts/report-narrative-lists.ts`
+>   is a read-only report; on 2026-10-28: 56 master CVs, 14 affected, 17 list-only, 57
+>   duplicate-list, 5 extra-item blocks (8 items appended), 308 list items checked, 0 lost.
+> - **Questions** (analysis prompt v2-3; `normalizeAnalysisOutput` enforces): at most 3 gap
+>   questions, each for a must-have that is weak/missing, aimed at an editable block, one per
+>   requirement; at most 2 metric questions, one per editable item block, worded so an
+>   estimate is fine. Code appends the open number question
+>   `{ id: "q_open_metric", kind: "metric_open", requirement_id: null, target_block_id: null }`
+>   whenever the CV has an editable experience / project / volunteer item; no task depends
+>   on it. Its answer: `PUT /ai/tailoring-sessions/:sessionId/answers/q_open_metric` with
+>   `{ answer: null, detail: null, add_to_main?, entries: [{ target_block_id, detail }] }`
+>   (max 5, detail 1-300 chars, target an editable item block of this CV, else 400;
+>   `entries` on another question is a 400). Stored as `answers.q_open_metric.entries`. Each
+>   entry is a `metric` confirmed fact (and number-guard source) for its block's task; when
+>   entries change, the block tasks of every block that gained, lost or changed an entry are
+>   re-queued (`rerun_for_answer`), and a target block without a task gets one.
+> - **Writing** (block prompt v2-4): `TAILORING_WRITING_RULE` (action + concrete CV details +
+>   outcome, reuse names from the CV, no filler, no repeated opening verb), 3-5 strong lines
+>   most relevant first, and `TAILORING_SUMMARY_RULE` (built from the candidate's field,
+>   experience and strongest proofs). Truth / language / confirmed-facts / refinement rules
+>   unchanged.
+> - **Demo / mock:** the mock analysis fixture asks one gap question (a must-have, aimed at
+>   the first experience) and one "Roughly how many …" metric question for the same block;
+>   the code adds `q_open_metric`. The Language Studio demo session should show the same
+>   three questions.
 >
 > The remainder of this document is the design as agreed before implementation.
 

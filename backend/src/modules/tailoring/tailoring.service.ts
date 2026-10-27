@@ -7,6 +7,7 @@ import {
   replaceBlockInCvContent
 } from "../../shared/cv-content/cv-content.utils";
 import { addBulletPrefix } from "../../shared/cv-content/bullet-text";
+import { convertNarrativeLists } from "../../shared/cv-content/narrative-fields";
 import { documentLanguageName, normalizeDocumentLanguage } from "../../shared/localization/languages";
 import {
   AiFlowFailedError,
@@ -47,6 +48,7 @@ import {
   type GeneratedSkill
 } from "./tailoring-rules";
 import type { CreateTailoringTaskPayload, TailoringRepository } from "./tailoring.repository";
+import { OPEN_METRIC_DETAIL_MAX_CHARS, OPEN_METRIC_MAX_ENTRIES } from "./tailoring.types";
 import type {
   CreateTailoringSessionInput,
   CreateTailoringSuggestionPayload,
@@ -54,6 +56,7 @@ import type {
   TailoringAdminSessionSummary,
   TailoringAnalysis,
   TailoringAnswerChoice,
+  TailoringOpenMetricEntry,
   TailoringCostReport,
   TailoringCostRun,
   TailoringPreferences,
@@ -102,6 +105,8 @@ export const taskUsesQuestion = (
   question: TailoringQuestion
 ): boolean => {
   if (task.depends_on_question_ids.includes(question.id)) return true;
+  // The open number question reaches only the blocks its entries name (see entryBlocksChanged).
+  if (question.kind === "metric_open") return false;
   switch (task.kind) {
     case "block":
       return task.block_id !== null && question.target_block_id === task.block_id;
@@ -115,6 +120,25 @@ export const taskUsesQuestion = (
     default:
       return false;
   }
+};
+
+// Blocks whose open-number entries were added, removed or changed between two answers.
+export const entryBlocksChanged = (
+  previous: TailoringOpenMetricEntry[],
+  next: TailoringOpenMetricEntry[]
+): Set<string> => {
+  const byBlock = (entries: TailoringOpenMetricEntry[]) => {
+    const map = new Map<string, string[]>();
+    for (const entry of entries) map.set(entry.target_block_id, [...(map.get(entry.target_block_id) ?? []), entry.detail]);
+    return map;
+  };
+  const before = byBlock(previous);
+  const after = byBlock(next);
+  const changed = new Set<string>();
+  for (const blockId of new Set([...before.keys(), ...after.keys()])) {
+    if (JSON.stringify(before.get(blockId) ?? []) !== JSON.stringify(after.get(blockId) ?? [])) changed.add(blockId);
+  }
+  return changed;
 };
 
 const TERMINAL_TASK_STATUSES = new Set(["done", "failed", "skipped"]);
@@ -140,6 +164,8 @@ interface MasterCvUpdate {
   field: string;
   previous_value: CvJsonValue | null;
   written_value: CvJsonValue;
+  // List-kind bullet fields folded into the written text (restored on undo).
+  removed_fields?: Record<string, CvJsonValue>;
   updated_at: string;
   reverted_at: string | null;
   revert_skipped_at: string | null;
@@ -490,7 +516,12 @@ export class TailoringService {
     session: SessionContext,
     sessionId: string,
     questionId: string,
-    input: { answer: TailoringAnswerChoice | null; detail: string | null; add_to_main: boolean }
+    input: {
+      answer: TailoringAnswerChoice | null;
+      detail: string | null;
+      add_to_main: boolean;
+      entries?: TailoringOpenMetricEntry[];
+    }
   ): Promise<TailoringSessionView> {
     const userId = session.appUser.id;
     const current = await this.requireSession(userId, sessionId);
@@ -499,6 +530,12 @@ export class TailoringService {
     }
 
     const question = current.analysis.questions.find((item) => item.id === questionId)!;
+    if (question.kind === "metric_open") {
+      return this.answerOpenMetricQuestion(session, current, question, input);
+    }
+    if (input.entries !== undefined) {
+      throw new ValidationError("Only the open number question takes entries.");
+    }
     const detail = input.detail?.trim() || null;
     const previous = current.answers[questionId];
     const answerChanged = !previous || previous.answer !== input.answer || (previous.detail ?? null) !== detail;
@@ -543,6 +580,92 @@ export class TailoringService {
       }
     }
 
+    return this.buildView(session, updated);
+  }
+
+  // The open number question: each entry is a figure for one editable item block. Blocks
+  // whose entries changed are regenerated (their task re-queued, or created when the
+  // analysis planned none) so the figure reaches the CV; other tasks are untouched.
+  private async answerOpenMetricQuestion(
+    session: SessionContext,
+    current: ActiveTailoringSession,
+    question: TailoringQuestion,
+    input: { answer: TailoringAnswerChoice | null; detail: string | null; add_to_main: boolean; entries?: TailoringOpenMetricEntry[] }
+  ): Promise<TailoringSessionView> {
+    const userId = session.appUser.id;
+    if (input.answer !== null || input.detail?.trim()) {
+      throw new ValidationError("Answer the open number question with entries only.");
+    }
+    const entries = (input.entries ?? []).map((entry) => ({
+      target_block_id: String(entry.target_block_id ?? "").trim(),
+      detail: String(entry.detail ?? "").trim()
+    }));
+    if (
+      entries.length > OPEN_METRIC_MAX_ENTRIES ||
+      entries.some((entry) => !entry.detail || entry.detail.length > OPEN_METRIC_DETAIL_MAX_CHARS)
+    ) {
+      throw new ValidationError(
+        `Add at most ${OPEN_METRIC_MAX_ENTRIES} numbers, each 1-${OPEN_METRIC_DETAIL_MAX_CHARS} characters.`
+      );
+    }
+
+    const tailored = await this.requireTailoredCv(userId, current.tailored_cv_id);
+    const compact = buildCompactCv(tailored.current_content);
+    const items = new Map(
+      compact.blocks.filter((block) => block.kind === "item" && isEditableBlock(block)).map((block) => [block.block_id, block])
+    );
+    const invalid = entries.find((entry) => !items.has(entry.target_block_id));
+    if (invalid) {
+      throw new ValidationError("A number can only be added to an experience, project or other entry of this CV.", {
+        target_block_id: invalid.target_block_id
+      });
+    }
+
+    const changedBlockIds = entryBlocksChanged(current.answers[question.id]?.entries ?? [], entries);
+    let updated =
+      (await this.repository.mergeSessionJson(userId, current.id, "answers", {
+        [question.id]: {
+          answer: null,
+          detail: null,
+          add_to_main: input.add_to_main,
+          answered_at: new Date().toISOString(),
+          entries
+        }
+      })) ?? current;
+    if (changedBlockIds.size === 0) {
+      return this.buildView(session, updated);
+    }
+
+    const tasks = await this.repository.listTasks(userId, current.id);
+    const blockTasks = tasks.filter((task) => task.kind === "block" && task.block_id !== null && changedBlockIds.has(task.block_id));
+    const affected = blockTasks.filter((task) => task.status !== "waiting" && task.status !== "ready");
+    const requeued = await this.repository.requeueTasksForAnswer(
+      userId,
+      current.id,
+      affected.map((task) => task.id)
+    );
+    const missing = [...changedBlockIds].filter(
+      (blockId) => !blockTasks.some((task) => task.block_id === blockId) && entries.some((entry) => entry.target_block_id === blockId)
+    );
+    const created = await this.repository.createTasks(
+      missing.map((blockId) => ({
+        session_id: current.id,
+        user_id: userId,
+        kind: "block" as const,
+        block_id: blockId,
+        section_id: items.get(blockId)!.section_id,
+        status: "ready" as const,
+        depends_on_question_ids: [],
+        brief: current.analysis!.block_briefs.find((brief) => brief.block_id === blockId) ?? {}
+      }))
+    );
+
+    const rerunning = requeued.length > 0 || created.length > 0 || affected.some((task) => task.status === "running");
+    if (rerunning && (updated.status === "reviewing" || updated.status === "ready")) {
+      await this.repository.claimSessionStatus(userId, current.id, ["reviewing", "ready"], "generating");
+      await this.advanceWhenTasksSettled(userId, current.id);
+      updated = (await this.repository.findSessionById(userId, current.id)) ?? updated;
+    }
     return this.buildView(session, updated);
   }
 
@@ -811,19 +934,35 @@ export class TailoringService {
     const kind = task.kind === "summary" ? (block ? "summary" : "new_summary") : "item";
     // The field the block keeps its narrative in (description, summary, content, ...).
     const field = info?.editable_field ?? "text";
-    const currentText = block ? String(block.fields[field] ?? "").trim() : "";
+    // The compact view's text: list-kind bullets are already folded into the field there
+    // (as the editor does on load), so "before" matches the editor's block.
+    const currentText = block ? info?.text ?? "" : "";
 
     const relatedQuestions = analysis.questions.filter((question) =>
       task.kind === "summary"
         ? question.target_block_id === task.block_id || (question.kind === "gap" && question.target_block_id === null)
         : question.target_block_id === task.block_id
     );
-    const confirmedFacts = relatedQuestions.flatMap((question) => {
-      const answer = session.answers[question.id];
-      if (!answer || answer.answer === "no" || (!answer.answer && !answer.detail)) return [];
-      return [{ kind: question.kind, question: question.text, answer: answer.answer, detail: answer.detail }];
-    });
-    const addToMain = relatedQuestions.some((question) => session.answers[question.id]?.add_to_main === true);
+    const confirmedFacts: Array<{ kind: "gap" | "metric"; question: string; answer: TailoringAnswerChoice | null; detail: string | null }> =
+      relatedQuestions.flatMap((question) => {
+        const answer = session.answers[question.id];
+        if (question.kind === "metric_open" || !answer || answer.answer === "no" || (!answer.answer && !answer.detail)) return [];
+        return [{ kind: question.kind, question: question.text, answer: answer.answer, detail: answer.detail }];
+      });
+    // Figures the candidate added for this block through the open number question: confirmed
+    // metric facts (they also license their numbers in the guard below).
+    const openQuestion = analysis.questions.find((question) => question.kind === "metric_open");
+    const openAnswer = openQuestion ? session.answers[openQuestion.id] : undefined;
+    const openEntries =
+      task.kind === "block" && task.block_id
+        ? (openAnswer?.entries ?? []).filter((entry) => entry.target_block_id === task.block_id)
+        : [];
+    for (const entry of openEntries) {
+      confirmedFacts.push({ kind: "metric", question: openQuestion!.text, answer: null, detail: entry.detail });
+    }
+    const addToMain =
+      relatedQuestions.some((question) => session.answers[question.id]?.add_to_main === true) ||
+      (openEntries.length > 0 && openAnswer?.add_to_main === true);
 
     const otherBlocks = compact.blocks
       .filter((item) => item.block_id !== task.block_id && item.kind !== "skills")
@@ -1322,7 +1461,17 @@ export class TailoringService {
       return null;
     }
 
-    const nextBlock: CvBlock = { ...lookup.block, fields: { ...lookup.block.fields, [field]: value } };
+    // The card was written for the block with its list-kind bullets folded into the text
+    // (as the editor shows it): drop those lists too, or the main CV would show them twice.
+    const sectionType = master.current_content.sections.find((item) => item.id === lookup.section_id)?.type ?? "";
+    const folded = convertNarrativeLists(lookup.block.fields, { sectionType, blockType: lookup.block.type });
+    const foldInto = folded.conversion !== "none" && folded.target_field === field;
+    const removedFields: Record<string, CvJsonValue> = {};
+    if (foldInto) {
+      for (const key of folded.removed_fields) removedFields[key] = lookup.block.fields[key];
+    }
+    const baseFields = foldInto ? folded.fields : lookup.block.fields;
+    const nextBlock: CvBlock = { ...lookup.block, fields: { ...baseFields, [field]: value } };
     const replacement = replaceBlockInCvContent(master.current_content, suggestion.block_id, nextBlock);
     const updated = await this.masterCvRepository.updateById(userId, master.id, {
       current_content: replacement.content,
@@ -1368,6 +1517,7 @@ export class TailoringService {
       field,
       previous_value: previousValue,
       written_value: replacement.updated_block.fields[field] ?? value,
+      ...(Object.keys(removedFields).length > 0 ? { removed_fields: removedFields } : {}),
       updated_at: appliedAt,
       reverted_at: null,
       revert_skipped_at: null
@@ -1397,6 +1547,9 @@ export class TailoringService {
       delete fields[update.field];
     } else {
       fields[update.field] = update.previous_value;
+    }
+    for (const [key, value] of Object.entries(update.removed_fields ?? {})) {
+      if (!(key in fields)) fields[key] = value;
     }
     const replacement = replaceBlockInCvContent(master.current_content, update.block_id, { ...lookup.block, fields });
     const updated = await this.masterCvRepository.updateById(userId, master.id, {

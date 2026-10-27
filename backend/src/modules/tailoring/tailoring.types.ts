@@ -25,9 +25,18 @@ export interface TailoringRequirement {
   reason: string;
 }
 
+// gap: yes/some/no about a must-have for one block; metric: one figure for one block's
+// work; metric_open: the code-made "any number to add?" question (id OPEN_METRIC_QUESTION_ID,
+// no requirement/target; answered with entries, one per block).
+export type TailoringQuestionKind = "gap" | "metric" | "metric_open";
+
+export const OPEN_METRIC_QUESTION_ID = "q_open_metric";
+export const OPEN_METRIC_MAX_ENTRIES = 5;
+export const OPEN_METRIC_DETAIL_MAX_CHARS = 300;
+
 export interface TailoringQuestion {
   id: string;
-  kind: "gap" | "metric";
+  kind: TailoringQuestionKind;
   text: string;
   requirement_id: string | null;
   target_block_id: string | null;
@@ -50,11 +59,19 @@ export interface TailoringAnalysis {
 
 export type TailoringAnswerChoice = "yes" | "some" | "no";
 
+// One figure the candidate added through the open number question, for one CV block.
+export interface TailoringOpenMetricEntry {
+  target_block_id: string;
+  detail: string;
+}
+
 export interface TailoringAnswer {
   answer: TailoringAnswerChoice | null;
   detail: string | null;
   add_to_main: boolean;
   answered_at: string;
+  // Only for the metric_open question (answer and detail are then null).
+  entries?: TailoringOpenMetricEntry[];
 }
 
 export type RequirementDecision = "relevant" | "not_relevant";

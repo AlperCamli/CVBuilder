@@ -1,4 +1,5 @@
 import type { CvBlock, CvContent } from "../../shared/cv-content/cv-content.types";
+import { normalizeNarrativeListsInContent } from "../../shared/cv-content/narrative-fields";
 
 export const SKILLS_POOL_MAX_SIZE = 20;
 export const TAILORED_SKILLS_MAX_SIZE = 24;
@@ -288,10 +289,12 @@ const sortedBlocksOfSections = (content: CvContent, types: Set<string>): CvBlock
     .flatMap((section) => [...section.blocks].sort((a, b) => a.order - b.order));
 
 export const collectSkillsPoolContext = (
-  content: CvContent,
+  rawContent: CvContent,
   currentBlock: CvBlock,
   currentPool: string[] = []
 ): SkillsPoolContext => {
+  // A list that duplicates the description would be sent twice: fold lists into the text.
+  const content = normalizeNarrativeListsInContent(rawContent);
   const currentFields = asRecord(currentBlock.fields);
   const existingSkills = dedupeSkills([
     ...asStringArray(currentFields.skills),

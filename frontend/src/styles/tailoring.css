@@ -215,3 +215,108 @@
     transition: none;
   }
 }
+
+/* Question cards (gap, specific number, open number question). */
+.tailor-question {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 12px;
+  background: var(--color-background-primary);
+}
+
+.tailor-question[data-answered="true"] {
+  border-color: var(--color-teal-200);
+}
+
+.tailor-question-skipped {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-style: dashed;
+  border-color: var(--color-border-tertiary);
+}
+
+.tailor-question-chip {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tailor-link {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-underline-offset: 2px;
+}
+
+.tailor-link:hover {
+  text-decoration: underline;
+}
+
+.tailor-choice {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-secondary);
+  background: var(--color-background-primary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.tailor-choice[aria-pressed="true"] {
+  border-color: var(--color-teal-400);
+  background: var(--color-teal-50);
+  color: var(--color-teal-800);
+}
+
+.tailor-choice:hover:not([aria-pressed="true"]) {
+  border-color: var(--color-teal-200);
+}
+
+.tailor-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--color-background-secondary);
+}
+
+.tailor-entry-select {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 8px;
+  background: var(--color-background-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.tailor-entry-remove {
+  flex-shrink: 0;
+  padding: 5px;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+}
+
+.tailor-entry-remove:hover {
+  background: var(--color-background-primary);
+  color: var(--color-red-700);
+}
+
+.tailor-choice:focus-visible,
+.tailor-link:focus-visible,
+.tailor-entry-remove:focus-visible,
+.tailor-entry-select:focus-visible {
+  outline: 2px solid var(--color-teal-400);
+  outline-offset: 1px;
+}

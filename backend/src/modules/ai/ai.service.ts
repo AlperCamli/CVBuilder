@@ -18,8 +18,15 @@ import {
   normalizeCvContent,
   replaceBlockInCvContent
 } from "../../shared/cv-content/cv-content.utils";
-import { looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
-import type { CvBlock } from "../../shared/cv-content/cv-content.types";
+import { BULLET_MARKER, looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
+import {
+  SUMMARY_SECTION_TYPES,
+  narrativeTextFields,
+  normalizeBlockNarrativeLists,
+  normalizeCvTypeKey,
+  normalizeNarrativeListsInContent
+} from "../../shared/cv-content/narrative-fields";
+import type { CvBlock, CvContent } from "../../shared/cv-content/cv-content.types";
 import { getCvModule, resolveModuleBlockAiPolicy } from "../../shared/cv-modules/module-registry";
 import {
   AiFlowFailedError,
@@ -148,29 +155,13 @@ const asStringArray = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
-// String narrative fields edited as bullet lists in the CV editor, per block type.
-// Array-shaped bullet fields (e.g. medical duties/outcomes) are not listed here: the
-// bulletizer only normalizes strings.
-const NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE: Record<string, string[]> = {
-  experience_item: ["description", "responsibilities", "highlights"],
-  education_item: ["description", "responsibilities", "highlights"],
-  project_item: ["description", "responsibilities", "highlights"],
-  volunteer_item: ["description", "responsibilities", "highlights"],
-  award_item: ["description", "responsibilities", "highlights"],
-  publication_item: ["description", "responsibilities", "highlights"],
-  // medical_uk textarea fields using the "• " bullet convention
-  medical_qualification: ["notes"],
-  career_gap: ["explanation"],
-  additional_skill: ["context"],
-  teaching_activity: ["evaluation"]
-};
-
 // Normalize AI bullet answers (dashes / numbers / "•" / multi-line) into the "• " convention
-// for experience-style blocks so they round-trip and render as bullets. Summary and skills
-// blocks are left untouched. Idempotent on already-normalized text.
-const bulletizeNarrativeFields = (block: CvBlock): CvBlock => {
-  const narrativeKeys = NARRATIVE_BULLET_FIELDS_BY_BLOCK_TYPE[block.type];
-  if (!narrativeKeys) {
+// for narrative item blocks so they round-trip and render as bullets. Which blocks and
+// fields qualify is the shared rule (section type + field shape, any block type; summary
+// and skills blocks are left untouched). Idempotent on already-normalized text.
+export const bulletizeNarrativeFields = (block: CvBlock, sectionType: string): CvBlock => {
+  const narrativeKeys = narrativeTextFields(block.fields, { sectionType, blockType: block.type });
+  if (narrativeKeys.length === 0) {
     return block;
   }
 
@@ -188,6 +179,24 @@ const bulletizeNarrativeFields = (block: CvBlock): CvBlock => {
   }
 
   return changed ? { ...block, fields } : block;
+};
+
+const sectionTypeOf = (content: CvContent, sectionId: string): string =>
+  content.sections.find((section) => section.id === sectionId)?.type ?? "";
+
+// The format the block_suggest answer must use, enforced in code so a DB prompt row cannot
+// drop it: bullet lines for narrative items, one paragraph for a summary.
+export const buildBlockSuggestFormatRule = (block: CvBlock, sectionType: string, editableFields: string[]): string | null => {
+  const context = { sectionType, blockType: block.type };
+  const bulletFields = narrativeTextFields(block.fields, context).filter((key) => editableFields.includes(key));
+  if (bulletFields.length > 0) {
+    return `OUTPUT FORMAT (set by the system): write ${bulletFields.join(", ")} as bullet lines, one achievement or responsibility per line, each line starting with "${BULLET_MARKER}" and separated by "\\n" (usually 3-5 lines, fewer when summarizing or shortening). Never merge them into one paragraph. Keep each field a single string.`;
+  }
+  const isSummary = SUMMARY_SECTION_TYPES.has(normalizeCvTypeKey(sectionType)) || normalizeCvTypeKey(block.type) === "summary";
+  if (isSummary) {
+    return "OUTPUT FORMAT (set by the system): write the summary as one paragraph of 2-4 sentences, without bullet characters or line breaks.";
+  }
+  return null;
 };
 
 const normalizeSectionType = (value: string): string =>
@@ -647,6 +656,9 @@ interface ExecuteFlowOptions {
   // Needed by calls that share a flow_type but have a stricter contract than the generic
   // template (e.g. the skills-pool call rides on block_suggest).
   force_user_prompt?: boolean;
+  // Code-owned rule appended to the system prompt even when a DB prompt row replaces it
+  // (e.g. the block_suggest output format).
+  system_prompt_suffix?: string | null;
   tailoring_session_id?: string | null;
   parent_run_id?: string | null;
 }
@@ -816,7 +828,10 @@ export class AiService {
       if (catalog.code !== language.code) throw new ValidationError("Translation language does not match its catalog");
       const prompt = claimed.input_payload.prompt as ResolvedPromptSnapshot | undefined
         ?? await this.resolvePromptForFlow({ flow_type: "cv_translate", action_type: null, user_prompt: "Translate every provided text into target_language." });
-      const blocks = translationBlocks(source.current_content);
+      // List-kind bullets that duplicate the description would be translated twice (and may
+      // come back worded differently): the translated CV keeps them as text only.
+      const sourceContent = normalizeNarrativeListsInContent(source.current_content);
+      const blocks = translationBlocks(sourceContent);
       const usageByBlock = new Map<number, NonNullable<RunFlowExecutionResult["token_usage"]>>();
       const tokenUsage = () => usageByBlock.size ? [...usageByBlock.values()].reduce((total, usage) => ({
         input_tokens: total.input_tokens + usage.input_tokens,
@@ -867,14 +882,14 @@ export class AiService {
         // reviewable comparison outside diagnostic logs and never create a CV.
         const failed = await this.aiRepository.failRun(session.appUser.id, runId, NUMBER_VERIFICATION_MESSAGE, null, {
           target_language: catalog.code, target_direction: catalog.direction,
-          validation_issues: describeTranslationNumberIssues(source.current_content, issues),
+          validation_issues: describeTranslationNumberIssues(sourceContent, issues),
         });
         return failed ?? this.getTranslation(session, masterId, runId);
       }
       if (failures.length) throw failures[0].reason;
       await this.updateRunStage(session.appUser.id, runId, "validating_output");
       const translations = settled.flatMap(result => result.status === "fulfilled" ? result.value : []);
-      const content = applyTranslation(source.current_content, translations, catalog);
+      const content = applyTranslation(sourceContent, translations, catalog);
       const output = { current_content: content, target_language: catalog.code, target_direction: catalog.direction, translated_blocks: blocks.length };
       // Heading-only CVs need no inference and consume no AI action.
       if (!blocks.length) return (await this.tryCompleteRun(session.appUser.id, runId, output, null)).run;
@@ -1493,7 +1508,12 @@ export class AiService {
         user_instruction: options.improvement_guidance.join("\n"),
         job_description: ""
       },
-      user_prompt: `Suggest a ${options.task.action_type} update for imported block ${options.task.block_id}.`
+      user_prompt: `Suggest a ${options.task.action_type} update for imported block ${options.task.block_id}.`,
+      system_prompt_suffix: buildBlockSuggestFormatRule(
+        currentBlock.block,
+        options.task.section_type,
+        Object.keys(currentBlock.block.fields)
+      )
     });
 
     return {
@@ -1523,7 +1543,8 @@ export class AiService {
       success.task.section_type
     );
     const suggestedBlock = bulletizeNarrativeFields(
-      normalizeCvBlock(sanitizedSuggestedBlock, currentBlock.block)
+      normalizeCvBlock(sanitizedSuggestedBlock, currentBlock.block),
+      success.task.section_type
     );
     const replacement = replaceBlockInCvContent(content, success.task.block_id, suggestedBlock);
 
@@ -1857,7 +1878,11 @@ export class AiService {
     await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
 
     const target = await this.resolveAiBlockTarget(session.appUser.id, input);
-    const currentBlock = findBlockInCvContent(target.current_content, input.block_id);
+    const lookup = findBlockInCvContent(target.current_content, input.block_id);
+    const sectionType = sectionTypeOf(target.current_content, lookup.section_id);
+    // List-kind bullets are folded into the narrative text first (as the editor does on
+    // load), so the model rewrites one text field and the suggestion stores text only.
+    const currentBlock = { ...lookup, block: normalizeBlockNarrativeLists(lookup.block, sectionType) };
     const blockType = asString(currentBlock.block.type).toLowerCase();
     const policyResolution = resolveModuleBlockAiPolicy(target.module_type, blockType);
 
@@ -1995,7 +2020,7 @@ export class AiService {
         ai_run_id: executed.ai_run.id,
         block_id: input.block_id,
         action_type: input.action_type,
-        before_block: asRecord(currentBlock.block),
+        before_block: asRecord(lookup.block),
         suggested_block: asRecord(suggestedBlock)
       });
 
@@ -2028,7 +2053,8 @@ export class AiService {
         user_prompt: buildModuleBlockSuggestUserPrompt({
           actionType: input.action_type,
           policy
-        })
+        }),
+        system_prompt_suffix: buildBlockSuggestFormatRule(currentBlock.block, sectionType, policy.editableFields)
       });
 
       const guardedBlock = enforceModuleBlockAiPolicy({
@@ -2043,7 +2069,7 @@ export class AiService {
         ai_run_id: executed.ai_run.id,
         block_id: input.block_id,
         action_type: input.action_type,
-        before_block: asRecord(currentBlock.block),
+        before_block: asRecord(lookup.block),
         suggested_block: asRecord(guardedBlock)
       });
 
@@ -2071,7 +2097,8 @@ export class AiService {
         user_instruction: input.user_instruction ?? "",
         job_description: target.linked_job?.job_description ?? ""
       },
-      user_prompt: `Suggest a ${input.action_type} update for block ${input.block_id}.`
+      user_prompt: `Suggest a ${input.action_type} update for block ${input.block_id}.`,
+      system_prompt_suffix: buildBlockSuggestFormatRule(currentBlock.block, sectionType, editableFields)
     });
 
     const output = asRecord(executed.output);
@@ -2085,7 +2112,7 @@ export class AiService {
       ai_run_id: executed.ai_run.id,
       block_id: input.block_id,
       action_type: input.action_type,
-      before_block: asRecord(currentBlock.block),
+      before_block: asRecord(lookup.block),
       suggested_block: asRecord(suggestedBlock)
     });
 
@@ -2134,7 +2161,8 @@ export class AiService {
     }
 
     const suggestedBlock = bulletizeNarrativeFields(
-      normalizeCvBlock(suggestion.suggested_content, current.block)
+      normalizeCvBlock(suggestion.suggested_content, current.block),
+      sectionTypeOf(target.current_content, current.section_id)
     );
     const replacement = replaceBlockInCvContent(
       target.current_content,
@@ -2223,7 +2251,8 @@ export class AiService {
   }): Promise<BlockSuggestApplyResponse> {
     const current = findBlockInCvContent(options.target.current_content, options.block_id);
     const suggestedBlock = bulletizeNarrativeFields(
-      normalizeCvBlock(options.suggested_block, current.block)
+      normalizeCvBlock(options.suggested_block, current.block),
+      sectionTypeOf(options.target.current_content, current.section_id)
     );
     const replacement = replaceBlockInCvContent(
       options.target.current_content,
@@ -2458,6 +2487,9 @@ export class AiService {
     });
     if (options.force_user_prompt) {
       prompt.user_prompt = options.user_prompt;
+    }
+    if (options.system_prompt_suffix) {
+      prompt.system_prompt = `${prompt.system_prompt}\n\n${options.system_prompt_suffix}`;
     }
 
     const aiRun = await this.aiRepository.createRun({

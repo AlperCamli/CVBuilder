@@ -56,7 +56,8 @@ export class TailoringController {
       {
         answer: request.body.answer,
         detail: request.body.detail ?? null,
-        add_to_main: request.body.add_to_main === true
+        add_to_main: request.body.add_to_main === true,
+        ...(Array.isArray(request.body.entries) ? { entries: request.body.entries } : {})
       }
     );
     sendSuccess(response, data);

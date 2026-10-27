@@ -39,6 +39,14 @@ export const mergeTailoringViews = (
   return { ...next, tasks, suggestions: [...next.suggestions, ...kept] };
 };
 
+// Tasks in a saved answer's view that our view doesn't have yet: the server creates a task
+// when an answer's figure targets a block that had none (the open number question).
+export const answerCreatedTasks = (previous: TailoringSessionView, saved: TailoringSessionView): string[] => {
+  if (previous.session.id !== saved.session.id) return [];
+  const known = new Set(previous.tasks.map((task) => task.id));
+  return saved.tasks.filter((task) => !known.has(task.id) && task.kind !== "structure").map((task) => task.id);
+};
+
 // A task run or block refine result. The task may be new (a refine creates a task for a
 // block that had none); a re-run replaces the task's pending cards (the server expired them).
 export const applyTailoringTaskResult = (

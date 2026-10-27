@@ -1,5 +1,15 @@
 import type { CvBlock, CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
 import { splitBulletLines } from "../../shared/cv-content/bullet-text";
+import {
+  HEADER_SECTION_TYPES,
+  NARRATIVE_TEXT_FIELDS,
+  REFERENCE_SECTION_TYPES,
+  SKILLS_SECTION_TYPES,
+  SUMMARY_SECTION_TYPES,
+  narrativeBulletField,
+  normalizeCvTypeKey,
+  normalizeNarrativeLists
+} from "../../shared/cv-content/narrative-fields";
 
 // Builds the compact, token-lean view of a CV that the tailoring model calls see:
 // header/contact data, references, hidden and empty blocks are left out, and block ids are
@@ -8,49 +18,17 @@ import { splitBulletLines } from "../../shared/cv-content/bullet-text";
 // Blocks are classified by their (normalized) section type and field shape, never by exact
 // block type: real CVs use many block types per section (experience/position, education/
 // degree, projects/academic_project, ...), so a type allow-list silently made most of them
-// read-only.
+// read-only. Which field holds an item's narrative is the shared rule in
+// shared/cv-content/narrative-fields.ts; list-kind bullets (responsibilities: [...], ...)
+// are folded into that text field first (normalizeNarrativeLists, mirrored by the editor
+// when it loads a CV), so those blocks are rewritable and the card's "before" text equals
+// the editor's block.
 
-const EXCLUDED_SECTION_TYPES = new Set([
-  "header",
-  "contact",
-  "contact_info",
-  "contact_information",
-  "personal_info",
-  "personal_information",
-  "personal_details",
-  "references",
-  "reference",
-  "referees"
-]);
-const SUMMARY_SECTION_TYPES = new Set([
-  "summary",
-  "professional_summary",
-  "profile",
-  "about",
-  "about_me",
-  "objective",
-  "career_objective",
-  "personal_statement"
-]);
-const SKILLS_SECTION_TYPES = new Set([
-  "skills",
-  "technical_skills",
-  "soft_skills",
-  "key_skills",
-  "core_skills",
-  "core_competencies",
-  "competencies"
-]);
-// Sections whose blocks are facts/labels, never narrative to rewrite.
-const READ_ONLY_SECTION_TYPES = new Set(["languages", "language", "interests", "hobbies"]);
+const EXCLUDED_SECTION_TYPES = new Set([...HEADER_SECTION_TYPES, ...REFERENCE_SECTION_TYPES]);
 const EDUCATION_SECTION_TYPES = new Set(["education", "medical_qualifications"]);
 
-// String fields an item block's narrative may live in, in the order the renderer picks its
-// body (rendering-presentation pickBodyText); includes every field ai.service bulletizes for
-// item blocks (description, responsibilities, highlights).
-export const ITEM_NARRATIVE_FIELDS = ["description", "summary", "details", "responsibilities", "highlights"] as const;
-// Narrative content that may also be stored as arrays (read-only context for tailoring).
-const ITEM_CONTEXT_FIELDS = [...ITEM_NARRATIVE_FIELDS, "bullets", "achievements", "notes", "text", "content"];
+// Narrative content that may also be stored in other fields or arrays (read-only context).
+const ITEM_CONTEXT_FIELDS = [...NARRATIVE_TEXT_FIELDS, "bullets", "achievements", "text", "content"];
 const SUMMARY_TEXT_FIELDS = ["text", "content", "summary", "description"] as const;
 
 const TITLE_FIELDS = ["role", "job_title", "title", "position", "name", "course", "course_name", "language"];
@@ -118,8 +96,7 @@ const strList = (value: CvJsonValue | undefined): string[] => {
   return [];
 };
 
-export const normalizeSectionType = (value: string): string =>
-  value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+export const normalizeSectionType = (value: string): string => normalizeCvTypeKey(value);
 
 const sortSections = (content: CvContent): CvSection[] =>
   [...content.sections].sort((left, right) => left.order - right.order);
@@ -208,25 +185,11 @@ const contextText = (fields: Record<string, CvJsonValue>): string => {
   return parts.join("\n").slice(0, 600);
 };
 
-// The string field an item's narrative is rewritten in, or null when the block has none
-// (or keeps its narrative only in arrays, which a text rewrite would duplicate).
-const itemEditableField = (fields: Record<string, CvJsonValue>): string | null => {
-  for (const key of ITEM_NARRATIVE_FIELDS) {
-    if (typeof fields[key] === "string" && str(fields[key])) {
-      return key;
-    }
-  }
-  const hasArrayNarrative = ITEM_CONTEXT_FIELDS.some((key) => strList(fields[key]).length > 0);
-  if (hasArrayNarrative) {
-    return null;
-  }
-  return typeof fields.description === "string" ? "description" : null;
-};
-
 type DescribedBlock = Pick<CompactBlockInfo, "kind" | "editable_field" | "title" | "subtitle" | "text" | "skills">;
 
 export const describeBlock = (block: CvBlock, sectionType: string): DescribedBlock => {
-  const fields = block.fields ?? {};
+  const context = { sectionType, blockType: block.type };
+  const fields = normalizeNarrativeLists(block.fields ?? {}, context);
   const type = normalizeSectionType(block.type ?? "");
 
   if (SKILLS_SECTION_TYPES.has(sectionType) || (type === "skills" && !SUMMARY_SECTION_TYPES.has(sectionType))) {
@@ -254,7 +217,7 @@ export const describeBlock = (block: CvBlock, sectionType: string): DescribedBlo
   }
 
   const { title, subtitle } = titleOf(fields, sectionType);
-  const editableField = READ_ONLY_SECTION_TYPES.has(sectionType) ? null : itemEditableField(fields);
+  const editableField = narrativeBulletField(fields, context);
   if (editableField) {
     return { kind: "item", editable_field: editableField, title, subtitle, text: str(fields[editableField]), skills: [] };
   }

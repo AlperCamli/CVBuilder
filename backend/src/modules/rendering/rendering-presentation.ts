@@ -1,6 +1,7 @@
 import { normalizeLanguage, SECTION_TITLES_TR } from "../../shared/localization/languages";
 import { SIGNATURE_TEMPLATE_PROFILES } from "./signature-template-profiles";
 import { splitBulletLines } from "../../shared/cv-content/bullet-text";
+import { narrativeBulletField, normalizeNarrativeLists } from "../../shared/cv-content/narrative-fields";
 import type { CvJsonValue } from "../../shared/cv-content/cv-content.types";
 import { buildCvFontFamily, type CvFontAssetKey } from "../../shared/cv-fonts/cv-font-catalog";
 import type { TemplateSummary } from "../templates/templates.types";
@@ -973,6 +974,30 @@ const narrativeParts = (
   return { body: normalizeLine(split.leadParagraph), bullets: dedupeText(split.bullets) };
 };
 
+// The block's narrative per the shared rule (shared/cv-content/narrative-fields.ts), as a
+// lead paragraph plus "• " bullets: every narrative section renders bullet lines as a
+// list and plain text as a paragraph. List-kind bullets not yet converted by the editor
+// are folded in the same way, so they render once.
+const blockNarrativeParts = (
+  sectionType: string,
+  block: RenderingBlock
+): { body: string | null; bullets: string[] } => {
+  const context = { sectionType, blockType: block.type };
+  // Raw fields win; normalized text covers blocks built without them.
+  const source: Record<string, CvJsonValue> = {
+    ...Object.fromEntries(Object.entries(block.normalized_fields).map(([key, value]) => [key, value.text ?? ""])),
+    ...block.fields
+  };
+  const fields = normalizeNarrativeLists(source, context);
+  const field = narrativeBulletField(fields, context);
+  const raw = field ? fields[field] : null;
+  if (typeof raw !== "string" || !raw.trim()) {
+    return { body: null, bullets: [] };
+  }
+  const split = splitBulletLines(raw);
+  return { body: normalizeLine(split.leadParagraph), bullets: dedupeText(split.bullets) };
+};
+
 const isEmptyPresentationItem = (item: PresentationItem): boolean =>
   !item.title &&
   !item.secondary_title &&
@@ -1581,7 +1606,7 @@ const mapSection = (
         const gpa = textByKey(block, ["gpa"]);
         const startDate = textByKey(block, ["start_date", "start"]);
         const endDate = textByKey(block, ["end_date", "end"]);
-        const description = textByKey(block, ["description", "notes", "details"]);
+        const narrative = blockNarrativeParts(type, block);
 
         const dateRange =
           startDate && endDate
@@ -1599,8 +1624,8 @@ const mapSection = (
         if (gpa) {
           bodyParts.push(`GPA: ${gpa}`);
         }
-        if (description) {
-          bodyParts.push(description);
+        if (narrative.body) {
+          bodyParts.push(narrative.body);
         }
 
         const metadataLine = buildMetadataLine(dateRange, null);
@@ -1613,7 +1638,7 @@ const mapSection = (
           location: null,
           metadata_line: metadataLine,
           body: bodyParts.length > 0 ? bodyParts.join("\n") : null,
-          bullets: []
+          bullets: narrative.bullets
         };
 
         if (
@@ -1621,7 +1646,8 @@ const mapSection = (
           !item.subtitle &&
           !item.date_range &&
           !item.metadata_line &&
-          !item.body
+          !item.body &&
+          item.bullets.length === 0
         ) {
           return null;
         }
@@ -1657,7 +1683,8 @@ const mapSection = (
             : textByKey(block, ["publisher", "journal", "issuer", "organization", "institution"]);
         const dateRange =
           textByKey(block, ["date", "awarded_on", "published_on"]) || normalizeLine(block.derived.date_range);
-        const description = textByKey(block, ["description", "details", "notes"]);
+        const narrative = blockNarrativeParts(type, block);
+        const description = narrative.body;
 
         // Keep the subtitle/description out of the title slot. With no title, titleValue falls
         // back to derived.headline, which can resolve to the publisher or the description and
@@ -1675,10 +1702,10 @@ const mapSection = (
           location: null,
           metadata_line: dateRange,
           body,
-          bullets: []
+          bullets: narrative.bullets
         };
 
-        if (!item.title && !item.subtitle && !item.date_range && !item.metadata_line && !item.body) {
+        if (!item.title && !item.subtitle && !item.date_range && !item.metadata_line && !item.body && item.bullets.length === 0) {
           return null;
         }
 

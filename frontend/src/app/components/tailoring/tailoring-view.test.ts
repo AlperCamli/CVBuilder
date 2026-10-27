@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TailoringSessionView, TailoringSuggestion, TailoringTask } from "../../integration/tailoring-types";
 import { refineSuggestionsForBlock } from "./RefineArea";
 import { ApiClientError } from "../../integration/api-error";
-import { applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
+import { answerCreatedTasks, applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
 
 const task = (id: string, patch: Partial<TailoringTask> = {}): TailoringTask => ({
   id,
@@ -102,6 +102,52 @@ describe("tailoring view merges", () => {
 
     const reanalyzing = view({ tasks: [], suggestions: [] }, "analyzing");
     expect(mergeTailoringViews(view(), reanalyzing).tasks).toEqual([]);
+  });
+});
+
+describe("answers with figures (open number question)", () => {
+  it("merges the tasks the server re-queued and created for an entries answer", () => {
+    const before = view({ tasks: [task("t1"), task("summary", { kind: "summary", block_id: "s1" })] }, "reviewing");
+    const saved = view(
+      {
+        tasks: [
+          task("t1", { status: "ready", rerun_for_answer: true, updated_at: "2026-10-27T10:10:00.000Z" }),
+          task("summary", { kind: "summary", block_id: "s1" }),
+          task("t-new", { block_id: "block-project", status: "ready", updated_at: "2026-10-27T10:10:00.000Z" })
+        ],
+        suggestions: [suggestion("s1")]
+      },
+      "generating"
+    );
+    saved.session.answers.q_open_metric = {
+      answer: null,
+      detail: null,
+      add_to_main: false,
+      entries: [
+        { target_block_id: "block-t1", detail: "~40 a week" },
+        { target_block_id: "block-project", detail: "3 teams" }
+      ],
+      answered_at: "2026-10-27T10:10:00.000Z"
+    };
+    expect(answerCreatedTasks(before, saved)).toEqual(["t-new"]);
+    const merged = mergeTailoringViews(before, saved);
+    expect(merged.tasks.map((item) => [item.id, item.status])).toEqual([
+      ["t1", "ready"],
+      ["summary", "done"],
+      ["t-new", "ready"]
+    ]);
+    expect(merged.session.status).toBe("generating");
+    expect(merged.session.answers.q_open_metric.entries).toHaveLength(2);
+    // The pending card stays until its re-run replaces it.
+    expect(merged.suggestions.map((item) => item.id)).toEqual(["s1"]);
+  });
+
+  it("reports no created tasks for another session or an unchanged task list", () => {
+    expect(answerCreatedTasks(view(), view())).toEqual([]);
+    const other = view({ tasks: [task("t1"), task("t9")] });
+    other.session.id = "session-2";
+    expect(answerCreatedTasks(view(), other)).toEqual([]);
+    expect(answerCreatedTasks(view(), view({ tasks: [task("t1"), task("st", { kind: "structure", block_id: null })] }))).toEqual([]);
   });
 });
 

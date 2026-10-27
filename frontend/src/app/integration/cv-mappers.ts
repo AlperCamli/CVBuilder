@@ -7,6 +7,12 @@ import {
   getModuleManagedSectionDefinition
 } from "../modules/module-registry";
 import type { FieldDescriptor, SectionTypeDefinition } from "../modules/cv-module.types";
+import { BULLET_MARKER, addBulletPrefix, isBulletLine } from "./bulletText";
+import {
+  narrativeBulletField,
+  narrativeTextFromValue,
+  normalizeBlockNarrativeLists
+} from "./narrative-fields";
 
 export interface EditorHeaderData {
   name: string;
@@ -180,6 +186,51 @@ const getField = (block: CvBlock, ...keys: string[]): string => {
   }
 
   return "";
+};
+
+// Reads a narrative item's bullet text (shared rule in narrative-fields.ts first, then the
+// section's legacy keys). Lists become "• item" lines instead of getField's ", " join, so
+// a list never shows up in the editor as one comma-separated line.
+const getNarrativeText = (block: CvBlock, sectionType: string, ...fallbackKeys: string[]): string => {
+  const field = narrativeBulletField(block.fields, { sectionType, blockType: block.type });
+  for (const key of field ? [field, ...fallbackKeys] : fallbackKeys) {
+    if (key in block.fields) {
+      const text = narrativeTextFromValue(block.fields[key]);
+      if (text.trim().length > 0) {
+        return text;
+      }
+    }
+  }
+
+  return "";
+};
+
+const splitLines = (value: string): string[] => value.split(/\r\n?|\n/);
+
+// Text-only blocks keep their bullet lines: the single-line parsers collapse whitespace,
+// so bullet lines are marked with "• " first and the line breaks restored afterwards.
+const hasBulletLines = (rawText: string): boolean => splitLines(rawText).some((line) => isBulletLine(line));
+
+const markBulletLines = (rawText: string): string =>
+  splitLines(rawText)
+    .map((line) => (isBulletLine(line) ? addBulletPrefix(line) : line))
+    .join("\n");
+
+const restoreBulletBreaks = (text: string): string =>
+  text
+    .replace(/\s*•\s+/g, (_match, offset: number) => (offset === 0 ? BULLET_MARKER : `\n${BULLET_MARKER}`))
+    .trim();
+
+const parseKeepingBullets = <T extends { description: string }>(
+  rawText: string,
+  parse: (text: string) => T
+): T => {
+  if (!hasBulletLines(rawText)) {
+    return parse(rawText);
+  }
+
+  const parsed = parse(markBulletLines(rawText));
+  return { ...parsed, description: restoreBulletBreaks(parsed.description) };
 };
 
 const buildDates = (start: string, end: string): string => {
@@ -564,7 +615,15 @@ const parseEducationText = (rawText: string): {
     gpa: gpaMatch ? normalizeWhitespace(gpaMatch[1]) : "",
     startDate: dateParts.startDate,
     endDate,
-    description: text.replace(/^(başlık|title|heading)\s*/i, "").trim()
+    // Keep the text's line structure (bullet lines become "• " lines) instead of the
+    // collapsed single line, so a text-only education block edits as a bullet list.
+    description: splitLines(rawText)
+      .map((line) => normalizeWhitespace(line))
+      .filter((line) => line.length > 0)
+      .map((line) => (isBulletLine(line) ? addBulletPrefix(line) : line))
+      .join("\n")
+      .replace(/^(başlık|title|heading)\s*/i, "")
+      .trim()
   };
 };
 
@@ -1341,7 +1400,12 @@ export const cvContentToEditorSections = (
 
   for (const section of sortedSections) {
     const sectionType = normalizeSectionType(section.type);
-    const sortedBlocks = [...section.blocks].sort((a, b) => a.order - b.order);
+    // List-kind bullets (bullets/responsibilities/highlights/achievements/array description)
+    // are folded into the narrative text here, per the shared rule, so the editor shows real
+    // "• " lines and the first save stores text instead of dropping or comma-joining lists.
+    const sortedBlocks = [...section.blocks]
+      .sort((a, b) => a.order - b.order)
+      .map((block) => normalizeBlockNarrativeLists(block, section.type));
     const sectionHidden =
       asString(section.meta.visibility).toLowerCase() === "hidden" ||
       (sortedBlocks.length > 0 && sortedBlocks.every((block) => block.visibility === "hidden"));
@@ -1451,14 +1515,14 @@ export const cvContentToEditorSections = (
         const structuredRole = getField(block, "role", "position", "title", "headline");
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
-        const structuredDescription = getField(block, "description", "summary", "highlights", "responsibilities");
+        const structuredDescription = getNarrativeText(block, sectionType, "description", "summary", "highlights", "responsibilities");
 
         const shouldUseTextFallback =
           !structuredRole ||
           !structuredCompany ||
           (!startDate && !endDate && !asBoolean(block.fields.current_role)) ||
           !structuredDescription;
-        const parsedFromText = shouldUseTextFallback ? parseExperienceText(getField(block, "text")) : null;
+        const parsedFromText = shouldUseTextFallback ? parseKeepingBullets(getField(block, "text"), parseExperienceText) : null;
         const normalizedStartDate = firstNonEmpty(startDate, parsedFromText?.startDate ?? "");
         const normalizedEndDate = firstNonEmpty(endDate, parsedFromText?.endDate ?? "");
         const currentRole =
@@ -1536,7 +1600,7 @@ export const cvContentToEditorSections = (
             asBoolean(block.fields.expected_graduation) || asBoolean(block.fields.expectedGraduation),
           exchangeProgram:
             asBoolean(block.fields.exchange_program) || asBoolean(block.fields.exchangeProgram),
-          description: firstNonEmptyMultiline(getField(block, "description", "notes"), parsedFromText.description)
+          description: firstNonEmptyMultiline(getNarrativeText(block, sectionType, "description", "notes"), parsedFromText.description)
         };
       });
 
@@ -1646,7 +1710,8 @@ export const cvContentToEditorSections = (
               ...withBlockState(block, index),
               name: structuredName,
               url: getField(block, "url", "link"),
-              verificationId: getField(block, "verification_id", "verificationId", "credential_id")
+              verificationId: getField(block, "verification_id", "verificationId", "credential_id"),
+              description: getNarrativeText(block, sectionType, "description", "summary", "details")
             }
           ];
         }
@@ -1663,7 +1728,8 @@ export const cvContentToEditorSections = (
             id: `${block.id || `block-${index + 1}`}-cert-${candidateIndex + 1}`,
             name: parsed.name,
             url: parsed.url,
-            verificationId: parsed.verificationId
+            verificationId: parsed.verificationId,
+            description: ""
           };
         });
       });
@@ -1676,7 +1742,7 @@ export const cvContentToEditorSections = (
         order: section.order,
         data: {
           items: items.filter((item) =>
-            [item.name, item.url, item.verificationId].some((value) => asString(value).trim().length > 0)
+            [item.name, item.url, item.verificationId, item.description].some((value) => asString(value).trim().length > 0)
           )
         }
       });
@@ -1693,7 +1759,7 @@ export const cvContentToEditorSections = (
               title: structuredTitle,
               institution: getField(block, "institution", "provider", "organization"),
               url: getField(block, "url", "link"),
-              description: getField(block, "description", "summary", "details")
+              description: getNarrativeText(block, sectionType, "description", "summary", "details")
             }
           ];
         }
@@ -1744,7 +1810,7 @@ export const cvContentToEditorSections = (
               subtitle: getField(block, "subtitle", "role", "stack"),
               startDate: getField(block, "start_date", "start"),
               endDate: getField(block, "end_date", "end"),
-              description: getField(block, "description", "summary", "details")
+              description: getNarrativeText(block, sectionType, "description", "summary", "details")
             }
           ];
         }
@@ -1792,7 +1858,7 @@ export const cvContentToEditorSections = (
         const normalizedStructuredRole = isYearOnly(structuredRole) ? "" : structuredRole;
         const startDate = getField(block, "start_date", "start");
         const endDate = getField(block, "end_date", "end");
-        const structuredDescription = getField(block, "description", "summary", "details");
+        const structuredDescription = getNarrativeText(block, sectionType, "description", "summary", "details");
         const fallbackText = getField(block, "text");
         const shouldUseTextFallback =
           fallbackText.length > 0 &&
@@ -1801,7 +1867,7 @@ export const cvContentToEditorSections = (
             !normalizedStructuredRole ||
             (!startDate && !endDate && !asBoolean(block.fields.current_role)) ||
             !structuredDescription);
-        const parsedFromText = shouldUseTextFallback ? parseVolunteerText(fallbackText) : null;
+        const parsedFromText = shouldUseTextFallback ? parseKeepingBullets(fallbackText, parseVolunteerText) : null;
         const normalizedStartDate = firstNonEmpty(startDate, parsedFromText?.startDate ?? "");
         const normalizedEndDate = firstNonEmpty(endDate, parsedFromText?.endDate ?? "");
         const currentRole =
@@ -1848,7 +1914,7 @@ export const cvContentToEditorSections = (
               name: structuredName,
               issuer: getField(block, "issuer", "organization"),
               date: getField(block, "date"),
-              description: getField(block, "description", "summary", "details")
+              description: getNarrativeText(block, sectionType, "description", "summary", "details")
             }
           ];
         }
@@ -1898,7 +1964,7 @@ export const cvContentToEditorSections = (
               title: structuredTitle,
               publisher: getField(block, "publisher", "journal", "organization"),
               date: getField(block, "date"),
-              description: getField(block, "description", "summary", "details")
+              description: getNarrativeText(block, sectionType, "description", "summary", "details")
             }
           ];
         }
@@ -2019,7 +2085,7 @@ export const cvContentToEditorSections = (
           "organization",
           "field_of_study"
         ),
-        description: getField(block, "description", "summary", "highlights", "details"),
+        description: getNarrativeText(block, sectionType, "description", "summary", "highlights", "details"),
         dates: buildDates(startDate, endDate) || getField(block, "date", "period")
       };
     });
@@ -2246,7 +2312,8 @@ export const editorSectionsToCvContent = (
           fields: {
             name: toJsonValue(asString(item.name)),
             url: toJsonValue(asString(item.url)),
-            verification_id: toJsonValue(asString(item.verificationId))
+            verification_id: toJsonValue(asString(item.verificationId)),
+            description: toJsonValue(asString(item.description))
           }
         }));
       }
