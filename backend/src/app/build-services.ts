@@ -95,6 +95,7 @@ import {
   type MonetizationRepository
 } from "../modules/monetization/monetization.repository";
 import { MonetizationRefreshService } from "../modules/monetization/monetization-refresh.service";
+import { MonetizationBackfillService } from "../modules/monetization/monetization-backfill.service";
 import { TailoringService } from "../modules/tailoring/tailoring.service";
 import {
   SupabaseTailoringRepository,
@@ -124,6 +125,7 @@ export interface AppServices {
   exportsService: ExportsService;
   billingService: BillingService;
   monetizationRefreshService?: MonetizationRefreshService;
+  monetizationBackfillService?: MonetizationBackfillService;
 }
 
 export interface ServiceOverrides {
@@ -380,6 +382,9 @@ export const buildDefaultServices = (
     cvPhotosService,
     exportsService,
     billingService,
-    monetizationRefreshService
+    monetizationRefreshService,
+    monetizationBackfillService: stripeGateway
+      ? new MonetizationBackfillService(supabaseClients.serviceRoleClient, stripeGateway, billingService, monetizationRefreshService, logger)
+      : undefined
   };
 };

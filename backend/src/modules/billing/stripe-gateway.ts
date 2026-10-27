@@ -111,6 +111,7 @@ export interface StripeInvoiceSummary {
 export interface StripeGateway {
   retrieveInvoice?(invoiceId: string): Promise<StripeInvoiceSummary | null>;
   retrieveChargeInvoiceId?(chargeId: string): Promise<string | null>;
+  listInvoiceIds?(customerId: string): Promise<string[]>;
   retrieveCheckoutSession?(sessionId: string): Promise<StripeCheckoutSessionSummary | null>;
   hasBillableSubscription?(customerId: string): Promise<boolean>;
   expireCheckoutSession?(sessionId: string): Promise<void>;
@@ -284,6 +285,15 @@ export class StripeBillingGateway implements StripeGateway {
   async retrieveChargeInvoiceId(chargeId: string): Promise<string | null> {
     const charge = await this.stripe.charges.retrieve(chargeId);
     return typeof charge.invoice === "string" ? charge.invoice : charge.invoice?.id ?? null;
+  }
+
+  // Non-draft invoices of a customer, oldest pages included.
+  async listInvoiceIds(customerId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for await (const invoice of this.stripe.invoices.list({ customer: customerId, limit: 100 })) {
+      if (invoice.status !== "draft") ids.push(invoice.id);
+    }
+    return ids;
   }
 
   async retrievePortalConfiguration(id: string) {

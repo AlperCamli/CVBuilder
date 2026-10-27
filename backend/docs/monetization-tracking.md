@@ -80,7 +80,11 @@ New columns:
    `invoice.marked_uncollectible`, `charge.refunded`, `checkout.session.expired`.
 3. `CRON_SECRET` must be set (already required by the guest cleanup cron). The refresh runs daily
    at 03:30 UTC: `GET /api/v1/billing/analytics/refresh`.
-4. Run the one-off backfill once after deploy: `npx tsx scripts/backfill-monetization.ts --dry-run`,
-   then without `--dry-run`. It fills the new subscription columns, imports every invoice of known
-   Stripe customers, refreshes the catalogs and loads monthly FX back to the first subscription.
-   It is safe to re-run and never changes subscription status or plan.
+4. Run the one-off backfill once after deploy: Vercel dashboard → Settings → Cron Jobs →
+   `/api/v1/billing/analytics/backfill` → **Run**. It fills the new subscription columns, imports
+   every invoice of known Stripe customers, refreshes the catalogs and loads monthly FX back to the
+   first subscription. Each call stops after 240 s and logs `monetization_backfill_partial` or
+   `monetization_backfill_complete` with counts; press Run again until it is complete (done work is
+   skipped). It never changes subscription status or plan, so the yearly schedule is harmless.
+   `?dry_run=1` (with the cron secret) or `npx tsx scripts/backfill-monetization.ts --dry-run`
+   only counts.

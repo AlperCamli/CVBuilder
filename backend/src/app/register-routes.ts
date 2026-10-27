@@ -75,7 +75,7 @@ export const registerV1Routes = (
     }));
   }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
-  if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService));
+  if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService, services.monetizationBackfillService));
   // Onboarding may claim/read an import and save account answers before activation.
   // Existing users retain their manual CV workspace; creation, AI, tailoring and exports stay paid.
   router.use((req, res, next) => {

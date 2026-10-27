@@ -2757,14 +2757,17 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     );
   }
 
+  const aiLockProps = aiLoading ? { inert: "" } : {};
+
   return (
     <DndProvider backend={HTML5Backend}>
       {/* The bubble is portalled outside this element; lock CV controls during the
-          request so a late AI response cannot replace newer manual edits. The editor fills
-          the viewport exactly; its panes scroll, the page never does. */}
-      <div className="h-screen flex flex-col overflow-hidden" aria-busy={aiLoading} {...(aiLoading ? { inert: "" } : {})}>
+          request so a late AI response cannot replace newer manual edits. The lock goes on
+          each pane's content, not the scroll containers, so the panes stay scrollable. The
+          editor fills the viewport exactly; its panes scroll, the page never does. */}
+      <div className="h-screen flex flex-col overflow-hidden" aria-busy={aiLoading}>
         {location.state?.onboardingAction === "improve" && <p role="status" className="p-4 bg-teal-50 text-teal-900 shrink-0">{t("Add your experience to your new CV, then use the AI tools to improve it.")}</p>}
-        <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }}>
+        <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }} {...aiLockProps}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto">
               <button onClick={() => navigate("/app")} style={{ color: "var(--color-text-secondary)" }}>
@@ -3068,7 +3071,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               pointerEvents: tailorMode ? "none" : undefined
             }}
           >
-            <div className="max-w-3xl mx-auto space-y-4">
+            <div className="max-w-3xl mx-auto space-y-4" {...aiLockProps}>
               <EditorItemHighlightContext.Provider value={highlightedItemIds}>
                 {headerSection ? renderSection(headerSection, 0) : null}
                 {bodySections.map((section, index) => renderSection(section, index))}
@@ -3101,7 +3104,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
               padding: "32px"
             }}
           >
-            <div>
+            <div {...aiLockProps}>
               <div className="flex items-center justify-between mb-4">
                 <p className="uppercase tracking-wider" style={{ fontSize: "11px", fontWeight: 500, color: "var(--color-text-secondary)" }}>
                   {t("Preview")}{" "}{renderingPreview?.resolved_template.template?.name ? `• ${renderingPreview.resolved_template.template.name}` : ""}
