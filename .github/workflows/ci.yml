@@ -72,7 +72,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      # Backend sources and tests import shared code from frontend/src, which needs frontend dependencies.
+      # Install scripts are skipped so puppeteer doesn't download a browser.
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
