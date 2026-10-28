@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { UnauthorizedError } from "../../shared/errors/app-error";
 import { sendError, sendSuccess } from "../../shared/http/response";
+import { setErrorLogContext } from "../../shared/middleware/error-handler";
 import { asyncHandler } from "../../shared/utils/async-handler";
 import {
   parseAlertEventId,
@@ -49,6 +50,7 @@ export class AdminAnalyticsController {
   getMetric = asyncHandler(async (request: Request, response: Response) => {
     const identity = requireIdentity(request);
     const name = parseMetricName(request.params.name);
+    setErrorLogContext(response, { metric: name });
     const { params, format } = parseMetricQuery(request.query);
 
     const startedAt = Date.now();
@@ -76,7 +78,9 @@ export class AdminAnalyticsController {
   getPeople = asyncHandler(async (request: Request, response: Response) => {
     const identity = requireIdentity(request);
     const name = parseMetricName(request.params.name);
+    setErrorLogContext(response, { people: name });
     const query = parsePeopleQuery(request.body);
+    setErrorLogContext(response, { format: query.format });
 
     const startedAt = Date.now();
     const result = await this.service.runPeople(name, query, {

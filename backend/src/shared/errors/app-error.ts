@@ -10,8 +10,10 @@ export class AppError extends Error {
     code: ErrorCode;
     message: string;
     details?: Record<string, unknown>;
+    /** The underlying failure: logged by the error handler, never sent to the client. */
+    cause?: unknown;
   }) {
-    super(options.message);
+    super(options.message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "AppError";
     this.statusCode = options.statusCode;
     this.code = options.code;
@@ -250,14 +252,46 @@ export class InternalServerError extends AppError {
   }
 }
 
+/** Keeps the failure behind a mapped error for the error handler's log line; it is never sent to the client. */
+export const withCause = <T extends AppError>(error: T, cause: unknown): T => Object.assign(error, { cause });
+
+// Client errors raised by Express middleware (body-parser: malformed JSON, oversized or mis-encoded body), as
+// http-errors with `expose` and a 4xx status. Their messages can quote the body, so the client and the logs get a
+// fixed message instead.
+const clientErrorMessages: Record<number, string> = {
+  400: "Request body could not be parsed",
+  413: "Request body is too large",
+  415: "Unsupported request body encoding"
+};
+
+const httpClientStatus = (error: Error): number | null => {
+  const { status, statusCode, expose } = error as Error & { status?: unknown; statusCode?: unknown; expose?: unknown };
+  const value = typeof status === "number" ? status : statusCode;
+  return expose === true && typeof value === "number" && value >= 400 && value < 500 ? value : null;
+};
+
 export const normalizeUnknownError = (error: unknown): AppError => {
   if (error instanceof AppError) {
     return error;
   }
 
   if (error instanceof Error) {
-    return new InternalServerError("Internal server error", {
-      reason: error.message
+    const clientStatus = httpClientStatus(error);
+    if (clientStatus !== null) {
+      const type = (error as Error & { type?: unknown }).type;
+      return new AppError({
+        statusCode: clientStatus,
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: clientErrorMessages[clientStatus] ?? "Bad request",
+        details: typeof type === "string" ? { type } : undefined
+      });
+    }
+    return new AppError({
+      statusCode: 500,
+      code: ERROR_CODES.INTERNAL_ERROR,
+      message: "Internal server error",
+      details: { reason: error.message },
+      cause: error
     });
   }
 

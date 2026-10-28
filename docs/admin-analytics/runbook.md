@@ -68,6 +68,7 @@ In the gap between steps 2 and 3, the dashboard returns `503 ANALYTICS_UNAVAILAB
 
 | Symptom | Likely cause / check |
 |---|---|
+| Writes and user lookups fail with 403 `FORBIDDEN` ("Origin not allowed") while charts work | The admin origin is missing from `CORS_ALLOWED_ORIGINS` on `cv-builder-backend`. It must include `https://admin.jobspecificcv.com`; add it, then redeploy the backend. |
 | Cards show "Analytics unavailable" (503) | `ANALYTICS_DATABASE_URL` missing or wrong, wrong password, or pooler issue. Check backend runtime logs for `admin-analytics` entries; they log the error code without the connection string. |
 | 504 on a chart | A query hit the 15 s role timeout. Narrow the range or use a coarser grain (day grain is capped at 366 days for MRR movement). |
 | "No access" for an admin | Not signed in with Google, email not in `ADMIN_EMAILS`, or the backend wasn't redeployed after the change. |

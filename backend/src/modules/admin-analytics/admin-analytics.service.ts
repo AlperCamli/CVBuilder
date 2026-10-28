@@ -1,4 +1,3 @@
-import type { Logger } from "pino";
 import type { AnalyticsQueryResult, AnalyticsRow } from "../../shared/db/analytics-db";
 import {
   AnalyticsTimeoutError,
@@ -7,7 +6,8 @@ import {
   ForbiddenError,
   InternalServerError,
   NotFoundError,
-  ValidationError
+  ValidationError,
+  withCause
 } from "../../shared/errors/app-error";
 import { isAdminIdentity, type AdminIdentity } from "../../shared/middleware/require-admin";
 import {
@@ -73,6 +73,15 @@ const errorCode = (error: unknown): string | undefined => {
   return typeof code === "string" ? code : undefined;
 };
 
+// A database message that echoes the search text (no function does today) is logged without it.
+const withoutSearchText = (error: unknown, text: string | null): unknown => {
+  if (!text || !(error instanceof Error) || !error.message.toLowerCase().includes(text.toLowerCase())) return error;
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const redacted = new Error(error.message.replace(new RegExp(escaped, "gi"), "[search text]"));
+  redacted.name = error.name;
+  return Object.assign(redacted, { code: (error as { code?: unknown }).code });
+};
+
 // Connection, pool, TLS and server-availability failures, not a fault of the query.
 const isUnavailable = (code: string): boolean =>
   code === "CONNECT_TIMEOUT" ||
@@ -88,7 +97,9 @@ export class AdminAnalyticsService {
 
   constructor(
     private readonly repository: AdminAnalyticsRepository | null,
-    private readonly options: { adminEmails: string[]; logger?: Pick<Logger, "error">; now?: () => number }
+    // Failures are not logged here: mapped errors keep the original as `cause`, and the error handler logs each failed
+    // request once (name, SQLSTATE, message, route, people function or metric).
+    private readonly options: { adminEmails: string[]; now?: () => number }
   ) {}
 
   getMe(identity: AdminIdentity): { email: string | null; is_admin: boolean } {
@@ -138,7 +149,7 @@ export class AdminAnalyticsService {
         query.format === "csv" ? this.exportPeople(session, name, query.params) : this.pagePeople(session, name, query.params)
       );
     } catch (error) {
-      throw await this.mapCallError(error, name, "people");
+      throw await this.mapCallError(withoutSearchText(error, query.params.query), name, "people");
     }
   }
 
@@ -236,10 +247,12 @@ export class AdminAnalyticsService {
       // Either the function was dropped after caching, or its body calls a missing function.
       this.catalog = null;
       await this.assertEntry(name, kind);
-      this.logFailure(error, name);
-      return new InternalServerError(kind === "metric" ? "Analytics metric failed" : "Analytics people function failed");
+      return withCause(
+        new InternalServerError(kind === "metric" ? "Analytics metric failed" : "Analytics people function failed"),
+        error
+      );
     }
-    return this.mapError(error, name);
+    return this.mapError(error);
   }
 
   private async assertEntry(name: string, kind: CatalogEntry["kind"]): Promise<void> {
@@ -256,7 +269,8 @@ export class AdminAnalyticsService {
     return this.repository;
   }
 
-  private mapError(error: unknown, metric?: string): unknown {
+  // Unmapped errors pass through unchanged; the error handler turns them into a 500.
+  private mapError(error: unknown): unknown {
     if (error instanceof AnalyticsUnavailableError) {
       return error;
     }
@@ -271,24 +285,16 @@ export class AdminAnalyticsService {
     if (code === "23505") {
       return new ConflictError("An alert rule with this name already exists");
     }
-    this.logFailure(error, metric);
     if (code === "57014") {
-      return new AnalyticsTimeoutError();
+      return withCause(new AnalyticsTimeoutError(), error);
     }
     if (code === "42501") {
       // E.g. a people function refused to run without its audit row.
-      return new ForbiddenError("The analytics database refused this read");
+      return withCause(new ForbiddenError("The analytics database refused this read"), error);
     }
     if (code && isUnavailable(code)) {
-      return new AnalyticsUnavailableError("Analytics database is unavailable");
+      return withCause(new AnalyticsUnavailableError("Analytics database is unavailable"), error);
     }
     return error;
-  }
-
-  private logFailure(error: unknown, metric?: string): void {
-    this.options.logger?.error(
-      { code: errorCode(error) ?? null, message: error instanceof Error ? error.message : String(error), metric: metric ?? null },
-      "Admin analytics query failed"
-    );
   }
 }

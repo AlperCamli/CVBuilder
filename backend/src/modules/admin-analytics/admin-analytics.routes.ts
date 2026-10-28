@@ -1,5 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { Router } from "express";
+import { setErrorLogContext } from "../../shared/middleware/error-handler";
 import type { AdminAnalyticsController } from "./admin-analytics.controller";
 
 export const createAdminAnalyticsRouter = (
@@ -16,9 +17,11 @@ export const createAdminAnalyticsRouter = (
   const router = Router();
   const admin: RequestHandler[] = [adminAuth, requireAdmin, adminRateLimiter];
 
-  // Admin data must never be cached, including error responses.
+  // Admin data must never be cached, including error responses. Failures are logged with their name, code and message
+  // (admin error messages never carry the search text; see AdminAnalyticsService).
   router.use("/admin", (_request: Request, response: Response, next: NextFunction) => {
     response.set("Cache-Control", "no-store");
+    setErrorLogContext(response, { area: "admin" });
     next();
   }, ipRateLimiter);
 

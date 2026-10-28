@@ -215,7 +215,7 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
   - Recharts `Tooltip`, `Legend` (click to toggle a series), `Brush` (zoom), and `onClick` to drill.
   - A drill-down either adds to `filters` in the URL or opens the `drill_users` drawer → user profile.
 - **CSV:** the export button requests `?format=csv` with the current filters, so exports always come from the server and are audited.
-- **Hosting:** `vercel.json` rewrites `/api/:path*` to the backend (same origin, so no CORS changes), adds an SPA fallback and sets `X-Robots-Tag: noindex, nofollow` on all paths.
+- **Hosting:** `vercel.json` rewrites `/api/:path*` to the backend (same origin for the browser, but browsers still send `Origin: https://admin.jobspecificcv.com` on POST/PATCH/DELETE and the rewrite forwards it, so the admin origin is listed in the backend's `CORS_ALLOWED_ORIGINS`; unlisted origins get a 403), adds an SPA fallback and sets `X-Robots-Tag: noindex, nofollow` on all paths.
 
 ## 6. Security and privacy summary
 

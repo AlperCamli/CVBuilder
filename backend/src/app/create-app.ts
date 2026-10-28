@@ -4,6 +4,7 @@ import express, { Router, type Express } from "express";
 import helmet from "helmet";
 import type { Logger } from "pino";
 import { getConfig, type AppConfig } from "../shared/config/env";
+import { ForbiddenError } from "../shared/errors/app-error";
 import { createLogger, createRequestLogger } from "../shared/logging/logger";
 import { createErrorHandler } from "../shared/middleware/error-handler";
 import { notFoundMiddleware } from "../shared/middleware/not-found";
@@ -106,12 +107,15 @@ export const createApp = (options?: CreateAppOptions): Express => {
 
   app.use(
     cors({
+      // Browsers send Origin even on same-origin POST/PATCH/DELETE, and the /api rewrites of the frontend and the
+      // admin app (admin.jobspecificcv.com) forward it, so every site that calls this API must be listed in
+      // FRONTEND_APP_URL or CORS_ALLOWED_ORIGINS. Other origins are refused with a 403, not a 500.
       origin: (origin, callback) => {
         if (!origin || allowedOrigins.has(origin)) {
           callback(null, true);
           return;
         }
-        callback(new Error(`Origin not allowed by CORS: ${origin}`));
+        callback(new ForbiddenError("Origin not allowed", { origin }));
       },
       methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Guest-Token", "Accept-Language"]

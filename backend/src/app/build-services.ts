@@ -370,7 +370,7 @@ export const buildDefaultServices = (
       : analyticsDatabaseUrl
         ? new PostgresAdminAnalyticsRepository(() => getAnalyticsDb(analyticsDatabaseUrl))
         : null,
-    { adminEmails: config.adminEmails ?? [], logger }
+    { adminEmails: config.adminEmails ?? [] }
   );
   const exportsService = new ExportsService(
     exportsRepository,

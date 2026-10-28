@@ -1,6 +1,6 @@
 import pino from "pino";
 import request from "supertest";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
 import type { AlertEventStatus, AlertRuleInput, AlertRulePatch } from "../src/modules/admin-analytics/admin-alerts.contract";
 import type { CatalogEntry, MetricParams, PeopleParams } from "../src/modules/admin-analytics/admin-analytics.contract";
@@ -21,6 +21,7 @@ import { EntitlementsService } from "../src/modules/entitlements/entitlements.se
 import { SystemService } from "../src/modules/system/system.service";
 import { UsageService } from "../src/modules/usage/usage.service";
 import { UsersService } from "../src/modules/users/users.service";
+import type { AppConfig } from "../src/shared/config/env";
 import type { AnalyticsQueryResult, AnalyticsRow } from "../src/shared/db/analytics-db";
 import { analyticsSslOption } from "../src/shared/db/analytics-db";
 import { SUPABASE_ROOT_CA } from "../src/shared/db/supabase-root-ca";
@@ -226,11 +227,12 @@ class FakeAdminIdentityProvider implements AdminIdentityProvider {
 
 const buildTestApp = (
   repository: AdminAnalyticsRepository | null,
-  options: { production?: boolean; logger?: { error: ReturnType<typeof vi.fn> }; appLogger?: pino.Logger } = {}
+  options: { production?: boolean; appLogger?: pino.Logger; configure?: (config: AppConfig) => void } = {}
 ) => {
   const config = createTestConfig();
   config.adminEmails = [ADMIN_EMAIL];
   if (options.production) config.appEnv = "production";
+  options.configure?.(config);
   const usersRepository = new InMemoryUsersRepository();
   const ensureByAuthIdentity = vi.spyOn(usersRepository, "ensureByAuthIdentity");
   const authProvider = new FakeAuthProvider({
@@ -273,11 +275,20 @@ const buildTestApp = (
       usersService,
       dashboardService: new DashboardService(usersService, new InMemoryDashboardRepository()),
       systemService: new SystemService(config, new FakeDatabaseHealthChecker({ connected: true })),
-      adminAnalyticsService: new AdminAnalyticsService(repository, { adminEmails: config.adminEmails, logger: options.logger }),
+      adminAnalyticsService: new AdminAnalyticsService(repository, { adminEmails: config.adminEmails }),
       adminIdentityProvider: identityProvider
     }
   });
   return Object.assign(app, { ensureByAuthIdentity, identityProvider });
+};
+
+// Captures the app's log lines; failures() returns the error handler's "Request failed" entries.
+const captureLogs = () => {
+  const lines: string[] = [];
+  const appLogger = pino({ level: "trace" }, { write: (line: string) => lines.push(line) });
+  const failures = () =>
+    lines.map((line) => JSON.parse(line) as Record<string, unknown>).filter((entry) => entry.msg === "Request failed");
+  return { lines, appLogger, failures };
 };
 
 const asAdmin = (app: ReturnType<typeof buildTestApp>, path: string) =>
@@ -585,34 +596,49 @@ describe("admin analytics endpoints", () => {
     ["XX000", 500, "INTERNAL_ERROR"]
   ])("maps error code %s to %s", async (code, status, errorCode) => {
     const repository = new FakeAnalyticsRepository();
-    const logger = { error: vi.fn() };
+    const logs = captureLogs();
     repository.error = pgError(code, "Unsupported breakdown: plan");
-    const response = await asAdmin(buildTestApp(repository, { logger }), "/admin/metrics/signups");
+    const response = await asAdmin(buildTestApp(repository, { appLogger: logs.appLogger }), "/admin/metrics/signups");
 
     expect(response.status).toBe(status);
     expect(response.body.error.code).toBe(errorCode);
     expect(response.headers["cache-control"]).toBe("no-store");
+    expect(logs.failures()).toHaveLength(1);
     if (code === "22023") {
       expect(response.body.error.message).toBe("Unsupported breakdown: plan");
-      expect(logger.error).not.toHaveBeenCalled();
+      expect(logs.failures()[0]).toEqual(expect.not.objectContaining({ error: expect.anything() }));
     } else {
-      expect(logger.error).toHaveBeenCalledWith(
-        { code, message: "Unsupported breakdown: plan", metric: "signups" },
-        "Admin analytics query failed"
-      );
+      expect(logs.failures()[0]).toMatchObject({
+        level: 50,
+        code: errorCode,
+        statusCode: status,
+        method: "GET",
+        route: "/admin/metrics/:name",
+        area: "admin",
+        metric: "signups",
+        error: { name: "PostgresError", code, message: "Unsupported breakdown: plan" }
+      });
     }
   });
 
   it("logs and returns 503 when the catalog cannot be reached", async () => {
     const repository = new FakeAnalyticsRepository();
-    const logger = { error: vi.fn() };
+    const logs = captureLogs();
     repository.listCatalog = async () => {
       throw pgError("ECONNRESET", "read ECONNRESET");
     };
-    const response = await asAdmin(buildTestApp(repository, { logger }), "/admin/catalog");
+    const response = await asAdmin(buildTestApp(repository, { appLogger: logs.appLogger }), "/admin/catalog");
     expect(response.status).toBe(503);
     expect(response.body.error.code).toBe("ANALYTICS_UNAVAILABLE");
-    expect(logger.error).toHaveBeenCalledWith({ code: "ECONNRESET", message: "read ECONNRESET", metric: null }, "Admin analytics query failed");
+    expect(logs.failures()).toEqual([
+      expect.objectContaining({
+        code: "ANALYTICS_UNAVAILABLE",
+        statusCode: 503,
+        route: "/admin/catalog",
+        area: "admin",
+        error: { name: "PostgresError", code: "ECONNRESET", message: "read ECONNRESET" }
+      })
+    ]);
   });
 
   it("returns 404 on 42883 when the metric was dropped", async () => {
@@ -631,18 +657,23 @@ describe("admin analytics endpoints", () => {
 
   it("returns 500 on 42883 raised inside a metric that still exists", async () => {
     const repository = new FakeAnalyticsRepository();
-    const logger = { error: vi.fn() };
+    const logs = captureLogs();
     repository.error = pgError("42883", "function analytics_private.missing_helper() does not exist");
 
-    const response = await asAdmin(buildTestApp(repository, { logger }), "/admin/metrics/signups");
+    const response = await asAdmin(buildTestApp(repository, { appLogger: logs.appLogger }), "/admin/metrics/signups");
 
     expect(response.status).toBe(500);
     expect(response.body.error.code).toBe("INTERNAL_ERROR");
     expect(repository.catalogCalls).toBe(2);
-    expect(logger.error).toHaveBeenCalledWith(
-      { code: "42883", message: "function analytics_private.missing_helper() does not exist", metric: "signups" },
-      "Admin analytics query failed"
-    );
+    expect(logs.failures()).toEqual([
+      expect.objectContaining({
+        code: "INTERNAL_ERROR",
+        statusCode: 500,
+        route: "/admin/metrics/:name",
+        metric: "signups",
+        error: { name: "PostgresError", code: "42883", message: "function analytics_private.missing_helper() does not exist" }
+      })
+    ]);
   });
 
   it("returns 503 when the analytics database is not configured", async () => {
@@ -822,7 +853,7 @@ describe("admin people endpoint", () => {
   it("returns no data when the audit insert fails", async () => {
     const repository = new FakeAnalyticsRepository();
     repository.auditError = pgError("23514", "audit_log check violated");
-    const response = await post(buildTestApp(repository, { logger: { error: vi.fn() } }), SEARCH, { q: "findme" });
+    const response = await post(buildTestApp(repository), SEARCH, { q: "findme" });
     expect(response.status).toBe(500);
     expect(response.body.data).toBeUndefined();
     expect(repository.events).toEqual(["begin", "audit", "rollback"]);
@@ -889,29 +920,46 @@ describe("admin people endpoint", () => {
   ])("maps people error %s to %s and rolls back", async (code, status, errorCode) => {
     const repository = new FakeAnalyticsRepository();
     repository.peopleError = pgError(code, "malformed cursor");
-    const response = await post(buildTestApp(repository, { logger: { error: vi.fn() } }), SEARCH, { q: "findme", cursor: "zzz" });
+    const response = await post(buildTestApp(repository), SEARCH, { q: "findme", cursor: "zzz" });
     expect(response.status).toBe(status);
     expect(response.body.error.code).toBe(errorCode);
     expect(repository.events).toEqual(["begin", "audit", "call:search_users", "rollback"]);
   });
 
   it("never logs the raw search text", async () => {
-    const lines: string[] = [];
-    const appLogger = pino({ level: "trace" }, { write: (line: string) => lines.push(line) });
+    const { lines, appLogger, failures } = captureLogs();
     const repository = new FakeAnalyticsRepository();
-    const serviceLogger = { error: vi.fn() };
-    const app = buildTestApp(repository, { appLogger, logger: serviceLogger });
+    const app = buildTestApp(repository, { appLogger });
 
     expect((await post(app, SEARCH, { q: "Secret.Person@example.com" })).status).toBe(200);
     expect((await post(app, SEARCH, { q: "Secret.Person@example.com", limit: 999 })).status).toBe(400);
     repository.peopleError = pgError("XX000", "boom");
     expect((await post(app, SEARCH, { q: "Secret.Person@example.com" })).status).toBe(500);
+    // A database message that echoes the search text is logged without it.
+    repository.peopleError = pgError("22P02", 'invalid input syntax for type uuid: "secret.person@example.com"');
+    expect((await post(app, SEARCH, { q: "Secret.Person@example.com" })).status).toBe(500);
+    // A malformed body is a 400 whose parser message (which quotes the body) is neither returned nor logged.
+    const malformed = await request(app)
+      .post(`/api/v1${SEARCH}`)
+      .set("Authorization", "Bearer admin-token")
+      .set("Content-Type", "application/json")
+      .send('{"q": "Secret.Person@example.com"');
+    expect(malformed.status).toBe(400);
+    expect(malformed.body.error).toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Request body could not be parsed",
+      details: { type: "entity.parse.failed" }
+    });
 
-    const logged = [...lines, JSON.stringify(serviceLogger.error.mock.calls), JSON.stringify(repository.audits.map((audit) => audit.params))]
-      .join("\n")
-      .toLowerCase();
+    const logged = [...lines, JSON.stringify(repository.audits.map((audit) => audit.params))].join("\n").toLowerCase();
     expect(lines.some((line) => line.includes("Admin people served"))).toBe(true);
     expect(logged).not.toContain("secret.person");
+    expect(failures().map((entry) => (entry.error as { message?: string } | undefined)?.message)).toEqual([
+      undefined,
+      "boom",
+      'invalid input syntax for type uuid: "[search text]"',
+      undefined
+    ]);
   });
 
   it("exports CSV by paging on the server under one export.csv audit row", async () => {
@@ -973,6 +1021,254 @@ describe("admin people endpoint", () => {
     expect((await post(app, SEARCH, { q: "findme" })).status).toBe(200);
     expect(repository.audits.filter((audit) => audit.action === "export.csv")).toHaveLength(10);
     vi.unstubAllEnvs();
+  });
+});
+
+// Regression: in production every people read (and every alert write) failed with a 500 before reaching the
+// controller. The admin app calls the API through its same-origin /api rewrite; browsers send Origin on same-origin
+// POST/PATCH/DELETE (never on GET), the rewrite forwards it, and the CORS check refused the unlisted admin origin by
+// throwing a plain Error (500). The admin origin is now listed in CORS_ALLOWED_ORIGINS and unlisted origins get a 403.
+// These requests reproduce the admin client exactly (admin/src/lib/people.ts peopleBody / downloadPeopleCsv and its
+// callers) against the production CORS list.
+describe("admin app requests through the same-origin rewrite", () => {
+  const ADMIN_ORIGIN = "https://admin.jobspecificcv.com";
+  const USER_ID = "4f2b8a8e-8a51-4a7c-9d1e-2b4b3f1c9a10";
+  // admin_app.log_access rejects any other request_id.
+  const LOG_ACCESS_REQUEST_ID = /^[-A-Za-z0-9_.:]{1,128}$/;
+  const PEOPLE_CATALOG: CatalogEntry[] = [
+    ...CATALOG,
+    { name: "user_summary", kind: "people", meta: { ...meta, breakdowns: [], filters: [] } },
+    { name: "drill_users", kind: "people", meta: { ...meta, breakdowns: [], filters: [] } }
+  ];
+
+  const productionApp = (repository: FakeAnalyticsRepository, appLogger?: pino.Logger) =>
+    buildTestApp(repository, {
+      production: true,
+      ...(appLogger ? { appLogger } : {}),
+      configure: (config) => {
+        config.frontendAppUrl = "https://jobspecificcv.com";
+        config.corsAllowedOrigins = ["https://cv-builder-backend-chi.vercel.app", ADMIN_ORIGIN];
+      }
+    });
+
+  // What the browser sends: the admin's bearer token, a JSON body and the page's own origin.
+  const browserPost = (app: ReturnType<typeof buildTestApp>, path: string, body: unknown, origin = ADMIN_ORIGIN) =>
+    request(app)
+      .post(`/api/v1${path}`)
+      .set("Authorization", "Bearer admin-token")
+      .set("Content-Type", "application/json")
+      .set("Origin", origin)
+      .send(JSON.stringify(body));
+
+  beforeEach(() => {
+    vi.stubEnv("VERCEL", "1");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const NO_PARAMS = { userId: null, query: null, from: null, to: null, filters: {}, limit: 50, cursor: null };
+
+  it.each([
+    {
+      label: "search_users (Users page search)",
+      name: "search_users",
+      body: { q: "camlialper03@gmail.com", limit: 50 },
+      audit: {
+        action: "people.search_users",
+        targetUserId: null,
+        params: { function: "search_users", format: "json", limit: 50 },
+        query: "camlialper03@gmail.com"
+      },
+      calls: [{ ...NO_PARAMS, query: "camlialper03@gmail.com" }]
+    },
+    {
+      label: "search_users CSV (Users page export)",
+      name: "search_users",
+      body: { q: "camlialper03@gmail.com", format: "csv" },
+      audit: {
+        action: "export.csv",
+        targetUserId: null,
+        params: { function: "search_users", format: "csv", max_rows: 50_000 },
+        query: "camlialper03@gmail.com"
+      },
+      calls: [{ ...NO_PARAMS, query: "camlialper03@gmail.com", limit: 200 }]
+    },
+    {
+      label: "user_summary (profile page)",
+      name: "user_summary",
+      body: { user_id: USER_ID },
+      audit: {
+        action: "people.user_summary",
+        targetUserId: USER_ID,
+        params: { function: "user_summary", format: "json", limit: 50 },
+        query: null
+      },
+      calls: [{ ...NO_PARAMS, userId: USER_ID }]
+    },
+    {
+      label: "user_timeline (profile timeline)",
+      name: "user_timeline",
+      body: { user_id: USER_ID, from: "2026-10-01", to: "2026-10-28", filters: { event_type: ["ai_run", "signup"] }, limit: 100 },
+      audit: {
+        action: "people.user_timeline",
+        targetUserId: USER_ID,
+        params: {
+          function: "user_timeline",
+          format: "json",
+          from: "2026-10-01",
+          to: "2026-10-28",
+          filters: { event_type: ["ai_run", "signup"] },
+          limit: 100
+        },
+        query: null
+      },
+      calls: [
+        { ...NO_PARAMS, userId: USER_ID, from: "2026-10-01", to: "2026-10-28", filters: { event_type: ["ai_run", "signup"] }, limit: 100 }
+      ]
+    },
+    {
+      label: "user_timeline CSV (timeline export)",
+      name: "user_timeline",
+      body: { user_id: USER_ID, filters: { event_type: ["signup"] }, format: "csv" },
+      audit: {
+        action: "export.csv",
+        targetUserId: USER_ID,
+        params: { function: "user_timeline", format: "csv", filters: { event_type: ["signup"] }, max_rows: 50_000 },
+        query: null
+      },
+      calls: [{ ...NO_PARAMS, userId: USER_ID, filters: { event_type: ["signup"] }, limit: 200 }]
+    },
+    {
+      label: "drill_users (metric drill drawer)",
+      name: "drill_users",
+      body: { from: "2026-10-01", to: "2026-10-07", filters: { market: "TR", metric: "ai_cost_users" }, limit: 50 },
+      audit: {
+        action: "people.drill_users",
+        targetUserId: null,
+        params: {
+          function: "drill_users",
+          format: "json",
+          from: "2026-10-01",
+          to: "2026-10-07",
+          filters: { market: "TR", metric: "ai_cost_users" },
+          limit: 50
+        },
+        query: null
+      },
+      calls: [{ ...NO_PARAMS, from: "2026-10-01", to: "2026-10-07", filters: { market: "TR", metric: "ai_cost_users" } }]
+    },
+    {
+      label: "drill_users CSV (drill drawer export)",
+      name: "drill_users",
+      body: { from: "2026-10-01", to: "2026-10-07", filters: { metric: "ai_cost_users" }, format: "csv" },
+      audit: {
+        action: "export.csv",
+        targetUserId: null,
+        params: {
+          function: "drill_users",
+          format: "csv",
+          from: "2026-10-01",
+          to: "2026-10-07",
+          filters: { metric: "ai_cost_users" },
+          max_rows: 50_000
+        },
+        query: null
+      },
+      calls: [{ ...NO_PARAMS, from: "2026-10-01", to: "2026-10-07", filters: { metric: "ai_cost_users" }, limit: 200 }]
+    }
+  ])("serves $label with the parameters the database functions expect", async ({ name, body, audit, calls }) => {
+    const repository = new FakeAnalyticsRepository();
+    repository.catalog = PEOPLE_CATALOG;
+    const logs = captureLogs();
+
+    const response = await browserPost(productionApp(repository, logs.appLogger), `/admin/people/${name}`, body);
+
+    expect(response.status).toBe(200);
+    expect(logs.failures()).toEqual([]);
+    expect(response.headers["access-control-allow-origin"]).toBe(ADMIN_ORIGIN);
+    expect(repository.events).toEqual(["begin", "audit", `call:${name}`, "commit"]);
+    expect(repository.audits).toEqual([{ adminEmail: "Admin@CVBuilder.dev", requestId: expect.any(String), ...audit }]);
+    expect(repository.audits[0]?.requestId).toMatch(LOG_ACCESS_REQUEST_ID);
+    expect(repository.peopleCalls.map((call) => call.name)).toEqual(calls.map(() => name));
+    expect(repository.peopleCalls.map((call) => call.params)).toEqual(calls);
+  });
+
+  it("serves alert writes from the admin origin too", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await browserPost(productionApp(repository), "/admin/alerts/rules", {
+      name: "AI failure rate",
+      metric: "kpi_health",
+      measure: "ai_failure_rate",
+      window: "1d",
+      condition: "gt",
+      threshold: 0.1
+    });
+    expect(response.status).toBe(201);
+    expect(repository.writes.map((write) => write.op)).toEqual(["create_alert_rule"]);
+  });
+
+  it("grants CORS only to listed origins and refuses others with a 403, never a 500", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const logs = captureLogs();
+    const app = productionApp(repository, logs.appLogger);
+
+    const listed = await request(app)
+      .options("/api/v1/admin/people/search_users")
+      .set("Origin", "https://jobspecificcv.com")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "authorization,content-type");
+    expect(listed.status).toBe(204);
+    expect(listed.headers["access-control-allow-origin"]).toBe("https://jobspecificcv.com");
+
+    const unlisted = await request(app)
+      .options("/api/v1/admin/people/search_users")
+      .set("Origin", "https://attacker.example")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "authorization,content-type");
+    expect(unlisted.status).toBe(403);
+    expect(unlisted.body.error.code).toBe("FORBIDDEN");
+    expect(unlisted.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(unlisted.headers["access-control-allow-headers"]).toBeUndefined();
+
+    // A browser request from an unlisted origin is refused before authentication.
+    const foreign = await request(app)
+      .post("/api/v1/admin/people/search_users")
+      .set("Origin", "https://attacker.example")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ q: "camlialper03@gmail.com" }));
+    expect(foreign.status).toBe(403);
+    expect(foreign.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(logs.failures().map((entry) => entry.statusCode)).toEqual([403, 403]);
+    expect(repository.events).toEqual([]);
+  });
+
+  it("logs an unexpected failure once, with what is needed to diagnose it and without the search text", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleError = pgError("XX000", "could not read block 7 in file base/5/1234");
+    const logs = captureLogs();
+
+    const response = await browserPost(productionApp(repository, logs.appLogger), "/admin/people/search_users", {
+      q: "camlialper03@gmail.com",
+      limit: 50
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toEqual({ code: "INTERNAL_ERROR", message: "Internal server error" });
+    expect(logs.failures()).toEqual([
+      expect.objectContaining({
+        level: 50,
+        code: "INTERNAL_ERROR",
+        statusCode: 500,
+        method: "POST",
+        route: "/admin/people/:name",
+        area: "admin",
+        people: "search_users",
+        format: "json",
+        error: { name: "PostgresError", code: "XX000", message: "could not read block 7 in file base/5/1234" }
+      })
+    ]);
+    expect(logs.lines.join("\n").toLowerCase()).not.toContain("camlialper03");
   });
 });
 
@@ -1130,7 +1426,7 @@ describe("admin alerts, recompute and audit endpoints (Phase 5)", () => {
   ])("maps write error %s to %s and rolls the write (and its audit row) back", async (code, status, errorCode) => {
     const repository = new FakeAnalyticsRepository();
     repository.writeError = pgError(code, "metric kpi_overview is not alertable");
-    const response = await send(buildTestApp(repository, { logger: { error: vi.fn() } }), "post", "/admin/alerts/rules", RULE);
+    const response = await send(buildTestApp(repository), "post", "/admin/alerts/rules", RULE);
     expect(response.status).toBe(status);
     expect(response.body.error.code).toBe(errorCode);
     expect(response.headers["cache-control"]).toBe("no-store");
