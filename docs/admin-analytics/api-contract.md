@@ -200,14 +200,16 @@ All four exclude accounts pending deletion (erased accounts no longer exist), sh
 **Cursor:** opaque keyset text. For the timeline it is `occurred_at|event_type|entity_id` (microsecond UTC time); for searches and lists it is `sort_key|user_id`. A malformed cursor raises 22023.
 
 ### Drill-down
-- **Metrics:** a metric that supports drill-down has `"drill": true` in its meta (Phase 2: `signups`, `ai_cost`).
+- **Metrics:** a metric that supports drill-down has `"drill": true` in its meta (Phase 2: `signups`, `ai_cost`; Phase 3 AI: `ai_reliability`, `ai_wasted_spend`).
 - **Keys:** `drill_users` dispatches `p_filters.metric = '<key>'` (`^[a-z][a-z0-9_]{0,40}$`) to `analytics_private.drill_<key>`, resolved with `to_regprocedure` (unknown → 22023). Supported keys: `admin_app.drill_keys()` → `(key, description, meta)`, also published as `drill_metrics` in `drill_users`' catalog meta. Each key's meta has `description`, `metric` (the `analytics.<metric>` it drills, or null), `filters`, `value`, `unit`, `order`, `detail`.
 
   | Key | Drills | Key filters | `value` |
   |---|---|---|---|
   | `signups` | `signups` | `locale`, `market` | 1 per account (newest first) |
   | `ai_cost_users` | `ai_cost` | `ai_flow`, `ai_model`, `ai_provider` | AI cost USD (highest first) |
-  | `ai_failures` | — (Phase 3 AI reliability) | `ai_flow`, `ai_model`, `ai_provider` | failed runs (most first) |
+  | `ai_failures` | — (generic; no metric links to it) | `ai_flow`, `ai_model`, `ai_provider` | failed runs (most first) |
+  | `ai_failures_by_flow` | `ai_reliability` | `ai_flow`, `ai_model`, `ai_provider`, `market` | failed runs (most first) |
+  | `ai_wasted_spend` | `ai_wasted_spend` | `ai_flow`, `ai_model`, `ai_provider`, `market` | wasted AI cost USD (highest first) |
 - **Common filters** (handled by `drill_users`): `metric`; `include_internal` (boolean, default false, as in metrics); `day` (`YYYY-MM-DD`, overrides `p_from`/`p_to`). Otherwise the range is `p_from..p_to` with the metric defaults (last 30 days, ≤ 3 years). A clicked bucket is passed as `p_from`/`p_to` (or `day`) and its breakdown value as the matching key filter.
 - **Convention for a new key** (no change to `drill_users`):
   - `create function analytics_private.drill_<key>(p_from date, p_to date, p_filters jsonb, p_limit integer, p_cursor text) returns table (user_id uuid, value numeric, detail jsonb, sort_key text) language … stable set search_path = ''`.
@@ -225,3 +227,110 @@ All four exclude accounts pending deletion (erased accounts no longer exist), sh
   - Raises 22023 for: a malformed email; an action not matching `<area>.<name>` (`^[a-z][a-z0-9_]{0,40}(\.[a-z][a-z0-9_]{0,40}){1,3}$`) or naming an unknown people function; params that are not an object, exceed 8,192 characters or carry `q`, `query`, `p_query`, `query_hmac` or `query_sha256`; `p_query` over 1,000 characters; a request id over 128 characters or outside `[-A-Za-z0-9_.:]`.
 - **Enforcement:** `analytics_private.assert_audited(function, user_id)` runs first in every `analytics_people` function and raises 42501 unless the current transaction (`pg_current_xact_id_if_assigned()`) holds a row for that function and, when `user_id` is given, for that user (or for no user when the id does not exist).
 - **Reads** (Phase 5 Data health page): `admin_app.audit_recent(p_limit integer default 100)` → newest first, clamped to 1–500.
+
+## Phase 3 AI metric outputs (AI cost & reliability)
+
+Every AI metric reads the `analytics.ai_cost` population through `analytics_private.ai_run_scope` (`run_cost`: exact `cost_usd` from 2026-10-27, otherwise tokens re-priced with `ai_model_prices`; non-mock, non-guest runs; accounts pending deletion or restricted excluded; internal accounts only with `include_internal`). Cost is USD for `native` and `usd`; `try` converts each run at its month's rate from `analytics_private.fx_months`, and `fx_provisional` follows the Phase 1 rule (a needed missing rate makes the value null). `market` is the account's locked market (`unknown` without one).
+
+| Function | Shape (unit) | Columns | Breakdowns / filters | Display keys |
+|---|---|---|---|---|
+| `ai_reliability` | timeseries (ratio) | `bucket, dimension, failure_rate, runs, completed_runs, failed_runs, pending_runs, model_failure_rate, model_failed_runs, p50_duration_seconds, p95_duration_seconds, avg_tokens_per_run` | ai_flow, ai_model, ai_provider / + market | `plot ["failure_rate"]`, `drill` (key `ai_failures_by_flow`) |
+| `ai_wasted_spend` | timeseries (ratio) | `bucket, dimension, wasted_share, wasted_cost, total_cost, failed_runs_cost, expired_cards_cost, rejected_cards_cost, unfinished_sessions_cost, failed_import_improve_cost, skills_pool_escalation_cost, wasted_tokens_share, runs, failed_runs, unpriced_runs, fx_provisional` | ai_flow, ai_model, ai_provider / + market | `plot ["wasted_share","wasted_tokens_share"]`, `drill` (key `ai_wasted_spend`) |
+| `ai_cost_anomalies` | timeseries (currency) | `bucket, dimension, cost, runs, tokens, unpriced_runs, terminal_runs, model_failed_runs, model_failure_rate, cost_baseline, cost_upper_band, cost_z, tokens_baseline, tokens_upper_band, tokens_z, baseline_buckets, cost_spike, token_spike, jump_from_flat_baseline, failure_spike, is_anomaly, fx_provisional` | ai_flow, ai_model, ai_provider / + market | `flag_column "is_anomaly"` |
+| `ai_tokens_by_model` | timeseries (tokens) | `bucket, dimension, total_tokens, input_tokens, cached_input_tokens, output_tokens, runs, runs_without_tokens, completed_runs, failed_runs, cost, unpriced_runs, fx_provisional` | ai_model, ai_provider, ai_flow / + market | `plot ["input_tokens","output_tokens"]`, `stacked` |
+| `ai_cost_concentration` | breakdown (ratio) | `dimension` (`top 10%` … `90-100%`), `cost_share, cumulative_cost_share, cost, users, runs, tokens, token_share, unpriced_runs, gini_cost, gini_tokens, fx_provisional` | none / ai_flow, ai_model, ai_provider, market | `min_group 2` |
+| `ai_cost_per_outcome` | breakdown (currency) | `dimension` (outcome), `cost_per_outcome, outcomes, users, attributed_cost, attributed_cost_exact, attributed_cost_estimated, attributed_runs, unpriced_runs, tokens_per_outcome, fully_loaded_cost_per_outcome, fx_provisional` | none / ai_model, ai_provider, market | `min_group 5`; `outcomes`, `users` ignore ai_model / ai_provider |
+| `ai_cost_by_plan` | breakdown (currency) | `dimension` (plan segment), `ai_cost, users, paying_users, ai_active_users, runs, unpriced_runs, cost_per_user, cost_per_paying_user, revenue, revenue_usd_native, revenue_try_native, ai_cost_share_of_revenue, gross_margin, exact_share, fx_provisional` | none / plan (matches the segment), market | `min_group 5`; no `breakdown_dimension` (segments are not plan codes) |
+
+Rules:
+- **Timeseries** are gap-filled per bucket (and per breakdown value). Breakdown shapes ignore `p_grain` and reject `p_breakdown`.
+- **`ai_reliability`:** `failure_rate = failed / (completed + failed)` (pending runs excluded); `model_failure_rate` also drops privacy / claim failures and watchdog timeouts without usage. Durations are of completed runs.
+- **`ai_wasted_spend`:** a run is fully wasted when it failed, belongs to a failed `import_improve` orchestration, to a tailoring session unfinished 7 days after creation, or is a `skills_pool` escalation; otherwise the share of its expired or rejected v2 cards. `wasted_cost` counts each run once; the category columns overlap. `wasted_share` and `wasted_tokens_share` are computed in USD and tokens.
+- **`ai_cost_anomalies`:** the baseline is the 7 previous buckets of the requested grain (current bucket excluded). Flags: z > 3 on cost or tokens, a flat token baseline followed by more than twice its mean, and model failure rate > 20% with ≥ 5 terminal runs; `is_anomaly` is any flag. `cost_z` / `tokens_z` use unit `count` (standard deviations, not fractions).
+- **`ai_cost_concentration`:** deciles by USD cost (`ntile(10)`). A decile with fewer than `min_group` (2) users shows only `users`; its shares, cost, runs, tokens and unpriced runs are null. No per-user rows.
+- **`ai_cost_by_plan`:** `revenue` and `gross_margin` are null for `native` (see the `*_native` columns); `ai_cost_share_of_revenue` is computed in USD.
+- **Drill keys** (`analytics_private.drill_<key>`, see **Drill-down**): `ai_failures_by_flow` (value = failed runs; detail `failed_runs, runs, failure_rate, last_failed_at, flows, models, failure_classes`, class counts only) and `ai_wasted_spend` (value = wasted USD; detail `wasted_cost_usd, total_cost_usd, wasted_share, wasted_tokens_share, wasted_runs, failed_runs, runs, unpriced_runs, flows`). Both accept `ai_flow`, `ai_model`, `ai_provider` and `market`.
+
+## Phase 3 Monetization metric outputs
+
+All functions use the standard metric signature (`20261102120000_analytics_monetization.sql`). Common rules:
+- **Population:** billing facts (invoices, checkout attempts, events) keep erased accounts (`user_id` null) and accounts pending deletion or restricted; metrics built on subscription rows (`trial_to_paid`, `subscription_churn`, `cancellation_reasons`) use `analysis_users`. Internal accounts only with `include_internal`.
+- **Money:** the requested currency column (`usd` / `try`, converted at the fact month's rate from `analytics_private.fx_months`, the shared monthly FX helper) plus `*_usd_native` / `*_try_native`. In `native` mode the converted column is null, except `mrr_movement`, which splits by invoice currency like `revenue` (`dimension` = `USD` / `TRY`; a breakdown raises 22023). `fx_provisional` follows the Phase 1 rule; a needed missing rate makes the value null.
+- **Market** falls back to `unknown`. Ratios are 0–1. The primary measure is the first measure column listed below.
+- **MRR snapshot** (`mrr_movement`, `plan_mix`) is the `kpi_overview` one, so `plan_mix` subscriptions add up to `active_subscriptions` and `mrr_movement` ending MRR equals `kpi_overview.mrr` at the same instant.
+
+| Function | Shape (unit) | Columns | Breakdowns / filters | Display keys |
+|---|---|---|---|---|
+| `mrr_movement` | timeseries (currency) | `bucket, dimension, new, expansion, contraction, churn, reactivation, fx_effect, starting_mrr, ending_mrr, starting_customers, new_customers, reactivated_customers, churned_customers, ending_customers, fx_provisional` | market, plan / market, plan, currency | `plot ["new","expansion","contraction","churn","reactivation"]`, `stacked` (contraction and churn are negative; `starting_mrr + movements + fx_effect = ending_mrr`). Day grain is limited to 366 days (22023). |
+| `trial_to_paid` | timeseries by trial-start cohort (ratio) | `bucket, dimension, trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, unresolved, resolved, failed_charge_rate` | market, plan / market, plan | `plot` = the six outcome counts, `stacked`, `drill` (key `trial_conversions`) |
+| `checkout_funnel` | funnel (count) | `step_order, step, dimension, users, conversion_from_prev, conversion_from_start, dropped, pending`; steps `attempts`, `session_created`, `completed`, `paid_within_7d` (`users` counts checkout attempts) | market, plan / market, plan | `drill` (key `checkout_funnel`, filter `step`) |
+| `subscriber_ltv` | breakdown (currency) | `dimension, ltv, customers, ltv_usd_native, ltv_try_native, median_ltv, revenue, revenue_usd_native, revenue_try_native, still_paying, censored_share, avg_paid_invoices, avg_observed_months, erased_customers, fx_provisional` | plan (default), market, currency / plan, market, currency | `breakdown_dimension "plan"` (p_breakdown switches it) |
+| `plan_mix` | breakdown (count) | `dimension, subscriptions, share, mrr, mrr_usd_native, mrr_try_native, switched_in, switched_out, fx_provisional` (snapshot at the end of `p_to`) | plan / market, plan, currency | `breakdown_dimension "plan"` |
+| `subscription_churn` | timeseries (count) | `bucket, dimension, paid_churn, paid_voluntary, paid_involuntary, paid_other_or_unknown, ended_never_paid, replaced_excluded, cancel_scheduled_open, lost_to_erasure, lost_mrr, lost_mrr_usd_native, lost_mrr_try_native, involuntary_share, fx_provisional` | market, plan / market, plan | `plot ["paid_voluntary","paid_involuntary","paid_other_or_unknown"]`, `stacked`, `drill` (key `churned_subscribers`) |
+| `payment_issues` | timeseries (count) | `bucket, dimension, failed_invoices, invoices_due, failure_rate, paid_late_invoices, failed_amount, failed_amount_usd_native, failed_amount_try_native, past_due_episodes, recovered_episodes, lost_episodes, refunded_invoices, refunded, refunded_usd_native, refunded_try_native, refund_rate, discounted_invoices, discount, discount_usd_native, discount_try_native, effective_discount_rate, fx_provisional` | market, plan / market, plan, currency | `plot ["failed_invoices","refunded_invoices","discounted_invoices"]` |
+| `cancellation_reasons` | breakdown (count) | `dimension, cancellations, share, reason_group_share, paid_cancellations, trial_or_unpaid_cancellations, reason_group, cancellation_reason, cancellation_feedback` (`dimension` = `group / reason / feedback`) | none (22023) / market, plan | — |
+| `paywall_denials` | timeseries (count) | `bucket, dimension, user_days, users, hits, hits_consenting, hits_anonymous, anonymous_share` | market, plan / market, plan | `consent_scoped`, `drill` (key `paywall_denials`) |
+
+Grain does not apply to `checkout_funnel`, `subscriber_ltv`, `plan_mix` and `cancellation_reasons`; currency does not apply to `trial_to_paid`, `checkout_funnel`, `cancellation_reasons` and `paywall_denials`.
+
+**Drill keys** (convention under Phase 2 "Drill-down"; one row per user, privacy and `include_internal` applied by `drill_users`):
+
+| Key | Drills | Key filters | `value` (order) |
+|---|---|---|---|
+| `trial_conversions` | `trial_to_paid` | `market`, `plan`, `outcome` (converted, failed_first_charge, trial_canceled, superseded, in_trial, unresolved) | trials started in range (newest trial first) |
+| `checkout_funnel` | `checkout_funnel` | `market`, `plan`, `step` (attempts by default, session_created, completed, paid_within_7d, abandoned, rejected) | matching attempts (latest attempt first) |
+| `checkout_abandoned` | — (generic: `checkout_funnel` with `step = abandoned`) | `market`, `plan` | abandoned attempts (latest first) |
+| `churned_subscribers` | `subscription_churn` | `market`, `plan`, `reason_group` | churned paid subscriptions (latest end first) |
+| `paywall_denials` | `paywall_denials` | `market`, `plan` | denial hits of consenting users (most first) |
+
+## Phase 5: alerts, recompute and data health
+
+### Alertable metrics
+Rules can only target metrics whose meta has `alertable: true`. These are `kpi`-shaped, one row per window.
+- `analytics.kpi_overview` (exists).
+- New `analytics.kpi_health` (kpi), with columns:
+  - `ai_runs bigint, ai_failed_runs bigint, ai_failure_rate numeric`
+  - `failed_payments bigint, payment_failure_rate numeric`
+  - `checkout_attempts bigint, checkout_abandon_rate numeric`
+  - `export_failures bigint, export_failure_rate numeric`
+  - `import_failures bigint, import_failure_rate numeric`
+  - `tailoring_task_failures bigint, tailoring_task_failure_rate numeric`
+  - `unpriced_ai_runs bigint`
+
+  It takes standard parameters, and its filters are `market` and `plan` where they apply.
+
+### Tables (`admin_app`, no grants; access only through definer functions executable by `analytics_api`)
+- **`alert_rules`:**
+  - Identity and target: `id uuid pk, name text, metric text, measure text, params jsonb` (`currency`, `include_internal`, `filters`).
+  - Window and condition: `window text` (`today`, `1d`, `7d` or `30d`), `condition text` (`gt`, `lt`, `pct_change_gt` or `pct_change_lt`), `threshold numeric`.
+  - Behaviour and bookkeeping: `cooldown_hours int default 24, enabled bool default true, created_by text, created_at, updated_at`.
+- **`alert_events`:** `id bigint identity, rule_id uuid (on delete cascade), fired_at, window_from date, window_to date, value numeric, baseline numeric, message text, acknowledged_by text, acknowledged_at`.
+- **Windows (UTC):**
+  - `today` is the current day so far.
+  - `1d` is yesterday.
+  - `7d` and `30d` are the last N complete days.
+- **Baseline:** `pct_change_*` conditions compare the window with the previous window of the same length.
+
+### Evaluation
+- `analytics_private.evaluate_alerts()` runs hourly through `pg_cron`. For each enabled rule outside its cooldown, it:
+  1. calls `analytics.<metric>` for the window;
+  2. reads `measure`;
+  3. compares it with the threshold;
+  4. inserts an `alert_events` row with a human-readable `message`.
+- **Validation:** rules are checked at write time. The metric must be alertable, the measure must be a numeric column, and the params must be valid.
+- **Null values:** a null value never fires.
+
+### Endpoints (admin only, `no-store`; writes are audited with actions `alert.rule.create|update|delete`, `alert.event.ack` and `recompute`)
+| Method & path | Does |
+|---|---|
+| `GET /admin/alerts/rules` | List rules |
+| `POST /admin/alerts/rules` | Create (body = rule fields) → rule |
+| `PATCH /admin/alerts/rules/:id` | Partial update → rule |
+| `DELETE /admin/alerts/rules/:id` | 204 |
+| `GET /admin/alerts/events?status=open\|all&limit=50` | Newest first, with `rule_name` and `metric` |
+| `POST /admin/alerts/events/:id/ack` | Acknowledge → event |
+| `GET /admin/alerts/summary` | `{ open_count, latest_fired_at }` (header badge and Overview banner) |
+| `POST /admin/recompute` | `admin_app.request_recompute()` → 202 `{status:'queued', run_id}`, or 429 `{status:'throttled', retry_after_seconds}` |
+| `GET /admin/recompute/status` | `admin_app.recompute_status()` → the latest run (status, requested_at, started_at, finished_at, error) |
+
+The **Data health page** uses `analytics.data_freshness` (table) plus `admin_app.audit_recent(50)`, exposed as `GET /admin/audit/recent?limit=50`. It's admin only and audited as `audit.read`.
