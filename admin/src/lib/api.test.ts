@@ -3,7 +3,7 @@ import { z } from "zod";
 
 vi.mock("./supabase", () => ({ getAccessToken: vi.fn(async () => "token-123") }));
 
-import { ApiError, apiGet, catalogSchema, metricQuery, shouldRetry, toMetricParams, type MetricMeta } from "./api";
+import { ApiError, apiGet, catalogSchema, measureOf, metricQuery, relabelCsv, shouldRetry, toMetricParams, type MetricMeta } from "./api";
 import { parseFilters } from "./filters";
 
 const json = (status: number, body: unknown) =>
@@ -112,6 +112,46 @@ describe("catalog parsing", () => {
     ]);
     expect(parsed.metrics[0].meta.breakdowns).toEqual(["market"]);
     expect(parsed.metrics[2].meta).toMatchObject({ unit: "count", breakdowns: [], filters: [] });
+  });
+});
+
+describe("measures meta", () => {
+  const parse = (meta: unknown) => catalogSchema.parse({ metrics: [{ name: "ai_cost", kind: "metric", meta }] }).metrics[0].meta;
+
+  it("keeps valid measures, drops malformed ones and ignores unknown keys", () => {
+    const meta = parse({
+      title: "AI cost",
+      unit: "currency",
+      future_key: { nested: true },
+      measures: {
+        cost: { label: "Cost", unit: "currency", description: "USD", extra: 1 },
+        runs: { label: "Runs", unit: "count" },
+        exact_share: { label: "Exact share", unit: "bogus" },
+        broken: { unit: "count" },
+        junk: 7,
+      },
+    });
+    expect(meta.measures).toEqual({
+      cost: { label: "Cost", unit: "currency", description: "USD" },
+      runs: { label: "Runs", unit: "count" },
+      exact_share: { label: "Exact share", unit: undefined, description: undefined },
+    });
+    expect(measureOf(meta, "exact_share")).toEqual({ label: "Exact share", unit: "currency" });
+    expect(measureOf(meta, "unpriced_runs")).toEqual({ label: "Unpriced runs", unit: "currency" });
+  });
+
+  it("survives a non-object measures value", () => {
+    expect(parse({ title: "X", measures: "nope" }).measures).toBeUndefined();
+  });
+});
+
+describe("relabelCsv", () => {
+  it("relabels header columns, re-adds the BOM and leaves data rows alone", () => {
+    const csv = "bucket,dimension,cost,runs\r\n2026-10-01,,1.5,3\r\n";
+    expect(relabelCsv(csv, { cost: "Cost (USD)", runs: "Runs, total", bogus: "x" })).toBe(
+      '\uFEFFbucket,dimension,Cost (USD),"Runs, total"\r\n2026-10-01,,1.5,3\r\n',
+    );
+    expect(relabelCsv("\uFEFFcost", { cost: "=Cost" })).toBe("\uFEFF'=Cost");
   });
 });
 

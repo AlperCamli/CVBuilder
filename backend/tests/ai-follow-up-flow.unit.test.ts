@@ -108,7 +108,7 @@ describe("AiService follow_up_questions flow", () => {
   const providerGenerate = vi.fn();
   const resolvePrompt = vi.fn();
 
-  const makeService = () => {
+  const makeService = (privacy?: unknown) => {
     const aiRepository = {
       createRun,
       completeRun,
@@ -145,7 +145,8 @@ describe("AiService follow_up_questions flow", () => {
       {} as CvRevisionsService,
       {} as TemplatesService,
       promptResolver,
-      billingService
+      billingService,
+      privacy as never
     );
   };
 
@@ -253,6 +254,50 @@ describe("AiService follow_up_questions flow", () => {
     expect(failRun.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(String(failRun.mock.calls[0][2])).toContain("Structured output validation failed");
     expect(completeRun).not.toHaveBeenCalled();
+  });
+
+  it("stores output-contract failures as path + issue code, never zod's message text", async () => {
+    const service = makeService();
+    providerGenerate.mockResolvedValue({
+      provider: "gemini",
+      model_name: "gemini-3-flash-preview",
+      output_payload: {
+        questions: [{ id: "q1", question: "Q", question_type: "SECRET_TYPE" }],
+        "SECRET key": 1
+      }
+    });
+
+    await expect(
+      service.generateFollowUpQuestions(session, { master_cv_id: masterCv.id, selected_topics: ["API delivery"], selected_keywords: [] })
+    ).rejects.toBeInstanceOf(AiFlowFailedError);
+
+    const [, , message, debugPayload] = failRun.mock.calls[0] as [unknown, unknown, string, Record<string, unknown>];
+    expect(message).toMatch(/^Structured output validation failed: [A-Za-z0-9_.*]+: [a-z_]+(; [A-Za-z0-9_.*]+: [a-z_]+)*$/);
+    expect(message).toContain("questions.0.question_type: invalid_enum_value");
+    expect(JSON.stringify([message, debugPayload])).not.toContain("SECRET");
+    expect(debugPayload).toMatchObject({ reason: "output_contract_invalid", stage: "validating_output" });
+    for (const issue of debugPayload.validation_errors as Record<string, unknown>[]) {
+      expect(Object.keys(issue).sort()).toEqual(["code", "path"]);
+    }
+  });
+
+  it("stores only the fixed message and no validation details when privacy controls are on", async () => {
+    const privacy = new Proxy({}, { get: () => vi.fn().mockResolvedValue(undefined) });
+    const service = makeService(privacy);
+    providerGenerate.mockResolvedValue({
+      provider: "gemini",
+      model_name: "gemini-3-flash-preview",
+      output_payload: { questions: [{ id: "q1", question: "Q", question_type: "SECRET_TYPE" }] }
+    });
+
+    await expect(
+      service.generateFollowUpQuestions(session, { master_cv_id: masterCv.id, selected_topics: ["API delivery"], selected_keywords: [] })
+    ).rejects.toBeInstanceOf(AiFlowFailedError);
+
+    const [, , message, debugPayload] = failRun.mock.calls[0] as [unknown, unknown, string, Record<string, unknown>];
+    expect(message).toBe("Structured output validation failed");
+    expect(debugPayload).not.toHaveProperty("validation_errors");
+    expect(debugPayload).toMatchObject({ reason: "output_contract_invalid" });
   });
 
   it("accepts yes-no questions", async () => {

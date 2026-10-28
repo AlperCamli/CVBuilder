@@ -1,5 +1,5 @@
 import { useIsFetching } from "@tanstack/react-query";
-import { AlertTriangle, LogOut, Menu, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, LogOut, Menu, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { FilterBar } from "./FilterBar";
 import { NAV, useCurrentPage } from "./nav";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  // Page filters travel with nav links. The user-search term never appears in any URL (it lives in history.state).
   const { search } = useLocation();
   return (
     <ul className="flex flex-col gap-0.5">
@@ -17,7 +18,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <li key={path}>
           <NavLink
             to={{ pathname: path, search }}
-            end
+            end={path === "/"}
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
@@ -41,7 +42,8 @@ export function Layout() {
   const fetching = useIsFetching() > 0;
   const catalog = useCatalog();
   const [menuOpen, setMenuOpen] = useState(false);
-  const current = useCurrentPage()?.label ?? "Admin";
+  const page = useCurrentPage();
+  const current = page?.label ?? "Admin";
 
   return (
     <div className="flex min-h-dvh">
@@ -89,10 +91,17 @@ export function Layout() {
               <NavLinks onNavigate={() => setMenuOpen(false)} />
             </nav>
           )}
-          <FilterBar />
+          {page?.people ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
+              Every lookup is logged. Page filters don't apply here; all dates UTC.
+            </p>
+          ) : (
+            <FilterBar />
+          )}
         </header>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-4 p-4 outline-none md:p-6">
-          {catalog.isError && (
+          {catalog.isError && !page?.people && (
             <div role="alert" className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
               <span>

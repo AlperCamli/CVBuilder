@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kpiWindows } from "./kpi";
+import { kpiWindows, numberAt } from "./kpi";
 
 const now = new Date("2026-10-28T09:00:00Z");
 
@@ -24,5 +24,14 @@ describe("kpiWindows", () => {
 
   it("has nothing to compare when the range is only today", () => {
     expect(kpiWindows("2026-10-28", "2026-10-28", now)).toMatchObject({ current: null, previous: null });
+  });
+});
+
+describe("numberAt", () => {
+  it("treats null and missing cells as no value", () => {
+    expect(numberAt({ revenue: null, mrr: 0, x: "12.5" }, "revenue")).toBeUndefined();
+    expect(numberAt({ mrr: 0 }, "mrr")).toBe(0);
+    expect(numberAt({ x: "12.5" }, "x")).toBe(12.5);
+    expect(numberAt(undefined, "x")).toBeUndefined();
   });
 });

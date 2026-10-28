@@ -7,7 +7,9 @@ export const createAdminAnalyticsRouter = (
   adminAuth: RequestHandler,
   requireAdmin: RequestHandler,
   ipRateLimiter: RequestHandler,
-  adminRateLimiter: RequestHandler
+  adminRateLimiter: RequestHandler,
+  // Applies to people CSV exports only (body.format = "csv").
+  exportRateLimiter: RequestHandler = (_request, _response, next) => next()
 ): Router => {
   const router = Router();
   const admin: RequestHandler[] = [adminAuth, requireAdmin, adminRateLimiter];
@@ -21,6 +23,8 @@ export const createAdminAnalyticsRouter = (
   router.get("/admin/me", adminAuth, controller.getMe);
   router.get("/admin/catalog", ...admin, controller.getCatalog);
   router.get("/admin/metrics/:name", ...admin, controller.getMetric);
+  // POST so the search text and filters travel in the body, never in URLs or access logs.
+  router.post("/admin/people/:name", ...admin, exportRateLimiter, controller.getPeople);
 
   return router;
 };

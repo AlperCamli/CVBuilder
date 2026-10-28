@@ -1,8 +1,21 @@
-import { addDays, customRange, type Dimension, type GlobalFilters, type Grain } from "./filters";
+import type { MetricMeta } from "./api";
+import { addDays, customRange, type Dimension, type DimensionFilters, type FilterValue, type GlobalFilters, type Grain } from "./filters";
+
+/** `drill_users` filters: the metric's dimension filters plus metric-specific keys (e.g. `step`, `cohort`). */
+export type DrillFilters = Record<string, FilterValue | FilterValue[]>;
 
 export interface DrillPoint {
   bucket: string;
   dimension: string | null;
+}
+
+/** What the users drawer lists: `drill_users` for one metric point. */
+export interface DrillTarget {
+  metric: string;
+  title: string;
+  filters: DrillFilters;
+  from: string;
+  to: string;
 }
 
 export function bucketEnd(bucket: string, grain: Grain) {
@@ -13,6 +26,12 @@ export function bucketEnd(bucket: string, grain: Grain) {
   }
   return bucket;
 }
+
+/** A bucket's days, clamped to the page range (the first and last week/month can be partial). */
+const bucketRange = (filters: GlobalFilters, bucket: string) => {
+  const end = bucketEnd(bucket, filters.grain);
+  return { from: bucket < filters.from ? filters.from : bucket, to: end > filters.to ? filters.to : end };
+};
 
 /** Whether clicking a point does anything, so charts only look clickable when it does. */
 export const canDrill = (filters: GlobalFilters, breakdown?: Dimension) => Boolean(breakdown) || filters.grain !== "day";
@@ -27,11 +46,8 @@ export function drillPatch(filters: GlobalFilters, breakdown: Dimension | undefi
     return { filters: { ...filters.filters, [breakdown]: point.dimension }, breakdown: undefined };
   }
   if (filters.grain === "day") return null;
-  const end = bucketEnd(point.bucket, filters.grain);
-  return {
-    ...customRange(point.bucket < filters.from ? filters.from : point.bucket, end > filters.to ? filters.to : end),
-    grain: "day",
-  };
+  const { from, to } = bucketRange(filters, point.bucket);
+  return { ...customRange(from, to), grain: "day" };
 }
 
 export function drillHandler(
@@ -43,5 +59,48 @@ export function drillHandler(
   return (point) => {
     const patch = drillPatch(filters, breakdown, point);
     if (patch) setFilters(patch);
+  };
+}
+
+/**
+ * The users behind a point: the metric's own dimension filters, plus the clicked series value, over the bucket's days.
+ * Null for the folded "Other" series, which has no single value to filter on.
+ */
+export function drillTarget(
+  metric: string,
+  title: string,
+  filters: GlobalFilters,
+  dims: DimensionFilters,
+  breakdown: Dimension | undefined,
+  point: DrillPoint,
+): DrillTarget | null {
+  if (breakdown && !point.dimension) return null;
+  return {
+    metric,
+    title,
+    filters: breakdown ? { ...dims, [breakdown]: point.dimension! } : { ...dims },
+    ...bucketRange(filters, point.bucket),
+  };
+}
+
+interface PointHandlerOptions {
+  metric: string;
+  title: string;
+  meta: MetricMeta | undefined;
+  filters: GlobalFilters;
+  setFilters: (patch: Partial<GlobalFilters>) => void;
+  /** The metric's effective params (filters narrowed to what it accepts, breakdown if supported). */
+  dims: DimensionFilters;
+  breakdown?: Dimension;
+  openDrill: (target: DrillTarget) => void;
+}
+
+/** Metrics flagged `meta.drill` open the users drawer for any point; the rest keep filtering/zooming the page. */
+export function pointHandler(opts: PointHandlerOptions): ((point: DrillPoint) => void) | undefined {
+  const { metric, title, meta, filters, setFilters, dims, breakdown, openDrill } = opts;
+  if (!meta?.drill) return drillHandler(filters, setFilters, breakdown);
+  return (point) => {
+    const target = drillTarget(metric, title, filters, dims, breakdown, point);
+    if (target) openDrill(target);
   };
 }

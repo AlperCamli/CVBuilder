@@ -31,7 +31,8 @@ const recordingRepository = () => ({
   upsertPriceCatalog: vi.fn(async () => {}),
   upsertPlanCatalog: vi.fn(async () => {}),
   upsertFxRates: vi.fn(async () => {}),
-  markInternalUsers: vi.fn(async () => 1)
+  markInternalUsers: vi.fn(async () => 1),
+  replaceModelPrices: vi.fn(async () => {})
 }) satisfies MonetizationRepository;
 
 const invoice = (overrides: Partial<StripeInvoiceSummary> = {}): StripeInvoiceSummary => ({
@@ -185,7 +186,11 @@ describe("monetization tracking", () => {
 });
 
 describe("monetization reference refresh", () => {
-  const refreshService = (fetchImpl: typeof fetch, gateway: Partial<StripeGateway> | null = null) => {
+  const refreshService = (
+    fetchImpl: typeof fetch,
+    gateway: Partial<StripeGateway> | null = null,
+    modelPricing: Record<string, { input: number; cached_input?: number; output: number }> = { "gpt-6-luna": { input: 0.1, output: 0.5 } }
+  ) => {
     const repository = recordingRepository();
     const service = new MonetizationRefreshService(repository, gateway as StripeGateway | null, new EntitlementsService(createPlanCatalog()), {
       prices: { GLOBAL: { weekly: "price_usd_week", monthly: null, annual: null }, TR: { weekly: "price_try_week", monthly: null, annual: null } },
@@ -193,6 +198,7 @@ describe("monetization reference refresh", () => {
       historicalPrices: { price_old_try: "weekly" },
       trialDays: 3,
       adminEmails: ["admin@example.invalid"],
+      modelPricing,
       fetchImpl
     });
     return { repository, service };
@@ -229,6 +235,78 @@ describe("monetization reference refresh", () => {
       expect.objectContaining({ provider_price_id: "price_try_week", market: "TR", unit_amount: 6990, is_configured: true }),
       expect.objectContaining({ provider_price_id: "price_old_try", market: "TR", unit_amount: 4990, is_configured: false })
     ]));
+  });
+
+  it("syncs configured AI model prices as prefixes, with cached input left null when not discounted", async () => {
+    const { repository, service } = refreshService(
+      (async () => new Response(JSON.stringify({ rates: {} }))) as unknown as typeof fetch,
+      null,
+      { "gpt-6-luna": { input: 0.1, cached_input: 0.01, output: 0.5 }, "gemini-3-flash": { input: 0.3, output: 2.5 } }
+    );
+    const result = await service.refresh(new Date("2026-10-27T10:00:00Z"));
+    expect(result.failures).toEqual([]);
+    expect(result.model_prices).toBe(2);
+    expect(repository.replaceModelPrices).toHaveBeenCalledWith([
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5 },
+      { model_prefix: "gemini-3-flash", input_usd: 0.3, cached_input_usd: null, output_usd: 2.5 }
+    ]);
+  });
+
+  it("keeps existing model prices and reports a failure when no pricing is configured", async () => {
+    const { repository, service } = refreshService((async () => new Response(JSON.stringify({ rates: {} }))) as unknown as typeof fetch, null, {});
+    const result = await service.refresh(new Date("2026-10-27T10:00:00Z"));
+    expect(result.failures).toEqual(["model_prices: AI_MODEL_PRICING_JSON empty; kept existing prices"]);
+    expect(repository.replaceModelPrices).not.toHaveBeenCalled();
+    expect(result.model_prices).toBe(0);
+    expect(result.internal_accounts).toBe(1);
+  });
+
+  it("reports a model price write failure without stopping the other steps", async () => {
+    const { repository, service } = refreshService(
+      (async () => new Response(JSON.stringify({ rates: {} }))) as unknown as typeof fetch,
+      null,
+      { "gpt-6-luna": { input: 0.1, output: 0.5 } }
+    );
+    repository.replaceModelPrices.mockRejectedValueOnce(new Error("db down"));
+    const result = await service.refresh(new Date("2026-10-27T10:00:00Z"));
+    expect(result.failures).toEqual(["model_prices: db down"]);
+    expect(result.internal_accounts).toBe(1);
+  });
+});
+
+describe("model price table sync", () => {
+  const fakeDb = (existing: string[]) => {
+    const calls = { upsert: vi.fn(), deleted: vi.fn() };
+    const from = vi.fn(() => ({
+      upsert: async (rows: unknown, options: unknown) => { calls.upsert(rows, options); return { error: null }; },
+      select: async () => ({ data: existing.map(model_prefix => ({ model_prefix })), error: null }),
+      delete: () => ({ in: async (column: string, values: string[]) => { calls.deleted(column, values); return { error: null }; } })
+    }));
+    return { db: { from } as never, calls, from };
+  };
+
+  it("upserts configured prefixes and deletes the ones no longer configured", async () => {
+    const { db, calls } = fakeDb(["gpt-6-luna", "old-model"]);
+    await new SupabaseMonetizationRepository(db, { warn: vi.fn() }).replaceModelPrices([
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5 }
+    ]);
+    expect(calls.upsert).toHaveBeenCalledWith(
+      [expect.objectContaining({ model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5, refreshed_at: expect.any(String) })],
+      { onConflict: "model_prefix" }
+    );
+    expect(calls.deleted).toHaveBeenCalledWith("model_prefix", ["old-model"]);
+  });
+
+  it("never clears the table for an empty price list and skips the delete when nothing is stale", async () => {
+    const empty = fakeDb(["gpt-6-luna"]);
+    await new SupabaseMonetizationRepository(empty.db, { warn: vi.fn() }).replaceModelPrices([]);
+    expect(empty.from).not.toHaveBeenCalled();
+
+    const current = fakeDb(["gpt-6-luna"]);
+    await new SupabaseMonetizationRepository(current.db, { warn: vi.fn() }).replaceModelPrices([
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: null, output_usd: 0.5 }
+    ]);
+    expect(current.calls.deleted).not.toHaveBeenCalled();
   });
 });
 

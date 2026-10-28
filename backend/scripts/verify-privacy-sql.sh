@@ -14,6 +14,11 @@ privacy_psql=(psql -h 127.0.0.1 -p "$privacy_pg_port" -U privacy_test postgres -
 create role anon;
 create role authenticated;
 create role service_role bypassrls;
+-- Supabase installs pgcrypto in the extensions schema, which is on the default search_path.
+create schema extensions;
+create extension pgcrypto with schema extensions;
+alter database postgres set search_path = "$user", public, extensions;
+grant usage on schema extensions to anon,authenticated,service_role;
 -- Mirror Supabase's default grants so browser-role privileges are tested as deployed.
 grant usage on schema public to anon,authenticated,service_role;
 alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
@@ -53,3 +58,5 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/monetization-tracking.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-foundation.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-hardening.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-overview.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-people.sql"

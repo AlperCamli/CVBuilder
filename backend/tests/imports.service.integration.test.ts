@@ -1,10 +1,10 @@
-import { ConflictError } from "../src/shared/errors/app-error";
+import { ConflictError, ValidationError } from "../src/shared/errors/app-error";
 import { trackedAiService } from "./helpers/tracked-ai-service";
 import { reviewCv } from "../src/modules/cv-review/cv-review";
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
-import { ImportsService } from "../src/modules/imports/imports.service";
+import { ImportsService, importFailureMessage } from "../src/modules/imports/imports.service";
 import { AiPromptResolver } from "../src/modules/ai/prompts/prompt-resolver";
 import {
   type CreateFilePayload,
@@ -590,6 +590,25 @@ describe("imports service integration checks", () => {
     expect(result.raw_extracted_text).toBeNull();
     expect(result.review.score).toBeNull();
     expect(result.review.status).toBe("unscorable");
+  });
+  it("stores a generic failure message instead of a raw parser error that may quote the file", async () => {
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from("raw text")), "text/plain", "cv.txt");
+    const parser: CvParser = { async parse() { throw new SyntaxError("Unexpected token J in JSON at position 0: John Doe, 555-0100"); } };
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser);
+    const response = await service.parseImport(buildSession(userId), repository.importId);
+    expect(response.parse_summary.status).toBe("failed");
+    expect(response.parse_summary.warnings).toEqual(["Import parsing failed"]);
+    const stored = (await repository.findImportDetailById(userId, repository.importId))?.importRow.error_message;
+    expect(stored).toBe("Import parsing failed");
+  });
+
+  it("keeps app-authored validation messages for failed imports", () => {
+    expect(importFailureMessage(new ValidationError("Enable AI processing before analyzing your CV."))).toBe(
+      "Enable AI processing before analyzing your CV."
+    );
+    expect(importFailureMessage(new Error("pdfjs: bad XRef entry near 'John Doe'"))).toBe("Import parsing failed");
+    expect(importFailureMessage("not an error")).toBe("Import parsing failed");
   });
 
   it("returns parsed status with warnings on low-confidence PDF text and still converts to master CV", async () => {

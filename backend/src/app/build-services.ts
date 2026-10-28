@@ -259,7 +259,8 @@ export const buildDefaultServices = (
     legacyPrices: { pro: config.billing.stripeProPriceId, lifetime: config.billing.stripeLifetimePriceId },
     historicalPrices: config.billing.historicalPrices ?? {},
     trialDays: config.billing.trialPeriodDays,
-    adminEmails: config.adminEmails ?? []
+    adminEmails: config.adminEmails ?? [],
+    modelPricing: config.ai.modelPricing ?? {}
   });
 
   const billingService =

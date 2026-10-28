@@ -100,6 +100,26 @@ export const createAdminRateLimiter = (config: AppConfig): RequestHandler => {
   });
 };
 
+// People CSV exports (up to 50,000 rows each) get a tighter per-admin budget on top of the admin limiter.
+export const createAdminExportRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (request: Request): boolean => (request.body as { format?: unknown } | undefined)?.format !== "csv",
+    keyGenerator: (request: Request): string => {
+      const authUserId = request.adminIdentity?.authUserId;
+      return authUserId ? `admin-export:${authUserId}` : `admin-export-ip:${ipKeyGenerator(request.ip ?? "")}`;
+    },
+    handler: handleRateLimited
+  });
+};
+
 // Runs before the admin token check, so unauthenticated probing is capped too.
 export const createAdminIpRateLimiter = (config: AppConfig): RequestHandler => {
   if (config.appEnv === "test") {

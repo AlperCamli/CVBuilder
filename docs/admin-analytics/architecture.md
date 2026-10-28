@@ -178,7 +178,7 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 | `GET /admin/me` | `{ email, is_admin }` | Drives the AuthGate |
 | `GET /admin/catalog` | `metric_catalog()` | Titles, definitions, breakdowns, alertable flag |
 | `GET /admin/metrics/:name` | Calls `analytics.<name>` with the contract params | `name` matches `^[a-z][a-z0-9_]{0,62}$`; unknown → 404; `?format=csv` |
-| `GET /admin/people/:name` | Calls `analytics_people.<name>` | Every call audited; `Cache-Control: no-store`; `?format=csv` audited as export |
+| `POST /admin/people/:name` | Calls `analytics_people.<name>` (JSON body) | Every call audited, enforced in the database; `Cache-Control: no-store`; `format: "csv"` audited as export, 10/min per admin |
 | `POST /admin/recompute` | `request_recompute()` | 202, or 429 when throttled |
 | `GET/POST/PATCH/DELETE /admin/alerts/rules` | CRUD | Rules validated against the catalog; audited |
 | `GET /admin/alerts/events`, `POST …/:id/ack` | List and acknowledge | |

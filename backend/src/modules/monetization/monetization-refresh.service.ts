@@ -1,10 +1,12 @@
 import type { StripeGateway } from "../billing/stripe-gateway";
 import type { BillingMarket, PurchasePlan } from "../billing/regional-pricing";
 import type { EntitlementsService } from "../entitlements/entitlements.service";
+import type { ModelPriceTable } from "../ai/ai-cost";
 import type { FxRateRow, MonetizationRepository, PriceCatalogRow } from "./monetization.repository";
 
 // Copies pricing and plan rules that live in env/code into the database once a day,
-// together with the monthly USD->TRY average used to report revenue in one currency.
+// together with the monthly USD->TRY average used to report revenue in one currency and the
+// AI model prices used to estimate the cost of runs without a stored cost_usd.
 
 export interface MonetizationRefreshOptions {
   prices: Record<BillingMarket, Record<PurchasePlan, string | null>>;
@@ -12,6 +14,8 @@ export interface MonetizationRefreshOptions {
   historicalPrices: Record<string, PurchasePlan>;
   trialDays: number;
   adminEmails: string[];
+  // AI_MODEL_PRICING_JSON: USD per 1M tokens, keyed by model name (matched as a prefix).
+  modelPricing: ModelPriceTable;
   fetchImpl?: typeof fetch;
 }
 
@@ -20,6 +24,7 @@ export interface MonetizationRefreshResult {
   plans: number;
   fx_months: string[];
   internal_accounts: number;
+  model_prices: number;
   failures: string[];
 }
 
@@ -39,7 +44,7 @@ export class MonetizationRefreshService {
 
   // Each step runs even if another fails; failures are reported, not thrown.
   async refresh(now = new Date()): Promise<MonetizationRefreshResult> {
-    const result: MonetizationRefreshResult = { prices: 0, plans: 0, fx_months: [], internal_accounts: 0, failures: [] };
+    const result: MonetizationRefreshResult = { prices: 0, plans: 0, fx_months: [], internal_accounts: 0, model_prices: 0, failures: [] };
     const step = async (name: string, run: () => Promise<void>) => {
       try { await run(); } catch (error) { result.failures.push(`${name}: ${error instanceof Error ? error.message : "unknown"}`); }
     };
@@ -52,7 +57,24 @@ export class MonetizationRefreshService {
     await step("internal_accounts", async () => {
       result.internal_accounts = await this.repository.markInternalUsers(this.options.adminEmails);
     });
+    await step("model_prices", async () => { result.model_prices = await this.refreshModelPrices(); });
     return result;
+  }
+
+  // The configured table is the source of truth: prefixes no longer configured are removed. An empty map is
+  // treated as a misconfiguration, so existing prices are kept rather than wiped.
+  async refreshModelPrices(): Promise<number> {
+    if (!Object.keys(this.options.modelPricing).length) {
+      throw new Error("AI_MODEL_PRICING_JSON empty; kept existing prices");
+    }
+    const rows = Object.entries(this.options.modelPricing).map(([model, price]) => ({
+      model_prefix: model,
+      input_usd: price.input,
+      cached_input_usd: price.cached_input ?? null,
+      output_usd: price.output
+    }));
+    await this.repository.replaceModelPrices(rows);
+    return rows.length;
   }
 
   async refreshPriceCatalog(): Promise<number> {

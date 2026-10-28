@@ -1,8 +1,13 @@
+import pino from "pino";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
-import type { CatalogEntry, MetricParams } from "../src/modules/admin-analytics/admin-analytics.contract";
-import type { AdminAnalyticsRepository } from "../src/modules/admin-analytics/admin-analytics.repository";
+import type { CatalogEntry, MetricParams, PeopleParams } from "../src/modules/admin-analytics/admin-analytics.contract";
+import type {
+  AdminAnalyticsRepository,
+  AuditEntry,
+  PeopleSession
+} from "../src/modules/admin-analytics/admin-analytics.repository";
 import { AdminAnalyticsService } from "../src/modules/admin-analytics/admin-analytics.service";
 import { SupabaseAdminIdentityProvider, type AdminIdentityProvider } from "../src/modules/admin-analytics/admin-identity";
 import { AuthService } from "../src/modules/auth/auth.service";
@@ -39,7 +44,8 @@ const meta = {
 
 const CATALOG: CatalogEntry[] = [
   { name: "signups", kind: "metric", meta: { ...meta, breakdowns: [...meta.breakdowns], filters: [...meta.filters] } },
-  { name: "search_users", kind: "people", meta: { ...meta, breakdowns: [], filters: [] } }
+  { name: "search_users", kind: "people", meta: { ...meta, breakdowns: [], filters: [] } },
+  { name: "user_timeline", kind: "people", meta: { ...meta, breakdowns: [], filters: [] } }
 ];
 
 class FakeAnalyticsRepository implements AdminAnalyticsRepository {
@@ -62,6 +68,39 @@ class FakeAnalyticsRepository implements AdminAnalyticsRepository {
     this.calls.push({ name, params });
     if (this.error) throw this.error;
     return this.result;
+  }
+
+  // People: records the transaction steps in order.
+  events: string[] = [];
+  audits: AuditEntry[] = [];
+  peopleCalls: { name: string; params: PeopleParams }[] = [];
+  auditError: unknown = null;
+  peopleError: unknown = null;
+  peopleResult: (params: PeopleParams) => AnalyticsQueryResult = () => ({
+    columns: ["user_id", "email", "cursor"],
+    rows: [{ user_id: "u1", email: "a@example.invalid", cursor: "1~5|u1" }]
+  });
+
+  async withAuditedPeople<T>(audit: AuditEntry, work: (session: PeopleSession) => Promise<T>): Promise<T> {
+    this.events.push("begin");
+    try {
+      this.events.push("audit");
+      this.audits.push(audit);
+      if (this.auditError) throw this.auditError;
+      const result = await work({
+        call: async (name, params) => {
+          this.events.push(`call:${name}`);
+          this.peopleCalls.push({ name, params });
+          if (this.peopleError) throw this.peopleError;
+          return this.peopleResult(params);
+        }
+      });
+      this.events.push("commit");
+      return result;
+    } catch (error) {
+      this.events.push("rollback");
+      throw error;
+    }
   }
 }
 
@@ -97,7 +136,7 @@ class FakeAdminIdentityProvider implements AdminIdentityProvider {
 
 const buildTestApp = (
   repository: AdminAnalyticsRepository | null,
-  options: { production?: boolean; logger?: { error: ReturnType<typeof vi.fn> } } = {}
+  options: { production?: boolean; logger?: { error: ReturnType<typeof vi.fn> }; appLogger?: pino.Logger } = {}
 ) => {
   const config = createTestConfig();
   config.adminEmails = [ADMIN_EMAIL];
@@ -138,6 +177,7 @@ const buildTestApp = (
 
   const app = createApp({
     config,
+    ...(options.appLogger ? { logger: options.appLogger } : {}),
     services: {
       authService: new AuthService(authProvider, usersRepository),
       usersService,
@@ -570,5 +610,278 @@ describe("admin analytics endpoints", () => {
     const response = await asAdmin(buildTestApp(repository), "/admin/metrics/signups?format=csv");
     expect(response.status).toBe(200);
     expect(response.text).toBe("\uFEFFbucket,users\r\n");
+  });
+});
+
+describe("admin people endpoint", () => {
+  const SEARCH = "/admin/people/search_users";
+  const TIMELINE = "/admin/people/user_timeline";
+  const USER_ID = "4f2b8a8e-8a51-4a7c-9d1e-2b4b3f1c9a10";
+
+  const page = (count: number, start = 0): AnalyticsQueryResult => ({
+    columns: ["user_id", "value", "cursor"],
+    rows: Array.from({ length: count }, (_, index) => ({ user_id: `u${start + index}`, value: start + index, cursor: `c${start + index}` }))
+  });
+
+  const post = (app: ReturnType<typeof buildTestApp>, path: string, body: unknown, token = "admin-token") =>
+    request(app).post(`/api/v1${path}`).set("Authorization", `Bearer ${token}`).send(body as object);
+
+  it("requires a token and an admin, and audits nothing for them", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const anonymous = await request(app).post(`/api/v1${SEARCH}`).send({ q: "findme" });
+    expect(anonymous.status).toBe(401);
+    const user = await post(app, SEARCH, { q: "findme" }, "user-token");
+    expect(user.status).toBe(403);
+    expect(user.body.error.code).toBe("FORBIDDEN");
+    expect(user.headers["cache-control"]).toBe("no-store");
+    expect(repository.events).toEqual([]);
+  });
+
+  it("no longer serves people functions over GET", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await asAdmin(buildTestApp(repository), `${SEARCH}?q=findme`);
+    expect(response.status).toBe(404);
+    expect(repository.events).toEqual([]);
+  });
+
+  it("audits first, then reads, in one transaction, and returns the page without the cursor column", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleResult = () => page(2);
+    const app = buildTestApp(repository);
+
+    const response = await post(app, SEARCH, { q: " FindMe ", limit: 2, filters: { market: "TR" } }).set("X-Request-Id", "req-abc_123");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body.data).toEqual({
+      name: "search_users",
+      rows: [
+        { user_id: "u0", value: 0 },
+        { user_id: "u1", value: 1 }
+      ],
+      next_cursor: "c1",
+      generated_at: expect.any(String)
+    });
+    expect(repository.events).toEqual(["begin", "audit", "call:search_users", "commit"]);
+    expect(repository.audits).toEqual([
+      {
+        adminEmail: "Admin@CVBuilder.dev",
+        action: "people.search_users",
+        targetUserId: null,
+        params: { function: "search_users", format: "json", filters: { market: "TR" }, limit: 2 },
+        requestId: "req-abc_123",
+        // Handed to log_access, which stores only its HMAC.
+        query: "FindMe"
+      }
+    ]);
+    expect(JSON.stringify(repository.audits[0]?.params).toLowerCase()).not.toContain("findme");
+    expect(repository.peopleCalls[0]?.params).toEqual({
+      userId: null,
+      query: "FindMe",
+      from: null,
+      to: null,
+      filters: { market: "TR" },
+      limit: 2,
+      cursor: null
+    });
+  });
+
+  it("keeps the user in target_user_id and records only that a cursor was used", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleResult = () => page(3);
+    const app = buildTestApp(repository);
+
+    const response = await post(app, TIMELINE, {
+      user_id: USER_ID,
+      from: "2026-01-01",
+      to: "2026-01-31",
+      cursor: "2026-01-02T00:00:00.000000Z|ai_run|" + USER_ID,
+      filters: { event_type: ["ai_run"], failures_only: true },
+      q: null
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.next_cursor).toBeNull();
+    expect(response.body.data.rows).toHaveLength(3);
+    expect(repository.audits[0]).toEqual({
+      adminEmail: "Admin@CVBuilder.dev",
+      action: "people.user_timeline",
+      targetUserId: USER_ID,
+      params: {
+        function: "user_timeline",
+        format: "json",
+        from: "2026-01-01",
+        to: "2026-01-31",
+        filters: { event_type: ["ai_run"], failures_only: true },
+        limit: 50,
+        has_cursor: true
+      },
+      requestId: expect.any(String),
+      query: null
+    });
+    expect(JSON.stringify(repository.audits[0]?.params)).not.toContain(USER_ID);
+    expect(repository.peopleCalls[0]?.params).toMatchObject({ userId: USER_ID, limit: 50, cursor: expect.stringContaining("|ai_run|") });
+
+    // A function without a cursor column (user_summary) never has a next page.
+    repository.peopleResult = () => ({ columns: ["user_id"], rows: [{ user_id: USER_ID }] });
+    const single = await post(app, TIMELINE, { user_id: USER_ID, limit: 1 });
+    expect(single.body.data.next_cursor).toBeNull();
+  });
+
+  it("returns no data when the audit insert fails", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.auditError = pgError("23514", "audit_log check violated");
+    const response = await post(buildTestApp(repository, { logger: { error: vi.fn() } }), SEARCH, { q: "findme" });
+    expect(response.status).toBe(500);
+    expect(response.body.data).toBeUndefined();
+    expect(repository.events).toEqual(["begin", "audit", "rollback"]);
+    expect(repository.peopleCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ["q too short", { q: "ab" }],
+    ["q too short after trimming", { q: " ab " }],
+    ["q too long", { q: "a".repeat(201) }],
+    ["q not a string", { q: 123 }],
+    ["user_id not a uuid", { user_id: "123" }],
+    ["limit 0", { q: "findme", limit: 0 }],
+    ["limit 201", { q: "findme", limit: 201 }],
+    ["limit as a string", { q: "findme", limit: "10" }],
+    ["fractional limit", { q: "findme", limit: 1.5 }],
+    ["cursor too long", { q: "findme", cursor: "c".repeat(201) }],
+    ["empty cursor", { q: "findme", cursor: "" }],
+    ["impossible date", { user_id: USER_ID, from: "2026-02-30" }],
+    ["from after to", { user_id: USER_ID, from: "2026-02-02", to: "2026-02-01" }],
+    ["filters as a string", { q: "findme", filters: '{"market":"TR"}' }],
+    ["filters as an array", { q: "findme", filters: [1] }],
+    ["bad filter key", { q: "findme", filters: { "Bad-Key": 1 } }],
+    ["nested filter value", { q: "findme", filters: { metric: { a: 1 } } }],
+    ["filters too large", { q: "findme", filters: { event_type: Array.from({ length: 50 }, () => "x".repeat(100)) } }],
+    ["bad format", { q: "findme", format: "xlsx" }],
+    ["unknown body key", { q: "findme", query: "findme" }],
+    ["body not an object", ["findme"]]
+  ])("rejects %s with 400 before auditing", async (_label, body) => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await post(buildTestApp(repository), SEARCH, body);
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(repository.events).toEqual([]);
+    expect(JSON.stringify(response.body)).not.toContain("x".repeat(100));
+  });
+
+  it("rejects a bad function name with 400", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await post(buildTestApp(repository), "/admin/people/Search-Users", { q: "findme" });
+    expect(response.status).toBe(400);
+    expect(repository.events).toEqual([]);
+  });
+
+  it("keeps people functions and metrics apart (404)", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    for (const name of ["unknown_fn", "signups"]) {
+      const response = await post(app, `/admin/people/${name}`, { q: "findme" });
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe("NOT_FOUND");
+    }
+    expect((await asAdmin(app, "/admin/metrics/user_timeline")).status).toBe(404);
+    expect(repository.events).toEqual([]);
+    expect(repository.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["22023", 400, "VALIDATION_ERROR"],
+    ["42501", 403, "FORBIDDEN"],
+    ["57014", 504, "ANALYTICS_TIMEOUT"],
+    ["08006", 503, "ANALYTICS_UNAVAILABLE"]
+  ])("maps people error %s to %s and rolls back", async (code, status, errorCode) => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleError = pgError(code, "malformed cursor");
+    const response = await post(buildTestApp(repository, { logger: { error: vi.fn() } }), SEARCH, { q: "findme", cursor: "zzz" });
+    expect(response.status).toBe(status);
+    expect(response.body.error.code).toBe(errorCode);
+    expect(repository.events).toEqual(["begin", "audit", "call:search_users", "rollback"]);
+  });
+
+  it("never logs the raw search text", async () => {
+    const lines: string[] = [];
+    const appLogger = pino({ level: "trace" }, { write: (line: string) => lines.push(line) });
+    const repository = new FakeAnalyticsRepository();
+    const serviceLogger = { error: vi.fn() };
+    const app = buildTestApp(repository, { appLogger, logger: serviceLogger });
+
+    expect((await post(app, SEARCH, { q: "Secret.Person@example.com" })).status).toBe(200);
+    expect((await post(app, SEARCH, { q: "Secret.Person@example.com", limit: 999 })).status).toBe(400);
+    repository.peopleError = pgError("XX000", "boom");
+    expect((await post(app, SEARCH, { q: "Secret.Person@example.com" })).status).toBe(500);
+
+    const logged = [...lines, JSON.stringify(serviceLogger.error.mock.calls), JSON.stringify(repository.audits.map((audit) => audit.params))]
+      .join("\n")
+      .toLowerCase();
+    expect(lines.some((line) => line.includes("Admin people served"))).toBe(true);
+    expect(logged).not.toContain("secret.person");
+  });
+
+  it("exports CSV by paging on the server under one export.csv audit row", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleResult = (params) => {
+      const start = params.cursor ? Number(params.cursor.slice(1)) + 1 : 0;
+      return page(Math.min(params.limit, 213 - start), start);
+    };
+
+    const response = await post(buildTestApp(repository), TIMELINE, { user_id: USER_ID, format: "csv", limit: 5 });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("text/csv; charset=utf-8");
+    expect(response.headers["content-disposition"]).toMatch(/^attachment; filename="user_timeline_\d{4}-\d{2}-\d{2}\.csv"$/);
+    expect(response.headers["x-export-truncated"]).toBe("false");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    const lines = response.text.split("\r\n");
+    expect(lines[0]).toBe("﻿user_id,value");
+    expect(lines).toHaveLength(1 + 213 + 1);
+    expect(repository.audits).toHaveLength(1);
+    expect(repository.audits[0]).toMatchObject({
+      action: "export.csv",
+      targetUserId: USER_ID,
+      params: { function: "user_timeline", format: "csv", max_rows: 50_000 }
+    });
+    expect(repository.events).toEqual(["begin", "audit", "call:user_timeline", "call:user_timeline", "commit"]);
+    expect(repository.peopleCalls.map((call) => [call.params.limit, call.params.cursor])).toEqual([
+      [200, null],
+      [200, "c199"]
+    ]);
+  });
+
+  it("caps a CSV export at 50,000 rows", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.peopleResult = (params) => {
+      const start = params.cursor ? Number(params.cursor.slice(1)) + 1 : 0;
+      return page(params.limit, start);
+    };
+
+    const response = await post(buildTestApp(repository), SEARCH, { q: "findme", format: "csv" });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["x-export-truncated"]).toBe("true");
+    expect(response.text.split("\r\n")).toHaveLength(1 + 50_000 + 1);
+    expect(repository.peopleCalls).toHaveLength(250);
+    expect(repository.audits.map((audit) => audit.action)).toEqual(["export.csv"]);
+  });
+
+  it("limits CSV exports to 10 a minute per admin without limiting JSON reads", async () => {
+    vi.stubEnv("VERCEL", "");
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository, { production: true });
+    for (let index = 0; index < 10; index++) {
+      expect((await post(app, SEARCH, { q: "findme", format: "csv" })).status).toBe(200);
+    }
+    const limited = await post(app, SEARCH, { q: "findme", format: "csv" });
+    expect(limited.status).toBe(429);
+    expect(limited.headers["cache-control"]).toBe("no-store");
+    expect((await post(app, SEARCH, { q: "findme" })).status).toBe(200);
+    expect(repository.audits.filter((audit) => audit.action === "export.csv")).toHaveLength(10);
+    vi.unstubAllEnvs();
   });
 });

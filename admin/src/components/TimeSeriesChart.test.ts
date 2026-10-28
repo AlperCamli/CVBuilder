@@ -35,4 +35,14 @@ describe("pivotRows", () => {
     const rows = ["TR", "US", "DE"].map((dim) => ({ bucket: "2026-10-01", dimension: dim, signups: 1 }));
     expect(pivotRows(rows, "signups", 2).series.map((s) => s.label)).toEqual(["DE", "TR", "US"]);
   });
+
+  it("totals the sample column per series, including folded ones", () => {
+    const rows = ["TR", "US", "DE", "GB"].map((dim, i) => ({ bucket: "2026-10-01", dimension: dim, revenue: 100 - i, invoices: i + 1 }));
+    const { series } = pivotRows(rows, "revenue", 2, "Revenue", "invoices");
+    expect(series.map((s) => [s.label, s.sample])).toEqual([
+      ["TR", 1],
+      ["US", 2],
+      [OTHER_LABEL, 7],
+    ]);
+  });
 });

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router";
 import { OVERVIEW_METRICS } from "@/pages/Overview";
+import { ACQUISITION, AI_COST, ENGAGEMENT, metricsOf, MONETIZATION, TAILORING, type PageSection } from "./pages";
 
 export interface NavItem {
   path: string;
@@ -19,21 +20,38 @@ export interface NavItem {
   icon: LucideIcon;
   /** Metrics rendered on the page, used to tell which URL filters actually apply there. */
   metrics: string[];
+  /** The page has a real screen (others show a placeholder until their phase ships). */
+  ready?: boolean;
+  /** A generic metrics page built from these sections (see ./pages.ts). */
+  sections?: PageSection[];
+  /**
+   * The page shows personal data from the people endpoints: global date/segment filters don't apply there, and
+   * the "every lookup is logged" note replaces the filter bar.
+   */
+  people?: boolean;
+}
+
+function sectionPage(path: string, label: string, icon: LucideIcon, sections: PageSection[]): NavItem {
+  return { path, label, icon, metrics: metricsOf(sections), sections, ready: true };
 }
 
 export const NAV: NavItem[] = [
-  { path: "/", label: "Overview", icon: LayoutDashboard, metrics: OVERVIEW_METRICS },
-  { path: "/monetization", label: "Monetization", icon: CreditCard, metrics: [] },
-  { path: "/ai-cost", label: "AI cost", icon: Bot, metrics: [] },
-  { path: "/engagement", label: "Engagement", icon: Activity, metrics: [] },
-  { path: "/tailoring", label: "Tailoring", icon: Sparkles, metrics: [] },
-  { path: "/acquisition", label: "Acquisition", icon: Megaphone, metrics: [] },
-  { path: "/users", label: "Users", icon: Users, metrics: [] },
+  { path: "/", label: "Overview", icon: LayoutDashboard, metrics: OVERVIEW_METRICS, ready: true },
+  sectionPage("/monetization", "Monetization", CreditCard, MONETIZATION),
+  sectionPage("/ai-cost", "AI cost", Bot, AI_COST),
+  sectionPage("/engagement", "Engagement", Activity, ENGAGEMENT),
+  sectionPage("/tailoring", "Tailoring", Sparkles, TAILORING),
+  sectionPage("/acquisition", "Acquisition", Megaphone, ACQUISITION),
+  { path: "/users", label: "Users", icon: Users, metrics: [], ready: true, people: true },
   { path: "/alerts", label: "Alerts", icon: Bell, metrics: [] },
   { path: "/data-health", label: "Data health", icon: HeartPulse, metrics: [] },
 ];
 
+/** The nav entry for a path; sub-pages (e.g. /users/:id) belong to their section. */
+export const pageFor = (pathname: string) =>
+  NAV.find((n) => n.path === pathname) ?? NAV.find((n) => n.path !== "/" && pathname.startsWith(`${n.path}/`));
+
 export function useCurrentPage() {
   const { pathname } = useLocation();
-  return NAV.find((n) => n.path === pathname);
+  return pageFor(pathname);
 }

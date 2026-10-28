@@ -6,6 +6,7 @@ import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports
 import type { Router } from "express";
 import type { AppConfig } from "../shared/config/env";
 import {
+  createAdminExportRateLimiter,
   createAdminIpRateLimiter,
   createAdminRateLimiter,
   createAiRateLimiter,
@@ -94,7 +95,8 @@ export const registerV1Routes = (
         createAdminAuthMiddleware(services.adminIdentityProvider),
         createRequireAdmin(config.adminEmails ?? []),
         createAdminIpRateLimiter(config),
-        createAdminRateLimiter(config)
+        createAdminRateLimiter(config),
+        createAdminExportRateLimiter(config)
       )
     );
   }

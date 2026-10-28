@@ -12,6 +12,34 @@ npm run dev                  # http://localhost:5174, proxies /api to the backen
 
 Run the backend (`../backend`, `npm run dev`) with your email in `ADMIN_EMAILS`. Other scripts: `npm test`, `npm run typecheck`, `npm run build`, `npm run preview` (serves `dist/` with the production security headers from `vercel.json`, CSP included).
 
+CI (`.github/workflows/ci.yml`) runs typecheck, tests and build here whenever `admin/**` changes.
+
+## Data-era markers
+
+Charts mark the KB's era cutoffs (`new_analysis/README.md`, "Era cutoffs") from the static list in `src/lib/eras.ts`. Each era names the metrics it affects. When the KB table changes, update that file too.
+
+## User lookup (personal data)
+
+`/users` and `/users/:id` call `POST /api/v1/admin/people/:name` with a JSON body (`src/lib/people.ts`), so search terms and user ids never appear in a URL. Every call, CSV exports included, is written to the audit log by the backend. The UI keeps these answers only while they're on screen (`staleTime: 0`, `gcTime: 0`) and never writes them to local or session storage. The search term lives in component state and in the `/users` history entry's state (back/forward restores it), never in the address bar; an old link with `?q=` is scrubbed on arrival. Restricted users appear as "Restricted user (no data shown)" with a shortened id and no link. Charts whose metric sets `meta.drill` open the users drawer (`drill_users`) on click instead of filtering the page.
+
+## Metric pages
+
+Monetization, AI cost, Engagement, Tailoring and Acquisition are declared as sections of metric names in `src/app/pages.ts`. `MetricChartCard` picks a renderer from the catalog's `meta.shape` (timeseries, breakdown, funnel, cohort, kpi, table), and every shape has a Table view. A metric the catalog doesn't list yet shows a compact "Not available yet" card and is never requested, so a page can ship before its SQL. Timeseries and cohort cards span the full width; breakdowns and funnels pair up, and a half card left alone stretches.
+
+Optional meta keys the renderers read (see `api-contract.md`):
+
+| Key | Shape | Effect |
+|---|---|---|
+| `breakdown_dimension` | breakdown, funnel | The `Dimension` held in `dimension`. Clicking a bar filters the page by it (or opens the users drawer when `drill` is set). |
+| `plot` | timeseries | Measures drawn as separate series, colored in this order. Measures with different units get one chart each (never two y-axes). The page breakdown doesn't apply when there are 2+. |
+| `stacked` | timeseries + `plot` | Stacked bars. Negative values (e.g. contraction, churn) stack below a zero line. |
+| `flag_column` | timeseries | Boolean column. Flagged buckets get a marker, a legend key and a table column. The label comes from `measures[flag_column].label`, else the column name without `is_`. |
+| `min_group` | all | Small-sample badge threshold. Muted cohort rows, badged bars and funnels. |
+
+The first declared measure (or the column named like the metric) is the primary one. Drill-drawer filters add `step` (funnel), `cohort` + `period` (cohort), or the breakdown dimension (or `dimension` when there is none).
+
+`VITE_FEATURE_RECOMPUTE=true` shows a disabled page-level Recompute button; Phase 4 wires it.
+
 ## Environment variables
 
 | Variable | Notes |

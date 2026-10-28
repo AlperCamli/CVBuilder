@@ -83,6 +83,14 @@ export interface FxRateRow {
   is_final: boolean;
 }
 
+// USD per 1M tokens for every model id starting with model_prefix (longest prefix wins in analytics).
+export interface ModelPriceRow {
+  model_prefix: string;
+  input_usd: number;
+  cached_input_usd: number | null;
+  output_usd: number;
+}
+
 export interface MonetizationRepository {
   // Throws so a failed webhook is retried by Stripe; the upsert is idempotent.
   upsertInvoice(row: InvoiceRow): Promise<void>;
@@ -94,6 +102,9 @@ export interface MonetizationRepository {
   upsertPlanCatalog(rows: PlanCatalogRow[]): Promise<void>;
   upsertFxRates(rows: FxRateRow[]): Promise<void>;
   markInternalUsers(emails: string[]): Promise<number>;
+  // Makes ai_model_prices equal to the configured prices: upserts them and deletes every other prefix.
+  // An empty list changes nothing.
+  replaceModelPrices(rows: ModelPriceRow[]): Promise<void>;
 }
 
 const utcDay = () => new Date().toISOString().slice(0, 10);
@@ -165,6 +176,23 @@ export class SupabaseMonetizationRepository implements MonetizationRepository {
     const { data, error } = await this.db.rpc("mark_internal_users", { p_emails: emails });
     if (error) throw new InternalServerError("Failed to mark internal accounts", { reason: error.message });
     return typeof data === "number" ? data : 0;
+  }
+
+  async replaceModelPrices(rows: ModelPriceRow[]): Promise<void> {
+    // Never wipe the table: an empty set means the configuration is missing, not that every price was removed.
+    if (!rows.length) return;
+    const { error } = await this.db.from("ai_model_prices")
+      .upsert(rows.map(row => ({ ...row, refreshed_at: new Date().toISOString() })), { onConflict: "model_prefix" });
+    if (error) throw new InternalServerError("Failed to refresh model prices", { reason: error.message });
+    const { data, error: readError } = await this.db.from("ai_model_prices").select("model_prefix");
+    if (readError) throw new InternalServerError("Failed to refresh model prices", { reason: readError.message });
+    const configured = new Set(rows.map(row => row.model_prefix));
+    const stale = ((data ?? []) as Array<{ model_prefix: string }>)
+      .map(row => row.model_prefix)
+      .filter(prefix => !configured.has(prefix));
+    if (!stale.length) return;
+    const { error: deleteError } = await this.db.from("ai_model_prices").delete().in("model_prefix", stale);
+    if (deleteError) throw new InternalServerError("Failed to refresh model prices", { reason: deleteError.message });
   }
 
   private async quietly(code: string, write: () => PromiseLike<{ error: { message: string } | null }>): Promise<void> {

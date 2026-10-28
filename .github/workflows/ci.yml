@@ -1,0 +1,95 @@
+name: CI
+
+# Pushes to main, and pull requests (which cover feature branches without a second run per push).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read # dorny/paths-filter lists PR files through the API
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      admin: ${{ steps.filter.outputs.admin }}
+      backend: ${{ steps.filter.outputs.backend }}
+      sql: ${{ steps.filter.outputs.sql }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            admin:
+              - "admin/**"
+              - ".github/workflows/ci.yml"
+            backend:
+              - "backend/**"
+              - "frontend/**" # backend tests import frontend/src
+              - ".github/workflows/ci.yml"
+            sql:
+              - "backend/supabase/**"
+              - "backend/tests/sql/**"
+              - "backend/scripts/**"
+              - ".github/workflows/ci.yml"
+
+  admin:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build # runs tsc --noEmit before vite build
+
+  backend:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  sql:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.sql == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The script starts its own throwaway cluster with initdb/pg_ctl from PATH.
+      # Plain postgresql-17 has no pg_cron, so the migrations skip scheduling as they do locally.
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - run: bash backend/scripts/verify-privacy-sql.sh

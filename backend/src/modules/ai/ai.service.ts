@@ -755,6 +755,20 @@ const TAILORING_FLOW_TYPES: TailoringRunFlowType[] = [
   "tailored_draft"
 ];
 
+// Kept as the prefix of the detailed form, which analytics classifies as output_contract_invalid.
+export const STRUCTURED_OUTPUT_FAILED_MESSAGE = "Structured output validation failed";
+
+// Output-contract issues for ai_runs: the schema path and zod issue code only. Path segments that are not plain
+// identifiers or indexes (e.g. record keys taken from the model output) are masked.
+export const structuredOutputIssues = (issues: readonly z.ZodIssue[]): { path: string; code: string }[] =>
+  issues.slice(0, 20).map((issue) => ({
+    path:
+      issue.path
+        .map((segment) => (typeof segment === "number" || /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(segment) ? String(segment) : "*"))
+        .join(".") || "root",
+    code: issue.code
+  }));
+
 export class AiService {
   constructor(
     private readonly aiRepository: AiRepository,
@@ -2886,20 +2900,20 @@ export class AiService {
     await this.updateRunStage(owner, options.ai_run_id, "validating_output");
     const parsed = definition.output_schema.safeParse(outputPayloadForValidation);
     if (!parsed.success) {
-      const validationDetails = parsed.error.issues.slice(0, 20).map((issue) => ({
-        path: issue.path.join(".") || "root",
-        message: issue.message
-      }));
-      const validationMessage = `Structured output validation failed: ${validationDetails
-        .map((issue) => `${issue.path}: ${issue.message}`)
-        .join("; ")}`;
+      // Path + issue code only: zod's message text can quote the model output (e.g. a received enum value).
+      const validationDetails = structuredOutputIssues(parsed.error.issues);
+      const validationMessage = this.privacy
+        ? STRUCTURED_OUTPUT_FAILED_MESSAGE
+        : `Structured output validation failed: ${validationDetails
+            .map((issue) => `${issue.path}: ${issue.code}`)
+            .join("; ")}`.slice(0, 2000);
 
-      await this.aiRepository.failRun(owner, options.ai_run_id, validationMessage.slice(0, 2000), {
+      await this.aiRepository.failRun(owner, options.ai_run_id, validationMessage, {
         error_name: "AiFlowFailedError",
         reason: "output_contract_invalid",
         stage: "validating_output",
         flow_type: options.flow_type,
-        validation_errors: validationDetails
+        ...(this.privacy ? {} : { validation_errors: validationDetails })
       });
 
       throw new AiFlowFailedError("AI output did not match required contract", {

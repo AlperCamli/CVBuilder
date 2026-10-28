@@ -99,6 +99,11 @@ const sanitizeFilename = (value: string): string => {
   return normalized.slice(0, 180);
 };
 
+export const IMPORT_FAILED_MESSAGE = "Import parsing failed";
+
+export const importFailureMessage = (error: unknown): string =>
+  error instanceof ValidationError && error.message.trim().length > 0 ? error.message.slice(0, 500) : IMPORT_FAILED_MESSAGE;
+
 export class ImportsService {
   constructor(
     private readonly importsRepository: ImportsRepository,
@@ -288,7 +293,9 @@ export class ImportsService {
         }
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Import parsing failed";
+      // Only app-authored validation messages are stored; anything else (parser, provider or JSON errors) may quote
+      // file or model content, so it becomes the generic message.
+      const message = importFailureMessage(error);
 
       const failed = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "failed",

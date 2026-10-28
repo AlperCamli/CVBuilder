@@ -80,6 +80,7 @@ export interface MetricMeta {
   consent_scoped?: boolean;
   alertable?: boolean;
   min_group?: number;
+  drill?: boolean;
 }
 
 export interface CatalogEntry {
@@ -147,5 +148,88 @@ export const parseMetricQuery = (query: unknown, now: Date = new Date()): Metric
       filters: value.filters ?? {}
     },
     format: value.format
+  };
+};
+
+// ---------------------------------------------------------------------------
+// People endpoint (GET /admin/people/:name), api-contract.md "Phase 2"
+// ---------------------------------------------------------------------------
+
+export const PEOPLE_DEFAULT_LIMIT = 50;
+export const PEOPLE_MAX_LIMIT = 200;
+export const PEOPLE_CSV_MAX_ROWS = 50_000;
+const MAX_PEOPLE_FILTER_KEYS = 20;
+
+const MAX_PEOPLE_FILTERS_JSON = 4_000;
+
+// People functions validate their own filter keys (event_type, failures_only, metric, day, …) and raise 22023.
+// Small enough that the audited params always fit admin_app.log_access's 8 KB cap.
+const peopleFiltersSchema = z
+  .record(
+    z.string().regex(/^[a-z][a-z0-9_]{0,62}$/, "Invalid filter key"),
+    z.union([filterScalarSchema, z.array(filterScalarSchema).min(1).max(MAX_FILTER_VALUES)])
+  )
+  .refine((filters) => Object.keys(filters).length <= MAX_PEOPLE_FILTER_KEYS, `At most ${MAX_PEOPLE_FILTER_KEYS} filters`)
+  .refine((filters) => JSON.stringify(filters).length <= MAX_PEOPLE_FILTERS_JSON, "filters are too large");
+
+// POST /admin/people/:name body. null counts as absent. Issues never echo the value, so the raw search text stays
+// out of error responses and logs.
+const peopleBodySchema = z
+  .object({
+    user_id: z.string().uuid("user_id must be a uuid").nullish(),
+    q: z
+      .string()
+      .max(1_000, "q must be 3 to 200 characters")
+      .transform((value) => value.trim())
+      .pipe(z.string().min(3, "q must be 3 to 200 characters").max(200, "q must be 3 to 200 characters"))
+      .nullish(),
+    from: isoDateSchema.nullish(),
+    to: isoDateSchema.nullish(),
+    filters: peopleFiltersSchema.nullish(),
+    limit: z.number().int().min(1).max(PEOPLE_MAX_LIMIT).nullish(),
+    cursor: z.string().min(1).max(200).nullish(),
+    format: z.enum(["json", "csv"]).nullish()
+  })
+  .strict();
+
+export type PeopleFilters = z.infer<typeof peopleFiltersSchema>;
+
+export interface PeopleParams {
+  userId: string | null;
+  query: string | null;
+  from: string | null;
+  to: string | null;
+  filters: PeopleFilters;
+  limit: number;
+  cursor: string | null;
+}
+
+export interface PeopleQuery {
+  params: PeopleParams;
+  format: "json" | "csv";
+}
+
+export const parsePeopleQuery = (body: unknown): PeopleQuery => {
+  const parsed = peopleBodySchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    throw new ValidationError("Validation failed", formatZodError(parsed.error));
+  }
+
+  const value = parsed.data;
+  if (value.from && value.to && toMs(value.from) > toMs(value.to)) {
+    throw new ValidationError("Validation failed", { issues: [{ path: "from", message: "from must be on or before to", code: "custom" }] });
+  }
+
+  return {
+    params: {
+      userId: value.user_id ?? null,
+      query: value.q ?? null,
+      from: value.from ?? null,
+      to: value.to ?? null,
+      filters: value.filters ?? {},
+      limit: value.limit ?? PEOPLE_DEFAULT_LIMIT,
+      cursor: value.cursor ?? null
+    },
+    format: value.format ?? "json"
   };
 };
