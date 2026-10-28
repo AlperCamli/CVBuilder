@@ -93,7 +93,7 @@ export interface MonetizationRepository {
   upsertPriceCatalog(rows: PriceCatalogRow[]): Promise<void>;
   upsertPlanCatalog(rows: PlanCatalogRow[]): Promise<void>;
   upsertFxRates(rows: FxRateRow[]): Promise<void>;
-  markInternalUsers(emails: string[]): Promise<void>;
+  markInternalUsers(emails: string[]): Promise<number>;
 }
 
 const utcDay = () => new Date().toISOString().slice(0, 10);
@@ -159,11 +159,12 @@ export class SupabaseMonetizationRepository implements MonetizationRepository {
     if (error) throw new InternalServerError("Failed to refresh FX rates", { reason: error.message });
   }
 
-  // Only ever adds the flag; accounts marked by hand are left alone.
-  async markInternalUsers(emails: string[]): Promise<void> {
-    if (!emails.length) return;
-    const { error } = await this.db.from("users").update({ is_internal: true }).in("email", emails).eq("is_internal", false);
+  // Only ever adds the flag (case-insensitive match); returns the number of accounts newly marked.
+  async markInternalUsers(emails: string[]): Promise<number> {
+    if (!emails.length) return 0;
+    const { data, error } = await this.db.rpc("mark_internal_users", { p_emails: emails });
     if (error) throw new InternalServerError("Failed to mark internal accounts", { reason: error.message });
+    return typeof data === "number" ? data : 0;
   }
 
   private async quietly(code: string, write: () => PromiseLike<{ error: { message: string } | null }>): Promise<void> {

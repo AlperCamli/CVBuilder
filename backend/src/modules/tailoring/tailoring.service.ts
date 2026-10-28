@@ -9,6 +9,7 @@ import {
 import { addBulletPrefix } from "../../shared/cv-content/bullet-text";
 import { convertNarrativeLists } from "../../shared/cv-content/narrative-fields";
 import { documentLanguageName, normalizeDocumentLanguage } from "../../shared/localization/languages";
+import { isAdminEmail } from "../../shared/middleware/require-admin";
 import {
   AiFlowFailedError,
   AiProviderError,
@@ -288,8 +289,7 @@ export class TailoringService {
   ) {}
 
   isAdmin(session: SessionContext): boolean {
-    const email = session.appUser.email?.trim().toLowerCase();
-    return Boolean(email) && (this.options.adminEmails ?? []).includes(email);
+    return isAdminEmail(session.appUser.email, this.options.adminEmails ?? []);
   }
 
   // -------------------------------------------------------------------------

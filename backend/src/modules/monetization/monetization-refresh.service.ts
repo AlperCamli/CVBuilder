@@ -50,8 +50,7 @@ export class MonetizationRefreshService {
     const previous = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - 1, 1));
     await step("fx", async () => { result.fx_months = await this.refreshFxMonths([previous, current], now); });
     await step("internal_accounts", async () => {
-      await this.repository.markInternalUsers(this.options.adminEmails);
-      result.internal_accounts = this.options.adminEmails.length;
+      result.internal_accounts = await this.repository.markInternalUsers(this.options.adminEmails);
     });
     return result;
   }

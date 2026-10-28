@@ -11,7 +11,7 @@ import {
 import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
 import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
 import { MonetizationRefreshService } from "../src/modules/monetization/monetization-refresh.service";
-import type { MonetizationRepository } from "../src/modules/monetization/monetization.repository";
+import { SupabaseMonetizationRepository, type MonetizationRepository } from "../src/modules/monetization/monetization.repository";
 import { UsageService } from "../src/modules/usage/usage.service";
 import { ConflictError, ForbiddenError } from "../src/shared/errors/app-error";
 import {
@@ -31,7 +31,7 @@ const recordingRepository = () => ({
   upsertPriceCatalog: vi.fn(async () => {}),
   upsertPlanCatalog: vi.fn(async () => {}),
   upsertFxRates: vi.fn(async () => {}),
-  markInternalUsers: vi.fn(async () => {})
+  markInternalUsers: vi.fn(async () => 1)
 }) satisfies MonetizationRepository;
 
 const invoice = (overrides: Partial<StripeInvoiceSummary> = {}): StripeInvoiceSummary => ({
@@ -212,6 +212,7 @@ describe("monetization reference refresh", () => {
       expect.objectContaining({ rate_month: "2026-10-01", rate: 51, sample_days: 2, is_final: false })
     ]);
     expect(repository.markInternalUsers).toHaveBeenCalledWith(["admin@example.invalid"]);
+    expect(result.internal_accounts).toBe(1);
     expect(repository.upsertPlanCatalog).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ plan_code: "weekly", trial_days: 3 }),
       expect.objectContaining({ plan_code: "free", trial_days: 0, limits: expect.objectContaining({ exports: 5 }) })
@@ -228,5 +229,16 @@ describe("monetization reference refresh", () => {
       expect.objectContaining({ provider_price_id: "price_try_week", market: "TR", unit_amount: 6990, is_configured: true }),
       expect.objectContaining({ provider_price_id: "price_old_try", market: "TR", unit_amount: 4990, is_configured: false })
     ]));
+  });
+});
+
+describe("internal account marking", () => {
+  it("marks admins through the case-insensitive RPC and returns the newly marked count", async () => {
+    const rpc = vi.fn(async () => ({ data: 2, error: null }));
+    const repository = new SupabaseMonetizationRepository({ rpc } as never, { warn: vi.fn() });
+    expect(await repository.markInternalUsers(["Admin@Example.invalid"])).toBe(2);
+    expect(rpc).toHaveBeenCalledWith("mark_internal_users", { p_emails: ["Admin@Example.invalid"] });
+    expect(await repository.markInternalUsers([])).toBe(0);
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 });

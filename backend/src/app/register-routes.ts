@@ -5,7 +5,16 @@ import { asyncHandler } from "../shared/utils/async-handler";
 import { createGuestImportsRouter } from "../modules/guest-imports/guest-imports.routes";
 import type { Router } from "express";
 import type { AppConfig } from "../shared/config/env";
-import { createAiRateLimiter, createTailoringRateLimiter } from "../shared/middleware/rate-limit";
+import {
+  createAdminIpRateLimiter,
+  createAdminRateLimiter,
+  createAiRateLimiter,
+  createTailoringRateLimiter
+} from "../shared/middleware/rate-limit";
+import { createRequireAdmin } from "../shared/middleware/require-admin";
+import { AdminAnalyticsController } from "../modules/admin-analytics/admin-analytics.controller";
+import { createAdminAnalyticsRouter } from "../modules/admin-analytics/admin-analytics.routes";
+import { createAdminAuthMiddleware } from "../modules/admin-analytics/admin-identity";
 import { TailoringController } from "../modules/tailoring/tailoring.controller";
 import { createTailoringRouter } from "../modules/tailoring/tailoring.routes";
 import { createAuthMiddleware } from "../modules/auth/auth.middleware";
@@ -76,6 +85,19 @@ export const registerV1Routes = (
   }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
   if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService, services.monetizationBackfillService));
+  // Admin analytics stays outside the product-access/consent guards below and
+  // authenticates the Supabase identity only, never creating a product account.
+  if (services.adminAnalyticsService && services.adminIdentityProvider) {
+    router.use(
+      createAdminAnalyticsRouter(
+        new AdminAnalyticsController(services.adminAnalyticsService),
+        createAdminAuthMiddleware(services.adminIdentityProvider),
+        createRequireAdmin(config.adminEmails ?? []),
+        createAdminIpRateLimiter(config),
+        createAdminRateLimiter(config)
+      )
+    );
+  }
   // Onboarding may claim/read an import and save account answers before activation.
   // Existing users retain their manual CV workspace; creation, AI, tailoring and exports stay paid.
   router.use((req, res, next) => {

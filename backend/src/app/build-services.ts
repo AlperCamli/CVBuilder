@@ -97,6 +97,16 @@ import {
 import { MonetizationRefreshService } from "../modules/monetization/monetization-refresh.service";
 import { MonetizationBackfillService } from "../modules/monetization/monetization-backfill.service";
 import { TailoringService } from "../modules/tailoring/tailoring.service";
+import { AdminAnalyticsService } from "../modules/admin-analytics/admin-analytics.service";
+import {
+  PostgresAdminAnalyticsRepository,
+  type AdminAnalyticsRepository
+} from "../modules/admin-analytics/admin-analytics.repository";
+import {
+  SupabaseAdminIdentityProvider,
+  type AdminIdentityProvider
+} from "../modules/admin-analytics/admin-identity";
+import { getAnalyticsDb } from "../shared/db/analytics-db";
 import {
   SupabaseTailoringRepository,
   type TailoringRepository
@@ -126,6 +136,8 @@ export interface AppServices {
   billingService: BillingService;
   monetizationRefreshService?: MonetizationRefreshService;
   monetizationBackfillService?: MonetizationBackfillService;
+  adminAnalyticsService?: AdminAnalyticsService;
+  adminIdentityProvider?: AdminIdentityProvider;
 }
 
 export interface ServiceOverrides {
@@ -156,6 +168,8 @@ export interface ServiceOverrides {
   usageService?: UsageService;
   billingService?: BillingService;
   monetizationRepository?: MonetizationRepository;
+  adminAnalyticsRepository?: AdminAnalyticsRepository | null;
+  adminIdentityProvider?: AdminIdentityProvider;
 }
 
 export const buildDefaultServices = (
@@ -348,6 +362,15 @@ export const buildDefaultServices = (
     overrides?.guestImportsRepository ?? new SupabaseGuestImportsRepository(supabaseClients.serviceRoleClient),
     importsRepository, importsService, privacyService
   );
+  const analyticsDatabaseUrl = config.analyticsDatabaseUrl;
+  const adminAnalyticsService = new AdminAnalyticsService(
+    overrides?.adminAnalyticsRepository !== undefined
+      ? overrides.adminAnalyticsRepository
+      : analyticsDatabaseUrl
+        ? new PostgresAdminAnalyticsRepository(() => getAnalyticsDb(analyticsDatabaseUrl))
+        : null,
+    { adminEmails: config.adminEmails ?? [], logger }
+  );
   const exportsService = new ExportsService(
     exportsRepository,
     tailoredCvRepository,
@@ -383,6 +406,9 @@ export const buildDefaultServices = (
     exportsService,
     billingService,
     monetizationRefreshService,
+    adminAnalyticsService,
+    adminIdentityProvider:
+      overrides?.adminIdentityProvider ?? new SupabaseAdminIdentityProvider(supabaseClients.serviceRoleClient),
     monetizationBackfillService: stripeGateway
       ? new MonetizationBackfillService(supabaseClients.serviceRoleClient, stripeGateway, billingService, monetizationRefreshService, logger)
       : undefined

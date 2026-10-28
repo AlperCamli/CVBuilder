@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* Chart palette and chrome follow the dataviz reference palette; categorical slots are validated per mode. */
+:root {
+  color-scheme: light;
+  --background: #f9f9f7;
+  --card: #fcfcfb;
+  --foreground: #0b0b0b;
+  --muted-foreground: #52514e;
+  --subtle: #898781;
+  --border: rgba(11, 11, 11, 0.1);
+  --input: rgba(11, 11, 11, 0.16);
+  --accent: #f0efec;
+  --accent-foreground: #0b0b0b;
+  --primary: #0f6e56;
+  --primary-foreground: #ffffff;
+  --secondary: #f0efec;
+  --secondary-foreground: #0b0b0b;
+  --destructive: #d03b3b;
+  --ring: #1d9e75;
+
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --delta-good: #006300;
+  --delta-bad: #d03b3b;
+  --warning: #fab219;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-other: #898781;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #0d0d0d;
+    --card: #1a1a19;
+    --foreground: #f0efec;
+    --muted-foreground: #c3c2b7;
+    --subtle: #898781;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.16);
+    --accent: #2c2c2a;
+    --accent-foreground: #f0efec;
+    --primary: #1d9e75;
+    --primary-foreground: #ffffff;
+    --secondary: #2c2c2a;
+    --secondary-foreground: #f0efec;
+    --destructive: #e66767;
+    --ring: #1d9e75;
+
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --delta-good: #0ca30c;
+    --delta-bad: #e66767;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+  }
+}
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+  --color-delta-good: var(--delta-good);
+  --color-delta-bad: var(--delta-bad);
+  --color-warning: var(--warning);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  select,
+  input {
+    color-scheme: inherit;
+  }
+}

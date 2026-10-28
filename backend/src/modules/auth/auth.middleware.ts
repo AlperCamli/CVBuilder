@@ -4,7 +4,7 @@ import type { NextFunction, Request, Response, RequestHandler } from "express";
 import { UnauthorizedError } from "../../shared/errors/app-error";
 import type { AuthService } from "./auth.service";
 
-const getBearerToken = (authorizationHeader: string | undefined): string | null => {
+export const getBearerToken = (authorizationHeader: string | undefined): string | null => {
   if (!authorizationHeader) {
     return null;
   }

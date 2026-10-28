@@ -217,6 +217,28 @@ export class ExportNotReadyError extends AppError {
   }
 }
 
+export class AnalyticsUnavailableError extends AppError {
+  constructor(message = "Analytics database is not configured", details?: Record<string, unknown>) {
+    super({
+      statusCode: 503,
+      code: ERROR_CODES.ANALYTICS_UNAVAILABLE,
+      message,
+      details
+    });
+  }
+}
+
+export class AnalyticsTimeoutError extends AppError {
+  constructor(message = "Analytics query timed out", details?: Record<string, unknown>) {
+    super({
+      statusCode: 504,
+      code: ERROR_CODES.ANALYTICS_TIMEOUT,
+      message,
+      details
+    });
+  }
+}
+
 export class InternalServerError extends AppError {
   constructor(message = "Internal server error", details?: Record<string, unknown>) {
     super({

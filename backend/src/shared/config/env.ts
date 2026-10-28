@@ -110,7 +110,9 @@ const envSchema = z
     BILLING_PORTAL_RETURN_URL: z.string().url().optional(),
     SUPABASE_URL: z.string().url(),
     SUPABASE_ANON_KEY: z.string().min(1),
-    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1)
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+    // Admin analytics: Supavisor transaction-pooler URL for the analytics_api role.
+    ANALYTICS_DATABASE_URL: optionalApiKey
   })
   .superRefine((value, context) => {
     if (value.AI_PROVIDER === "gemini" && !value.GEMINI_API_KEY) {
@@ -195,6 +197,7 @@ export interface AppConfig {
     modelPricing?: ModelPriceTable;
   };
   adminEmails?: string[];
+  analyticsDatabaseUrl?: string;
   exports: {
     storageBucket: string;
     downloadUrlTtlSeconds: number;
@@ -336,6 +339,7 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       .split(",")
       .map((email) => email.trim().toLowerCase())
       .filter((email) => email.length > 0),
+    analyticsDatabaseUrl: parsed.data.ANALYTICS_DATABASE_URL,
     exports: {
       storageBucket: parsed.data.EXPORTS_STORAGE_BUCKET,
       downloadUrlTtlSeconds: parsed.data.EXPORT_DOWNLOAD_URL_TTL_SECONDS

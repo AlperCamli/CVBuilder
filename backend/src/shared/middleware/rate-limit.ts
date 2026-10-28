@@ -31,6 +31,8 @@ export const createGlobalRateLimiter = (config: AppConfig): RequestHandler => {
     limit: 100,
     standardHeaders: true,
     legacyHeaders: false,
+    // Admin routes have their own per-IP and per-admin limiters; a dashboard page loads many metrics at once.
+    skip: (request: Request): boolean => request.path.startsWith("/admin/"),
     // Vercel supplies the trusted X-Forwarded-For header. The alternative
     // Forwarded header is deliberately ignored, including client forgeries.
     validate: { forwardedHeader: process.env.VERCEL !== "1" },
@@ -75,6 +77,42 @@ export const createAiRateLimiter = (config: AppConfig): RequestHandler => {
       }
       return `ip:${ipKeyGenerator(request.ip ?? "")}`;
     },
+    handler: handleRateLimited
+  });
+};
+
+// Guards against runaway dashboard clients only; a page loads many metrics at once.
+export const createAdminRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (request: Request): string => {
+      const authUserId = request.adminIdentity?.authUserId;
+      return authUserId ? `admin:${authUserId}` : `admin-user-ip:${ipKeyGenerator(request.ip ?? "")}`;
+    },
+    handler: handleRateLimited
+  });
+};
+
+// Runs before the admin token check, so unauthenticated probing is capped too.
+export const createAdminIpRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
+    keyGenerator: (request: Request): string => `admin-ip:${ipKeyGenerator(request.ip ?? "")}`,
     handler: handleRateLimited
   });
 };

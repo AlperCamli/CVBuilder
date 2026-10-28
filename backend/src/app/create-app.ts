@@ -76,7 +76,9 @@ export const createApp = (options?: CreateAppOptions): Express => {
     monetizationRefreshService:
       options?.services?.monetizationRefreshService ?? defaultServices?.monetizationRefreshService,
     monetizationBackfillService:
-      options?.services?.monetizationBackfillService ?? defaultServices?.monetizationBackfillService
+      options?.services?.monetizationBackfillService ?? defaultServices?.monetizationBackfillService,
+    adminAnalyticsService: options?.services?.adminAnalyticsService ?? defaultServices?.adminAnalyticsService,
+    adminIdentityProvider: options?.services?.adminIdentityProvider ?? defaultServices?.adminIdentityProvider
   };
 
   const app = express();
