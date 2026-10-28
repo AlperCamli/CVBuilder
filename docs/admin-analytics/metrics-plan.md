@@ -1,5 +1,7 @@
 # Admin Analytics — Metrics plan (v1)
 
+> **Historical:** this is the original build plan. Several names and columns changed during the build; see [metrics-inventory.md](metrics-inventory.md) for what is deployed.
+
 Every dashboard number is one SQL function (see [api-contract.md](api-contract.md)). This file lists them by phase with their KB source, so porting stays traceable.
 
 KB root: `/Users/alpercamli/Desktop/cv-data-model-kb/CV_data_tool`.

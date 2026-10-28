@@ -1,6 +1,6 @@
 # Admin Analytics — Runbook
 
-Operational tasks for `admin.jobspecificcv.com`. Design: [architecture.md](architecture.md); contracts: [api-contract.md](api-contract.md); metrics: [metrics-plan.md](metrics-plan.md).
+Operational tasks for `admin.jobspecificcv.com`. Design: [architecture.md](architecture.md); contracts: [api-contract.md](api-contract.md); metrics: [metrics-inventory.md](metrics-inventory.md).
 
 ## Where things live
 
@@ -32,7 +32,7 @@ Operational tasks for `admin.jobspecificcv.com`. Design: [architecture.md](archi
 2. **Test it.** Add `backend/tests/sql/analytics-<area>.sql` with fixtures, register it in `backend/scripts/verify-privacy-sql.sh`, and run `npm run test:privacy-sql`. The contract check fails the run if the signature, grants or comment are wrong.
 3. **Document it.** Add a `Dashboard function:` line to the KB file it ports, plus a "Dashboard definition" note if it deviates.
 4. **Ship it.** Push the migration, then list the metric name on a page in `admin/src/app/pages.ts`. Until the migration is applied, the card shows "Not available yet". No backend change is needed.
-5. **Optional drill-down:** add `analytics_private.drill_<key>(p_from, p_to, p_filters, p_limit, p_cursor)`, set `"drill": true` on the metric, and call `analytics_private.refresh_drill_metrics()` at the end of the migration.
+5. **Optional drill-down:** add `analytics_private.drill_<key>(p_from, p_to, p_filters, p_limit, p_cursor)`, set `"drill": true` on the metric, and call `analytics_private.refresh_drill_metrics()` at the end of the migration (full recipe: development.md §6).
 
 ## Refreshes, recompute and scheduled jobs
 - **Jobs:** `pg_cron` runs inside the database:
@@ -42,6 +42,7 @@ Operational tasks for `admin.jobspecificcv.com`. Design: [architecture.md](archi
   | `analytics_nightly` | 03:45 | `analytics_private.refresh_all('nightly')`: rebuilds the materialized views |
   | `analytics_recompute_queue` | every minute | `analytics_private.process_recompute_queue()` |
   | `analytics_alerts` | hourly at :05 | `analytics_private.evaluate_alerts()` |
+  | `analytics_cron_history_purge` | 04:20 | deletes `cron.job_run_details` rows of `analytics_*` jobs older than 7 days |
 
 - **Inspect jobs:** `select jobname, schedule, active from cron.job;` and `select * from cron.job_run_details order by start_time desc limit 20;` (SQL editor).
 - **Recompute button:** queues a run and is throttled to once every 5 minutes, enforced in the database. Status is shown on **Data health**.
@@ -69,7 +70,7 @@ In the gap between steps 2 and 3, the dashboard returns `503 ANALYTICS_UNAVAILAB
 | Symptom | Likely cause / check |
 |---|---|
 | Writes and user lookups fail with 403 `FORBIDDEN` ("Origin not allowed") while charts work | The admin origin is missing from `CORS_ALLOWED_ORIGINS` on `cv-builder-backend`. It must include `https://admin.jobspecificcv.com`; add it, then redeploy the backend. |
-| Cards show "Analytics unavailable" (503) | `ANALYTICS_DATABASE_URL` missing or wrong, wrong password, or pooler issue. Check backend runtime logs for `admin-analytics` entries; they log the error code without the connection string. |
+| Cards show "Analytics unavailable" (503) | `ANALYTICS_DATABASE_URL` missing or wrong, wrong password, or pooler issue. Check backend runtime logs for `Request failed` lines with `area: "admin"`; they carry the route, error name, code and message, never the connection string. |
 | 504 on a chart | A query hit the 15 s role timeout. Narrow the range or use a coarser grain (day grain is capped at 366 days for MRR movement). |
 | "No access" for an admin | Not signed in with Google, email not in `ADMIN_EMAILS`, or the backend wasn't redeployed after the change. |
 | Numbers differ from a KB query | Check the function comment's `definition` and the KB file's "Dashboard definition" note. The dashboard uses UTC, excludes internal, restricted and pending-deletion accounts, and uses `analysis_users`. |

@@ -1,5 +1,7 @@
 # Admin Analytics — HTTP & SQL contract
 
+> **Column lists:** the per-phase output tables below were written while each phase was built. [metrics-inventory.md](metrics-inventory.md) is the authoritative list of what is deployed, and it includes the Phase 4 metrics (Engagement, Tailoring, Acquisition) that have no table here. Read the rules in this file together with that inventory.
+
 Shared contract between `backend/src/modules/admin-analytics`, `admin/` and the `analytics*` SQL functions. If you change it, change all three in the same commit.
 
 ## Envelope
@@ -33,10 +35,13 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
   alertable?: boolean;              // single-row KPI usable in alert rules
   min_group?: number;               // small-sample warning threshold (default 5)
   drill?: boolean;                  // clicking a point opens the drill drawer (analytics_people.drill_users)
-  breakdown_dimension?: Dimension;  // breakdown shape: the Dimension its `dimension` column holds (enables click-to-filter)
+  breakdown_dimension?: Dimension;  // breakdown / funnel shapes: the Dimension its `dimension` column holds (enables click-to-filter)
   plot?: string[];                  // timeseries: measures plotted as separate series (else the first measure)
   stacked?: boolean;                // timeseries with `plot`: stacked bars (signed values allowed)
   flag_column?: string;             // timeseries: boolean column that highlights points (e.g. anomalies)
+  precomputed?: boolean;            // read from a materialized view: Recompute button, "Data as of" = last build
+  filter_keys?: string[];           // people functions: every accepted p_filters key (filters lists only Dimensions)
+  drill_metrics?: Record<string, { metric: string | null; filters: string[]; … }>; // drill_users only, see Drill-down
   measures?: Record<string, {       // per-column labels/units when a metric returns several measures
     label: string;
     unit: Unit;                     // overrides `unit` for this column
@@ -64,7 +69,8 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
 Validation:
 - `from ≤ to`; span ≤ 1096 days; `name` matches `^[a-z][a-z0-9_]{0,62}$`.
 - An unknown metric returns 404.
-- SQLSTATE `22023` (invalid parameter, raised by the metric) → 400 `VALIDATION_ERROR`. `57014` (timeout) → 504 `ANALYTICS_TIMEOUT`. Analytics DB not configured → 503 `ANALYTICS_UNAVAILABLE`.
+- SQLSTATE `22023` (invalid parameter, raised by the metric) → 400 `VALIDATION_ERROR`. `57014` (timeout) → 504 `ANALYTICS_TIMEOUT`. Analytics DB not configured or unreachable (connection, TLS, auth, pool or `57P0x` errors) → 503 `ANALYTICS_UNAVAILABLE`. `42883` (function vanished) → 404 when it has left the catalog, else 500.
+- CSV (`format=csv`): `text/csv; charset=utf-8` with a BOM, `Content-Disposition: attachment; filename="<name>_<from>_<to>.csv"`. Metric CSVs are not audited (they hold aggregates only).
 
 ## SQL function contract
 
@@ -226,7 +232,7 @@ All four exclude accounts pending deletion (erased accounts no longer exist), sh
   - With `p_query`, adds `params.query_hmac = encode(extensions.hmac(lower(trim(p_query)), pepper, 'sha256'), 'hex')`. The pepper is a random 32-byte value in `admin_app.audit_pepper` (one row, created by the migration, no grants); the raw text is never stored.
   - Raises 22023 for: a malformed email; an action not matching `<area>.<name>` (`^[a-z][a-z0-9_]{0,40}(\.[a-z][a-z0-9_]{0,40}){1,3}$`) or naming an unknown people function; params that are not an object, exceed 8,192 characters or carry `q`, `query`, `p_query`, `query_hmac` or `query_sha256`; `p_query` over 1,000 characters; a request id over 128 characters or outside `[-A-Za-z0-9_.:]`.
 - **Enforcement:** `analytics_private.assert_audited(function, user_id)` runs first in every `analytics_people` function and raises 42501 unless the current transaction (`pg_current_xact_id_if_assigned()`) holds a row for that function and, when `user_id` is given, for that user (or for no user when the id does not exist).
-- **Reads** (Phase 5 Data health page): `admin_app.audit_recent(p_limit integer default 100)` → newest first, clamped to 1–500.
+- **Reads** (Phase 5 Data health page): `admin_app.audit_recent(p_limit integer default 100)` → newest first, clamped to 1–500. The alerts migration replaced it: it also returns `people_function` and raises 42501 unless the transaction already holds an `audit.read` row (see Phase 5).
 
 ## Phase 3 AI metric outputs (AI cost & reliability)
 

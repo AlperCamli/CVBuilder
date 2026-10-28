@@ -12,7 +12,7 @@ npm run dev                  # http://localhost:5174, proxies /api to the backen
 
 Run the backend (`../backend`, `npm run dev`) with your email in `ADMIN_EMAILS`. Other scripts: `npm test`, `npm run typecheck`, `npm run build`, `npm run preview` (serves `dist/` with the production security headers from `vercel.json`, CSP included).
 
-CI (`.github/workflows/ci.yml`) runs typecheck, tests and build here whenever `admin/**` changes.
+CI (`.github/workflows/ci.yml`) runs `npm test` and `npm run build` (which typechecks) here whenever `admin/**` or the workflow changes.
 
 ## Data-era markers
 
@@ -39,7 +39,7 @@ Optional meta keys the renderers read (see `api-contract.md`):
 
 The primary measure is the column named like the metric, or else the first measure column in the order the function returns its columns. It doesn't use `meta.measures` key order, because Postgres jsonb reorders object keys.
 
-Drill-down uses the `drill_users` key whose `drill_metrics` entry names the metric (for example `ai_cost` → `ai_cost_users`, `growth_accounting` → `churned_users`). The page grain is added when that key accepts `grain`. Drill-drawer filters add `step` (funnel), `cohort` + `period` (cohort), or the breakdown dimension (or `dimension` when there is none).
+Drill-down uses the `drill_users` key whose `drill_metrics` entry names the metric (for example `ai_cost` → `ai_cost_users`, `growth_accounting` → `churned_users`). The page grain is added when that key accepts `grain`. Drill-drawer filters are the page filters the metric accepts, over the clicked bucket's days (timeseries) or the page range, plus `step` (funnel), `cohort` + `period` (cohort), or the breakdown dimension (or `dimension` when there is none). The drawer never sends `include_internal`, so drill lists exclude internal accounts. New people functions must be added to `PEOPLE_FUNCTIONS` in `src/lib/people.ts`.
 
 The AI cost chart (Overview and AI cost page) marks the `is_anomaly` buckets of `ai_cost_anomalies` when the catalog lists it. The markers use the same range, grain and filters, with no breakdown, so they flag the total.
 

@@ -26,6 +26,8 @@ admin.jobspecificcv.com                backend (existing Vercel project)        
 
 ## 2. Repository layout
 
+The layout as planned; the files that actually exist are in the code map, [development.md](development.md) §2.
+
 ```
 CV_Builder/
 ├── admin/                                  NEW — Vercel project "cv-builder-admin", root dir = admin
@@ -62,7 +64,7 @@ The KB (`cv-data-model-kb/CV_data_tool`) gets a `Dashboard function:` line in ea
 | `analytics_private` | Shared views, materialized views, alert evaluator, helpers | owner only |
 
 - None of these schemas are exposed to the Data API (see §3.8).
-- `anon`, `authenticated`, `service_role` and `PUBLIC` get no `USAGE` or `EXECUTE`. Postgres grants function `EXECUTE` to `PUBLIC` by default, so the foundation migration sets default privileges for the four schemas, and the contract check (`analytics_private.contract_violations()`) asserts the result.
+- `anon`, `authenticated`, `service_role` and `PUBLIC` get no `USAGE` or `EXECUTE`. Postgres grants function `EXECUTE` to `PUBLIC` by default and per-schema default privileges can't remove that, so the foundation migration's default privileges only grant `analytics_api`, every analytics migration ends with an explicit `revoke … from public`, and the contract check (`analytics_private.contract_violations()`) asserts the result.
 - The schema an endpoint calls *is* its allowlist. Helpers that must never be called directly stay in `analytics_private`.
 
 ### 3.2 Shared definitions (`analytics_private`), defined once
@@ -101,6 +103,8 @@ language sql stable set search_path = ''
 
 ### 3.4 Functions in v1
 
+The original plan; what shipped (35 metrics, no `data_quality_checks`) is in [metrics-inventory.md](metrics-inventory.md).
+
 - **analytics**
   - `kpi_overview` (current vs. previous period for all Overview tiles), `signups`, `activation_funnel`
   - `revenue`, `mrr_movement`, `trial_to_paid`, `checkout_funnel`, `subscriber_ltv`
@@ -114,26 +118,27 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 
 ### 3.5 Pre-computed metrics and scheduling (`pg_cron`)
 
-- **Materialized views** in `analytics_private` back `cohort_retention`, `growth_accounting`, `subscriber_ltv` and `mrr_movement`. Each has a unique index so `refresh materialized view concurrently` never blocks reads. All other metrics run live; the data is small. Indexes are added only when `EXPLAIN` shows the need.
+- **Materialized views** in `analytics_private` (`engagement_user_periods`, `engagement_growth`, `refresh_snapshot`) back `cohort_retention` and `growth_accounting`; `subscriber_ltv` and `mrr_movement` run live. Each MV has a unique index so `refresh materialized view concurrently` never blocks reads. All other metrics run live; the data is small. Indexes are added only when `EXPLAIN` shows the need.
 - **`pg_cron` jobs:**
 
   | Job | Schedule | Does |
   |---|---|---|
   | `analytics_nightly` | 03:45 UTC | Refresh all MVs (after the 03:30 Vercel refresh updates FX, prices and internal flags) |
   | `analytics_recompute_queue` | every minute | If `admin_app.refresh_runs` has a pending request, refresh MVs and mark it done |
-  | `analytics_alerts` | hourly | `analytics_private.evaluate_alerts()` |
+  | `analytics_alerts` | hourly at :05 | `analytics_private.evaluate_alerts()` |
+  | `analytics_cron_history_purge` | 04:20 UTC | Keep 7 days of `cron.job_run_details` for the `analytics_*` jobs |
 
-- **Recompute button:** `admin_app.request_recompute(admin_email)` inserts a pending run. It is rejected if a run finished or was requested within 5 minutes; this check lives in the database, so it holds across serverless instances. The UI polls `data_freshness` until the run completes, so the HTTP request never waits on the refresh.
+- **Recompute button:** `admin_app.request_recompute(admin_email)` inserts a pending run. It is rejected if a run finished or was requested within 5 minutes; this check lives in the database, so it holds across serverless instances. The UI polls `GET /admin/recompute/status` until the run completes, so the HTTP request never waits on the refresh.
 
 ### 3.6 Alerts
 
-- `admin_app.alert_rules`: `metric`, `params jsonb`, `value_column`, `condition` (`gt`/`lt`/`pct_change_gt`/…), `threshold`, `window`, `cooldown`, `enabled`, `created_by`.
-- `admin_app.alert_events`: `rule_id`, `fired_at`, `value`, `baseline`, `acknowledged_by/at`.
+- `admin_app.alert_rules`: `name`, `metric`, `measure`, `params jsonb`, `condition` (`gt`/`lt`/`pct_change_gt`/`pct_change_lt`), `threshold`, `"window"`, `cooldown_hours`, `enabled`, `created_by` (full columns: api-contract.md "Phase 5").
+- `admin_app.alert_events`: `rule_id`, `fired_at`, `window_from/to`, `value`, `baseline`, `message`, `acknowledged_by/at`.
 - **Evaluation:** `evaluate_alerts()` checks the metric name against `pg_proc` in schema `analytics` before calling it dynamically (`format('%I', …)`), then compares the result and respects the cooldown. Only KPI-shaped metrics (a single row) can be alerted on, and the rule editor offers only those.
 
 ### 3.7 Audit log
 
-- **`admin_app.audit_log`** stores: `at`, `admin_email`, `action` (`people.search`, `people.summary`, `people.timeline`, `people.drill`, `export.csv`, `alert.rule.*`, `recompute`), `target_user_id`, `params jsonb`, `request_id`.
+- **`admin_app.audit_log`** stores: `at`, `admin_email`, `action` (`people.<function>` e.g. `people.search_users`, `export.csv`, `alert.rule.*`, `alert.event.ack`, `recompute.request`, `audit.read`), `people_function`, `xact_id`, `target_user_id`, `params jsonb`, `request_id`.
 - It is append-only: there are no update/delete grants, and a trigger rejects changes.
 - It must be added to the privacy erasure flow so `target_user_id` is nulled when a user is erased.
 
@@ -209,12 +214,12 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 - **Data fetching:** `useMetric(name, filters)` → query key `[name, filters]`.
   - `staleTime` is 5 minutes.
   - Refresh invalidates the page's queries.
-  - Recompute calls the endpoint, then polls `data_freshness`.
-- **State:** filters, breakdown and drill-down live in URL search params, parsed with zod. There is no global store.
+  - Recompute calls the endpoint, then polls `GET /admin/recompute/status` every 5 s while a run is open.
+- **State:** filters, breakdown and click-to-filter drill-downs live in URL search params, parsed with zod; the users drawer and people search terms stay in component state. There is no global store.
 - **Interactivity:**
   - Recharts `Tooltip`, `Legend` (click to toggle a series), `Brush` (zoom), and `onClick` to drill.
   - A drill-down either adds to `filters` in the URL or opens the `drill_users` drawer → user profile.
-- **CSV:** the export button requests `?format=csv` with the current filters, so exports always come from the server and are audited.
+- **CSV:** the export button requests `?format=csv` with the current filters, so exports always come from the server. People CSVs (`POST … format: "csv"`) are audited as `export.csv`; metric CSVs (aggregates) are not.
 - **Hosting:** `vercel.json` rewrites `/api/:path*` to the backend (same origin for the browser, but browsers still send `Origin: https://admin.jobspecificcv.com` on POST/PATCH/DELETE and the rewrite forwards it, so the admin origin is listed in the backend's `CORS_ALLOWED_ORIGINS`; unlisted origins get a 403), adds an SPA fallback and sets `X-Robots-Tag: noindex, nofollow` on all paths.
 
 ## 6. Security and privacy summary
@@ -240,7 +245,7 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 | Admin app | vitest + Testing Library | URL ↔ filter round-trip, AuthGate states, drill-down URL changes |
 | Parity | One-off, per ported metric | Dashboard function and KB query return the same rows on a production snapshot |
 
-**CI:** a GitHub Actions workflow with path filters. `admin/**` runs the admin tests; `backend/src/**` runs the backend tests; `backend/supabase/migrations/**` runs the SQL test.
+**CI:** a GitHub Actions workflow with path filters. `admin/**` runs the admin tests and build; `backend/**` or `frontend/**` runs the backend typecheck and tests; `backend/supabase/**`, `backend/tests/sql/**` or `backend/scripts/**` runs the SQL test.
 
 ## 8. Deployment
 
@@ -254,13 +259,15 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 - **Build skipping:** each Vercel project's Ignored Build Step is `git diff --quiet HEAD^ HEAD -- ./<dir>`.
 - **Deploy order:** migration → backend → admin.
 - **One-time setup:**
-  - Vercel project `admin` with domain `admin.jobspecificcv.com`.
+  - Vercel project `cv-builder-admin` (root `admin/`) with domain `admin.jobspecificcv.com`.
   - Admin app env vars: Supabase URL and anon key only.
   - Supabase Auth redirect URL `https://admin.jobspecificcv.com/**`.
   - Set the `analytics_api` password and add `ANALYTICS_DATABASE_URL` to the backend project.
   - `pg_cron` is enabled by the foundation migration.
 
-## 9. Delivery plan
+## 9. Delivery plan (completed)
+
+All phases shipped to production on 2026-10-28; each went through independent reviews before deploy. Phase 0's "expose schemas" spike was replaced by the direct `analytics_api` connection (§3.8). The current state, backlog and deploy procedure are in [development.md](development.md); what shipped is in [metrics-inventory.md](metrics-inventory.md).
 
 | Phase | Scope | Done when |
 |---|---|---|
@@ -273,4 +280,5 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 
 ## 10. Open items
 1. ~~Timeline scope vs. consent~~ **Decided (2026-10-28):** the timeline is available for every signed-up, non-restricted user, for support purposes. The profile shows a consent badge, and the privacy notice must say that staff can view account activity.
-2. **Shared TypeScript contract between `backend/` and `admin/`:** duplicate the small zod schemas in v1 (simplest, given separate Vercel root directories), or set up a shared package later.
+2. **Shared TypeScript contract between `backend/` and `admin/`:** v1 duplicates the small zod schemas (separate Vercel root directories); a shared package is on the backlog in development.md §9.
+3. **Later decisions** (CORS for the admin origin, Google-only admins, database-enforced auditing, the search-text HMAC and others) are recorded in the relevant sections above and in development.md §7 (lessons learned).

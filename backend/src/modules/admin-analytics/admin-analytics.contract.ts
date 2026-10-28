@@ -152,7 +152,7 @@ export const parseMetricQuery = (query: unknown, now: Date = new Date()): Metric
 };
 
 // ---------------------------------------------------------------------------
-// People endpoint (GET /admin/people/:name), api-contract.md "Phase 2"
+// People endpoint (POST /admin/people/:name, JSON body), api-contract.md "Phase 2"
 // ---------------------------------------------------------------------------
 
 export const PEOPLE_DEFAULT_LIMIT = 50;
