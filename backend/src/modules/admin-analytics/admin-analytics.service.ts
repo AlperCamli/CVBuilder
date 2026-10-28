@@ -3,6 +3,7 @@ import type { AnalyticsQueryResult, AnalyticsRow } from "../../shared/db/analyti
 import {
   AnalyticsTimeoutError,
   AnalyticsUnavailableError,
+  ConflictError,
   ForbiddenError,
   InternalServerError,
   NotFoundError,
@@ -17,7 +18,14 @@ import {
   type PeopleParams,
   type PeopleQuery
 } from "./admin-analytics.contract";
-import type { AdminAnalyticsRepository, AuditEntry, PeopleSession } from "./admin-analytics.repository";
+import type { AlertEventStatus, AlertRuleInput, AlertRulePatch } from "./admin-alerts.contract";
+import type {
+  AdminAnalyticsRepository,
+  AdminWriteContext,
+  AuditEntry,
+  PeopleSession,
+  RecomputeRequestResult
+} from "./admin-analytics.repository";
 
 const CATALOG_TTL_MS = 60_000;
 const CURSOR_COLUMN = "cursor";
@@ -134,6 +142,69 @@ export class AdminAnalyticsService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Phase 5: alerts, recompute and the audit log (api-contract.md "Phase 5")
+  // ---------------------------------------------------------------------------
+
+  listAlertRules(): Promise<AnalyticsRow[]> {
+    return this.call((repository) => repository.listAlertRules());
+  }
+
+  createAlertRule(context: AdminWriteContext, rule: AlertRuleInput): Promise<AnalyticsRow> {
+    return this.call((repository) => repository.createAlertRule(context, rule));
+  }
+
+  updateAlertRule(context: AdminWriteContext, id: string, patch: AlertRulePatch): Promise<AnalyticsRow> {
+    return this.call((repository) => repository.updateAlertRule(context, id, patch));
+  }
+
+  deleteAlertRule(context: AdminWriteContext, id: string): Promise<void> {
+    return this.call((repository) => repository.deleteAlertRule(context, id));
+  }
+
+  listAlertEvents(status: AlertEventStatus, limit: number): Promise<AnalyticsRow[]> {
+    return this.call((repository) => repository.listAlertEvents(status, limit));
+  }
+
+  ackAlertEvent(context: AdminWriteContext, id: string): Promise<AnalyticsRow> {
+    return this.call((repository) => repository.ackAlertEvent(context, id));
+  }
+
+  async alertSummary(): Promise<{ open_count: number; latest_fired_at: unknown }> {
+    const row = await this.call((repository) => repository.alertSummary());
+    return { open_count: Number(row.open_count ?? 0), latest_fired_at: row.latest_fired_at ?? null };
+  }
+
+  /** Queues a recompute; the database throttles it (5 minutes) and writes the recompute.request audit row itself. */
+  requestRecompute(adminEmail: string): Promise<RecomputeRequestResult> {
+    return this.call((repository) => repository.requestRecompute(adminEmail));
+  }
+
+  recomputeStatus(): Promise<AnalyticsRow | null> {
+    return this.call((repository) => repository.recomputeStatus());
+  }
+
+  /** The latest audit rows, read in the transaction that writes this read's own `audit.read` row. */
+  readAuditRecent(context: AdminWriteContext, limit: number): Promise<AnalyticsRow[]> {
+    const audit: AuditEntry = {
+      adminEmail: context.adminEmail,
+      action: "audit.read",
+      targetUserId: null,
+      params: { limit },
+      requestId: context.requestId,
+      query: null
+    };
+    return this.call((repository) => repository.readAuditRecent(audit, limit));
+  }
+
+  private async call<T>(work: (repository: AdminAnalyticsRepository) => Promise<T>): Promise<T> {
+    try {
+      return await work(this.requireRepository());
+    } catch (error) {
+      throw this.mapError(error);
+    }
+  }
+
   private async pagePeople(session: PeopleSession, name: string, params: PeopleParams): Promise<PeopleResult> {
     const page = await session.call(name, params);
     return {
@@ -192,6 +263,13 @@ export class AdminAnalyticsService {
     const code = errorCode(error);
     if (code === "22023") {
       return new ValidationError((error as Error).message);
+    }
+    // Expected outcomes of the Phase 5 writes: an unknown rule / event id, a duplicate rule name.
+    if (code === "P0002") {
+      return new NotFoundError((error as Error).message);
+    }
+    if (code === "23505") {
+      return new ConflictError("An alert rule with this name already exists");
     }
     this.logFailure(error, metric);
     if (code === "57014") {

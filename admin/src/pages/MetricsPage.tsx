@@ -1,10 +1,8 @@
-import { Cpu } from "lucide-react";
 import { useId } from "react";
 import { isWideShape, MetricChartCard } from "@/components/MetricChartCard";
-import { Button } from "@/components/ui/button";
+import { RecomputeControl } from "@/components/RecomputeControl";
 import type { PageMetric, PageSection } from "@/app/pages";
 import { useCatalog } from "@/lib/api";
-import { features } from "@/lib/config";
 import { useFilters } from "@/lib/filters";
 import type { Shape } from "@/lib/shapes";
 import { cn } from "@/lib/utils";
@@ -66,15 +64,12 @@ export function MetricsPage({ sections }: { sections: PageSection[] }) {
     if (!catalog.data) return m.shape;
     return catalog.data.metrics.find((entry) => entry.name === m.name)?.meta.shape;
   };
+  // Recompute only rebuilds materialized views, so it appears on pages that show a pre-computed metric.
+  const names = new Set(sections.flatMap((s) => s.metrics.map((m) => m.name)));
+  const precomputed = catalog.data?.metrics.some((entry) => names.has(entry.name) && entry.meta.precomputed === true);
   return (
     <div className="flex flex-col gap-6">
-      {features.recompute && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" disabled title="Rebuilds cohorts, LTV and growth accounting. Not wired yet.">
-            <Cpu /> Recompute
-          </Button>
-        </div>
-      )}
+      {precomputed && <RecomputeControl />}
       {sections.map((section) => (
         <Section key={section.title} section={section} shapeOf={shapeOf} />
       ))}

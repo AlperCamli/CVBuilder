@@ -1,7 +1,8 @@
 import { useIsFetching } from "@tanstack/react-query";
-import { AlertTriangle, LogOut, Menu, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Info, LogOut, Menu, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
+import { AlertBadge } from "@/components/AlertBadge";
 import { Button } from "@/components/ui/button";
 import { useCatalog, useRefreshPage } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,7 @@ export function Layout() {
               <RefreshCw className={cn(fetching && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
+            <AlertBadge />
             <span className="hidden max-w-48 truncate text-sm text-muted-foreground lg:inline" title={email}>
               {email}
             </span>
@@ -96,12 +98,17 @@ export function Layout() {
               <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
               Every lookup is logged. Page filters don't apply here; all dates UTC.
             </p>
+          ) : page?.note ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Info className="size-3.5 shrink-0" aria-hidden="true" />
+              {page.note}
+            </p>
           ) : (
             <FilterBar />
           )}
         </header>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-4 p-4 outline-none md:p-6">
-          {catalog.isError && !page?.people && (
+          {catalog.isError && !page?.people && !page?.note && (
             <div role="alert" className="flex items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
               <span>

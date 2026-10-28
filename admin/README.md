@@ -35,10 +35,22 @@ Optional meta keys the renderers read (see `api-contract.md`):
 | `stacked` | timeseries + `plot` | Stacked bars. Negative values (e.g. contraction, churn) stack below a zero line. |
 | `flag_column` | timeseries | Boolean column. Flagged buckets get a marker, a legend key and a table column. The label comes from `measures[flag_column].label`, else the column name without `is_`. |
 | `min_group` | all | Small-sample badge threshold. Muted cohort rows, badged bars and funnels. |
+| `precomputed` | all | Read from a materialized view. The page gets a Recompute button, and "Data as of" is the last view build (`as_of` from `GET /admin/recompute/status`), not the request time. Absent means live. |
 
-The first declared measure (or the column named like the metric) is the primary one. Drill-drawer filters add `step` (funnel), `cohort` + `period` (cohort), or the breakdown dimension (or `dimension` when there is none).
+The primary measure is the column named like the metric, or else the first measure column in the order the function returns its columns. It doesn't use `meta.measures` key order, because Postgres jsonb reorders object keys.
 
-`VITE_FEATURE_RECOMPUTE=true` shows a disabled page-level Recompute button; Phase 4 wires it.
+Drill-down uses the `drill_users` key whose `drill_metrics` entry names the metric (for example `ai_cost` → `ai_cost_users`, `growth_accounting` → `churned_users`). The page grain is added when that key accepts `grain`. Drill-drawer filters add `step` (funnel), `cohort` + `period` (cohort), or the breakdown dimension (or `dimension` when there is none).
+
+The AI cost chart (Overview and AI cost page) marks the `is_anomaly` buckets of `ai_cost_anomalies` when the catalog lists it. The markers use the same range, grain and filters, with no breakdown, so they flag the total.
+
+## Alerts, recompute and data health
+
+- **Alerts (`/alerts`):** fired events (Open / All, acknowledge) and rules (create, edit, enable, delete). The editor lists only catalog metrics with `alertable: true`, along with their declared measures and allowed filters.
+  - Thresholds are stored in the measure's unit. Ratio and percent measures, and `pct_change_*` conditions, are typed as percentages and stored as 0–1 fractions (signed for % change; `pct_change_lt` fires below its threshold).
+  - Enable/disable and acknowledge are optimistic and roll back on error. Create, edit and delete wait for the server.
+- **Header badge:** shows the open count (`GET /admin/alerts/summary`), refetched every 60 s while the tab is visible. Overview shows a banner while any alert is open.
+- **Recompute:** shown on pages with a `precomputed` metric and on Data health. `POST /admin/recompute` → "Queued…", then `GET /admin/recompute/status` is polled every 5 s while a run is open. When a new run finishes, the pre-computed metrics and `data_freshness` are refetched. A 429 shows "Recently recomputed — try again in N s".
+- **Data health (`/data-health`):** shows the latest run, the `data_freshness` checks (status icon + label) and the latest 50 audit entries. Audit entries show the admin, action, people function and shortened target id; other parameters are dropped when parsed.
 
 ## Environment variables
 

@@ -35,17 +35,28 @@ export function inferShape(meta: MetricMeta | undefined, rows: Row[] | undefined
 }
 
 /**
- * Numeric measure columns in display order: declared `meta.measures` first (in declaration order) when the rows
- * carry them, then any other numeric column. Structural columns and the flag column are never measures.
+ * Measure columns in the order the function returns them: the first row's column order, then any column only later
+ * rows carry. A column is a measure when `meta.measures` declares it or some row holds a number in it; structural
+ * columns and the flag column never are. `meta.measures` key order is not used: Postgres jsonb reorders object keys
+ * (shorter keys first), so the function's column order is the only reliable "declaration order".
  */
 export function measureKeys(meta: MetricMeta | undefined, rows: Row[], exclude: string[] = []): string[] {
   const skip = new Set([...STRUCTURAL, ...exclude, ...(meta?.flag_column ? [meta.flag_column] : [])]);
-  const present = new Set(rows.flatMap((r) => Object.keys(r)));
-  const declared = Object.keys(meta?.measures ?? {}).filter((k) => !skip.has(k) && present.has(k));
-  const numeric = [...present].filter(
-    (k) => !skip.has(k) && !declared.includes(k) && rows.some((r) => typeof r[k] === "number"),
-  );
-  return [...declared, ...numeric];
+  const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  return columns.filter((k) => !skip.has(k) && (meta?.measures?.[k] !== undefined || rows.some((r) => typeof r[k] === "number")));
+}
+
+/**
+ * The primary measure: the column named like the metric, else the first measure column of the rows (see
+ * `measureKeys`). Before rows arrive it falls back to `plot`, then to any declared measure.
+ */
+export function primaryMeasure(name: string, meta: MetricMeta | undefined, rows: Row[] | undefined) {
+  if (meta?.measures?.[name] || rows?.some((r) => typeof r[name] === "number")) return name;
+  const keys = measureKeys(meta, rows ?? []);
+  if (keys.length) return keys[0];
+  if (meta?.plot?.length) return meta.plot[0];
+  const declared = Object.keys(meta?.measures ?? {}).filter((k) => !STRUCTURAL.has(k) && k !== meta?.flag_column);
+  return declared[0] ?? name;
 }
 
 // --- Breakdown -------------------------------------------------------------------------------------------

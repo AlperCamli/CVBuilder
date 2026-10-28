@@ -1,6 +1,7 @@
+import type { CatalogEntry } from "./api";
 import { describe, expect, it, vi } from "vitest";
 import { catalogSchema, type MetricMeta } from "./api";
-import { bucketEnd, drillHandler, drillPatch, pointHandler } from "./drill";
+import { bucketEnd, drillHandler, drillKeyFor, drillPatch, pointHandler, withDrillKey } from "./drill";
 import { parseFilters, writeFilters } from "./filters";
 
 const now = new Date("2026-10-28T12:00:00Z");
@@ -102,5 +103,43 @@ describe("drill wiring", () => {
       metrics: [entry(true), entry({ keys: ["bucket"] }), entry("yes"), entry(1), { name: "n", kind: "metric", meta: { title: "N" } }],
     });
     expect(metrics.map((m) => m.meta.drill)).toEqual([true, true, false, false, undefined]);
+  });
+});
+
+describe("drill keys", () => {
+  const catalog = [
+    {
+      name: "drill_users",
+      kind: "people" as const,
+      meta: {
+        title: "Users behind a metric point",
+        drill_metrics: {
+          signups: { metric: "signups", filters: ["locale", "market"] },
+          ai_cost_users: { metric: "ai_cost", filters: ["ai_flow"] },
+          churned_users: { metric: "growth_accounting", filters: ["grain", "market", "locale"] },
+          cohort_active_users: { metric: "cohort_retention", filters: ["cohort", "period", "grain"] },
+        },
+      },
+    },
+  ] as unknown as CatalogEntry[];
+
+  it("resolves the key whose metric names the drilled metric", () => {
+    expect(drillKeyFor(catalog, "ai_cost")).toEqual({ key: "ai_cost_users", grain: false });
+    expect(drillKeyFor(catalog, "signups")).toEqual({ key: "signups", grain: false });
+    expect(drillKeyFor(catalog, "growth_accounting")).toEqual({ key: "churned_users", grain: true });
+    // Unknown metric or no catalog: the metric name, as before.
+    expect(drillKeyFor(catalog, "checkout_funnel")).toEqual({ key: "checkout_funnel", grain: false });
+    expect(drillKeyFor(undefined, "ai_cost")).toEqual({ key: "ai_cost", grain: false });
+  });
+
+  it("adds the page grain for keys that accept it", () => {
+    const target = { metric: "cohort_retention", title: "Cohort retention", filters: { cohort: "2026-10-05", period: 2 }, from: "a", to: "b" };
+    expect(withDrillKey(target, catalog, "week")).toEqual({
+      ...target,
+      metric: "cohort_active_users",
+      filters: { cohort: "2026-10-05", period: 2, grain: "week" },
+    });
+    const ai = { ...target, metric: "ai_cost", filters: { ai_flow: "tailoring" } };
+    expect(withDrillKey(ai, catalog, "week").filters).toEqual({ ai_flow: "tailoring" });
   });
 });

@@ -62,3 +62,6 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-people.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-monetization.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-ai.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-engagement.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-alerts.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-tailoring-acquisition.sql"

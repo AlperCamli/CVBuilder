@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { AlertsBanner } from "@/components/AlertsBanner";
 import { SmallSampleBadge } from "@/components/Badge";
 import { errorCopy, InfoTip } from "@/components/ChartCard";
 import { KpiTile, type KpiPart } from "@/components/KpiTile";
@@ -135,6 +136,7 @@ export function OverviewPage() {
 
   return (
     <>
+      <AlertsBanner />
       <OverviewKpis filters={filters} />
       <MetricChartCard name={SIGNUPS} filters={filters} setFilters={setFilters} />
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -154,6 +156,7 @@ export function OverviewPage() {
           sampleMeasure="runs"
           footnote={aiCostFootnote}
           badges={aiCostBadges}
+          anomalies="ai_cost_anomalies"
           filters={filters}
           setFilters={setFilters}
         />

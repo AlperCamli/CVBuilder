@@ -45,16 +45,26 @@ export async function parseEnvelope(res: Response): Promise<unknown> {
 
 export type Query = Record<string, string | undefined>;
 
-/** GET with a query string, or POST with a JSON body (people endpoints keep personal data out of URLs). */
-async function request(path: string, query: Query = {}, signal?: AbortSignal, body?: unknown): Promise<Response> {
+export type Method = "GET" | "POST" | "PATCH" | "DELETE";
+
+/**
+ * GET with a query string, or POST/PATCH with a JSON body (people endpoints keep personal data out of URLs).
+ * The method defaults to POST when there is a body and GET otherwise.
+ */
+export async function request(path: string, query: Query = {}, signal?: AbortSignal, body?: unknown, method?: Method): Promise<Response> {
   const url = new URL(`${config.apiBaseUrl}${path}`, window.location.origin);
   for (const [key, value] of Object.entries(query)) if (value !== undefined) url.searchParams.set(key, value);
   const token = await getAccessToken();
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-  const post = body !== undefined;
-  if (post) headers["Content-Type"] = "application/json";
+  const hasBody = body !== undefined;
+  if (hasBody) headers["Content-Type"] = "application/json";
   try {
-    return await fetch(url, { method: post ? "POST" : "GET", headers, signal, ...(post ? { body: JSON.stringify(body) } : {}) });
+    return await fetch(url, {
+      method: method ?? (hasBody ? "POST" : "GET"),
+      headers,
+      signal,
+      ...(hasBody ? { body: JSON.stringify(body) } : {}),
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server. Check your connection.");
@@ -73,6 +83,18 @@ export async function apiGet<S extends ZodTypeAny>(
 /** POST a JSON body; nothing but the path ends up in the URL. */
 export async function apiPost<S extends ZodTypeAny>(path: string, schema: S, body: unknown, signal?: AbortSignal): Promise<z.output<S>> {
   return parseWith(schema, await request(path, {}, signal, body));
+}
+
+/** A write (POST/PATCH/DELETE) to an admin endpoint; a 204 resolves to `undefined` without parsing. */
+export async function apiSend<S extends ZodTypeAny>(
+  method: Exclude<Method, "GET">,
+  path: string,
+  schema: S,
+  body?: unknown,
+): Promise<z.output<S> | undefined> {
+  const res = await request(path, {}, undefined, body ?? (method === "DELETE" ? undefined : {}), method);
+  if (res.status === 204) return undefined;
+  return parseWith(schema, res);
 }
 
 async function parseWith<S extends ZodTypeAny>(schema: S, res: Response): Promise<z.output<S>> {
@@ -141,6 +163,18 @@ export const metricMetaSchema = z.object({
   stacked: z.boolean().optional().catch(undefined),
   /** timeseries: boolean column whose true rows are highlighted (e.g. `is_anomaly`). */
   flag_column: z.string().min(1).optional().catch(undefined),
+  /** Read from a materialized view rebuilt nightly or by Recompute; absent means live. */
+  precomputed: z.boolean().optional().catch(undefined),
+  /** `drill_users` only: the supported drill keys, each naming the metric it drills and the filters it accepts. */
+  drill_metrics: z
+    .record(
+      z.object({
+        metric: z.string().nullable().optional().catch(null),
+        filters: z.array(z.string()).optional().catch(undefined),
+      }),
+    )
+    .optional()
+    .catch(undefined),
 });
 const catalogEntrySchema = z.object({
   name: z.string(),
@@ -204,7 +238,7 @@ export function ignoredFilters(meta: MetricMeta | undefined, filters: GlobalFilt
   );
 }
 
-const METRIC_NAME = /^[a-z][a-z0-9_]{0,62}$/;
+export const METRIC_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
 /** Narrows the global filters to what a metric accepts, so a page-wide breakdown never 400s another chart. */
 export function toMetricParams(filters: GlobalFilters, meta?: MetricMeta): MetricParams {
@@ -290,7 +324,7 @@ export const downloadCsv = (name: string, params: MetricParams, headers: Record<
 
 const STALE_TIME = 5 * 60_000;
 // App-level keys start with "@" so they can never collide with a metric name and survive a page Refresh.
-const CATALOG_KEY = ["@catalog"] as const;
+export const CATALOG_KEY = ["@catalog"] as const;
 
 /** One retry for transient failures only: 4xx won't change, and 503/504 must not re-run a 15 s query. */
 export const shouldRetry = (count: number, error: unknown) =>

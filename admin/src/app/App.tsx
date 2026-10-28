@@ -2,6 +2,8 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { createQueryClient } from "@/lib/api";
+import { AlertsPage } from "@/pages/Alerts";
+import { DataHealthPage } from "@/pages/DataHealth";
 import { MetricsPage } from "@/pages/MetricsPage";
 import { OverviewPage } from "@/pages/Overview";
 import { PlaceholderPage } from "@/pages/Placeholder";
@@ -22,6 +24,8 @@ export function App({ queryClient }: { queryClient?: QueryClient }) {
               <Route index element={<OverviewPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="users/:id" element={<UserProfilePage />} />
+              <Route path="alerts" element={<AlertsPage />} />
+              <Route path="data-health" element={<DataHealthPage />} />
               {NAV.filter((n) => n.sections).map((n) => (
                 <Route key={n.path} path={n.path} element={<MetricsPage key={n.path} sections={n.sections!} />} />
               ))}

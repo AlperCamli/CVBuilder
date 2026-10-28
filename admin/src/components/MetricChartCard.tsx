@@ -9,12 +9,14 @@ import { ChartCard } from "@/components/ChartCard";
 import { DrillDrawer } from "@/components/DrillDrawer";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { controlClass } from "@/components/ui/control";
-import { DEFAULT_MIN_GROUP, downloadCsv, ignoredFilters, measureOf, useCatalogEntry, useMetric, type MetricMeta } from "@/lib/api";
-import { pointHandler, type DrillFilters, type DrillTarget } from "@/lib/drill";
+import { DEFAULT_MIN_GROUP, downloadCsv, ignoredFilters, measureOf, useCatalog, useCatalogEntry, useMetric, type MetricMeta } from "@/lib/api";
+import { useAnomalyBuckets } from "@/lib/anomalies";
+import { pointHandler, withDrillKey, type DrillFilters, type DrillTarget } from "@/lib/drill";
 import { erasFor } from "@/lib/eras";
 import type { Currency, Dimension, GlobalFilters } from "@/lib/filters";
 import { csvHeaders, DIMENSION_LABELS, formatValue, humanize, labelWithUnit, notFilteredBy, unitSuffix } from "@/lib/format";
-import { flaggedBuckets, groupByUnit, inferShape, measureKeys, type Row, type Shape } from "@/lib/shapes";
+import { dataAsOf, useRecomputeStatus } from "@/lib/recompute";
+import { flaggedBuckets, groupByUnit, inferShape, measureKeys, primaryMeasure, type Row, type Shape } from "@/lib/shapes";
 
 interface MetricChartCardProps {
   name: string;
@@ -37,6 +39,11 @@ interface MetricChartCardProps {
   topN?: number;
   height?: number;
   className?: string;
+  /**
+   * A timeseries metric whose `is_anomaly` days are marked on this chart (e.g. `ai_cost_anomalies` on AI cost),
+   * fetched with the same range, grain and filters and without the breakdown. Skipped when the catalog lacks it.
+   */
+  anomalies?: string;
   /** Title until the catalog provides one (and for the "Not available yet" card). */
   title?: string;
   headingLevel?: 2 | 3;
@@ -47,15 +54,6 @@ const WIDE_SHAPES = new Set<Shape>(["timeseries", "cohort"]);
 
 /** Timeseries and cohort heatmaps span the full grid; breakdowns, funnels, KPI lists and tables take half. */
 export const isWideShape = (shape: Shape | undefined) => Boolean(shape && WIDE_SHAPES.has(shape));
-
-/** The primary measure: the column named like the metric, else the first measure the rows (or meta) carry. */
-export function primaryMeasure(name: string, meta: MetricMeta | undefined, rows: Row[] | undefined) {
-  if (meta?.measures?.[name]) return name;
-  const keys = measureKeys(meta, rows ?? []);
-  if (keys.length) return keys[0];
-  const declared = Object.keys(meta?.measures ?? {}).filter((k) => k !== "dimension" && k !== meta?.flag_column);
-  return declared[0] ?? name;
-}
 
 /** `is_anomaly` → "Anomaly" unless the measure declares its own label. */
 const flagLabelOf = (meta: MetricMeta | undefined, column: string) =>
@@ -68,15 +66,22 @@ const flagLabelOf = (meta: MetricMeta | undefined, column: string) =>
 export function MetricChartCard(props: MetricChartCardProps) {
   const { name, filters, setFilters, native, footnote, badges, variant, topN, height, className, headingLevel } = props;
   const { entry } = useCatalogEntry(name);
+  const catalog = useCatalog();
   const plot = entry?.meta.shape === "timeseries" && entry.meta.plot?.length ? entry.meta.plot : undefined;
   const multi = Boolean(plot && plot.length > 1);
   const split = native === "split" && filters.currency === "native";
   // Several plotted measures already use the series slots, so the page breakdown doesn't apply here.
   const metric = useMetric(name, split || multi ? { ...filters, breakdown: undefined } : filters);
-  const [drill, setDrill] = useState<DrillTarget | null>(null);
+  const [drill, setDrillTarget] = useState<DrillTarget | null>(null);
   const { meta, params, data } = metric;
   const title = meta?.title ?? props.title ?? name;
   const rows = data?.rows;
+  const isTimeseries = (meta?.shape ?? "timeseries") === "timeseries";
+  const anomalyBuckets = useAnomalyBuckets(props.anomalies, params, Boolean(meta && isTimeseries && !meta.flag_column));
+  // Pre-computed metrics are as fresh as the last materialized-view build, not the request time.
+  const recompute = useRecomputeStatus(Boolean(meta?.precomputed));
+  const asOf = (meta?.precomputed ? dataAsOf(recompute.data) : null) ?? data?.generated_at;
+  const setDrill = (target: DrillTarget) => setDrillTarget(withDrillKey(target, catalog.data?.metrics, filters.grain));
 
   if (metric.missing) return <NotAvailableCard name={name} title={props.title ?? humanize(name)} className={className} />;
 
@@ -131,6 +136,7 @@ export function MetricChartCard(props: MetricChartCardProps) {
     const groups = plot ? groupByUnit(meta, plot) : [{ unit: plotted.unit, keys: [measure] }];
     const panels = facets.flatMap((facet) => groups.map((group) => ({ facet, group })));
     const flagColumn = meta?.flag_column;
+    const anomalyLabel = params.breakdown ? "Anomaly in total" : "Anomaly";
     return panels.map(({ facet, group }, i) => {
       const panelRows = facet === null ? allRows : allRows.filter((r) => String(r.dimension ?? "") === facet).map((r) => ({ ...r, dimension: null }));
       const panelCurrency = facet === null ? currency : (FACET_CURRENCY[facet] ?? "native");
@@ -156,8 +162,8 @@ export function MetricChartCard(props: MetricChartCardProps) {
           hideEraList={i < panels.length - 1}
           measures={plot ? group.keys.map((key) => ({ key, label: measureOf(meta, key).label })) : undefined}
           stacked={Boolean(meta?.stacked)}
-          flags={flagColumn ? flaggedBuckets(panelRows, flagColumn) : undefined}
-          flagLabel={flagColumn ? flagLabelOf(meta, flagColumn) : undefined}
+          flags={flagColumn ? flaggedBuckets(panelRows, flagColumn) : anomalyBuckets}
+          flagLabel={flagColumn ? flagLabelOf(meta, flagColumn) : anomalyBuckets ? anomalyLabel : undefined}
         />
       );
       return facet === null ? (
@@ -243,7 +249,7 @@ export function MetricChartCard(props: MetricChartCardProps) {
       <ChartCard
         title={title}
         meta={meta}
-        generatedAt={data?.generated_at}
+        generatedAt={asOf}
         loading={metric.isPending}
         refreshing={metric.isPlaceholderData || metric.isFetching}
         error={metric.isError && !data ? metric.error : undefined}
@@ -264,7 +270,7 @@ export function MetricChartCard(props: MetricChartCardProps) {
           </div>
         )}
       </ChartCard>
-      {drill && <DrillDrawer {...drill} onClose={() => setDrill(null)} />}
+      {drill && <DrillDrawer {...drill} onClose={() => setDrillTarget(null)} />}
     </>
   );
 }

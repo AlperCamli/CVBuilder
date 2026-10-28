@@ -84,6 +84,20 @@ const CATALOG = [
       },
     },
   },
+  {
+    name: "ai_cost_anomalies",
+    kind: "metric",
+    meta: {
+      title: "AI cost anomalies",
+      definition: "Spikes.",
+      unit: "currency",
+      shape: "timeseries",
+      breakdowns: ["ai_flow", "ai_model", "ai_provider"],
+      filters: ["ai_flow", "ai_model", "ai_provider", "market"],
+      flag_column: "is_anomaly",
+      measures: { cost: measure("AI cost", "currency") },
+    },
+  },
 ];
 
 const FROM = "2026-10-01";
@@ -149,20 +163,26 @@ function rowsFor(name: string, query: URLSearchParams) {
         exact_share: 0.5,
         fx_provisional: currency === "try" && i === 0,
       }));
+    case "ai_cost_anomalies":
+      return DAYS.map((bucket, i) => ({ bucket, dimension: null, cost: 2, is_anomaly: i === 5 || i === 9 }));
     default:
       return [];
   }
 }
 
+let summary = { open_count: 0, latest_fired_at: null as string | null };
+
 const ok = (data: unknown) =>
   new Response(JSON.stringify({ success: true, data }), { status: 200, headers: { "Content-Type": "application/json" } });
 
 beforeEach(() => {
+  summary = { open_count: 0, latest_fired_at: null };
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockImplementation(async (input) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("/admin/catalog")) return ok({ metrics: CATALOG });
+    if (url.pathname.endsWith("/admin/alerts/summary")) return ok(summary);
     const name = url.pathname.split("/").pop()!;
     return ok({ metric: name, rows: rowsFor(name, url.searchParams), generated_at: "2026-10-28T09:00:00Z" });
   });
@@ -290,5 +310,38 @@ describe("Overview", () => {
     const cells = within(aiCost).getAllByRole("cell").map((c) => c.textContent);
     expect(cells).toContain("—");
     expect(cells.filter((c) => c === "₺0")).toHaveLength(0);
+  });
+
+  it("shows a banner while alerts are open", async () => {
+    summary = { open_count: 3, latest_fired_at: "2026-10-28T08:00:00Z" };
+    renderOverview("currency=usd");
+    const banner = await screen.findByText("3 open alerts");
+    const box = banner.closest("[role=status]") as HTMLElement;
+    expect(within(box).getByText(/latest at Oct 28, 2026, 08:00 UTC/)).toBeTruthy();
+    expect(within(box).getByRole("link", { name: "Review alerts" }).getAttribute("href")).toMatch(/^\/alerts\?/);
+  });
+
+  it("hides the banner with no open alerts", async () => {
+    renderOverview("currency=usd");
+    await card("Signups");
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/alerts/summary"))).toBe(true));
+    expect(screen.queryByText(/open alert/)).toBeNull();
+  });
+
+  it("marks anomaly days from ai_cost_anomalies on the AI cost chart", async () => {
+    renderOverview(`currency=usd&breakdown=ai_flow&filters=${encodeURIComponent('{"ai_model":"m1"}')}`);
+    const aiCost = await card("AI cost");
+    expect(await within(aiCost).findByText("Anomaly in total (2)")).toBeTruthy();
+    fireEvent.click(within(aiCost).getByRole("button", { name: "Table" }));
+    expect(within(aiCost).getByRole("columnheader", { name: "Anomaly in total" })).toBeTruthy();
+    expect(within(aiCost).getAllByRole("cell", { name: "Yes" })).toHaveLength(2);
+    // Same window, grain and filters; never the breakdown (the markers flag the total).
+    const sent = requests("ai_cost_anomalies");
+    expect(sent.length).toBeGreaterThan(0);
+    for (const url of sent) {
+      expect(url.searchParams.has("breakdown")).toBe(false);
+      expect(url.searchParams.get("filters")).toBe('{"ai_model":"m1"}');
+      expect(url.searchParams.get("from")).toBe(FROM);
+    }
   });
 });

@@ -120,6 +120,25 @@ export const createAdminExportRateLimiter = (config: AppConfig): RequestHandler 
   });
 };
 
+// Recompute requests: 5 a minute per admin on top of the admin limiter; the database throttles the runs themselves.
+export const createAdminRecomputeRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (request: Request): string => {
+      const authUserId = request.adminIdentity?.authUserId;
+      return authUserId ? `admin-recompute:${authUserId}` : `admin-recompute-ip:${ipKeyGenerator(request.ip ?? "")}`;
+    },
+    handler: handleRateLimited
+  });
+};
+
 // Runs before the admin token check, so unauthenticated probing is capped too.
 export const createAdminIpRateLimiter = (config: AppConfig): RequestHandler => {
   if (config.appEnv === "test") {

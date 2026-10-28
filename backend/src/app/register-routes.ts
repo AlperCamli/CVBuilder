@@ -9,6 +9,7 @@ import {
   createAdminExportRateLimiter,
   createAdminIpRateLimiter,
   createAdminRateLimiter,
+  createAdminRecomputeRateLimiter,
   createAiRateLimiter,
   createTailoringRateLimiter
 } from "../shared/middleware/rate-limit";
@@ -96,7 +97,8 @@ export const registerV1Routes = (
         createRequireAdmin(config.adminEmails ?? []),
         createAdminIpRateLimiter(config),
         createAdminRateLimiter(config),
-        createAdminExportRateLimiter(config)
+        createAdminExportRateLimiter(config),
+        createAdminRecomputeRateLimiter(config)
       )
     );
   }

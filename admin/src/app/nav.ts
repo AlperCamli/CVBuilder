@@ -29,6 +29,8 @@ export interface NavItem {
    * the "every lookup is logged" note replaces the filter bar.
    */
   people?: boolean;
+  /** Shown instead of the filter bar on pages the global filters don't apply to (Alerts, Data health). */
+  note?: string;
 }
 
 function sectionPage(path: string, label: string, icon: LucideIcon, sections: PageSection[]): NavItem {
@@ -43,8 +45,22 @@ export const NAV: NavItem[] = [
   sectionPage("/tailoring", "Tailoring", Sparkles, TAILORING),
   sectionPage("/acquisition", "Acquisition", Megaphone, ACQUISITION),
   { path: "/users", label: "Users", icon: Users, metrics: [], ready: true, people: true },
-  { path: "/alerts", label: "Alerts", icon: Bell, metrics: [] },
-  { path: "/data-health", label: "Data health", icon: HeartPulse, metrics: [] },
+  {
+    path: "/alerts",
+    label: "Alerts",
+    icon: Bell,
+    metrics: [],
+    ready: true,
+    note: "Page filters don't apply here; each rule has its own. Rules are checked hourly; all times UTC.",
+  },
+  {
+    path: "/data-health",
+    label: "Data health",
+    icon: HeartPulse,
+    metrics: [],
+    ready: true,
+    note: "Page filters don't apply here; internal accounts are excluded. All times UTC.",
+  },
 ];
 
 /** The nav entry for a path; sub-pages (e.g. /users/:id) belong to their section. */

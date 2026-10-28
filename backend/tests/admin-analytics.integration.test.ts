@@ -2,11 +2,14 @@ import pino from "pino";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
+import type { AlertEventStatus, AlertRuleInput, AlertRulePatch } from "../src/modules/admin-analytics/admin-alerts.contract";
 import type { CatalogEntry, MetricParams, PeopleParams } from "../src/modules/admin-analytics/admin-analytics.contract";
 import type {
   AdminAnalyticsRepository,
+  AdminWriteContext,
   AuditEntry,
-  PeopleSession
+  PeopleSession,
+  RecomputeRequestResult
 } from "../src/modules/admin-analytics/admin-analytics.repository";
 import { AdminAnalyticsService } from "../src/modules/admin-analytics/admin-analytics.service";
 import { SupabaseAdminIdentityProvider, type AdminIdentityProvider } from "../src/modules/admin-analytics/admin-identity";
@@ -18,7 +21,7 @@ import { EntitlementsService } from "../src/modules/entitlements/entitlements.se
 import { SystemService } from "../src/modules/system/system.service";
 import { UsageService } from "../src/modules/usage/usage.service";
 import { UsersService } from "../src/modules/users/users.service";
-import type { AnalyticsQueryResult } from "../src/shared/db/analytics-db";
+import type { AnalyticsQueryResult, AnalyticsRow } from "../src/shared/db/analytics-db";
 import { analyticsSslOption } from "../src/shared/db/analytics-db";
 import { SUPABASE_ROOT_CA } from "../src/shared/db/supabase-root-ca";
 import { isAdminEmail, isAdminIdentity, type AdminIdentity } from "../src/shared/middleware/require-admin";
@@ -41,6 +44,8 @@ const meta = {
   breakdowns: ["market"],
   filters: ["market", "plan"]
 } as const;
+
+const RULE_ID = "6c1d2b0e-3f4a-4b5c-8d9e-0f1a2b3c4d5e";
 
 const CATALOG: CatalogEntry[] = [
   { name: "signups", kind: "metric", meta: { ...meta, breakdowns: [...meta.breakdowns], filters: [...meta.filters] } },
@@ -97,6 +102,91 @@ class FakeAnalyticsRepository implements AdminAnalyticsRepository {
       });
       this.events.push("commit");
       return result;
+    } catch (error) {
+      this.events.push("rollback");
+      throw error;
+    }
+  }
+
+  // Phase 5: each write is one admin_app call that validates, writes and audits in one transaction.
+  writes: { op: string; context: AdminWriteContext | { adminEmail: string }; args: unknown[] }[] = [];
+  writeError: unknown = null;
+  readError: unknown = null;
+  rules: AnalyticsRow[] = [{ id: RULE_ID, name: "AI failure rate", window: "1d", threshold: 0.1 }];
+  alertEvents: AnalyticsRow[] = [{ id: 7, rule_id: RULE_ID, rule_name: "AI failure rate", metric: "kpi_health" }];
+  eventCalls: { status: AlertEventStatus; limit: number }[] = [];
+  summary: AnalyticsRow = { open_count: 2, latest_fired_at: new Date("2026-11-15T10:00:00Z") };
+  recompute: RecomputeRequestResult = { status: "queued", run_id: 12, retry_after_seconds: 0 };
+  status: AnalyticsRow | null = { run_id: 12, kind: "recompute", status: "pending", open_run_id: 12, retry_after_seconds: 300 };
+  auditRows: AnalyticsRow[] = [
+    {
+      id: 2,
+      at: new Date("2026-11-15T10:00:00Z"),
+      admin_email: "admin@cvbuilder.dev",
+      action: "export.csv",
+      target_user_id: null,
+      params: { function: "search_users", query_hmac: "abc" },
+      request_id: "req-1",
+      people_function: "search_users"
+    }
+  ];
+  auditLimits: number[] = [];
+
+  private async inWrite<T>(op: string, context: AdminWriteContext | { adminEmail: string }, args: unknown[], result: () => T): Promise<T> {
+    this.events.push("begin", `write:${op}`);
+    this.writes.push({ op, context, args });
+    if (this.writeError) {
+      this.events.push("rollback");
+      throw this.writeError;
+    }
+    this.events.push("commit");
+    return result();
+  }
+
+  private async inRead<T>(op: string, result: () => T): Promise<T> {
+    this.events.push(`read:${op}`);
+    if (this.readError) throw this.readError;
+    return result();
+  }
+
+  listAlertRules() {
+    return this.inRead("list_alert_rules", () => this.rules);
+  }
+  createAlertRule(context: AdminWriteContext, rule: AlertRuleInput) {
+    return this.inWrite("create_alert_rule", context, [rule], () => ({ id: RULE_ID, ...rule }) as AnalyticsRow);
+  }
+  updateAlertRule(context: AdminWriteContext, id: string, patch: AlertRulePatch) {
+    return this.inWrite("update_alert_rule", context, [id, patch], () => ({ ...this.rules[0], ...patch, id }) as AnalyticsRow);
+  }
+  async deleteAlertRule(context: AdminWriteContext, id: string) {
+    await this.inWrite("delete_alert_rule", context, [id], () => undefined);
+  }
+  listAlertEvents(status: AlertEventStatus, limit: number) {
+    this.eventCalls.push({ status, limit });
+    return this.inRead("list_alert_events", () => this.alertEvents);
+  }
+  ackAlertEvent(context: AdminWriteContext, id: string) {
+    return this.inWrite("ack_alert_event", context, [id], () => ({ id: Number(id), acknowledged_by: context.adminEmail.toLowerCase() }) as AnalyticsRow);
+  }
+  alertSummary() {
+    return this.inRead("alert_summary", () => this.summary);
+  }
+  requestRecompute(adminEmail: string) {
+    return this.inWrite("request_recompute", { adminEmail }, [], () => this.recompute);
+  }
+  recomputeStatus() {
+    return this.inRead("recompute_status", () => this.status);
+  }
+  async readAuditRecent(audit: AuditEntry, limit: number) {
+    this.events.push("begin", "audit");
+    this.audits.push(audit);
+    this.auditLimits.push(limit);
+    try {
+      if (this.auditError) throw this.auditError;
+      this.events.push("read:audit_recent");
+      if (this.readError) throw this.readError;
+      this.events.push("commit");
+      return this.auditRows;
     } catch (error) {
       this.events.push("rollback");
       throw error;
@@ -348,7 +438,7 @@ describe("admin analytics endpoints", () => {
     expect(limited.status).toBe(429);
     expect(limited.headers["cache-control"]).toBe("no-store");
     expect(app.identityProvider.calls).toBe(0);
-  });
+  }, 30_000);
 
   it("forbids non-admins from catalog and metrics", async () => {
     const repository = new FakeAnalyticsRepository();
@@ -883,5 +973,290 @@ describe("admin people endpoint", () => {
     expect((await post(app, SEARCH, { q: "findme" })).status).toBe(200);
     expect(repository.audits.filter((audit) => audit.action === "export.csv")).toHaveLength(10);
     vi.unstubAllEnvs();
+  });
+});
+
+describe("admin alerts, recompute and audit endpoints (Phase 5)", () => {
+  const RULE = {
+    name: "AI failure rate",
+    metric: "kpi_health",
+    measure: "ai_failure_rate",
+    window: "1d",
+    condition: "gt",
+    threshold: 0.1
+  };
+
+  const send = (
+    app: ReturnType<typeof buildTestApp>,
+    method: "post" | "patch" | "delete" | "get",
+    path: string,
+    body?: unknown,
+    token = "admin-token"
+  ) => {
+    const call = request(app)[method](`/api/v1${path}`).set("Authorization", `Bearer ${token}`);
+    return body === undefined ? call : call.send(body as object);
+  };
+
+  it("requires an admin on every Phase 5 route and touches nothing for others", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const routes: ["get" | "post" | "patch" | "delete", string, unknown?][] = [
+      ["get", "/admin/alerts/rules"],
+      ["post", "/admin/alerts/rules", RULE],
+      ["patch", `/admin/alerts/rules/${RULE_ID}`, { enabled: false }],
+      ["delete", `/admin/alerts/rules/${RULE_ID}`],
+      ["get", "/admin/alerts/events"],
+      ["post", "/admin/alerts/events/7/ack", {}],
+      ["get", "/admin/alerts/summary"],
+      ["post", "/admin/recompute", {}],
+      ["get", "/admin/recompute/status"],
+      ["get", "/admin/audit/recent"]
+    ];
+    for (const [method, path, body] of routes) {
+      const anonymous = await request(app)[method](`/api/v1${path}`);
+      expect(anonymous.status, `${method} ${path}`).toBe(401);
+      const user = await send(app, method, path, body, "user-token");
+      expect(user.status, `${method} ${path}`).toBe(403);
+      expect(user.body.error.code).toBe("FORBIDDEN");
+      expect(user.headers["cache-control"]).toBe("no-store");
+    }
+    expect(repository.events).toEqual([]);
+    expect(repository.audits).toEqual([]);
+  });
+
+  it("creates a rule in one audited write and returns 201 with the rule", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await send(buildTestApp(repository), "post", "/admin/alerts/rules", {
+      ...RULE,
+      name: "  AI failure rate ",
+      params: { currency: "try", include_internal: true, filters: { market: ["TR"] } },
+      cooldown_hours: 6
+    }).set("X-Request-Id", "req-rule_1");
+
+    expect(response.status).toBe(201);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body.data).toMatchObject({ id: RULE_ID, name: "AI failure rate", cooldown_hours: 6 });
+    expect(repository.events).toEqual(["begin", "write:create_alert_rule", "commit"]);
+    expect(repository.writes).toEqual([
+      {
+        op: "create_alert_rule",
+        context: { adminEmail: "Admin@CVBuilder.dev", requestId: "req-rule_1" },
+        args: [
+          {
+            ...RULE,
+            params: { currency: "try", include_internal: true, filters: { market: ["TR"] } },
+            cooldown_hours: 6
+          }
+        ]
+      }
+    ]);
+  });
+
+  it.each([
+    ["missing metric", { ...RULE, metric: undefined }],
+    ["bad metric name", { ...RULE, metric: "Kpi-Health" }],
+    ["bad measure name", { ...RULE, measure: "AI rate" }],
+    ["empty name", { ...RULE, name: "   " }],
+    ["name too long", { ...RULE, name: "x".repeat(121) }],
+    ["unknown window", { ...RULE, window: "2d" }],
+    ["unknown condition", { ...RULE, condition: "gte" }],
+    ["threshold as text", { ...RULE, threshold: "0.1" }],
+    ["threshold null", { ...RULE, threshold: null }],
+    ["cooldown 0", { ...RULE, cooldown_hours: 0 }],
+    ["cooldown 721", { ...RULE, cooldown_hours: 721 }],
+    ["fractional cooldown", { ...RULE, cooldown_hours: 1.5 }],
+    ["% change on today", { ...RULE, window: "today", condition: "pct_change_gt" }],
+    ["unknown params key", { ...RULE, params: { grain: "week" } }],
+    ["bad currency", { ...RULE, params: { currency: "eur" } }],
+    ["non-dimension filter", { ...RULE, params: { filters: { event_type: "x" } } }],
+    ["nested filter value", { ...RULE, params: { filters: { market: { a: 1 } } } }],
+    ["unknown body key", { ...RULE, id: RULE_ID }],
+    ["body not an object", [RULE]]
+  ])("rejects a rule with %s (400) before any write", async (_label, body) => {
+    const repository = new FakeAnalyticsRepository();
+    const response = await send(buildTestApp(repository), "post", "/admin/alerts/rules", body);
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(repository.events).toEqual([]);
+  });
+
+  it("patches a rule partially and validates the id and the patch", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const response = await send(app, "patch", `/admin/alerts/rules/${RULE_ID}`, { enabled: false, threshold: 0.2 });
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ id: RULE_ID, enabled: false, threshold: 0.2 });
+    expect(repository.writes[0]).toMatchObject({ op: "update_alert_rule", args: [RULE_ID, { enabled: false, threshold: 0.2 }] });
+
+    for (const [path, body] of [
+      ["/admin/alerts/rules/not-a-uuid", { enabled: false }],
+      [`/admin/alerts/rules/${RULE_ID}`, {}],
+      [`/admin/alerts/rules/${RULE_ID}`, { created_by: "x@y.z" }],
+      [`/admin/alerts/rules/${RULE_ID}`, { window: "today", condition: "pct_change_lt" }],
+      [`/admin/alerts/rules/${RULE_ID}`, { enabled: "no" }]
+    ] as const) {
+      expect((await send(app, "patch", path, body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(repository.writes).toHaveLength(1);
+  });
+
+  it("deletes with 204 and acknowledges events", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const deleted = await send(app, "delete", `/admin/alerts/rules/${RULE_ID}`).set("X-Request-Id", "req-del");
+    expect(deleted.status).toBe(204);
+    expect(deleted.text).toBe("");
+    const acked = await send(app, "post", "/admin/alerts/events/7/ack", {});
+    expect(acked.status).toBe(200);
+    expect(acked.body.data).toEqual({ id: 7, acknowledged_by: "admin@cvbuilder.dev" });
+    expect(repository.writes.map((write) => [write.op, write.args])).toEqual([
+      ["delete_alert_rule", [RULE_ID]],
+      ["ack_alert_event", ["7"]]
+    ]);
+    expect(repository.writes[0]?.context).toEqual({ adminEmail: "Admin@CVBuilder.dev", requestId: "req-del" });
+    for (const id of ["0", "abc", "-1", "1.5", "1".repeat(19)]) {
+      expect((await send(app, "post", `/admin/alerts/events/${id}/ack`, {})).status, id).toBe(400);
+    }
+    expect(repository.writes).toHaveLength(2);
+  });
+
+  it.each([
+    ["22023", 400, "VALIDATION_ERROR"],
+    ["P0002", 404, "NOT_FOUND"],
+    ["23505", 409, "CONFLICT"],
+    ["42501", 403, "FORBIDDEN"],
+    ["57014", 504, "ANALYTICS_TIMEOUT"],
+    ["08006", 503, "ANALYTICS_UNAVAILABLE"]
+  ])("maps write error %s to %s and rolls the write (and its audit row) back", async (code, status, errorCode) => {
+    const repository = new FakeAnalyticsRepository();
+    repository.writeError = pgError(code, "metric kpi_overview is not alertable");
+    const response = await send(buildTestApp(repository, { logger: { error: vi.fn() } }), "post", "/admin/alerts/rules", RULE);
+    expect(response.status).toBe(status);
+    expect(response.body.error.code).toBe(errorCode);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(repository.events).toEqual(["begin", "write:create_alert_rule", "rollback"]);
+  });
+
+  it("lists rules and events and serves the summary", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const rules = await send(app, "get", "/admin/alerts/rules");
+    expect(rules.status).toBe(200);
+    expect(rules.headers["cache-control"]).toBe("no-store");
+    expect(rules.body.data).toEqual({ rules: repository.rules });
+
+    const events = await send(app, "get", "/admin/alerts/events");
+    expect(events.body.data).toEqual({ events: repository.alertEvents });
+    await send(app, "get", "/admin/alerts/events?status=all&limit=200");
+    expect(repository.eventCalls).toEqual([
+      { status: "open", limit: 50 },
+      { status: "all", limit: 200 }
+    ]);
+    for (const query of ["status=closed", "limit=0", "limit=201", "limit=abc"]) {
+      expect((await send(app, "get", `/admin/alerts/events?${query}`)).status, query).toBe(400);
+    }
+    expect(repository.eventCalls).toHaveLength(2);
+
+    const summary = await send(app, "get", "/admin/alerts/summary");
+    expect(summary.status).toBe(200);
+    expect(summary.body.data).toEqual({ open_count: 2, latest_fired_at: "2026-11-15T10:00:00.000Z" });
+    repository.summary = { open_count: 0, latest_fired_at: null };
+    expect((await send(app, "get", "/admin/alerts/summary")).body.data).toEqual({ open_count: 0, latest_fired_at: null });
+    // Reads write nothing.
+    expect(repository.writes).toEqual([]);
+    expect(repository.audits).toEqual([]);
+  });
+
+  it("queues a recompute with 202 and reports a throttle as 429 with Retry-After", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const queued = await send(app, "post", "/admin/recompute", {});
+    expect(queued.status).toBe(202);
+    expect(queued.body.data).toEqual({ status: "queued", run_id: 12 });
+    // request_recompute writes its own audit row: the backend logs nothing itself.
+    expect(repository.events).toEqual(["begin", "write:request_recompute", "commit"]);
+    expect(repository.writes[0]?.context).toEqual({ adminEmail: "Admin@CVBuilder.dev" });
+    expect(repository.audits).toEqual([]);
+
+    repository.recompute = { status: "throttled", run_id: 12, retry_after_seconds: 240 };
+    const throttled = await send(app, "post", "/admin/recompute", {});
+    expect(throttled.status).toBe(429);
+    expect(throttled.headers["retry-after"]).toBe("240");
+    expect(throttled.headers["cache-control"]).toBe("no-store");
+    expect(throttled.body).toEqual({
+      success: false,
+      error: {
+        code: "RATE_LIMITED",
+        message: expect.any(String),
+        details: { status: "throttled", run_id: 12, retry_after_seconds: 240 }
+      }
+    });
+
+    const status = await send(app, "get", "/admin/recompute/status");
+    expect(status.status).toBe(200);
+    expect(status.body.data).toEqual(repository.status);
+  });
+
+  it("limits recompute requests to 5 a minute per admin", async () => {
+    vi.stubEnv("VERCEL", "");
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository, { production: true });
+    for (let index = 0; index < 5; index++) {
+      expect((await send(app, "post", "/admin/recompute", {})).status).toBe(202);
+    }
+    const limited = await send(app, "post", "/admin/recompute", {});
+    expect(limited.status).toBe(429);
+    expect(limited.body.error.code).toBe("RATE_LIMITED");
+    expect(repository.writes).toHaveLength(5);
+    expect((await send(app, "get", "/admin/recompute/status")).status).toBe(200);
+    vi.unstubAllEnvs();
+  });
+
+  it("audits audit-log reads as audit.read in the same transaction as the read", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const response = await send(app, "get", "/admin/audit/recent?limit=20").set("X-Request-Id", "req-audit");
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body.data).toEqual({
+      entries: [
+        {
+          id: 2,
+          at: "2026-11-15T10:00:00.000Z",
+          admin_email: "admin@cvbuilder.dev",
+          action: "export.csv",
+          target_user_id: null,
+          people_function: "search_users",
+          request_id: "req-1"
+        }
+      ],
+      generated_at: expect.any(String)
+    });
+    expect(JSON.stringify(response.body)).not.toContain("query_hmac");
+    expect(repository.events).toEqual(["begin", "audit", "read:audit_recent", "commit"]);
+    expect(repository.audits).toEqual([
+      { adminEmail: "Admin@CVBuilder.dev", action: "audit.read", targetUserId: null, params: { limit: 20 }, requestId: "req-audit", query: null }
+    ]);
+    await send(app, "get", "/admin/audit/recent");
+    expect(repository.auditLimits).toEqual([20, 50]);
+    for (const query of ["limit=0", "limit=501", "limit=x"]) {
+      expect((await send(app, "get", `/admin/audit/recent?${query}`)).status, query).toBe(400);
+    }
+    expect(repository.audits).toHaveLength(2);
+  });
+
+  it("returns no audit rows when the audit.read insert fails", async () => {
+    const repository = new FakeAnalyticsRepository();
+    repository.auditError = pgError("22023", "admin_email is required");
+    const response = await send(buildTestApp(repository), "get", "/admin/audit/recent");
+    expect(response.status).toBe(400);
+    expect(response.body.data).toBeUndefined();
+    expect(repository.events).toEqual(["begin", "audit", "rollback"]);
+  });
+
+  it("returns 503 for Phase 5 routes when the analytics database is not configured", async () => {
+    const app = buildTestApp(null);
+    expect((await send(app, "get", "/admin/alerts/summary")).status).toBe(503);
+    expect((await send(app, "post", "/admin/recompute", {})).status).toBe(503);
   });
 });

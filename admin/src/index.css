@@ -33,6 +33,10 @@
   --series-7: #6250d6;
   --series-8: #e34948;
   --series-other: #898781;
+  /* Status palette (fixed in both modes; always paired with an icon and a label, never colour alone). */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
   --status-critical: #d03b3b;
 
   /* Sequential blue (palette steps 100→700) for heatmaps, low → high, with the ink that reads on each step. */
@@ -122,6 +126,10 @@
   --color-delta-good: var(--delta-good);
   --color-delta-bad: var(--delta-bad);
   --color-warning: var(--warning);
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-serious: var(--status-serious);
+  --color-status-critical: var(--status-critical);
 }
 
 @layer base {

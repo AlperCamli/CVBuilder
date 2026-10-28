@@ -10,6 +10,7 @@ import {
   inferShape,
   measureKeys,
   OTHER_LABEL,
+  primaryMeasure,
   rankBreakdown,
   rateBin,
   sortRows,
@@ -176,10 +177,25 @@ describe("table helpers", () => {
     expect(sortRows(rows, "s", "asc").map((r) => r.s)).toEqual(["a", "b", "c", null]);
   });
 
-  it("lists declared measures first and skips structural and flag columns", () => {
+  it("lists measures in the rows' column order and skips structural, flag and non-numeric columns", () => {
     const m = meta({ flag_column: "is_anomaly", measures: { cost: { label: "Cost", unit: "currency" }, gone: { label: "Gone", unit: "count" } } });
     const rows = [{ bucket: "2026-10-01", dimension: null, runs: 3, cost: 1.5, is_anomaly: true, note: "x" }];
-    expect(measureKeys(m, rows)).toEqual(["cost", "runs"]);
+    expect(measureKeys(m, rows)).toEqual(["runs", "cost"]);
+    // A declared column that is null in every row is still a measure; a column only later rows carry comes last.
+    expect(measureKeys(m, [{ cost: null, runs: 1 }, { cost: null, runs: 2, extra: 4 }])).toEqual(["cost", "runs", "extra"]);
+  });
+
+  it("takes the primary measure from the column order, not the jsonb-reordered meta.measures", () => {
+    // Postgres jsonb stores shorter keys first, so the comment's declaration order (active_users, rate) is lost.
+    const m = meta({ measures: { rate: { label: "Rate", unit: "ratio" }, active_users: { label: "Active users", unit: "count" } } });
+    const rows = [{ bucket: "2026-10-01", dimension: null, active_users: 10, rate: 0.5 }];
+    expect(primaryMeasure("engagement", m, rows)).toBe("active_users");
+    // The column named like the metric wins wherever it sits.
+    expect(primaryMeasure("rate", m, rows)).toBe("rate");
+    // Before rows arrive: plot first, then any declared measure.
+    expect(primaryMeasure("engagement", meta({ ...m, plot: ["active_users"] }), undefined)).toBe("active_users");
+    expect(primaryMeasure("engagement", m, [])).toBe("rate");
+    expect(primaryMeasure("engagement", undefined, undefined)).toBe("engagement");
   });
 
   it("infers a shape from the columns when the catalog is unavailable", () => {

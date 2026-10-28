@@ -285,52 +285,104 @@ Grain does not apply to `checkout_funnel`, `subscriber_ltv`, `plan_mix` and `can
 
 ## Phase 5: alerts, recompute and data health
 
+Migration `20261104120000_analytics_alerts.sql` (recompute and `data_freshness` come from `20261103120000_analytics_engagement.sql`).
+
 ### Alertable metrics
-Rules can only target metrics whose meta has `alertable: true`. These are `kpi`-shaped, one row per window.
-- `analytics.kpi_overview` (exists).
-- New `analytics.kpi_health` (kpi), with columns:
-  - `ai_runs bigint, ai_failed_runs bigint, ai_failure_rate numeric`
-  - `failed_payments bigint, payment_failure_rate numeric`
-  - `checkout_attempts bigint, checkout_abandon_rate numeric`
-  - `export_failures bigint, export_failure_rate numeric`
-  - `import_failures bigint, import_failure_rate numeric`
-  - `tailoring_task_failures bigint, tailoring_task_failure_rate numeric`
-  - `unpriced_ai_runs bigint`
+Rules can only target metrics whose meta has `alertable: true` and `shape: "kpi"` (one row per window).
+- `analytics.kpi_overview`.
+- `analytics.kpi_health` (kpi, standard signature; grain and currency are accepted but don't apply), columns:
+  - `ai_runs bigint, ai_failed_runs bigint, ai_failure_rate numeric`: the `ai_cost` population (`ai_run_scope`); rate = failed / (completed + failed).
+  - `failed_payments bigint, payment_failure_rate numeric`: `payment_issues` section A (uncollectible, void, or open > 1 day / due invoices, still-open < 1 day excluded).
+  - `checkout_attempts bigint, checkout_abandon_rate numeric`: abandoned (expired, canceled, open > 24h) / (completed + abandoned).
+  - `export_failures bigint, export_failure_rate numeric`: CV and cover-letter exports; failed / (completed + failed).
+  - `import_failures bigint, import_failure_rate numeric`: non-mock imports; failed / (parsed + failed).
+  - `tailoring_task_failures bigint, tailoring_task_failure_rate numeric`: v2 tasks; failed / (done + skipped + failed).
+  - `unpriced_ai_runs bigint`.
+  - Rates are `null` without a denominator. Filters: `market` (every measure) and `plan` (payments and checkout; the other measures list it in `ignores_filters`).
 
-  It takes standard parameters, and its filters are `market` and `plan` where they apply.
+### Tables (`admin_app`, RLS on, no grants; reached only through the definer functions below)
+- **`alert_rules`:** `id uuid pk, name text` (1–120 chars, unique case-insensitively), `metric text, measure text, params jsonb` (stored normalised: `{currency, include_internal, filters}`), `"window" text` (`today` \| `1d` \| `7d` \| `30d`), `condition text` (`gt` \| `lt` \| `pct_change_gt` \| `pct_change_lt`), `threshold numeric, cooldown_hours int default 24` (1–720), `enabled bool default true, created_by text, created_at, updated_by text, updated_at`, plus the last evaluation: `last_evaluated_at, last_value numeric, last_error text`.
+- **`alert_events`:** `id bigint identity, rule_id uuid` (on delete cascade), `fired_at, window_from date, window_to date, value numeric, baseline numeric, message text, acknowledged_by text, acknowledged_at`.
+- **Thresholds** are in the measure's own unit: ratio/percent measures as 0–1 fractions (as the metrics return them), currency measures in the rule's `params.currency`. `pct_change_*` thresholds are SIGNED fractions of the previous window: `pct_change_gt` fires when change > threshold (`0.5` = up more than 50%), `pct_change_lt` when change < threshold (`-0.2` = down more than 20%).
 
-### Tables (`admin_app`, no grants; access only through definer functions executable by `analytics_api`)
-- **`alert_rules`:**
-  - Identity and target: `id uuid pk, name text, metric text, measure text, params jsonb` (`currency`, `include_internal`, `filters`).
-  - Window and condition: `window text` (`today`, `1d`, `7d` or `30d`), `condition text` (`gt`, `lt`, `pct_change_gt` or `pct_change_lt`), `threshold numeric`.
-  - Behaviour and bookkeeping: `cooldown_hours int default 24, enabled bool default true, created_by text, created_at, updated_at`.
-- **`alert_events`:** `id bigint identity, rule_id uuid (on delete cascade), fired_at, window_from date, window_to date, value numeric, baseline numeric, message text, acknowledged_by text, acknowledged_at`.
-- **Windows (UTC):**
-  - `today` is the current day so far.
-  - `1d` is yesterday.
-  - `7d` and `30d` are the last N complete days.
-- **Baseline:** `pct_change_*` conditions compare the window with the previous window of the same length.
+### Windows (UTC, from the evaluation time)
+| Window | Days | Previous window (baseline) |
+|---|---|---|
+| `today` | today so far | — (`pct_change_*` on `today` is rejected: a partial day against a whole one) |
+| `1d` | yesterday | the day before |
+| `7d` | the 7 complete days before today | the 7 days before those |
+| `30d` | the 30 complete days before today | the 30 days before those |
 
-### Evaluation
-- `analytics_private.evaluate_alerts()` runs hourly through `pg_cron`. For each enabled rule outside its cooldown, it:
-  1. calls `analytics.<metric>` for the window;
-  2. reads `measure`;
-  3. compares it with the threshold;
-  4. inserts an `alert_events` row with a human-readable `message`.
-- **Validation:** rules are checked at write time. The metric must be alertable, the measure must be a numeric column, and the params must be valid.
-- **Null values:** a null value never fires.
+### Evaluation (`analytics_private.evaluate_alerts(p_now timestamptz default now(), p_budget interval default '10 minutes') returns integer`)
+- `pg_cron` job `analytics_alerts`, hourly at minute 5, command `set statement_timeout = '15min'; select analytics_private.evaluate_alerts()`. It is scheduled by `analytics_private.schedule_alert_job()` only where the `cron` schema exists, using the same guard as the engagement jobs.
+- Serialised with an advisory lock. Every enabled rule is evaluated each run, least recently evaluated first, so `last_value` / `last_error` stay current during a cooldown. For each rule it:
+  1. re-checks the metric against the catalog (an `analytics` function with the standard signature and alertable kpi meta, the measure one of its numeric output columns);
+  2. calls `analytics.<metric>` dynamically (`format('%I')`) for the window with the rule's `currency`, `include_internal` and `filters` (`p_grain = 'day'`, no breakdown), and reads the measure. More than one row is an error;
+  3. for `pct_change_*`, reads the previous window too: change = (value − baseline) / |baseline|;
+  4. fires when value > threshold (`gt`), value < threshold (`lt`), change > threshold (`pct_change_gt`) or change < threshold (`pct_change_lt`). It fires only if the rule is outside its cooldown (no event within `cooldown_hours` before `p_now`) and, for the complete windows (`1d`/`7d`/`30d`), no event of the rule exists yet for the same `window_from`/`window_to`: an unchanged window is reported once. `today` keeps changing, so it can fire again after the cooldown. A null value, or a null or zero baseline, never fires;
+  5. records `last_evaluated_at` / `last_value` on the rule and, when it fires, inserts an event with `fired_at = p_now`, the window, value, baseline and a message such as `AI runs up: AI runs is 7 for 2026-11-08 to 2026-11-14, +250% vs 2 for 2026-11-01 to 2026-11-07 (threshold +100%).`
+- Each rule runs in its own subtransaction (`when others or query_canceled`): a failing or cancelled call (e.g. a metric no longer alertable, or the job's statement timeout) is stored in `last_error` (`SQLSTATE: message`), and the other rules still run.
+- **Time limits:** a `statement_timeout` set inside a function does not cap the statements it runs (checked on Postgres 17), so the limits work differently:
+  - the cron command sets `statement_timeout` for the whole run. When it fires, the running rule catches the cancellation, and the timer does not re-arm;
+  - `evaluate_alerts` starts no new rule once `p_budget` (10 minutes) is spent. Rules it skips are first in line on the next run.
 
-### Endpoints (admin only, `no-store`; writes are audited with actions `alert.rule.create|update|delete`, `alert.event.ack` and `recompute`)
-| Method & path | Does |
+### SQL API (`admin_app`, SECURITY DEFINER, executable by `analytics_api`)
+Every write validates its input (22023), changes the table and writes its own audit row through `log_access` in the same transaction, so no write goes unaudited. Unknown ids raise `P0002`; a duplicate rule name raises `23505`.
+
+| Function | Audit action |
 |---|---|
-| `GET /admin/alerts/rules` | List rules |
-| `POST /admin/alerts/rules` | Create (body = rule fields) → rule |
-| `PATCH /admin/alerts/rules/:id` | Partial update → rule |
-| `DELETE /admin/alerts/rules/:id` | 204 |
-| `GET /admin/alerts/events?status=open\|all&limit=50` | Newest first, with `rule_name` and `metric` |
-| `POST /admin/alerts/events/:id/ack` | Acknowledge → event |
-| `GET /admin/alerts/summary` | `{ open_count, latest_fired_at }` (header badge and Overview banner) |
-| `POST /admin/recompute` | `admin_app.request_recompute()` → 202 `{status:'queued', run_id}`, or 429 `{status:'throttled', retry_after_seconds}` |
-| `GET /admin/recompute/status` | `admin_app.recompute_status()` → the latest run (status, requested_at, started_at, finished_at, error) |
+| `list_alert_rules() returns setof alert_rules` (newest first) | — |
+| `create_alert_rule(p_admin_email, p_rule jsonb, p_request_id)` → the rule | `alert.rule.create` (params: the rule) |
+| `update_alert_rule(p_admin_email, p_id uuid, p_patch jsonb, p_request_id)` → the rule | `alert.rule.update` (params: `rule_id`, `changes: {field: {from, to}}`) |
+| `delete_alert_rule(p_admin_email, p_id uuid, p_request_id)` → the id | `alert.rule.delete` (params: `rule_id, name, metric, measure, deleted_events`) |
+| `list_alert_events(p_status 'open'\|'all', p_limit 1–200)` | — |
+| `ack_alert_event(p_admin_email, p_id bigint, p_request_id)` → the event | `alert.event.ack` (params: `event_id, rule_id, already_acknowledged`) |
+| `alert_summary()` → `(open_count, latest_fired_at)` | — |
+| `request_recompute(p_admin_email)` (engagement migration) | `recompute.request` (written by the function) |
+| `audit_recent(p_limit)` → `(id, at, admin_email, action, target_user_id, params, request_id, people_function)` | refuses (42501) unless the transaction already holds an `audit.read` row |
 
-The **Data health page** uses `analytics.data_freshness` (table) plus `admin_app.audit_recent(50)`, exposed as `GET /admin/audit/recent?limit=50`. It's admin only and audited as `audit.read`.
+- **Rule validation (22023):**
+  - the metric must be alertable and kpi-shaped;
+  - the measure must be a numeric output column (bigint, integer, numeric, …; not boolean);
+  - `params` keys must be among `currency` (`native`/`usd`/`try`, default `usd`), `include_internal` (boolean, default false) and `filters` (keys from the metric's meta `filters`, each value a scalar or an array of 1–50 scalars). Serialised `params` must be ≤ 2,000 characters;
+  - the window and condition must come from the enums, and `pct_change_*` is not allowed on `today`;
+  - the threshold must be a finite number, `cooldown_hours` an integer from 1 to 720, `enabled` a boolean;
+  - the name must be 1–120 characters after trimming;
+  - unknown fields are rejected.
+- **PATCH** merges the given fields over the stored rule (`params` is replaced as a whole) and validates the result.
+- **Acknowledging** an already acknowledged event keeps the first acknowledgement.
+- **`log_access`** is unchanged: actions outside `people.*` / `export.csv` (`alert.*`, `recompute.request`, `audit.read`) are logged with `people_function = null`. People auditing stays strict.
+
+### Endpoints (admin only, `Cache-Control: no-store`, admin limiters)
+| Method & path | Response `data` |
+|---|---|
+| `GET /admin/alerts/rules` | `{ rules: AlertRule[] }` |
+| `POST /admin/alerts/rules` | 201, `AlertRule`. Body: `{ name, metric, measure, params?, window, condition, threshold, cooldown_hours?, enabled? }` |
+| `PATCH /admin/alerts/rules/:id` | `AlertRule`. Body: any non-empty subset of the create fields |
+| `DELETE /admin/alerts/rules/:id` | 204, no body (the rule's events cascade) |
+| `GET /admin/alerts/events?status=open\|all&limit=1..200` | `{ events: AlertEvent[] }`, newest first. Defaults: `open`, 50 |
+| `POST /admin/alerts/events/:id/ack` | `AlertEvent` |
+| `GET /admin/alerts/summary` | `{ open_count: number, latest_fired_at: ISO \| null }` (newest unacknowledged event) |
+| `POST /admin/recompute` | 202 `{ status: "queued", run_id }`; or 429 error envelope `{ code: "RATE_LIMITED", details: { status: "throttled", run_id \| null, retry_after_seconds } }` with a `Retry-After` header |
+| `GET /admin/recompute/status` | the `recompute_status()` row: `{ run_id, kind, status, requested_at, requested_by, started_at, finished_at, duration_seconds, error, open_run_id, retry_after_seconds, as_of }` |
+| `GET /admin/audit/recent?limit=1..500` | `{ entries: [{ id, at, admin_email, action, target_user_id, people_function, request_id }], generated_at }` (default limit 50). `params` is never sent: it can hold filters, search hashes and rule bodies |
+
+- **Shapes for the UI:** lists are wrapped (`{ rules }`, `{ events }`, `{ entries }`), the recompute status is a single object, DELETE is 204 without a body, and a throttled recompute is the error envelope with `details.retry_after_seconds` plus a `Retry-After` header.
+- **`AlertRule`** = the `alert_rules` row (fields above; `params` normalised, timestamps as ISO strings).
+- **`AlertEvent`** = `{ id, rule_id, rule_name, metric, measure, condition, threshold, fired_at, window_from, window_to, value, baseline, message, acknowledged_by, acknowledged_at }`. `measure`, `condition` and `threshold` are the rule's current values.
+- **Validation:** zod rejects malformed bodies and ids before any call (400 `VALIDATION_ERROR`; unknown body keys too). The rule id must be a uuid, and the event id a positive integer.
+- **Errors:** `22023` → 400, `P0002` → 404 `NOT_FOUND`, `23505` → 409 `CONFLICT`, `42501` → 403, `57014` → 504, connection errors → 503.
+- **Transactions:**
+  - Each write is a single read-write transaction: `set local statement_timeout` → the `admin_app` write function, which also writes its own audit row (the request id is passed through). A failed write leaves no audit row.
+  - `request_recompute` audits itself (`recompute.request`, no request id). The backend logs nothing separately.
+  - Reads (rules, events, summary, status) run in read-only transactions and are not audited.
+  - `GET /admin/audit/recent` runs `log_access(admin, 'audit.read', null, {limit}, request_id)` → `audit_recent(limit)` in one transaction. If the audit insert fails, no rows are returned.
+- **Rate limits:** `POST /admin/recompute` is limited to 5 per minute per admin (429 `RATE_LIMITED`), on top of the admin limiters. The database separately throttles runs to one every 5 minutes.
+- **Run states seen by the UI:** a refresh writes `running` and its result in one transaction, so polling never sees `running`: a queued run reads `pending` until it is `done` or `failed`. Show `pending` as "queued or running". A refresh that errors or is cancelled (timeout) is recorded as `failed` with `error`. A request still pending after 30 minutes (queue job not running, or every attempt killed) is failed with `error` "not processed within 30 minutes…", so it never blocks the button. With no run ever recorded, `retry_after_seconds` is 0.
+
+The **Data health page** uses `analytics.data_freshness` through `GET /admin/metrics/data_freshness` (table: `item, label, status ok|warn|error|info, value, value_text, at, detail`) and `GET /admin/audit/recent?limit=50`. The alerts migration redefines `data_freshness` (the engagement body, otherwise unchanged):
+- **`scheduler`:** warns unless `analytics_nightly`, `analytics_recompute_queue` and `analytics_alerts` all exist, every `analytics_*` job (including `analytics_cron_history_purge`) is `active`, and no analytics job has a `failed` run in `cron.job_run_details` in the last 24 hours. Columns are read only where they exist.
+- **`alerts_evaluated`:**
+  - `info` without enabled rules;
+  - `warn` when the latest evaluation is older than 2 hours, an enabled rule older than 2 hours hasn't been evaluated for 2 hours, or a rule has `last_error`;
+  - `value` is the hours since the latest evaluation, and `detail` holds `{enabled_rules, failing_rules, stale_rules, failing: [names]}`.

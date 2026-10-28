@@ -499,6 +499,7 @@ begin
   if rec.target_user_id is not null or rec.params <> '{"target_user_missing":true}'::jsonb then
     raise exception 'unknown target not handled: %', row_to_json(rec);
   end if;
+  perform admin_app.log_access('admin@example.invalid', 'audit.read', null, '{}', null);
   if (select array_agg(a.id) from admin_app.audit_recent(500) a)[1] <> (select max(id) from admin_app.audit_log)
      or (select count(*) from admin_app.audit_recent(2)) <> 2
      or array_position((select array_agg(a.id) from admin_app.audit_recent(500) a), audit_missing)

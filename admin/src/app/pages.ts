@@ -5,7 +5,7 @@ import type { Shape } from "@/lib/shapes";
 
 type CardOptions = Pick<
   ComponentProps<typeof MetricChartCard>,
-  "measure" | "native" | "sampleMeasure" | "footnote" | "badges" | "variant" | "topN"
+  "measure" | "native" | "sampleMeasure" | "footnote" | "badges" | "variant" | "topN" | "anomalies"
 >;
 
 /**
@@ -72,7 +72,12 @@ export const AI_COST: PageSection[] = [
   {
     title: "Spend",
     metrics: [
-      ai("ai_cost", "AI cost", "timeseries", { measure: "cost", sampleMeasure: "runs", footnote: aiCostFootnote }),
+      ai("ai_cost", "AI cost", "timeseries", {
+        measure: "cost",
+        sampleMeasure: "runs",
+        footnote: aiCostFootnote,
+        anomalies: "ai_cost_anomalies",
+      }),
       ai("ai_cost_anomalies", "Daily cost anomalies", "timeseries"),
       ai("ai_tokens_by_model", "Tokens by model", "timeseries"),
     ],

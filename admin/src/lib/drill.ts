@@ -1,4 +1,4 @@
-import type { MetricMeta } from "./api";
+import type { CatalogEntry, MetricMeta } from "./api";
 import { addDays, customRange, type Dimension, type DimensionFilters, type FilterValue, type GlobalFilters, type Grain } from "./filters";
 
 /** `drill_users` filters: the metric's dimension filters plus metric-specific keys (e.g. `step`, `cohort`). */
@@ -103,4 +103,23 @@ export function pointHandler(opts: PointHandlerOptions): ((point: DrillPoint) =>
     const target = drillTarget(metric, title, filters, dims, breakdown, point);
     if (target) openDrill(target);
   };
+}
+
+/**
+ * The `drill_users` key for a metric: the `drill_metrics` entry whose `metric` names it (keys rarely equal the
+ * metric, e.g. `ai_cost` → `ai_cost_users`, `growth_accounting` → `churned_users`). A key named like the metric
+ * wins a tie; without the catalog's list the metric name is used. `grain` is set when the key accepts a grain
+ * filter (cohort and growth drills), so the drawer passes the page's grain along.
+ */
+export function drillKeyFor(catalog: CatalogEntry[] | undefined, metric: string): { key: string; grain: boolean } {
+  const keys = catalog?.find((entry) => entry.name === "drill_users")?.meta.drill_metrics ?? {};
+  const matches = Object.entries(keys).filter(([, meta]) => meta.metric === metric);
+  const [key, meta] = matches.find(([k]) => k === metric) ?? matches[0] ?? [metric, keys[metric]];
+  return { key, grain: Boolean(meta?.filters?.includes("grain")) };
+}
+
+/** Points a drill target at the metric's drill key, adding the page grain when the key takes one. */
+export function withDrillKey(target: DrillTarget, catalog: CatalogEntry[] | undefined, grain: Grain): DrillTarget {
+  const drill = drillKeyFor(catalog, target.metric);
+  return { ...target, metric: drill.key, filters: drill.grain ? { ...target.filters, grain } : target.filters };
 }
