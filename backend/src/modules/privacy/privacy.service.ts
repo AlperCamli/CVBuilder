@@ -125,6 +125,12 @@ export class PrivacyService {
     const { source: _referral, ...guidance } = answers;
     const { error } = await this.db.from("users").update({ onboarding_answers: guidance }).eq("id", userId).is("deletion_requested_at", null);
     check(error);
+    if (path === "manual_create") {
+      // Unlike the metric above, this marker gates the app shell, so a failure is surfaced for a retry.
+      const { error: markerError } = await this.db.from("users").update({ entry_onboarding_completed_at: new Date().toISOString() })
+        .eq("id", userId).is("entry_onboarding_completed_at", null);
+      check(markerError);
+    }
     // Remove duplicate claim metadata; source bytes and account CVs are preserved.
     const { error: guestError } = await this.db.from("guest_imports").update({ answers: {} }).eq("claimed_user_id", userId);
     check(guestError);

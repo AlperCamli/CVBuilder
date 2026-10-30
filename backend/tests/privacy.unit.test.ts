@@ -76,12 +76,14 @@ describe("privacy release and permissions", () => {
       await service.updateAnswers(user, { career: "student", source: "friend" }, "manual_create");
       expect(rpc).toHaveBeenCalledWith("count_manual_onboarding_signup", { p_user: user, p_answers: { career: "student", source: "friend" } });
       expect(updates).toContainEqual(["users", { onboarding_answers: { career: "student" } }]);
+      expect(updates).toContainEqual(["users", { entry_onboarding_completed_at: expect.any(String) }]);
     });
 
     it("does not count profile edits, and a failed count never blocks saving answers", async () => {
       const plain = answersDb();
       await new PrivacyService(plain.db as any, null, { error: vi.fn() }).updateAnswers(randomUUID(), { career: "student" });
       expect(plain.rpc).not.toHaveBeenCalled();
+      expect(plain.updates).not.toContainEqual(["users", { entry_onboarding_completed_at: expect.any(String) }]);
 
       const failing = answersDb({ message: "metrics unavailable" }); const logger = { error: vi.fn() };
       await new PrivacyService(failing.db as any, null, logger).updateAnswers(randomUUID(), { career: "student" }, "manual_create");

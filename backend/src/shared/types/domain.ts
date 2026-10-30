@@ -28,6 +28,8 @@ export interface UserRecord {
   onboarding_completed: boolean;
   onboarding_state: OnboardingState;
   onboarding_answers?: GuestAnswers;
+  // Null until the account finishes the landing onboarding or owns a CV; absent before the migration.
+  entry_onboarding_completed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

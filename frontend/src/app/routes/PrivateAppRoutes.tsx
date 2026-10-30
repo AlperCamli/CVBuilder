@@ -1,5 +1,6 @@
 import { Navigate } from "react-router";
 import { Toaster } from "sonner";
+import { EntryOnboardingGate } from "../components/EntryOnboardingGate";
 import { SubscriptionGate } from "../components/SubscriptionGate";
 import { Checkout } from "../pages/Checkout";
 import { Layout } from "../components/Layout";
@@ -35,10 +36,12 @@ export function AppShellRoute() {
           <OnboardingProvider>
             <UpgradePromptProvider>
               <PostAuthRedirectResumer />
-              <SubscriptionGate>
-                <Layout />
-                <OnboardingChecklist />
-              </SubscriptionGate>
+              <EntryOnboardingGate>
+                <SubscriptionGate>
+                  <Layout />
+                  <OnboardingChecklist />
+                </SubscriptionGate>
+              </EntryOnboardingGate>
               <Toaster richColors position="top-right" />
             </UpgradePromptProvider>
           </OnboardingProvider>

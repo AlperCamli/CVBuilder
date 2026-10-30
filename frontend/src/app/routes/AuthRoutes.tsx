@@ -1,9 +1,10 @@
 import { type ReactNode } from "react";
-import { useLocation } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import { LanguageSwitcher } from "../localization/LanguageControls";
 import { Toaster } from "sonner";
 import { AuthProvider } from "../integration/auth-context";
 import { RedirectIfAuthenticated } from "../integration/auth-route-guards";
+import { signupOnboardingRedirect } from "../integration/entry-onboarding";
 import { AuthCallback } from "../pages/AuthCallback";
 import { EmailSent } from "../pages/EmailSent";
 import { ForgotPassword } from "../pages/ForgotPassword";
@@ -32,11 +33,17 @@ export function SignInRoute() {
   );
 }
 
+function SignUpEntry() {
+  const { state, search } = useLocation();
+  const onboarding = signupOnboardingRedirect(state, search);
+  return onboarding ? <Navigate to={onboarding} replace /> : <SignUp />;
+}
+
 export function SignUpRoute() {
   return (
     <AuthFrame>
       <RedirectIfAuthenticated>
-        <SignUp />
+        <SignUpEntry />
       </RedirectIfAuthenticated>
     </AuthFrame>
   );

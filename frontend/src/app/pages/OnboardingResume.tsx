@@ -2,7 +2,9 @@ import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { ApiClientError } from "../integration/api-error";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
+import { CV_START_PATH } from "../design-tools";
+import { needsEntryOnboarding } from "../integration/entry-onboarding";
 import { Loader2 } from "lucide-react";
 import {
   claimGuestCv,
@@ -32,7 +34,9 @@ export function OnboardingResume() {
     saveNewCvOnboarding({ ...newCv, accountId: me.user.id });
     // Sync the visitor's analytics choice first so the signup count applies their consent.
     void syncBrowserChoice().catch(() => undefined)
-      .then(() => api.patchOnboardingAnswers(newCv.answers, { path: "manual_create" })).then(() => {
+      .then(() => api.patchOnboardingAnswers(newCv.answers, { path: "manual_create" }))
+      // The save marks onboarding complete; refresh so the entry gate lets the account through.
+      .then(() => refreshMe()).then(() => {
       if (!cancelled) navigate("/app/cv-score?source=scratch", { replace: true });
     }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again.")); });
     return () => { cancelled = true; };
@@ -113,22 +117,18 @@ export function OnboardingResume() {
     };
   }, [guest, newCv, navigate, refreshMe, retry]);
 
+  // Nothing to resume on this device (a signup outside the landing flow, or verification
+  // opened elsewhere): start the onboarding, or go home if it was already completed.
+  if (!guest && !newCv) return <Navigate to={needsEntryOnboarding(me) ? CV_START_PATH : "/app"} replace />;
+
   return (
     <div className="max-w-lg mx-auto px-6 py-16 text-center">
       <h1 className="text-2xl font-semibold mb-3">
-        {!guest && !newCv
-          ? t("Upload your CV to get started")
-          : error
-            ? t("Let's finish saving your CV")
-            : newCv ? t("Preparing your new CV") : t("Preparing your CV score")}
+        {error
+          ? t("Let's finish saving your CV")
+          : newCv ? t("Preparing your new CV") : t("Preparing your CV score")}
       </h1>
-      {!guest && !newCv ? (
-        <p>
-          {t("This upload has expired or isn't available on this device.")}{" "}
-          <Link to="/onboarding" className="underline">
-            {t("Upload your CV")}</Link>
-        </p>
-      ) : error ? (
+      {error ? (
         <>
           <p role="alert" className="mb-5">
             {t(error)}
