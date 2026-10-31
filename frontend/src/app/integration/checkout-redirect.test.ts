@@ -18,7 +18,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   const stored = new Map<string, string>();
   vi.stubGlobal("window", {
-    location: { origin: "https://app.example", href: "" }, confirm: vi.fn(() => true),
+    location: { origin: "https://app.example", href: "", reload: vi.fn() }, confirm: vi.fn(() => true),
+    history: { state: { idx: 3 }, replaceState: vi.fn() }, addEventListener: vi.fn(),
     localStorage: { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) }
   });
   vi.stubGlobal("sessionStorage", { getItem: vi.fn(() => null), setItem: vi.fn() });
@@ -59,6 +60,26 @@ describe("authoritative checkout terms", () => {
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(api.createBillingCheckout).toHaveBeenCalledWith({ plan_code: "weekly", with_trial: false, pricing_quote: "signed-quote", success_url: "https://app.example/app/pricing?checkout=success", cancel_url: "https://app.example/app/pricing?checkout=cancel" });
     expect(window.location.href).toBe("https://checkout.stripe.test/session");
+  });
+  it("makes browser Back from Stripe land on the cancel page", async () => {
+    const api = fixture();
+    await startStripeCheckout(api as unknown as BackendApi, "monthly", { returnPath: "/app/cv-score?action=editor" });
+    const cancelUrl = "https://app.example/app/checkout?plan=monthly&trial=1&next=%2Fapp%2Fcv-score%3Faction%3Deditor&checkout=cancel";
+    expect(api.createBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ cancel_url: cancelUrl }));
+    expect(window.history.replaceState).toHaveBeenCalledWith({ idx: 3 }, "", cancelUrl);
+    expect(window.location.href).toBe("https://checkout.stripe.test/session");
+    const [event, onPageShow] = vi.mocked(window.addEventListener).mock.calls[0] as unknown as [string, (event: { persisted: boolean }) => void];
+    expect(event).toBe("pageshow");
+    onPageShow({ persisted: false });
+    expect(window.location.reload).not.toHaveBeenCalled();
+    onPageShow({ persisted: true });
+    expect(window.location.reload).toHaveBeenCalledOnce();
+  });
+  it("leaves history alone when no checkout is created", async () => {
+    const api = fixture();
+    vi.mocked(window.confirm).mockReturnValue(false);
+    await expect(startStripeCheckout(api as unknown as BackendApi, "weekly")).rejects.toThrow();
+    expect(window.history.replaceState).not.toHaveBeenCalled();
   });
   it("creates no checkout when the user declines paid billing instead of a trial", async () => {
     const api = fixture();

@@ -917,6 +917,46 @@
   border-radius: 20px;
   padding: 5px 9px;
 }
+.cv-trial-assurance {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 0;
+  list-style: none;
+}
+.cv-trial-assurance li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cv-trial-assurance-cancel {
+  padding: 4px 11px;
+  color: #0d5f47;
+  font-weight: 650;
+  background: #e3f3ea;
+  border: 1px solid #bfe2cf;
+  border-radius: 999px;
+}
+.cv-pricing-module > .cv-cancel-anytime {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 13px 18px;
+  color: #3f5a4c;
+  font-size: 13px;
+  line-height: 1.55;
+  background: #eef8f2;
+  border: 1px solid #cbe8d8;
+  border-radius: 14px;
+}
+.cv-cancel-anytime svg {
+  flex-shrink: 0;
+  color: #0f7755;
+}
+.cv-cancel-anytime strong {
+  color: #0f5c45;
+}
 .cv-pricing-full-link {
   display: flex;
   justify-content: center;

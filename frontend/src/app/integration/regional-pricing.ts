@@ -59,6 +59,8 @@ export function formatMoney(amount: number, currency: string): string {
   return new Intl.NumberFormat(localeCode(), {
     style: "currency",
     currency: currency.toUpperCase(),
+    // ₺ and $ in every interface language, not "TRY 149.90" in English.
+    currencyDisplay: "narrowSymbol",
   }).format(amount / 100);
 }
 export function regionalCards(prices: BillingPrices | null): PlanCard[] {

@@ -74,5 +74,10 @@ export async function startStripeCheckout(
     currency
   });
 
+  // Browser Back from Stripe must land where Stripe's own back link does: swap the
+  // page that started checkout for the cancel page, and reload if the browser restores
+  // the frozen "Opening secure checkout…" page from its back-forward cache.
+  window.history.replaceState(window.history.state, "", checkoutInput.cancel_url);
+  window.addEventListener("pageshow", event => { if (event.persisted) window.location.reload(); }, { once: true });
   window.location.href = response.checkout_url;
 }

@@ -13,7 +13,6 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
-  Check,
   ChevronDown,
   FileText,
   LayoutGrid,
@@ -29,6 +28,7 @@ import {
   PlanComparison,
   RegionalPricingCards,
   StartLink,
+  TrialAssurance,
   TrustLine,
 } from "./DesignShared";
 import { ProductDemo, type DemoAction } from "./ProductDemo";
@@ -241,9 +241,7 @@ export default function GuidedJourney({
                     {t("Try it first")}{" "}<ArrowDown size={16} />
                   </button>
                 </div>
-                <div className="cv-free-note">
-                  <Check size={13} />
-                  {t("3-day free trial · Card required to activate")}</div>
+                <TrialAssurance />
               </div>
             </section>
             <CompanyCarousel market={regional.prices?.market} />
@@ -364,7 +362,7 @@ export default function GuidedJourney({
             <StartLink to="/onboarding">
               {t("Let’s tailor my CV")}{" "}<ArrowRight size={17} />
             </StartLink>
-            <small>{t("3-day free trial. Card required to activate.")}</small>
+            <TrialAssurance />
           </div>
         </section>
         <section className="cv-wrap gj-faq">

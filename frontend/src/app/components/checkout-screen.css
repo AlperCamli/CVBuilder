@@ -1,0 +1,52 @@
+.checkout-screen { --checkout-ink:#143c33; --checkout-muted:#64716d; min-height:100%; padding:44px 28px 34px; background:#f8faf9; color:var(--checkout-ink); }
+.checkout-screen-status { display:flex; justify-content:center; align-items:center; gap:8px; font-size:12px; color:#6b7b71; margin:0 auto 20px; text-align:center; }
+.checkout-screen-status svg { flex-shrink:0; }
+.checkout-screen-card { width:min(100%,660px); margin:auto; overflow:hidden; border:1px solid #dce7e0; border-radius:22px; background:#fff; box-shadow:0 20px 60px -30px #204c3838; }
+.checkout-screen-head { position:relative; isolation:isolate; min-height:239px; padding:31px 32px 30px; background:linear-gradient(115deg,var(--color-teal-50),#f3faf6 75%,#edf6ef); }
+.checkout-screen-head::after { content:""; position:absolute; width:230px; height:230px; right:-53px; top:-35px; border:1px solid #ffffffa8; border-radius:50%; z-index:-1; box-shadow:0 0 0 27px #ffffff35,0 0 0 61px #ffffff25; }
+.checkout-screen-copy { max-width:420px; padding-right:34px; }
+.checkout-screen-eyebrow { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; margin-bottom:17px; color:#0c6b51; background:#ffffffb5; border:1px solid #c3e3d4; border-radius:30px; font-size:10px; font-weight:650; letter-spacing:.07em; }
+.checkout-screen h1 { position:relative; z-index:1; margin:0 0 11px; font-size:32px; font-weight:650; line-height:1.17; letter-spacing:-1.1px; text-wrap:balance; }
+.checkout-screen-copy p { margin:0; color:#5b7467; font-size:13px; line-height:1.65; }
+.checkout-screen-mascot { position:absolute; width:177px; height:266px; object-fit:contain; right:5px; bottom:-10px; transform:scaleX(-1); pointer-events:none; mix-blend-mode:multiply; }
+.checkout-screen-body { padding:24px 32px 26px; }
+.checkout-screen-offer { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:16px 18px; background:#f7faf8; border:1px solid #e3ebe5; border-radius:12px; }
+.checkout-screen-offer strong { color:#264c3c; font-size:14px; font-weight:650; }
+.checkout-screen-offer p { margin:5px 0 0; color:#6d7c73; font-size:11px; }
+.checkout-screen-price { white-space:nowrap; text-align:right; }
+.checkout-screen-price strong { font-size:27px; color:#134b38; letter-spacing:-.8px; }
+.checkout-screen-price span { margin-left:6px; color:#68796d; font-size:11px; }
+.checkout-screen-features { display:grid; gap:13px; list-style:none; padding:22px 0; margin:0; }
+.checkout-screen-features li { display:flex; gap:11px; align-items:center; color:#455b4e; font-size:13px; }
+.checkout-screen-features li>span { flex-shrink:0; display:grid; place-items:center; width:21px; height:21px; border-radius:50%; background:#e5f5ed; color:#0f7755; }
+.checkout-screen-cancel { display:flex; gap:12px; align-items:flex-start; padding:14px 16px; margin:0 0 16px; background:#eef8f2; border:1px solid #cbe8d8; border-radius:12px; }
+.checkout-screen-cancel>span { flex-shrink:0; display:grid; place-items:center; width:30px; height:30px; border-radius:50%; background:#fff; color:#0f7755; box-shadow:0 1px 3px #0f6e5620; }
+.checkout-screen-cancel strong { display:block; color:#0f5c45; font-size:14px; font-weight:650; }
+.checkout-screen-cancel p { margin:3px 0 0; color:#4f6b5d; font-size:12px; line-height:1.6; }
+.checkout-screen-waiting { display:flex; align-items:center; justify-content:center; gap:9px; min-height:47px; margin:0; color:#4d6255; font-size:13px; }
+.checkout-screen-footer-center { justify-content:center; }
+.checkout-screen-terms { margin:0 0 19px; color:#62756a; font-size:12px; line-height:1.8; }
+.checkout-screen-primary,.checkout-screen-secondary { display:flex; width:100%; min-height:47px; align-items:center; justify-content:center; gap:9px; border-radius:9px; font-size:13px; font-weight:600; text-align:center; text-decoration:none; padding:11px 14px; }
+.checkout-screen-primary { border:1px solid var(--color-teal-600); background:var(--color-teal-600); color:#fff; box-shadow:0 3px 7px #0f6e5615; }
+.checkout-screen-primary:hover { background:var(--color-teal-700); }
+.checkout-screen-secondary { margin-top:10px; border:1px solid #dce6df; background:#fff; color:#4d6255; font-weight:500; }
+.checkout-screen-secondary:hover { background:#f6faf7; }
+.checkout-screen button:disabled { cursor:wait; opacity:.6; }
+.checkout-screen a[aria-disabled="true"] { opacity:.6; cursor:wait; }
+.checkout-screen :is(button,a):focus-visible { outline:3px solid var(--color-teal-200); outline-offset:4px; }
+.checkout-screen-reassurance { display:flex; align-items:center; justify-content:center; gap:5px; margin:12px 0 0; font-size:10px; color:#697c70; }
+.checkout-screen-error { padding:12px; margin-bottom:16px; color:var(--color-red-700); background:var(--color-red-50); border-radius:8px; font-size:13px; }
+.checkout-screen-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; width:min(100%,660px); margin:19px auto 0; color:#62776a; }
+.checkout-screen-footer>a { display:flex; align-items:center; gap:5px; font-size:11px; }
+.checkout-screen-footer p { margin:0; font-size:11px; }
+.checkout-screen-next { display:flex; align-items:center; justify-content:center; gap:7px; width:min(100%,660px); margin:20px auto 0; color:#6b7f71; font-size:11px; text-align:center; }
+.checkout-screen-next svg { flex-shrink:0; }
+@media(max-width:760px) {
+  .checkout-screen { padding:76px 16px 28px; }.checkout-screen-status { font-size:11px; margin-bottom:17px; }.checkout-screen-card { border-radius:17px; }.checkout-screen-head { min-height:262px; padding:25px 22px 24px; }.checkout-screen-copy { max-width:100%; padding:0; }.checkout-screen h1 { max-width:245px; font-size:27px; line-height:1.17; letter-spacing:-.8px; margin-bottom:13px; text-wrap:initial; }.checkout-screen-eyebrow { font-size:9px; margin-bottom:16px; }.checkout-screen-copy p { max-width:205px; font-size:12px; line-height:1.7; }.checkout-screen-mascot { width:115px; height:172px; right:-5px; bottom:-2px; }.checkout-screen-body { padding:20px 22px 22px; }.checkout-screen-offer { padding:14px 13px; gap:10px; }.checkout-screen-offer strong { font-size:13px; }.checkout-screen-price strong { font-size:24px; }.checkout-screen-price span { display:block; margin:2px 0 0; font-size:10px; }.checkout-screen-features li { font-size:12px; gap:9px; }.checkout-screen-terms { font-size:11px; }.checkout-screen-cancel { padding:12px 13px; }.checkout-screen-cancel strong { font-size:13px; }.checkout-screen-cancel p { font-size:11px; }.checkout-screen-primary,.checkout-screen-secondary { font-size:12px; }.checkout-screen-reassurance { font-size:9px; }.checkout-screen-footer { justify-content:center; }.checkout-screen-next { font-size:10px; }
+}
+@media(max-width:360px) {
+  .checkout-screen-head { min-height:284px; }
+  .checkout-screen-copy p { max-width:calc(100% - 90px); }
+  .checkout-screen-mascot { width:100px; height:150px; right:0; bottom:0; }
+  .checkout-screen-price strong { font-size:21px; }
+}

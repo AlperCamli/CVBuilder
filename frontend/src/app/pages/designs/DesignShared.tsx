@@ -220,6 +220,17 @@ export function DesignShell({
   );
 }
 
+/** Trial terms in one glance, with "Cancel anytime" set apart so it reads first. */
+export function TrialAssurance() {
+  return (
+    <ul className="cv-free-note cv-trial-assurance" aria-label={t("Free trial terms")}>
+      <li><Check size={13} aria-hidden="true" />{t("Free for 3 days")}</li>
+      <li><Check size={13} aria-hidden="true" />{t("Add a card, pay nothing today")}</li>
+      <li className="cv-trial-assurance-cancel"><ShieldCheck size={14} aria-hidden="true" />{t("You can cancel anytime")}</li>
+    </ul>
+  );
+}
+
 export function Eyebrow({ children }: { children: ReactNode }) {
   useTranslation();
   return <div className="cv-eyebrow">{children}</div>;
@@ -540,6 +551,13 @@ export function RegionalPricingCards({
           <p className="cv-plan-footnote">{t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}</p>
         </article>
       </div>
+      <p className="cv-cancel-anytime">
+        <ShieldCheck size={18} aria-hidden="true" />
+        <span>
+          <strong>{t("Cancel anytime.")}</strong>{" "}
+          {t("No contracts. Cancel in a couple of clicks from billing settings, and if you cancel during the trial you won’t pay a thing.")}
+        </span>
+      </p>
       {teaser && (
         <Link
           to={`${guided?.pricingPath ?? `/designs/${concept}/pricing`}?billing=${period}`}

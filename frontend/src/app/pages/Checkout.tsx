@@ -1,15 +1,13 @@
-import { SupportHelp } from "../components/SupportHelp";
-import { CheckoutCancelled } from "../components/CheckoutCancelled";
+import { CheckoutConfirming, CheckoutLoading, CheckoutScreen } from "../components/CheckoutScreen";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { Loader2, CreditCard } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router";
 import { isCheckoutTarget } from "../../content/pricing";
 import { useAuth } from "../integration/auth-context";
 import { startStripeCheckout } from "../integration/checkout-redirect";
 import { clearPendingCheckout, setPendingCheckout } from "../integration/pending-checkout";
-import { checkoutPath, hasAppAccess, safeReturnPath } from "../integration/subscription-flow";
-import { useRegionalPricing, formatMoney } from "../integration/regional-pricing";
-import { PricingAvailability } from "../components/PricingAvailability";
+import { hasAppAccess, safeReturnPath } from "../integration/subscription-flow";
+import { useRegionalPricing } from "../integration/regional-pricing";
+import { checkoutKey, checkoutScreen, type CheckoutChoice } from "../integration/checkout-screen";
 import { translate as t } from "../localization/i18n";
 import {
   readCheckoutAttribution, clearCheckoutAttribution, paymentCompletedTrackingKey,
@@ -29,9 +27,9 @@ export function Checkout() {
   const auto = params.get("auto") === "1";
   const automaticHandoff = auto && !outcome;
   const regional = useRegionalPricing();
-  const price = regional.prices?.plans.find(item => item.code === plan);
   const [eligibility, setEligibility] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [handoffDelayed, setHandoffDelayed] = useState(false);
@@ -49,7 +47,7 @@ export function Checkout() {
     let active = true;
     setError(null);
     setEligibility(null);
-    if (outcome === "success") setBusy(true);
+    if (outcome === "success") setConfirming(true);
     void (async () => {
       try {
         // A success query is not proof of payment. Confirm ownership/status at Stripe.
@@ -81,19 +79,19 @@ export function Checkout() {
         if (outcome === "success") throw new Error(t("Your subscription is not active yet. Please try confirming again."));
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : t("Could not verify your subscription."));
-      } finally { if (active) setBusy(false); }
+      } finally { if (active) setConfirming(false); }
     })();
     return () => { active = false; };
   }, [api, refreshMe, navigate, destination, outcome, sessionId, attempt, plan, trial]);
 
   useEffect(() => { started.current = false; }, [plan, trial]);
 
-  const openCheckout = useCallback(async () => {
-    if (trial && eligibility !== true) return;
-    setBusy(true); setError(null);
-    setPendingCheckout({ plan_code: plan, with_trial: trial, return_path: destination });
-    try { await startStripeCheckout(api, plan, { withTrial: trial, source: "subscription_activation", returnPath: destination }); }
-    catch (err) { setError(err instanceof Error ? err.message : t("Checkout could not be opened.")); setBusy(false); }
+  const openCheckout = useCallback(async (target: CheckoutChoice = { plan, withTrial: trial }) => {
+    if (target.withTrial && eligibility !== true) return;
+    setOpening(checkoutKey(target)); setError(null);
+    setPendingCheckout({ plan_code: target.plan, with_trial: target.withTrial, return_path: destination });
+    try { await startStripeCheckout(api, target.plan, { withTrial: target.withTrial, source: "subscription_activation", returnPath: destination }); }
+    catch (err) { setError(err instanceof Error ? err.message : t("Checkout could not be opened.")); setOpening(null); }
   }, [api, plan, trial, destination, eligibility]);
   useEffect(() => {
     if (auto && !outcome && !started.current && eligibility !== null && regional.ready && !error && (!trial || eligibility)) {
@@ -107,26 +105,9 @@ export function Checkout() {
   if (automaticHandoff && !handoffDelayed && !error && !regional.error &&
       (regional.loading || regional.ready) && (!trial || eligibility !== false)) return null;
 
-  if (outcome === "cancel") return <CheckoutCancelled plan={plan} trial={trial} eligibility={eligibility} destination={destination} regional={regional} busy={busy} error={error} onRetry={() => void openCheckout()} />;
-
-  return <div className="mx-auto max-w-lg px-6 py-14">
-    <CreditCard className="mb-4 text-teal-700" size={32} />
-    <h1 className="text-2xl font-semibold mb-3">{t(outcome === "success" ? "Confirming your subscription" : trial ? "Activate your 3-day free trial" : "Complete your Pro purchase")}</h1>
-    <p className="mb-5 text-sm text-slate-600">{t("Your CV and selected next step are saved. We will take you back automatically after activation.")}</p>
-    <PricingAvailability {...regional} />
-    {price && <div className="rounded-xl border p-5 mb-5">
-      <strong>{trial ? t("3 days free, then Weekly Pro") : t("Pro {{plan}}", { plan: t(plan === "annual" ? "Yearly" : plan === "monthly" ? "Monthly" : "Weekly") })}</strong>
-      <p className="mt-2">{trial ? `${formatMoney(0, regional.prices!.currency)} ${t("today")}. ` : ""}{formatMoney(price.amount, regional.prices!.currency)} {t(plan === "annual" ? "billed yearly" : plan === "monthly" ? "billed monthly" : "billed weekly")}</p>
-      <p className="mt-2 text-sm">{t(trial ? "Credit card required. Renews weekly after 3 days unless cancelled before the trial ends." : "Your subscription renews automatically. You can manage or cancel it in billing settings.")}</p>
-    </div>}
-    {error && <p role="alert" className="mb-4 text-red-700">{t(error)}</p>}
-    {(error || regional.error) && <SupportHelp topic="Payment" />}
-    {trial && eligibility === false && <p role="status" className="mb-4">{t("This account is not eligible for another free trial. Choose a Pro plan to continue.")}</p>}
-    {outcome === "success" ? <button className="interactive-button rounded-lg bg-teal-700 text-white px-5 py-3" disabled={busy} onClick={() => setAttempt(value => value + 1)}>{busy ? t("Confirming…") : t("Check activation again")}</button> :
-      <button className="interactive-button rounded-lg bg-teal-700 text-white px-5 py-3 inline-flex gap-2 items-center" disabled={busy || !regional.ready || eligibility === null || (trial && !eligibility)} onClick={() => void openCheckout()}>
-        {busy && <Loader2 className="animate-spin" size={16} />}{t(busy ? "Opening secure checkout…" : trial ? "Activate 3-day free trial" : "Continue to secure checkout")}
-      </button>}
-    {!trial && error && eligibility !== false && <div className="mt-5"><p className="mb-2">{t("Having trouble purchasing? Try Pro with a 3-day free trial instead.")}</p><Link className="underline text-teal-700" to={checkoutPath({ with_trial: true, return_path: destination })}>{t("Start Free Trial")}</Link></div>}
-    <p className="mt-6"><Link to="/app/pricing" className="text-sm underline">{t("See Pro plans")}</Link></p>
-  </div>;
+  if (outcome === "success") return <CheckoutConfirming busy={confirming} error={error} onRetry={() => setAttempt(value => value + 1)} />;
+  if (eligibility === null && !error) return <CheckoutLoading />;
+  const view = outcome === "cancel" ? "cancel" : "start";
+  return <CheckoutScreen screen={checkoutScreen({ outcome: view, plan, trial, eligibility, error: Boolean(error) })} outcome={view}
+    regional={regional} eligibility={eligibility} opening={opening} error={error} onCheckout={action => void openCheckout(action)} />;
 }
