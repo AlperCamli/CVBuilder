@@ -1,6 +1,7 @@
 import { LANGUAGES, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { personalizedGuidance } from "../onboarding/pre-signup-questions";
+import { scoreResumePath } from "../onboarding/onboarding-flow";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
@@ -134,10 +135,9 @@ export function CVScore() {
       const freeAllowed = action === "editor"
         || (action === "tailor" && billing.free_tier?.tailoring_available === true)
         || (action === "improve" && (scratch || billing.free_tier?.improve_available === true));
+      const resumePath = scoreResumePath({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage, importId });
       if (!fullAccess && !freeAllowed) {
-        const next = new URLSearchParams({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage });
-        if (importId) next.set("import", importId);
-        showTrialPrompt(action === "tailor" ? "tailoring" : "ai", { returnPath: `/app/cv-score?${next}` });
+        showTrialPrompt(action === "tailor" ? "tailoring" : "ai", { returnPath: resumePath });
         return;
       }
       if (scratch) {
@@ -150,7 +150,7 @@ export function CVScore() {
         return;
       }
       if (action === "improve") {
-        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload", freeRun: !fullAccess, tailoringAvailable: fullAccess || billing.free_tier?.tailoring_available === true } });
+        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload", freeRun: !fullAccess, tailoringAvailable: fullAccess || billing.free_tier?.tailoring_available === true, resumePath } });
         return;
       }
       const detail = await api.getImport(importId!);

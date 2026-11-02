@@ -1490,7 +1490,7 @@
   "Your trial is canceled. You keep Pro until {{date}} and won’t be charged.": "Your trial is canceled. You keep Pro until {{date}} and won’t be charged.",
   "Cancel trial": "Cancel trial",
   "Cancel subscription": "Cancel subscription",
-  "Activate a trial or purchase Pro to access the application.": "Start your free trial or choose Pro to unlock exports, AI tools and tailoring.",
+  "Start a free 3-day trial to download your CVs and unlock every AI feature.": "Start a free 3-day trial to download your CVs and unlock every AI feature.",
   "Unlimited CVs and exports with your subscription.": "Your plan includes unlimited CVs and exports.",
   "Create a new CV · A few questions · Create an account · CV score · Activate trial": "Create a new CV · A few questions · Create an account · CV score · Start free trial",
   "Create or upload · A few questions · Create an account · CV score · Activate trial": "Create or upload · A few questions · Create an account · CV score · Start free trial",
@@ -1714,5 +1714,8 @@
   "Content criteria are rated by an AI review against a fixed rubric; quoted examples are checked against your CV text.": "Content criteria are rated by an AI review against a fixed rubric; quoted examples are checked against your CV text.",
   "Without the AI review, experience depth, role focus and skills evidence are not assessed.": "Without the AI review, experience depth, role focus and skills evidence are not assessed.",
   "Content criteria are rated against a strict rubric, so a high score has to be earned. Structure and parseability are checked automatically.": "Content criteria are rated against a strict rubric, so a high score has to be earned. Structure and parseability are checked automatically.",
-  "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.": "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules."
+  "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.": "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.",
+  "AI refinements left in your free tailoring: {{count}}": "AI refinements left in your free tailoring: {{count}}",
+  "Your free tailored CV is finished. Start your free 3-day trial to keep improving it with AI.": "Your free tailored CV is finished. Start your free 3-day trial to keep improving it with AI.",
+  "You've used the AI refinements included in your free tailoring. Start your free 3-day trial to keep refining with AI.": "You’ve used the AI refinements included in your free tailoring. Start your free 3-day trial to keep refining with AI."
 }

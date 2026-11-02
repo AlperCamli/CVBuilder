@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TailoringSessionView, TailoringSuggestion, TailoringTask } from "../../integration/tailoring-types";
 import { refineSuggestionsForBlock } from "./RefineArea";
 import { ApiClientError } from "../../integration/api-error";
-import { answerCreatedTasks, applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
+import { answerCreatedTasks, applyTailoringTaskResult, isFreeAiLocked, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
 
 const task = (id: string, patch: Partial<TailoringTask> = {}): TailoringTask => ({
   id,
@@ -69,6 +69,21 @@ describe("tailoring view merges", () => {
     expect(next.tasks.map((item) => item.id)).toEqual(["t1", "t2"]);
     expect(next.suggestions.map((item) => item.id)).toEqual(["s1", "s2"]);
     expect(next.score.potential).toBe(75);
+  });
+
+  it("tracks the free session's AI rewrites from task results", () => {
+    const free = view();
+    free.session.free_ai_refinements_left = 2;
+    const result = { task: task("t1"), suggestions: [], session_status: "ready" as const, score: free.score };
+    expect(isFreeAiLocked(free)).toBe(false);
+    const used = applyTailoringTaskResult(free, { ...result, free_ai_refinements_left: 0 });
+    expect(used.session.free_ai_refinements_left).toBe(0);
+    expect(isFreeAiLocked(used)).toBe(true);
+    // Older responses without the field keep what the view knew; null (trial or Pro) unlocks.
+    expect(applyTailoringTaskResult(used, result).session.free_ai_refinements_left).toBe(0);
+    expect(isFreeAiLocked(applyTailoringTaskResult(used, { ...result, free_ai_refinements_left: null }))).toBe(false);
+    expect(isFreeAiLocked(view())).toBe(false);
+    expect(isFreeAiLocked(null)).toBe(false);
   });
 
   it("replaces the pending cards of a re-run task and keeps decided ones", () => {

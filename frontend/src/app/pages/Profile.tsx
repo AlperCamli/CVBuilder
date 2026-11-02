@@ -278,7 +278,7 @@ export function Profile() {
                       ? cancelScheduled
                         ? t("Your trial is canceled. You keep Pro until {{date}} and won’t be charged.", { date: periodEndLabel })
                         : t("Your trial ends on {{date}}. Cancel before then and you won’t be charged. We’ll email you a reminder first.", { date: periodEndLabel })
-                      : planCode === "free" ? t("Activate a trial or purchase Pro to access the application.") : usage
+                      : planCode === "free" ? t("Start a free 3-day trial to download your CVs and unlock every AI feature.") : usage
                         ? t("Unlimited CVs and exports with your subscription.")
                         : t("Loading usage...")}
                 </p>

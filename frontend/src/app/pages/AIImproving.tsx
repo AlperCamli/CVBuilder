@@ -9,6 +9,7 @@ import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import { trackFunnelEvent } from "../integration/funnel-events";
+import { scoreResumePath } from "../onboarding/onboarding-flow";
 
 import { applyOnboardingTemplate } from "../integration/subscription-flow";
 
@@ -28,6 +29,11 @@ export function AIImproving() {
   // Set by the score page for accounts without a trial or Pro: this run is their free one.
   const freeRun = location.state?.freeRun === true;
   const tailoringAvailable = location.state?.tailoringAvailable !== false;
+  // Where checkout returns when the server refuses the run: the score page resumes the improvement
+  // (?action=improve). This page itself needs its route state, so it can't be the return path.
+  const resumePath =
+    (location.state?.resumePath as string | undefined) ??
+    (importId ? scoreResumePath({ source: "upload", action: "improve", language: parsedContent?.language, importId }) : undefined);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -113,7 +119,7 @@ export function AIImproving() {
               });
             } catch (err) {
               if (isTrialRequired(err)) {
-                showTrialPrompt(resolvePaywallSurface(err, "ai"));
+                showTrialPrompt(resolvePaywallSurface(err, "ai"), { returnPath: resumePath });
                 setError(err.message);
               } else if (isEntitlementExceeded(err)) {
                 showUpgradePrompt("limit_reached", {
@@ -137,7 +143,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, completeStep, freeRun, improvementGuidance, importId, navigate, parsedContent, source, steps, showTrialPrompt, showUpgradePrompt, tailoringAvailable]);
+  }, [api, completeStep, freeRun, improvementGuidance, importId, navigate, parsedContent, resumePath, source, steps, showTrialPrompt, showUpgradePrompt, tailoringAvailable]);
 
   const currentStepData = steps[currentStep];
 

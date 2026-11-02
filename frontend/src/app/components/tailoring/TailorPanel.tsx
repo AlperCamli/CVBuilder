@@ -665,7 +665,12 @@ export function TailorPanel({
           ) : null}
           <AnswersDisclosure view={view} content={content} updatingBlockIds={answerUpdatingBlockIds} onAnswer={controller.answer} />
           <div className="flex items-center justify-between" style={{ fontSize: "12px" }}>
-            <button type="button" onClick={() => switchTab("refine")} className="inline-flex items-center gap-1" style={{ color: "var(--color-teal-700)", fontWeight: 500 }}>
+            <button
+              type="button"
+              onClick={() => (controller.freeAiRefinementsLeft === 0 ? controller.openAiTrialPrompt() : switchTab("refine"))}
+              className="inline-flex items-center gap-1"
+              style={{ color: "var(--color-teal-700)", fontWeight: 500 }}
+            >
               <Sparkles size={12} /> {t("Keep refining")}
             </button>
             <button type="button" onClick={() => setRetargeting(true)} style={{ color: "var(--color-text-secondary)" }}>

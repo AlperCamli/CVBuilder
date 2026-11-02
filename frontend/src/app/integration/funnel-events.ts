@@ -61,3 +61,14 @@ export function trackFunnelEvent(event: FunnelEvent, detail?: string): void {
     // Counting must never break the page.
   }
 }
+
+// Landing and pricing views count once per page load: the remembered-locale redirect (/ <-> /tr,
+// /pricing <-> /tr/pricing) re-renders the page under a new path and must not count it again. A
+// later in-app move to the other page (landing -> pricing) still counts that page once.
+const countedPageViews = new Set<"landing_view" | "pricing_view">();
+
+export function trackPageViewOnce(event: "landing_view" | "pricing_view"): void {
+  if (countedPageViews.has(event)) return;
+  countedPageViews.add(event);
+  trackFunnelEvent(event);
+}

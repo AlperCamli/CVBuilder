@@ -56,6 +56,7 @@ export interface TailoringRepository {
   updateSession(userId: string, sessionId: string, payload: UpdateTailoringSessionPayload): Promise<TailoringSessionRecord | null>;
   // Moves the session to `to` only while it is in one of `from` (single-flight guard).
   claimSessionStatus(userId: string, sessionId: string, from: TailoringSessionStatus[], to: TailoringSessionStatus): Promise<TailoringSessionRecord | null>;
+  claimFreeAiRefinement(userId: string, sessionId: string, limit: number): Promise<boolean>;
   mergeSessionJson(userId: string, sessionId: string, column: "answers" | "requirement_decisions", patch: Record<string, unknown>): Promise<TailoringSessionRecord | null>;
   archiveActiveSessions(userId: string, tailoredCvId: string): Promise<void>;
 
@@ -132,6 +133,7 @@ const toSessionRecord = (row: Record<string, unknown>): TailoringSessionRecord =
   error_message: (row.error_message as string | null) ?? null,
   finished_at: (row.finished_at as string | null) ?? null,
   free_tier: row.free_tier === true,
+  free_ai_refinements: Number(row.free_ai_refinements ?? 0),
   created_at: String(row.created_at),
   updated_at: String(row.updated_at)
 });
@@ -225,6 +227,26 @@ export class SupabaseTailoringRepository implements TailoringRepository {
       .maybeSingle();
     if (error) fail("Failed to update tailoring session", error.message);
     return data ? toSessionRecord(data as Record<string, unknown>) : null;
+  }
+
+  // Counts one AI rewrite on the free session while fewer than `limit` are used. Compare-and-set on
+  // the count read, retried when a concurrent request changed it; false once the limit is reached.
+  async claimFreeAiRefinement(userId: string, sessionId: string, limit: number): Promise<boolean> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.findSessionById(userId, sessionId);
+      if (!current || current.free_ai_refinements >= limit) return false;
+      const { data, error } = await this.db
+        .from("tailoring_sessions")
+        .update({ free_ai_refinements: current.free_ai_refinements + 1 })
+        .eq("id", sessionId)
+        .eq("user_id", userId)
+        .eq("free_ai_refinements", current.free_ai_refinements)
+        .select("id")
+        .maybeSingle();
+      if (error) fail("Failed to count the AI refinement", error.message);
+      if (data) return true;
+    }
+    throw new InternalServerError("The AI refinement could not be counted. Try again.");
   }
 
   async claimSessionStatus(

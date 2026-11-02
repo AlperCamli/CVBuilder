@@ -1,11 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
-import { FUNNEL_EVENTS, isBotUserAgent } from "../src/modules/funnel-events/funnel-events.contract";
+import { FUNNEL_EVENT_DETAILS, FUNNEL_EVENTS, isBotUserAgent, normalizeUtmSource } from "../src/modules/funnel-events/funnel-events.contract";
 import { createFunnelEventsRouter } from "../src/modules/funnel-events/funnel-events.routes";
 import { FunnelEventsService } from "../src/modules/funnel-events/funnel-events.service";
 import { createTestConfig } from "./helpers/in-memory";
@@ -31,6 +31,45 @@ describe("funnel events contract", () => {
     expect([...list.matchAll(/"([a-z_]+)"/g)].map((m) => m[1])).toEqual([...FUNNEL_EVENTS]);
   });
 
+  it("allows exactly the detail values listed next to the frontend events", () => {
+    const source = readFileSync(join(__dirname, "../../frontend/src/app/integration/funnel-events.ts"), "utf-8");
+    const listed = Object.fromEntries(
+      [...source.matchAll(/"([a-z_]+)",\s*\/\/ detail: ([a-z_ |]+)/g)].map((m) => [m[1], m[2].split("|").map((value) => value.trim())])
+    );
+    expect(listed).toEqual(FUNNEL_EVENT_DETAILS);
+  });
+
+  it("allows every detail the frontend sends", () => {
+    const root = join(__dirname, "../../frontend/src");
+    const files = (readdirSync(root, { recursive: true }) as string[])
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
+      .map((file) => readFileSync(join(root, file), "utf-8"));
+    const sent: Array<[string, string]> = [];
+    for (const text of files) {
+      for (const m of text.matchAll(/trackFunnelEvent\("([a-z_]+)",\s*"([^"]+)"\)/g)) sent.push([m[1], m[2]]);
+      // Ternaries of literals, e.g. ok ? "trial" : "pro".
+      for (const m of text.matchAll(/trackFunnelEvent\("([a-z_]+)",[^;\n]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\)/g)) sent.push([m[1], m[2]], [m[1], m[3]]);
+      for (const m of text.matchAll(/(?:trackCtaClick\(|\bcta=)"([^"]+)"/g)) sent.push(["cta_click", m[1]]);
+      for (const m of text.matchAll(/(?:viewDetail = [^;\n]*\?\s*)"([^"]+)"\s*:\s*"([^"]+)"/g)) sent.push(["checkout_view", m[1]], ["checkout_view", m[2]]);
+      const questions = /QUESTION_FUNNEL_DETAIL: Record<[^>]+> = \{([\s\S]*?)\}/.exec(text)?.[1];
+      for (const m of questions?.matchAll(/:\s*"([^"]+)"/g) ?? []) sent.push(["onboarding_question_view", m[1]]);
+      const kinds = /function previewKind\([^)]*\): ([^{]+)\{/.exec(text)?.[1];
+      for (const m of kinds?.matchAll(/"([a-z_]+)"/g) ?? []) sent.push(["onboarding_score_preview", m[1]]);
+    }
+    const surfaces = /export type PaywallSurface = ([^;]+);/.exec(files.find((text) => text.includes("export type PaywallSurface")) ?? "")?.[1] ?? "";
+    for (const m of surfaces.matchAll(/"([a-z_]+)"/g)) sent.push(["paywall_shown", m[1]]);
+    for (const action of ["editor", "tailor", "improve"]) sent.push(["score_action", action]);
+    expect(sent.length).toBeGreaterThan(25);
+    expect(sent.filter(([event, detail]) => !FUNNEL_EVENT_DETAILS[event as keyof typeof FUNNEL_EVENT_DETAILS]?.includes(detail))).toEqual([]);
+  });
+
+  it("keeps known campaign sources and counts every other one as other", () => {
+    expect(["google", "instagram", "kariyer", "x"].map(normalizeUtmSource)).toEqual(["google", "instagram", "kariyer", "x"]);
+    expect(["ig", "chatgpt.com", "lnkd.in"].map(normalizeUtmSource)).toEqual(["instagram", "chatgpt", "linkedin"]);
+    expect(["mailchimp_4f2a9c", "user-12345", "acme.example"].map(normalizeUtmSource)).toEqual(["other", "other", "other"]);
+    expect(normalizeUtmSource(undefined)).toBeUndefined();
+  });
+
   it("treats crawlers, scripts and missing user agents as bots", () => {
     expect(isBotUserAgent(BROWSER)).toBe(false);
     for (const ua of [undefined, " ", "Googlebot/2.1", "facebookexternalhit/1.1", "curl/8.4", "HeadlessChrome/120", "python-requests/2.31"]) {
@@ -54,6 +93,19 @@ describe("POST /funnel-events", () => {
     await request(server).post("/funnel-events").set("User-Agent", BROWSER)
       .set("Content-Type", "text/plain").send(JSON.stringify({ event: "landing_view", locale: "en", device: "desktop" })).expect(204);
     expect(record).toHaveBeenCalledWith({ event: "landing_view", locale: "en", device: "desktop" });
+  });
+
+  it("drops details outside the event's allowlist and maps unknown campaigns to other", async () => {
+    const { server, record } = app();
+    const send = (body: object) => request(server).post("/funnel-events").set("User-Agent", BROWSER).send(body).expect(204);
+    await send({ ...event, detail: "newsletter_link_42", utm_source: "crm_contact_8812" });
+    await send({ event: "landing_view", detail: "hero", locale: "en", device: "desktop", utm_source: "ig" });
+    await send({ event: "checkout_view", detail: "trial", locale: "en", device: "desktop" });
+    expect(record.mock.calls.map((call) => (call as unknown[])[0])).toEqual([
+      { event: "cta_click", locale: "tr", device: "mobile", utm_source: "other" },
+      { event: "landing_view", locale: "en", device: "desktop", utm_source: "instagram" },
+      { event: "checkout_view", detail: "trial", locale: "en", device: "desktop" },
+    ]);
   });
 
   it("silently ignores bots", async () => {

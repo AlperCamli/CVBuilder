@@ -16,6 +16,7 @@ import {
   phaseFromStatus,
   previewKind,
   remainingSeconds,
+  scoreResumePath,
 } from "./onboarding-flow";
 import type { GuestReviewPreview } from "../integration/guest-import";
 import type { PrivacyConfig } from "../integration/privacy";
@@ -26,6 +27,14 @@ const review: GuestReviewPreview = {
   score: 64, status: "complete", method: "ai", summary: "Solid base.", strengths: [],
   improvements: ["Add measurable results to your experience.", "Name a target role.", "List your tools.", "Fourth"],
 };
+
+describe("score page resume path", () => {
+  it("returns checkout to the score page with the action to resume", () => {
+    expect(scoreResumePath({ source: "upload", action: "improve", language: "tr", importId: "imp-1" }))
+      .toBe("/app/cv-score?source=upload&action=improve&language=tr&import=imp-1");
+    expect(scoreResumePath({ source: "scratch", action: "tailor" })).toBe("/app/cv-score?source=scratch&action=tailor");
+  });
+});
 
 describe("pre-signup questions", () => {
   it("maps every question to its funnel detail and explains why it is asked", () => {

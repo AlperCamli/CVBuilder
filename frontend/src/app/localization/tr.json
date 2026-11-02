@@ -1425,7 +1425,7 @@
   "Your trial is canceled. You keep Pro until {{date}} and won’t be charged.": "Denemeniz iptal edildi. {{date}} tarihine kadar Pro’yu kullanabilirsiniz ve ücret ödemezsiniz.",
   "Cancel trial": "Denemeyi iptal et",
   "Cancel subscription": "Aboneliği iptal et",
-  "Activate a trial or purchase Pro to access the application.": "İndirme, yapay zekâ araçları ve CV uyarlama için ücretsiz denemenizi başlatın ya da Pro’yu seçin.",
+  "Start a free 3-day trial to download your CVs and unlock every AI feature.": "CV’lerinizi indirmek ve tüm yapay zekâ özelliklerini açmak için 3 günlük ücretsiz denemenizi başlatın.",
   "Unlimited CVs and exports with your subscription.": "Planınızla sınırsız CV oluşturabilir ve indirebilirsiniz.",
   "Create a new CV · A few questions · Create an account · CV score · Activate trial": "Yeni CV · Birkaç soru · Hesap oluştur · CV puanı · Ücretsiz denemeyi başlat",
   "Create or upload · A few questions · Create an account · CV score · Activate trial": "Oluştur veya yükle · Birkaç soru · Hesap oluştur · CV puanı · Ücretsiz denemeyi başlat",
@@ -1834,5 +1834,8 @@
   "Content criteria are rated by an AI review against a fixed rubric; quoted examples are checked against your CV text.": "İçerik ölçütleri sabit bir değerlendirme ölçeğine göre yapay zekâ tarafından puanlanır; alıntılanan örnekler CV metninle karşılaştırılarak doğrulanır.",
   "Without the AI review, experience depth, role focus and skills evidence are not assessed.": "Yapay zekâ değerlendirmesi olmadan deneyim derinliği, rol odağı ve becerilerin kanıtı değerlendirilmez.",
   "Content criteria are rated against a strict rubric, so a high score has to be earned. Structure and parseability are checked automatically.": "İçerik ölçütleri katı bir değerlendirme ölçeğine göre puanlanır; yüksek puan ancak güçlü içerikle alınır. Yapı ve okunabilirlik otomatik olarak kontrol edilir.",
-  "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.": "ile paylaşır. Puanın kendisi bu değerlendirmelerden, uygulamanın puanlama kurallarıyla hesaplanır."
+  "to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.": "ile paylaşır. Puanın kendisi bu değerlendirmelerden, uygulamanın puanlama kurallarıyla hesaplanır.",
+  "AI refinements left in your free tailoring: {{count}}": "Ücretsiz uyarlamanda kalan yapay zekâ iyileştirmesi: {{count}}",
+  "Your free tailored CV is finished. Start your free 3-day trial to keep improving it with AI.": "Ücretsiz işe özel CV’n tamamlandı. Yapay zekâyla geliştirmeye devam etmek için 3 günlük ücretsiz denemeni başlat.",
+  "You've used the AI refinements included in your free tailoring. Start your free 3-day trial to keep refining with AI.": "Ücretsiz uyarlamana dahil yapay zekâ iyileştirmelerini kullandın. Yapay zekâyla iyileştirmeye devam etmek için 3 günlük ücretsiz denemeni başlat."
 }

@@ -101,6 +101,8 @@ export interface TailoringSessionRecord {
   finished_at: string | null;
   // Started as the account's one free tailoring (no trial or Pro).
   free_tier: boolean;
+  // Extra AI rewrites used on the free session without a trial or Pro (see FREE_SESSION_AI_REFINEMENTS).
+  free_ai_refinements: number;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +114,9 @@ export const TAILORING_REFINEMENTS = ["shorter", "more_impact", "more_keywords",
 export type TailoringRefinement = (typeof TAILORING_REFINEMENTS)[number];
 // Free-text "Refine with AI" request from the candidate (trimmed, at most this long).
 export const TAILORING_INSTRUCTION_MAX_CHARS = 500;
+// Extra AI rewrites (Refine with AI, Regenerate, a changed answer that rewrites suggestions) on the
+// free session of an account without a trial or Pro; none once that session is finished.
+export const FREE_SESSION_AI_REFINEMENTS = 10;
 export type TailoringTaskStatus = "waiting" | "ready" | "running" | "done" | "failed" | "skipped";
 
 export interface TailoringTaskRecord {
@@ -207,6 +212,9 @@ export interface TailoringSessionView {
     questions_completed: boolean;
     error_message: string | null;
     free_tier: boolean;
+    // AI rewrites left on the free session for an account without a trial or Pro (0 once it is
+    // finished); null when AI steps are not limited (trial, Pro, or no subscription required).
+    free_ai_refinements_left: number | null;
     created_at: string;
     finished_at: string | null;
   };
@@ -251,6 +259,7 @@ export interface TailoringTaskRunResponse {
   suggestions: TailoringSuggestionView[];
   session_status: TailoringSessionStatus;
   score: TailoringScore;
+  free_ai_refinements_left: number | null;
 }
 
 export interface TailoringSuggestionDecisionResponse {

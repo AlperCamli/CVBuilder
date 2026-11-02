@@ -141,6 +141,9 @@ export interface TailoringSessionView {
     error_message: string | null;
     // The account's one free tailoring (no trial or Pro).
     free_tier?: boolean;
+    // AI rewrites (refine, regenerate, a changed answer) left on the free session without a
+    // trial or Pro, 0 once it is finished; null (or absent) when AI steps are not limited.
+    free_ai_refinements_left?: number | null;
     created_at: string;
     finished_at: string | null;
   };
@@ -156,6 +159,7 @@ export interface TailoringTaskRunResponse {
   suggestions: TailoringSuggestion[];
   session_status: TailoringSessionStatus;
   score: TailoringScore;
+  free_ai_refinements_left?: number | null;
 }
 
 // "Also add to my main CV": accepting writes the main CV block (with a block history

@@ -57,7 +57,11 @@ export const applyTailoringTaskResult = (
   const known = view.tasks.some((task) => task.id === result.task.id);
   return {
     ...view,
-    session: { ...view.session, status: result.session_status },
+    session: {
+      ...view.session,
+      status: result.session_status,
+      ...(result.free_ai_refinements_left !== undefined ? { free_ai_refinements_left: result.free_ai_refinements_left } : {})
+    },
     tasks: known ? view.tasks.map((task) => (task.id === result.task.id ? result.task : task)) : [...view.tasks, result.task],
     suggestions: [
       ...view.suggestions.filter(
@@ -73,3 +77,7 @@ export const applyTailoringTaskResult = (
 // A refine request the server refused with 409 while that block's task is already running
 // is not an error: the running task's card arrives on its own.
 export const isRefineBusyError = (error: unknown): boolean => error instanceof ApiClientError && error.status === 409;
+
+// The free session of an account without a trial or Pro allows no further AI rewrites (it is
+// finished, or its rewrites are used up): refine, regenerate and quick fixes open the trial prompt.
+export const isFreeAiLocked = (view: TailoringSessionView | null): boolean => view?.session.free_ai_refinements_left === 0;

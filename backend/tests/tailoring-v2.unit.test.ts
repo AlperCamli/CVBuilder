@@ -31,6 +31,7 @@ import {
 } from "../src/modules/tailoring/tailoring-rules";
 import { planTailoringTasks, TailoringService } from "../src/modules/tailoring/tailoring.service";
 import type { TailoringAnalysis } from "../src/modules/tailoring/tailoring.types";
+import { FREE_SESSION_AI_REFINEMENTS } from "../src/modules/tailoring/tailoring.types";
 import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 import type { AiRunRecord, AiSuggestionRecord, JobRecord, MasterCvRecord, TailoredCvRecord } from "../src/shared/types/domain";
 import { InMemoryTailoringRepository } from "./helpers/in-memory-tailoring";
@@ -451,7 +452,13 @@ const createHarness = (
     async recordTailoredCvGenerationUsage(userId: string) {
       usageCalls.push(userId);
     },
-    async recordAiActionUsage() {}
+    async recordAiActionUsage() {},
+    async isFreeTierLimited() {
+      return false;
+    },
+    async denyFreeSessionAi() {
+      throw new Error("not limited");
+    }
   };
   const cvRevisionsService = {
     async createMasterBlockRevision(input: (typeof masterRevisions)[number]) {
@@ -815,6 +822,105 @@ describe("TailoringService free tier", () => {
     await expect(h.service.createSession(session, { cv_id: "missing-cv", job: JOB })).rejects.toBeInstanceOf(NotFoundError);
     expect((await h.usage.getFreeTierMarkers(USER_ID)).tailoring).toBeNull();
     expect((await h.service.createSession(session, { cv_id: "master-1", job: JOB })).session.free_tier).toBe(true);
+  });
+
+  const TRIAL_REQUIRED_AI = { statusCode: 403, details: { reason: "trial_required", surface: "ai", action: "ai_action" } };
+  const trialing = (h: ReturnType<typeof freeTierHarness>) =>
+    h.subscriptions.seed({ id: "sub-row", user_id: USER_ID, provider: "stripe", provider_customer_id: "cus_1", provider_subscription_id: "sub_1", plan_code: "weekly", status: "trialing", current_period_start: null, current_period_end: new Date(Date.now() + 86400000).toISOString(), cancel_at_period_end: false, created_at: NOW, updated_at: NOW });
+  // A free session analyzed, its questions answered once and its planned tasks run.
+  const reviewedFreeSession = async (h: ReturnType<typeof freeTierHarness>) => {
+    const created = await h.service.createSession(session, { cv_id: "master-1", job: JOB });
+    const id = created.session.id;
+    await h.service.analyze(session, id);
+    const runReady = async () => {
+      const ready = (await h.service.getSession(session, id)).tasks.filter((task) => task.status === "ready");
+      await Promise.all(ready.map((task) => h.service.runTask(session, id, task.id)));
+    };
+    await runReady();
+    // First answers rewrite tasks that already ran (the summary) without counting.
+    await h.service.answerQuestion(session, id, "q1", { answer: "no", detail: null, add_to_main: false });
+    await h.service.answerQuestion(session, id, "q2", { answer: null, detail: "Served 12 merchants", add_to_main: false });
+    await h.service.completeQuestions(session, id);
+    await runReady();
+    return id;
+  };
+
+  it("caps AI rewrites during the free session", async () => {
+    const h = freeTierHarness();
+    const id = await reviewedFreeSession(h);
+    expect((await h.service.getSession(session, id)).session.free_ai_refinements_left).toBe(FREE_SESSION_AI_REFINEMENTS);
+
+    const summaryTask = (await h.service.getSession(session, id)).tasks.find((task) => task.kind === "summary")!;
+    for (let used = 1; used <= FREE_SESSION_AI_REFINEMENTS; used += 1) {
+      const result =
+        used % 2 === 0
+          ? await h.service.runTask(session, id, summaryTask.id, { regenerate: true })
+          : await h.service.refineBlock(session, id, "exp-1", { instruction: "Make it shorter" });
+      expect(result.free_ai_refinements_left).toBe(FREE_SESSION_AI_REFINEMENTS - used);
+    }
+    const runs = h.runs.size;
+    await expect(h.service.refineBlock(session, id, "exp-1", { refinement: "shorter" })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    await expect(h.service.runTask(session, id, summaryTask.id, { refinement: "shorter" })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    // Changing an earlier answer would rewrite suggestions, so it is refused too and nothing is saved.
+    await expect(h.service.answerQuestion(session, id, "q1", { answer: "yes", detail: null, add_to_main: false })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    expect((await h.service.getSession(session, id)).session.answers.q1.answer).toBe("no");
+    expect(h.runs.size).toBe(runs);
+    expect(h.repository.sessions.get(id)!.free_ai_refinements).toBe(FREE_SESSION_AI_REFINEMENTS);
+
+    // Finishing, deciding cards and the manual steps stay available.
+    const finished = await h.service.finish(session, id);
+    expect(finished.session.free_ai_refinements_left).toBe(0);
+
+    // A trial lifts the limit on the same session.
+    trialing(h);
+    const refined = await h.service.refineBlock(session, id, "exp-1", { refinement: "shorter" });
+    expect(refined.free_ai_refinements_left).toBeNull();
+    expect((await h.service.getSession(session, id)).session.free_ai_refinements_left).toBeNull();
+    expect(h.repository.sessions.get(id)!.free_ai_refinements).toBe(FREE_SESSION_AI_REFINEMENTS);
+  });
+
+  it("refuses every further AI step once the free session is finished", async () => {
+    const h = freeTierHarness();
+    const id = await reviewedFreeSession(h);
+    const finished = await h.service.finish(session, id);
+    expect(finished.session.free_ai_refinements_left).toBe(0);
+    const runs = h.runs.size;
+    const summaryTask = finished.tasks.find((task) => task.kind === "summary")!;
+
+    await expect(h.service.refineBlock(session, id, "exp-1", { instruction: "Rewrite it for a CTO role" })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    await expect(h.service.runTask(session, id, summaryTask.id, { regenerate: true })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    await expect(h.service.analyze(session, id)).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    await expect(h.service.answerQuestion(session, id, "q1", { answer: "yes", detail: null, add_to_main: false })).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    await expect(
+      h.service.answerQuestion(session, id, "q2", { answer: null, detail: "Served 40 merchants", add_to_main: false })
+    ).rejects.toMatchObject(TRIAL_REQUIRED_AI);
+    expect(h.runs.size).toBe(runs);
+    expect(h.repository.sessions.get(id)!.free_ai_refinements).toBe(0);
+
+    // Non-AI steps keep working on the finished session.
+    const pending = (await h.service.getSession(session, id)).suggestions.find((suggestion) => suggestion.status === "pending");
+    if (pending) {
+      expect((await h.service.decideSuggestion(session, id, pending.id, { decision: "reject" })).suggestion.status).toBe("rejected");
+    }
+    expect((await h.service.getSession(session, id)).session.status).toBe("ready");
+
+    trialing(h);
+    const regenerated = await h.service.runTask(session, id, summaryTask.id, { regenerate: true });
+    expect(regenerated.task.status).toBe("done");
+    expect(regenerated.free_ai_refinements_left).toBeNull();
+  });
+
+  it("never limits AI steps on a trialing account's session", async () => {
+    const h = freeTierHarness();
+    trialing(h);
+    const created = await h.service.createSession(session, { cv_id: "master-1", job: JOB });
+    expect(created.session.free_ai_refinements_left).toBeNull();
+    await h.service.analyze(session, created.session.id);
+    await h.service.finish(session, created.session.id);
+    for (let i = 0; i <= FREE_SESSION_AI_REFINEMENTS; i += 1) {
+      await h.service.refineBlock(session, created.session.id, "exp-1", { refinement: "shorter" });
+    }
+    expect(h.repository.sessions.get(created.session.id)!.free_ai_refinements).toBe(0);
   });
 
   it("never consumes the marker for trialing accounts", async () => {

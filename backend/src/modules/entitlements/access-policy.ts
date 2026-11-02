@@ -10,7 +10,8 @@ export type AccessAction = GatedAction | "app_access";
 // How a request is treated for an account without an active or trialing subscription.
 // - free: manual workspace (dashboard, CVs, imports, jobs, templates, preview rendering).
 // - free_use: allowed once per account; the service claims the marker atomically.
-// - free_session: allowed only on the account's free tailoring session.
+// - free_session: allowed only on the account's free tailoring session. Its AI steps are limited
+//   further by TailoringService (none once it is finished, FREE_SESSION_AI_REFINEMENTS rewrites before).
 // - paid: needs a trial or Pro.
 export type AppRequestPolicy =
   | { kind: "free" }

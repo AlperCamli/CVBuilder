@@ -2,8 +2,9 @@
 -- read them (visitor_funnel, visitor_trend, visitor_event_details) and the pre-signup onboarding totals of
 -- public.onboarding_monthly_stats (pre_signup_onboarding, onboarding_referrals).
 -- Like bump_onboarding_metric (20261026130000_onboarding_funnel_metrics.sql), a counter is an anonymous daily total:
--- no identifiers, IP, user agent, cookies, device storage or free text (event, detail and utm_source are validated
--- slugs), so it is kept for every visitor without analytics consent. GA4 stays opt-in.
+-- no identifiers, IP, user agent, cookies, device storage or free text (event, detail and utm_source come from backend
+-- allowlists: a detail outside its event's list is dropped and an unknown utm_source is stored as 'other'), so it is
+-- kept for every visitor without analytics consent. GA4 stays opt-in.
 begin;
 
 create table public.funnel_daily_stats (
@@ -20,8 +21,9 @@ alter table public.funnel_daily_stats enable row level security;
 revoke all on public.funnel_daily_stats from public, anon, authenticated;
 grant all on public.funnel_daily_stats to service_role;
 
--- The event allowlist lives in the backend (mirrors frontend/src/app/integration/funnel-events.ts), so adding an
--- event needs no migration; the checks above only bound the shape.
+-- The event, detail and utm_source allowlists live in the backend (funnel-events.contract.ts, mirroring
+-- frontend/src/app/integration/funnel-events.ts), so extending them needs no migration; the checks above only bound
+-- the shape.
 create function public.bump_funnel_event(p_event text, p_detail text, p_locale text, p_device text, p_utm_source text)
 returns void
 language sql security definer set search_path = ''
@@ -112,7 +114,7 @@ begin
 end $$;
 
 comment on function analytics.visitor_funnel(date, date, text, text, boolean, text, jsonb) is
-'{"title":"Visitor funnel","definition":"Anonymous first-party event counts per funnel step for the range (UTC days), from public.funnel_daily_stats (recorded from 2026-11-07 for every visitor, consent or not: no identifiers, so these are events, not unique people; a reload or a second visit counts again). Steps: landing_view (landing page views, / and /tr); cta_click (start buttons on landing and pricing, every placement); onboarding_view (the /onboarding upload screen); onboarding_started (a CV upload started or the new-CV path chosen); signup_view (the signup step of the onboarding); signup_completed (email or Google account created); score_view (CV score screen); checkout_view (in-app checkout screen); checkout_redirect (sent to Stripe Checkout); checkout_success (returned from a completed Stripe Checkout). Visitors can enter mid-funnel (a direct link to /onboarding or /signin), so a step can exceed the previous one and conversion_from_prev can be above 100%. conversion_from_start = step / landing views. Internal accounts cannot be told apart (no identifiers), so include_internal does not apply. Locale = the page language (/tr or the document language); device = mobile below 768 px viewport width, else desktop; utm_source = the utm_source of the landing URL ((none) without one), kept for the rest of the page session but lost on a full reload or the Google sign-in redirect. Bots are dropped by user agent; per-IP rate limited. Grain and currency do not apply.","unit":"count","shape":"funnel","breakdowns":["locale","device","utm_source"],"filters":["locale","device","utm_source"],"consent_scoped":false,"alertable":false,"min_group":20,"measures":{"users":{"label":"Events","unit":"count","description":"Events counted for the step (not unique visitors)"},"conversion_from_prev":{"label":"Step conversion","unit":"ratio","description":"Events of this step / events of the previous step"},"conversion_from_start":{"label":"Conversion from landing","unit":"ratio"}}}';
+'{"title":"Visitor funnel","definition":"Anonymous first-party event counts per funnel step for the range (UTC days), from public.funnel_daily_stats (recorded from 2026-11-07 for every visitor, consent or not: no identifiers, so these are events, not unique people; a reload or a second visit counts again). Steps: landing_view (landing page views, / and /tr); cta_click (start buttons on landing and pricing, every placement); onboarding_view (the /onboarding upload screen); onboarding_started (a CV upload started or the new-CV path chosen); signup_view (the signup step of the onboarding); signup_completed (email or Google account created); score_view (CV score screen); checkout_view (in-app checkout screen); checkout_redirect (sent to Stripe Checkout); checkout_success (returned from a completed Stripe Checkout). Visitors can enter mid-funnel (a direct link to /onboarding or /signin), so a step can exceed the previous one and conversion_from_prev can be above 100%. conversion_from_start = step / landing views. Internal accounts cannot be told apart (no identifiers), so include_internal does not apply. Locale = the page language (/tr or the document language); device = mobile below 768 px viewport width, else desktop; utm_source = the utm_source of the landing URL ((none) without one; sources outside the backend allowlist count as other), kept for the rest of the page session but lost on a full reload or the Google sign-in redirect. Bots are dropped by user agent; per-IP rate limited. Grain and currency do not apply.","unit":"count","shape":"funnel","breakdowns":["locale","device","utm_source"],"filters":["locale","device","utm_source"],"consent_scoped":false,"alertable":false,"min_group":20,"measures":{"users":{"label":"Events","unit":"count","description":"Events counted for the step (not unique visitors)"},"conversion_from_prev":{"label":"Step conversion","unit":"ratio","description":"Events of this step / events of the previous step"},"conversion_from_start":{"label":"Conversion from landing","unit":"ratio"}}}';
 
 -- ---------------------------------------------------------------------------
 -- analytics.visitor_trend

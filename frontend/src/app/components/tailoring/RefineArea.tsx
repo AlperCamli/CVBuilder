@@ -256,6 +256,8 @@ export function RefineArea({
   useEffect(() => () => highlight.current(null), []);
 
   const updating = controller.answerRerunTaskIds.size;
+  // Free session without a trial or Pro: rewrites left (0 = refine opens the trial prompt).
+  const freeLeft = controller.freeAiRefinementsLeft;
 
   return (
     <div className="space-y-3">
@@ -267,6 +269,32 @@ export function RefineArea({
           {t("Pick a part of your CV and tell the AI what to change. Every result is a suggestion you can review.")}
         </p>
       </div>
+
+      {freeLeft !== null && freeLeft > 0 ? (
+        <p style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+          {t("AI refinements left in your free tailoring: {{count}}", { count: freeLeft })}
+        </p>
+      ) : null}
+      {freeLeft === 0 ? (
+        <div className="rounded-lg p-2.5 space-y-2" style={{ background: "var(--color-teal-50)", color: "var(--color-teal-900)", fontSize: "12px" }}>
+          <p className="flex items-start gap-2">
+            <Sparkles size={13} className="shrink-0" style={{ marginTop: 2, color: "var(--color-teal-600)" }} />
+            <span>
+              {view.session.finished_at
+                ? t("Your free tailored CV is finished. Start your free 3-day trial to keep improving it with AI.")
+                : t("You've used the AI refinements included in your free tailoring. Start your free 3-day trial to keep refining with AI.")}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={controller.openAiTrialPrompt}
+            className="px-3 py-1.5 rounded-lg font-medium"
+            style={{ fontSize: "12px", background: "var(--color-teal-600)", color: "white" }}
+          >
+            {t("Start free trial")}
+          </button>
+        </div>
+      ) : null}
 
       {updating > 0 ? (
         <AiStatusLine label={t("Updating {{count}} suggestions with your answer…", { count: updating })} />

@@ -42,3 +42,16 @@ export function previewKind(review: GuestReviewPreview | null | undefined): "sco
 export function scoreTone(score: number) {
   return score >= 80 ? "good" : score >= 60 ? "fair" : "low";
 }
+
+/** The score page with ?action=, where checkout returns to resume a free account's next step. */
+export function scoreResumePath(options: {
+  source: "scratch" | "guest" | "upload";
+  action: "editor" | "tailor" | "improve";
+  language?: string;
+  importId?: string;
+}): string {
+  const params = new URLSearchParams({ source: options.source, action: options.action });
+  if (options.language) params.set("language", options.language);
+  if (options.importId) params.set("import", options.importId);
+  return `/app/cv-score?${params}`;
+}

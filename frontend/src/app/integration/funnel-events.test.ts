@@ -35,4 +35,20 @@ describe("anonymous funnel events", () => {
     trackFunnelEvent("landing_view");
     expect(beacon).toHaveBeenCalledTimes(1);
   });
+
+  it("counts the landing and pricing views once per page load", async () => {
+    const { trackPageViewOnce } = await import("./funnel-events");
+    trackPageViewOnce("landing_view");
+    // The remembered-locale redirect renders the landing page again under /tr.
+    location.pathname = "/tr";
+    trackPageViewOnce("landing_view");
+    // A real move to pricing still counts, once, also across its own locale redirect.
+    location.pathname = "/tr/pricing";
+    trackPageViewOnce("pricing_view");
+    location.pathname = "/pricing";
+    trackPageViewOnce("pricing_view");
+    trackPageViewOnce("landing_view");
+    expect(beacon).toHaveBeenCalledTimes(2);
+    expect([(await sent(0)).event, (await sent(1)).event]).toEqual(["landing_view", "pricing_view"]);
+  });
 });

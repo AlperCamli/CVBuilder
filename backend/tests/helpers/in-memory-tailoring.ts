@@ -34,6 +34,7 @@ export class InMemoryTailoringRepository implements TailoringRepository {
       id: randomUUID(),
       ...payload,
       free_tier: payload.free_tier === true,
+      free_ai_refinements: 0,
       status: "draft",
       analysis: null,
       analysis_run_id: null,
@@ -66,6 +67,13 @@ export class InMemoryTailoringRepository implements TailoringRepository {
     if (!record || record.user_id !== userId) return null;
     Object.assign(record, payload, { updated_at: now() });
     return { ...record };
+  }
+
+  async claimFreeAiRefinement(userId: string, sessionId: string, limit: number) {
+    const record = this.sessions.get(sessionId);
+    if (!record || record.user_id !== userId || record.free_ai_refinements >= limit) return false;
+    record.free_ai_refinements += 1;
+    return true;
   }
 
   async claimSessionStatus(userId: string, sessionId: string, from: TailoringSessionStatus[], to: TailoringSessionStatus) {

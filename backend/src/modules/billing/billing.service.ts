@@ -336,6 +336,19 @@ export class BillingService {
     return null;
   }
 
+  // True when the account is held to the free tier: a subscription is required and it has no
+  // trial or Pro. Its free tailoring session then has limited AI steps (TailoringService).
+  async isFreeTierLimited(userId: string): Promise<boolean> {
+    if (!this.options.requireSubscription) return false;
+    return !this.subscriptionAllowsAccess(await this.subscriptionsRepository.getCurrentForUser(userId));
+  }
+
+  // Refuses an AI step on the free tailoring session (finished, or its AI rewrites used up).
+  async denyFreeSessionAi(userId: string, message: string): Promise<never> {
+    const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
+    return this.denyAccess(userId, subscription, "ai_action", "ai", message);
+  }
+
   async releaseFreeUse(userId: string, claim: FreeUseClaim | null): Promise<void> {
     if (claim) await this.usageService.releaseFreeTierUse(userId, claim.use, claim.claimed_at);
   }

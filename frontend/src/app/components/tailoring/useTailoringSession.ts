@@ -24,7 +24,7 @@ import {
   type TailoringTask
 } from "../../integration/tailoring-types";
 import { describeBlock } from "./tailoring-labels";
-import { answerCreatedTasks, applyTailoringTaskResult, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
+import { answerCreatedTasks, applyTailoringTaskResult, isFreeAiLocked, isRefineBusyError, mergeTailoringViews } from "./tailoring-view";
 
 // Bridge to the editor, read through a ref so async work always sees the latest state.
 export interface TailoringEditorBridge {
@@ -142,7 +142,8 @@ export function useTailoringSession(options: {
   bridge: MutableRefObject<TailoringEditorBridge>;
   onTailoredCvCreated: (tailoredCvId: string) => Promise<void> | void;
   onMasterCvUpdated?: () => void;
-  // A further session needs a trial or Pro: the caller opens the trial prompt.
+  // A further session, or an AI rewrite the free session has none left for, needs a trial or
+  // Pro: the caller opens the trial prompt.
   onTrialRequired?: (surface: PaywallSurface) => void;
 }) {
   const { api, open, cvKind, cvId, bridge, onTailoredCvCreated, onMasterCvUpdated } = options;
@@ -604,6 +605,11 @@ export function useTailoringSession(options: {
     async (task: TailoringTask, payload: TailoringRunPayload = {}) => {
       const current = viewRef.current;
       if (!current || inflight.current.has(task.id)) return;
+      // A requested rewrite on a free session without rewrites left opens the trial prompt instead.
+      if ((payload.regenerate || payload.refinement || payload.instruction) && isFreeAiLocked(current)) {
+        onTrialRequired.current?.("ai");
+        return;
+      }
       // Re-queued by the server because an answer it depends on changed.
       const forAnswer =
         (task.rerun_for_answer === true || answerCreatedRef.current.includes(task.id)) &&
@@ -627,6 +633,13 @@ export function useTailoringSession(options: {
         }
         if (autoApplyRef.current) await acceptSequentially(result.suggestions, "auto");
       } catch (taskError) {
+        // Refused before it started (the free session's rewrites are used up): the trial prompt.
+        if (isTrialRequired(taskError)) {
+          const refreshed = await refetch(current.session.id);
+          if (refreshed) updateView(refreshed);
+          onTrialRequired.current?.(resolvePaywallSurface(taskError, "ai"));
+          return;
+        }
         // Show what the server knows: the run may have finished (response lost), failed, or
         // never started. Only a finished run clears the warning; anything else offers Retry.
         const refreshed = await refetch(current.session.id);
@@ -725,6 +738,11 @@ export function useTailoringSession(options: {
         // Drop the optimistic answer so the card shows what was really saved.
         const refreshed = await refetch(current.session.id);
         if (refreshed) updateView(refreshed);
+        // A changed answer would rewrite suggestions the free session has no rewrites left for.
+        if (isTrialRequired(answerError)) {
+          onTrialRequired.current?.(resolvePaywallSurface(answerError, "ai"));
+          return false;
+        }
         setIssue({
           tone: "error",
           text: describeError(answerError, "Couldn't save your answer."),
@@ -818,6 +836,10 @@ export function useTailoringSession(options: {
       const instruction = payload.instruction?.trim().slice(0, TAILORING_INSTRUCTION_MAX_LENGTH) || null;
       const body: TailoringRefinePayload = { refinement: payload.refinement ?? null, instruction };
       if (!body.refinement && !body.instruction) return false;
+      if (isFreeAiLocked(current)) {
+        onTrialRequired.current?.("ai");
+        return false;
+      }
       if (refiningBlocks.current.has(blockId)) return false;
       const existing = current.tasks.find((task) => task.block_id === blockId && task.kind !== "structure") ?? null;
       // A run of this block's task is already in flight; its card arrives first.
@@ -863,6 +885,15 @@ export function useTailoringSession(options: {
       } catch (refineError) {
         const refreshed = await refetch(current.session.id);
         if (refreshed) updateView(refreshed);
+        if (isTrialRequired(refineError)) {
+          // Nothing ran: keep the block's earlier cards and open the trial prompt.
+          setRefineRuns((runs) => {
+            const { [blockId]: run, ...rest } = runs;
+            return run && run.suggestionIds.length > 0 ? { ...rest, [blockId]: { ...run, status: "done", message: null } } : rest;
+          });
+          onTrialRequired.current?.(resolvePaywallSurface(refineError, "ai"));
+          return false;
+        }
         if (isRefineBusyError(refineError)) {
           setRun({ status: "busy", message: null });
           return false;
@@ -1031,6 +1062,9 @@ export function useTailoringSession(options: {
     // "Refine with AI" button); closeRefine when the user closes it.
     refineTargetBlockId,
     refineFocusToken: refineRequest?.token ?? 0,
+    // AI rewrites left on the free session (0: finished or used up); null when not limited.
+    freeAiRefinementsLeft: view?.session.free_ai_refinements_left ?? null,
+    openAiTrialPrompt: () => onTrialRequired.current?.("ai"),
     openRefine,
     closeRefine,
     reset: () => {

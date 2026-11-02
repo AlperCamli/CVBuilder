@@ -49,7 +49,7 @@ import {
   type GeneratedSkill
 } from "./tailoring-rules";
 import type { CreateTailoringTaskPayload, TailoringRepository } from "./tailoring.repository";
-import { OPEN_METRIC_DETAIL_MAX_CHARS, OPEN_METRIC_MAX_ENTRIES } from "./tailoring.types";
+import { FREE_SESSION_AI_REFINEMENTS, OPEN_METRIC_DETAIL_MAX_CHARS, OPEN_METRIC_MAX_ENTRIES } from "./tailoring.types";
 import type {
   CreateTailoringSessionInput,
   CreateTailoringSuggestionPayload,
@@ -189,6 +189,10 @@ const cvLanguageOf = (tailored: TailoredCvRecord): { code: string; name: string 
 };
 
 const TASK_FAILED_MESSAGE = "Something went wrong while preparing this suggestion. Try again.";
+const FREE_SESSION_FINISHED_MESSAGE =
+  "Your free tailored CV is finished. Start your free 3-day trial to keep improving it with AI.";
+const FREE_SESSION_REFINEMENTS_USED_MESSAGE =
+  "You've used the AI refinements included in your free tailoring. Start your free 3-day trial to keep refining with AI.";
 const TASK_MODEL_FAILED_MESSAGE = "The AI could not prepare this suggestion. Try again.";
 
 // ---------------------------------------------------------------------------
@@ -337,6 +341,24 @@ export class TailoringService {
     return record?.free_tier === true && record.tailored_cv_id !== null;
   }
 
+  // AI steps on the free session of an account without a trial or Pro (the route gate lets them
+  // through): none once the session is finished, and at most FREE_SESSION_AI_REFINEMENTS extra
+  // rewrites before that. `rewrite` counts one (Refine with AI, Regenerate, a changed answer that
+  // rewrites suggestions); first runs of planned tasks and the analysis never count. Trial and Pro
+  // accounts, and every other session, are never limited here.
+  private async authorizeFreeSessionAi(userId: string, record: TailoringSessionRecord, rewrite: boolean): Promise<void> {
+    if (!record.free_tier || !(await this.billingService.isFreeTierLimited(userId))) return;
+    if (record.finished_at) await this.billingService.denyFreeSessionAi(userId, FREE_SESSION_FINISHED_MESSAGE);
+    if (rewrite && !(await this.repository.claimFreeAiRefinement(userId, record.id, FREE_SESSION_AI_REFINEMENTS))) {
+      await this.billingService.denyFreeSessionAi(userId, FREE_SESSION_REFINEMENTS_USED_MESSAGE);
+    }
+  }
+
+  private async freeAiRefinementsLeft(userId: string, record: TailoringSessionRecord): Promise<number | null> {
+    if (!record.free_tier || !(await this.billingService.isFreeTierLimited(userId))) return null;
+    return record.finished_at ? 0 : Math.max(0, FREE_SESSION_AI_REFINEMENTS - record.free_ai_refinements);
+  }
+
   private async createTailoredCopy(
     userId: string,
     master: MasterCvRecord,
@@ -431,6 +453,7 @@ export class TailoringService {
   async analyze(session: SessionContext, sessionId: string): Promise<TailoringSessionView> {
     const userId = session.appUser.id;
     const current = await this.requireSession(userId, sessionId);
+    await this.authorizeFreeSessionAi(userId, current, false);
     const staleAnalysis =
       current.status === "analyzing" && Date.parse(current.updated_at) < Date.now() - ANALYSIS_STALE_AFTER_MS;
     const claimed = await this.repository.claimSessionStatus(
@@ -552,6 +575,15 @@ export class TailoringService {
     const detail = input.detail?.trim() || null;
     const previous = current.answers[questionId];
     const answerChanged = !previous || previous.answer !== input.answer || (previous.detail ?? null) !== detail;
+    // Tasks that already ran without this answer are regenerated with it (below).
+    const tasks = await this.repository.listTasks(userId, sessionId);
+    const affected = answerChanged
+      ? tasks.filter((task) => task.status !== "waiting" && task.status !== "ready").filter((task) => taskUsesQuestion(task, question))
+      : [];
+    // Changing an earlier answer rewrites suggestions: limited on the free session like a refine.
+    if (affected.length > 0 && (previous || current.finished_at)) {
+      await this.authorizeFreeSessionAi(userId, current, previous !== undefined);
+    }
 
     let updated =
       (await this.repository.mergeSessionJson(userId, sessionId, "answers", {
@@ -564,7 +596,6 @@ export class TailoringService {
       })) ?? current;
 
     // Tasks waiting only on answered questions can start now.
-    const tasks = await this.repository.listTasks(userId, sessionId);
     const unlocked = tasks
       .filter((task) => task.status === "waiting")
       .filter((task) => task.depends_on_question_ids.every((id) => updated.answers[id]))
@@ -574,10 +605,7 @@ export class TailoringService {
     // Tasks that already ran without this answer are regenerated with it: finished ones go
     // back to "ready" (the runner picks them up), running ones re-queue when they finish.
     // Their pending cards are replaced once the new ones exist; applied cards stay applied.
-    if (answerChanged) {
-      const affected = tasks
-        .filter((task) => task.status !== "waiting" && task.status !== "ready")
-        .filter((task) => taskUsesQuestion(task, question));
+    if (affected.length > 0) {
       const requeued = await this.repository.requeueTasksForAnswer(
         userId,
         sessionId,
@@ -634,7 +662,18 @@ export class TailoringService {
       });
     }
 
-    const changedBlockIds = entryBlocksChanged(current.answers[question.id]?.entries ?? [], entries);
+    const previous = current.answers[question.id];
+    const changedBlockIds = entryBlocksChanged(previous?.entries ?? [], entries);
+    const tasks = changedBlockIds.size > 0 ? await this.repository.listTasks(userId, current.id) : [];
+    const blockTasks = tasks.filter((task) => task.kind === "block" && task.block_id !== null && changedBlockIds.has(task.block_id));
+    const affected = blockTasks.filter((task) => task.status !== "waiting" && task.status !== "ready");
+    const missing = [...changedBlockIds].filter(
+      (blockId) => !blockTasks.some((task) => task.block_id === blockId) && entries.some((entry) => entry.target_block_id === blockId)
+    );
+    // Changing earlier numbers rewrites suggestions: limited on the free session like a refine.
+    if ((affected.length > 0 || missing.length > 0) && (previous || current.finished_at)) {
+      await this.authorizeFreeSessionAi(userId, current, previous !== undefined);
+    }
     let updated =
       (await this.repository.mergeSessionJson(userId, current.id, "answers", {
         [question.id]: {
@@ -649,16 +688,10 @@ export class TailoringService {
       return this.buildView(session, updated);
     }
 
-    const tasks = await this.repository.listTasks(userId, current.id);
-    const blockTasks = tasks.filter((task) => task.kind === "block" && task.block_id !== null && changedBlockIds.has(task.block_id));
-    const affected = blockTasks.filter((task) => task.status !== "waiting" && task.status !== "ready");
     const requeued = await this.repository.requeueTasksForAnswer(
       userId,
       current.id,
       affected.map((task) => task.id)
-    );
-    const missing = [...changedBlockIds].filter(
-      (blockId) => !blockTasks.some((task) => task.block_id === blockId) && entries.some((entry) => entry.target_block_id === blockId)
     );
     const created = await this.repository.createTasks(
       missing.map((blockId) => ({
@@ -732,7 +765,8 @@ export class TailoringService {
     session: SessionContext,
     sessionId: string,
     taskId: string,
-    options: TailoringRunOptions = {}
+    options: TailoringRunOptions = {},
+    internal: { authorized?: boolean } = {}
   ): Promise<TailoringTaskRunResponse> {
     const userId = session.appUser.id;
     const current = await this.requireSession(userId, sessionId);
@@ -742,6 +776,9 @@ export class TailoringService {
 
     const instruction = options.instruction?.trim() || null;
     const regenerate = Boolean(options.regenerate || options.refinement || instruction);
+    // A first run (or a retry after a failure) of a planned task is part of the session; a requested
+    // rewrite is limited on the free session (counted here, refused once it is finished).
+    if (regenerate && !internal.authorized) await this.authorizeFreeSessionAi(userId, current, true);
     const claimed = await this.repository.claimTask(
       userId,
       sessionId,
@@ -845,6 +882,11 @@ export class TailoringService {
 
     const tasks = await this.repository.listTasks(userId, sessionId);
     let task = tasks.find((item) => item.block_id === blockId && item.kind === kind);
+    if (task?.status === "running" && Date.parse(task.started_at ?? "") >= Date.now() - TASK_STALE_AFTER_MS) {
+      throw new ConflictError("This section is being updated. Try again in a moment.");
+    }
+    // Counted once, here (before a task is created or queued); the run below does not count again.
+    await this.authorizeFreeSessionAi(userId, current, true);
     if (!task) {
       [task] = await this.repository.createTasks([
         {
@@ -861,14 +903,12 @@ export class TailoringService {
       if (!task) {
         throw new InternalServerError("The refine task could not be created");
       }
-    } else if (task.status === "running" && Date.parse(task.started_at ?? "") >= Date.now() - TASK_STALE_AFTER_MS) {
-      throw new ConflictError("This section is being updated. Try again in a moment.");
     } else if (task.status === "waiting") {
       // An explicit request runs now; a later answer re-queues it (rerun_for_answer).
       await this.repository.markTasksReady(userId, sessionId, [task.id]);
     }
 
-    return this.runTask(session, sessionId, task.id, { regenerate: true, refinement, instruction });
+    return this.runTask(session, sessionId, task.id, { regenerate: true, refinement, instruction }, { authorized: true });
   }
 
   // When every task has settled, a generating session moves on: to "ready" when it was
@@ -1697,10 +1737,11 @@ export class TailoringService {
     if (tailoredCvId === null) {
       throw new NotFoundError("Tailoring session was not found");
     }
-    const [tasks, suggestions, preferences] = await Promise.all([
+    const [tasks, suggestions, preferences, freeAiRefinementsLeft] = await Promise.all([
       this.repository.listTasks(userId, record.id),
       this.repository.listSuggestions(userId, record.id),
-      this.repository.getPreferences(userId)
+      this.repository.getPreferences(userId),
+      this.freeAiRefinementsLeft(userId, record)
     ]);
 
     return {
@@ -1716,6 +1757,7 @@ export class TailoringService {
         questions_completed: record.questions_completed,
         error_message: record.error_message,
         free_tier: record.free_tier,
+        free_ai_refinements_left: freeAiRefinementsLeft,
         created_at: record.created_at,
         finished_at: record.finished_at
       },
@@ -1732,14 +1774,18 @@ export class TailoringService {
     session: TailoringSessionRecord,
     task: TailoringTaskRecord
   ): Promise<TailoringTaskRunResponse> {
-    const suggestions = await this.repository.listSuggestions(userId, session.id);
+    const [suggestions, freeAiRefinementsLeft] = await Promise.all([
+      this.repository.listSuggestions(userId, session.id),
+      this.freeAiRefinementsLeft(userId, session)
+    ]);
     return {
       task: this.toTaskView(task),
       suggestions: suggestions
         .filter((suggestion) => suggestion.tailoring_task_id === task.id)
         .map((suggestion) => this.toSuggestionView(suggestion)),
       session_status: session.status,
-      score: computeTailoringScore(session.analysis, session.requirement_decisions, session.answers, suggestions)
+      score: computeTailoringScore(session.analysis, session.requirement_decisions, session.answers, suggestions),
+      free_ai_refinements_left: freeAiRefinementsLeft
     };
   }
 

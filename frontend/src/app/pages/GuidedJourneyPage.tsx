@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router";
 import "./designs/designs.css";
 import GuidedJourney from "./designs/GuidedJourney";
-import { trackFunnelEvent } from "../integration/funnel-events";
+import { trackPageViewOnce } from "../integration/funnel-events";
 
 /** Primary public landing/pricing, rendered in the language of its URL. */
 export default function GuidedJourneyPage() {
@@ -12,8 +12,8 @@ export default function GuidedJourneyPage() {
   const { pathname, search } = useLocation();
   const pricing = pathname.replace(/\/$/, "").endsWith("/pricing");
   useEffect(() => {
-    trackFunnelEvent(pricing ? "pricing_view" : "landing_view");
-  }, [pathname, pricing]);
+    trackPageViewOnce(pricing ? "pricing_view" : "landing_view");
+  }, [pricing]);
   useEffect(() => {
     const root = document.getElementById("root");
     if (root) root.dataset.publicHydrated = pathname;
