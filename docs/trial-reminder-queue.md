@@ -7,7 +7,8 @@
 
 ## Access
 - Only the backend secret key can read it (`service_role`: SELECT only). `anon`, `authenticated` and the admin-analytics role have no access. RLS doesn't apply because it's a `security_invoker` view read as `service_role`.
-- Give the agent the **secret key** (`sb_secret_…`, or the legacy `service_role` key), never the publishable key. Treat it like a database password: it can read and write every table, not just this view.
+- **Current setup:** the email agent gets no database access. Run the export query by hand and pass the result to the agent, as described in [trial-reminder-agent.md](trial-reminder-agent.md).
+- If the agent ever queries the database directly, don't give it the secret key (`sb_secret_…`), which can read and write every table. Create a dedicated read-only role that can see only this view instead.
 - The view holds personal data (email, name). Keep only what you need to send the email, and don't log full rows.
 
 ## Rows
