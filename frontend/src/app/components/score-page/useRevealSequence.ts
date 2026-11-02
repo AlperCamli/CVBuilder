@@ -72,7 +72,9 @@ export function useRevealSequence({ mode, timeline, actionsRef }: {
     let follow = true;
     let finished = false;
     let skipped = false;
-    let autoScrollUntil = 0;
+    // Starts with a grace window: the page's own scroll to the top on open must not count as the
+    // user taking over (wheel, touch and keys still take over at once).
+    let autoScrollUntil = performance.now() + AUTO_SCROLL_WINDOW;
     let observer: IntersectionObserver | null = null;
     const pulses: Animation[] = [];
     const elementOf = (id: string) => id === itemIds.actions ? actionsRef?.current ?? null : elements.current.get(id) ?? null;

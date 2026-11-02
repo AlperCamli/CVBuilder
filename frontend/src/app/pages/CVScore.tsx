@@ -54,6 +54,9 @@ export function CVScore() {
     location.state?.moduleType as string | undefined,
   );
 
+  // The app keeps the previous page's scroll position on navigation; the score opens at the top.
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, []);
+
   useEffect(() => {
     if (scratch) { setLoading(false); return; }
     if (!importId) {
