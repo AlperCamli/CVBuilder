@@ -24,6 +24,8 @@ export interface OnboardingQuestion {
   eyebrow: string;
   title: string;
   description: string;
+  /** One line under the question explaining what the answer is used for. */
+  why: string;
   options: {
     value: string;
     label: string;
@@ -39,6 +41,7 @@ export const PRE_SIGNUP_QUESTIONS: OnboardingQuestion[] = [
     eyebrow: "YOUR NEXT MOVE",
     title: "What would you like to do first?",
     description: "We'll help you start with what matters most to you.",
+    why: "Why we ask: it tells us which improvements to show you first.",
     options: [
       {
         value: "tailor",
@@ -73,6 +76,7 @@ export const PRE_SIGNUP_QUESTIONS: OnboardingQuestion[] = [
     eyebrow: "YOUR EXPERIENCE",
     title: "Where are you in your career?",
     description: "This helps us suggest the right focus for your CV.",
+    why: "Why we ask: it helps us read your CV more accurately, for example how to weigh projects against jobs.",
     options: [
       {
         value: "student",
@@ -113,6 +117,7 @@ export const PRE_SIGNUP_QUESTIONS: OnboardingQuestion[] = [
     title: "What is your education level?",
     description:
       "Choose your highest level, completed or currently in progress.",
+    why: "Why we ask: it helps us recognize your education section correctly.",
     options: [
       { value: "secondary", label: "Secondary / high school", icon: BookOpen },
       {
@@ -138,6 +143,7 @@ export const PRE_SIGNUP_QUESTIONS: OnboardingQuestion[] = [
     eyebrow: "ONE LAST THING",
     title: "How did you hear about us?",
     description: "Help us understand how people find jobspecificCV.",
+    why: "Why we ask: it helps us reach more people like you. It's never sent to AI.",
     options: [
       {
         value: "search",

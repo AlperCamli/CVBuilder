@@ -1,7 +1,7 @@
 import { SupportHelp } from "../components/SupportHelp";
-import { i18n, documentLocale, translate as t } from "../localization/i18n";
+import { i18n, documentLocale, publicPath, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
-import { getPrivacyConfig, choices, openPrivacyChoices, type PrivacyConfig } from "../integration/privacy";
+import { getPrivacyConfig, choices, type PrivacyConfig } from "../integration/privacy";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
@@ -14,6 +14,8 @@ import {
   FileText,
   Loader2,
   LockKeyhole,
+  Mail,
+  RefreshCw,
   RotateCcw,
   Upload,
 } from "lucide-react";
@@ -33,39 +35,96 @@ import {
   saveGuestAnswers,
   saveGuestUpload,
   uploadGuestCv,
+  type GuestReviewPreview,
+  type GuestStatus,
   type GuestUpload,
 } from "../integration/guest-import";
 import { ONBOARDING_STEPS } from "../onboarding/onboarding-steps";
+import {
+  AUTO_ADVANCE_MS,
+  PARSE_GIVE_UP_MS,
+  PARSE_SLOW_MS,
+  QUESTION_FUNNEL_DETAIL,
+  parsingStage,
+  phaseFromStatus,
+  previewKind,
+  remainingSeconds,
+  type ProcessingPhase,
+} from "../onboarding/onboarding-flow";
+import { ScorePreview } from "../onboarding/ScorePreview";
 import { clearNewCvOnboarding, readNewCvOnboarding, recordNewCvStart, saveNewCvOnboarding, type NewCvOnboarding } from "../integration/new-cv-onboarding";
 import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { trackEvent } from "../integration/analytics";
+import { trackFunnelEvent, type FunnelEvent } from "../integration/funnel-events";
+import { supabase } from "../integration/supabase-client";
 import { AiUploadDisclosure } from "../components/AiUploadDisclosure";
 import "./pre-signup-onboarding.css";
 
 import { rememberOnboardingTemplate } from "../integration/subscription-flow";
 
 type Stage = "upload" | "questions" | "signup";
-type ProcessingPhase = "idle" | "parsing" | "ready" | "failed";
-function ParsingStatus({ phase }: { phase: ProcessingPhase }) {
+const GIVE_UP_MESSAGE = "Your CV is taking too long to analyze. Try another file, or create a new CV instead.";
+const RESEND_COOLDOWN_SECONDS = 60;
+
+function AnalysisStatus({ phase, elapsedMs, questionsLeft, slow, onAnotherFile, onCreateNew }: {
+  phase: ProcessingPhase; elapsedMs: number; questionsLeft?: number; slow: boolean; onAnotherFile: () => void; onCreateNew: () => void;
+}) {
   useTranslation();
-  if (phase === "idle") return null;
+  if (phase === "ready") {
+    return (
+      <p className="ob-analysis is-ready" role="status">
+        <CheckCircle2 size={16} aria-hidden="true" />
+        {questionsLeft === undefined
+          ? t("Your score is ready")
+          : questionsLeft === 1
+            ? t("Your score is ready · 1 question left")
+            : t("Your score is ready · {{count}} questions left", { count: questionsLeft })}
+      </p>
+    );
+  }
+  if (phase !== "parsing") return null;
   return (
-    <p className="ob-parsing-status" role="status">
-      {phase === "ready" ? (
-        <CheckCircle2 size={15} />
-      ) : phase === "failed" ? (
-        <FileText size={15} />
-      ) : (
-        <Loader2 size={15} className="animate-spin" />
+    <div className="ob-analysis is-parsing" role="status">
+      <p><Loader2 size={16} className="animate-spin" aria-hidden="true" />{t(parsingStage(elapsedMs))}</p>
+      <span className="ob-indeterminate" aria-hidden="true"><span /></span>
+      {slow && (
+        <p className="ob-analysis-slow">
+          {t("This is taking longer than usual. You can keep going while we finish.")}{" "}
+          <button type="button" className="ob-text-button" onClick={onAnotherFile}>{t("Try another file")}</button>
+          {" · "}
+          <button type="button" className="ob-text-button" onClick={onCreateNew}>{t("Create a new CV instead")}</button>
+        </p>
       )}
-      {phase === "ready"
-        ? t("CV analysis ready")
-        : phase === "failed"
-          ? t("Your CV needs another try")
-          : t("Parsing and analyzing your CV…")}
-    </p>
+    </div>
   );
 }
+
+function AnalysisFailed({ message, retryAvailable, busy, onRetry, onAnotherFile, onCreateNew }: {
+  message: string; retryAvailable: boolean; busy: boolean; onRetry: () => void; onAnotherFile: () => void; onCreateNew: () => void;
+}) {
+  useTranslation();
+  return (
+    <div className="ob-analysis-failed" role="alert">
+      <h2>{t("We couldn't read this CV")}</h2>
+      <p>{t(message)}</p>
+      <div className="ob-failed-actions">
+        <button type="button" className="ob-primary" disabled={busy} onClick={onAnotherFile}>
+          <Upload size={16} aria-hidden="true" />{t("Try another file")}
+        </button>
+        <button type="button" className="ob-secondary" disabled={busy} onClick={onCreateNew}>
+          <FileText size={16} aria-hidden="true" />{t("Continue without upload (create a new CV)")}
+        </button>
+        {retryAvailable && (
+          <button type="button" className="ob-text-button" disabled={busy} onClick={onRetry}>
+            <RotateCcw size={14} aria-hidden="true" />{t("Retry analysis")}
+          </button>
+        )}
+      </div>
+      <SupportHelp topic="CV upload" />
+    </div>
+  );
+}
+
 export default function PreSignupOnboarding() {
   useTranslation();
   return (
@@ -85,11 +144,8 @@ function OnboardingFlow() {
   const [hydrated, setHydrated] = useState(() => !guest || !!newCv);
   const [config, setConfig] = useState<PrivacyConfig | null>(null);
   const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiDeclined, setAiDeclined] = useState(false);
-  const [aiConsentPrompt, setAiConsentPrompt] = useState(false);
   const aiRequired = config?.ai_required !== false;
-  const uploadAllowed = !!config?.collection_enabled && (!aiRequired || (aiProcessing && config.ai_enabled));
-  const needsAiConsent = !!config?.collection_enabled && !!config.ai_enabled && aiRequired && !aiProcessing;
+  const uploadAllowed = !!config?.collection_enabled && (!aiRequired || config.ai_enabled);
   const rawStage = params.get("step");
   const stage: Stage = guest || newCv
     ? rawStage === "upload" || rawStage === "questions" || rawStage === "signup"
@@ -111,15 +167,32 @@ function OnboardingFlow() {
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [signupEmail, setSignupEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState<ProcessingPhase>("idle");
+  const [failureMessage, setFailureMessage] = useState("");
+  const [retryAvailable, setRetryAvailable] = useState(true);
+  const [review, setReview] = useState<GuestReviewPreview | null>(null);
+  const [pollKey, setPollKey] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const aiConsentInput = useRef<HTMLInputElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
   const trackedProcessing = useRef("");
+  const trackedView = useRef("");
+  const trackedPreview = useRef("");
+  const parseStart = useRef<{ id: string; at: number } | null>(null);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const parseElapsed = parseStart.current && guest && parseStart.current.id === guest.id ? Math.max(0, now - parseStart.current.at) : 0;
+  const parseSlow = processing === "parsing" && parseElapsed > PARSE_SLOW_MS;
+  const guestFailed = !!guest && !newCv && processing === "failed";
+  const scoredReview = guest && !newCv && processing === "ready" && review && typeof review.score === "number" ? review : null;
+
   useEffect(() => {
     if (!guest || (processing !== "ready" && processing !== "failed")) return;
     const key = `${guest.id}:${processing}`;
@@ -163,7 +236,20 @@ function OnboardingFlow() {
       step: stage,
       question: stage === "questions" ? question.id : undefined,
     });
+    const view = stage === "questions" ? `questions:${question.id}` : stage;
+    if (trackedView.current === view) return;
+    trackedView.current = view;
+    const events: Record<Stage, FunnelEvent> = { upload: "onboarding_upload_view", questions: "onboarding_question_view", signup: "onboarding_signup_view" };
+    trackFunnelEvent(events[stage], stage === "questions" ? QUESTION_FUNNEL_DETAIL[question.id] : undefined);
   }, [stage, questionIndex, question.id]);
+  useEffect(() => {
+    if (stage !== "signup" || !guest || newCv) return;
+    const kind = processing === "ready" ? previewKind(review) ?? "unscored" : processing === "failed" ? "unscored" : null;
+    if (!kind || trackedPreview.current === guest.id) return;
+    trackedPreview.current = guest.id;
+    trackFunnelEvent("onboarding_score_preview", kind);
+  }, [stage, guest?.id, newCv, processing, review]);
+  useEffect(() => () => clearTimeout(advanceTimer.current), [stage, questionIndex]);
   useEffect(() => {
     if (newCv && stage !== "upload") {
       try { saveNewCvOnboarding({ ...newCv, answers, step: stage, question: questionIndex }); }
@@ -183,8 +269,18 @@ function OnboardingFlow() {
       ),
     );
   }, [guest, newCv, answers, stage, questionIndex, hydrated]);
+  function applyStatus(result: GuestStatus) {
+    const phase = phaseFromStatus(result.status);
+    setRetryAvailable(result.retry_available);
+    setReview(result.review ?? null);
+    setProcessing(phase);
+    if (phase === "failed") setFailureMessage(result.error_message ?? "Please try another CV.");
+    return phase;
+  }
   useEffect(() => {
     if (!guest || newCv) return;
+    if (parseStart.current?.id !== guest.id) parseStart.current = { id: guest.id, at: Date.now() };
+    const startedAt = parseStart.current.at;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let first = true;
@@ -194,15 +290,13 @@ function OnboardingFlow() {
         if (cancelled) return;
         setAiProcessing(result.ai_processing);
         if (config?.ai_required !== false && !result.ai_processing) { setProcessing("idle"); return; }
-        setProcessing(
-          result.status === "parsed"
-            ? "ready"
-            : result.status === "failed"
-              ? "failed"
-              : "parsing",
-        );
-        if (result.status === "failed")
-          setError(result.error_message ?? "Please try another CV.");
+        const phase = applyStatus(result);
+        if (phase !== "parsing") return;
+        if (Date.now() - startedAt > PARSE_GIVE_UP_MS) {
+          setProcessing("failed");
+          setFailureMessage(GIVE_UP_MESSAGE);
+          return;
+        }
         if (
           result.status === "uploaded" ||
           (result.status === "parsing" && result.can_resume)
@@ -215,7 +309,6 @@ function OnboardingFlow() {
           });
         }
         first = false;
-        if (result.status === "parsed" || result.status === "failed") return;
       } catch (err) {
         if (cancelled) return;
         setError(
@@ -233,19 +326,23 @@ function OnboardingFlow() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [guest, newCv, aiProcessing, config?.ai_required]);
+  }, [guest, newCv, aiProcessing, config?.ai_required, pollKey]);
+  useEffect(() => {
+    if (processing !== "parsing") return;
+    const tick = setInterval(() => setNow(Date.now()), 3000);
+    return () => clearInterval(tick);
+  }, [processing]);
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const tick = setTimeout(() => setResendCooldown(seconds => seconds - 1), 1000);
+    return () => clearTimeout(tick);
+  }, [resendCooldown]);
 
-  function promptForAiConsent() {
-    setAiConsentPrompt(true);
-    aiConsentInput.current?.focus({ preventScroll: true });
-    aiConsentInput.current?.closest(".ai-upload-disclosure")?.scrollIntoView({ block: "center", behavior: "instant" });
-  }
   async function selectFile(files: File[]) {
     setDragging(false);
     if (uploadingRef.current || busy) return;
     if (!uploadAllowed) {
-      if (needsAiConsent) promptForAiConsent();
-      else setUploadError("Uploads are currently unavailable.");
+      setUploadError("Uploads are currently unavailable.");
       return;
     }
     if (files.length !== 1) {
@@ -261,26 +358,35 @@ function OnboardingFlow() {
       setUploadError("Choose a non-empty file smaller than 20 MB.");
       return;
     }
+    // Choosing the file next to the AI disclosure is the affirmative consent.
+    const aiConsent = !!config?.ai_enabled;
     uploadingRef.current = true;
     trackEvent("pre_signup_upload_started", {file_type: /\.pdf$/i.test(selected.name) ? "pdf" : "docx"});
+    trackFunnelEvent("onboarding_upload_started");
     setUploading(true);
     setUploadError("");
     setError("");
     try {
       if (guest) { await deleteGuestUpload(guest); clearGuestUpload(); setGuest(null); }
-      const row = await uploadGuestCv(selected, aiProcessing);
+      const row = await uploadGuestCv(selected, aiConsent);
       clearNewCvOnboarding();
       setNewCv(null);
       setHydrated(true);
       setAnswers({});
+      setAiProcessing(aiConsent);
+      setReview(null);
+      setFailureMessage("");
+      setRetryAvailable(true);
       setGuest(row);
       setEmailSent(false);
       go("questions");
       trackEvent("pre_signup_upload_completed", {
         file_type: /\.pdf$/i.test(selected.name) ? "pdf" : "docx",
       });
+      trackFunnelEvent("onboarding_upload_completed");
     } catch (err) {
       trackEvent("pre_signup_upload_failed", {result: "failure"});
+      trackFunnelEvent("onboarding_upload_failed");
       setUploadError(
         err instanceof Error ? err.message : "Upload failed. Please try again.",
       );
@@ -305,28 +411,34 @@ function OnboardingFlow() {
       setAnswers({});
       setHydrated(true);
       setProcessing("idle");
+      setFailureMessage("");
+      setReview(null);
       setEmailSent(false);
       setUploadError("");
       go("questions");
       trackEvent("pre_signup_path_selected", { path_selected: "manual_create" });
+      trackFunnelEvent("onboarding_manual_create");
     } catch (err) {
       clearNewCvOnboarding();
       setError(err instanceof Error ? err.message : t("Couldn't continue. Please try again."));
     } finally { setBusy(false); }
   }
+  function tryAnotherFile() {
+    go("upload");
+    fileInput.current?.click();
+  }
   async function changeGuestAi(accepted: boolean) {
-    if (accepted) setAiConsentPrompt(false);
-    if (!guest) { setAiProcessing(accepted); setAiDeclined(!accepted); return; }
+    if (!guest) return;
     setBusy(true); setError("");
     try {
       const result = await updateGuestPrivacy(guest, choices(accepted));
       setAiProcessing(result.ai_processing);
-      setAiDeclined(!accepted);
       setProcessing(result.status === "parsed" ? "ready" : "idle");
     } catch (err) { setError(err instanceof Error ? err.message : t("Your AI choice could not be saved. Please try again.")); }
     finally { setBusy(false); }
   }
   function advanceQuestion(skip = false) {
+    clearTimeout(advanceTimer.current);
     if (skip)
       setAnswers((previous) => {
         const next = { ...previous };
@@ -339,6 +451,11 @@ function OnboardingFlow() {
     });
     if (questionIndex < 3) go("questions", questionIndex + 1);
     else go("signup");
+  }
+  function chooseAnswer(value: string) {
+    setAnswers((previous) => ({ ...previous, [question.id]: value }));
+    clearTimeout(advanceTimer.current);
+    advanceTimer.current = setTimeout(() => advanceQuestion(), AUTO_ADVANCE_MS);
   }
   async function reset() {
     if (uploading || busy) return;
@@ -356,6 +473,8 @@ function OnboardingFlow() {
     setUploadError("");
     setError("");
     setProcessing("idle");
+    setFailureMessage("");
+    setReview(null);
     setEmailSent(false);
     setParams({}, { replace: true });
   }
@@ -376,20 +495,28 @@ function OnboardingFlow() {
     event.preventDefault();
     if (busy) return;
     const fields = new FormData(event.currentTarget);
+    const email = String(fields.get("email"));
     setBusy(true);
     setError("");
     try {
       await prepareAuth();
       const result = await signUp(
         name.trim(),
-        String(fields.get("email")),
+        email,
         String(fields.get("password")),
       );
       trackEvent("pre_signup_account_created", {
         method: "email",
         verification_required: result.needsEmailVerification,
       });
-      if (result.needsEmailVerification) setEmailSent(true);
+      trackFunnelEvent("signup_completed", "email");
+      if (result.needsEmailVerification) {
+        trackFunnelEvent("email_verification_required");
+        setSignupEmail(email);
+        setResent(false);
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
+        setEmailSent(true);
+      }
       else navigate(ONBOARDING_RESUME_PATH);
     } catch (err) {
       setError(
@@ -399,6 +526,25 @@ function OnboardingFlow() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function resendVerification() {
+    if (resendCooldown > 0 || resending || !signupEmail) return;
+    setResending(true);
+    setError("");
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: signupEmail,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (resendError) throw resendError;
+      setResent(true);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Failed to resend email."));
+    } finally {
+      setResending(false);
     }
   }
   async function continueWithAccount(google = false) {
@@ -421,22 +567,35 @@ function OnboardingFlow() {
   async function retryParsing() {
     if (!guest) return;
     setError("");
+    setFailureMessage("");
+    parseStart.current = { id: guest.id, at: Date.now() };
+    setNow(Date.now());
     setProcessing("parsing");
     try {
       const result = await processGuestCv(guest);
-      setProcessing(result.status === "parsed" ? "ready" : "failed");
-      if (result.error_message) setError(result.error_message);
+      // Another request still holds the lease: keep polling it.
+      if (applyStatus(result) === "parsing") setPollKey(key => key + 1);
     } catch (err) {
       setProcessing("failed");
-      setError(
-        err instanceof Error ? err.message : t("Please upload another CV."),
-      );
+      setFailureMessage(err instanceof Error ? err.message : "Please try another CV.");
     }
   }
+  const failurePanel = guestFailed && (
+    <AnalysisFailed
+      message={failureMessage || "Please try another CV."}
+      retryAvailable={retryAvailable}
+      busy={busy || uploading}
+      onRetry={() => void retryParsing()}
+      onAnotherFile={tryAnotherFile}
+      onCreateNew={() => void startNewCv()}
+    />
+  );
+  const questionsLeft = PRE_SIGNUP_QUESTIONS.length - questionIndex;
+  const answered = !!answers[question.id];
   return (
     <div className="ob-page">
       <header className="ob-header">
-        <Link to="/guided-journey" className="ob-logo">
+        <Link to={publicPath("/")} className="ob-logo">
           <img src="/images/logo.png" alt="" width={30} height={30} />
           <span>
             {"jobspecific"}<span>{t("CV")}</span>
@@ -452,6 +611,20 @@ function OnboardingFlow() {
           <span>{guest ? t("Delete upload & restart") : t("Restart")}</span>
         </button>
       </header>
+      <input
+        ref={fileInput}
+        className="ob-visually-hidden"
+        id="onboarding-cv-file"
+        type="file"
+        tabIndex={-1}
+        accept=".pdf,.docx"
+        aria-label={t("Choose a CV file")}
+        disabled={uploading || !uploadAllowed}
+        onChange={(event) => {
+          void selectFile(Array.from(event.target.files ?? []));
+          event.target.value = "";
+        }}
+      />
       <main ref={content} className={`ob-main${stage === "upload" ? " ob-main-start" : ""}`}>
         <div className="ob-layout">
           {stage === "upload" && <aside className="ob-start-guidance">
@@ -477,45 +650,19 @@ function OnboardingFlow() {
               </p>
             )}
             {error && <SupportHelp topic="CV upload" />}
-            {processing === "failed" && (
-              <button className="ob-back" onClick={retryParsing}>
-                {t("Retry analysis")}</button>
-            )}
-            {guest && !newCv && stage !== "upload" && hydrated && <div className="ob-footnote" style={{ display: "block", lineHeight: 1.7 }}>
-              <label style={{ display: "flex", gap: 8 }}><input type="checkbox" aria-label={t("AI processing for this upload")} checked={aiProcessing} disabled={busy || (!config?.ai_enabled && !aiProcessing)} onChange={event => void changeGuestAi(event.target.checked)} />{t("AI processing")}{" "}{config?.ai_provider ? `with ${config.ai_provider}` : ""}</label>
-              <span>{t("You can change this choice at any time.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</span>
-            </div>}
             {guest && !newCv && stage !== "upload" && hydrated && aiRequired && !aiProcessing && <>
               <h1 tabIndex={-1}>{t("Enable AI to continue")}</h1>
-              <p className="ob-description">{t("Your upload is saved for your remaining recovery window. JobSpecificCV needs AI to analyze it. You can enable AI above to resume, or delete your upload and leave.")}</p>
+              <p className="ob-description">{t("Your upload is saved for your remaining recovery window. JobSpecificCV needs AI to analyze it. You can enable AI below to resume, or delete your upload and leave.")}</p>
             </>}
             {stage === "upload" && (
               <>
                 {!config?.collection_enabled && <p className="ob-footnote" role="status">{config ? t("Uploads are temporarily unavailable while privacy arrangements are verified.") : t("Checking upload availability…")}</p>}
-                <AiUploadDisclosure extraDetails={<p>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}</p>} config={config} checked={aiProcessing} disabled={(!config?.ai_enabled && !aiProcessing) || uploading || busy} onChange={accepted => void changeGuestAi(accepted)} collapsible highlighted={aiConsentPrompt && needsAiConsent} inputRef={aiConsentInput} onHighlightEnd={() => setAiConsentPrompt(false)} />
-                {aiRequired && !aiProcessing && <p className="ob-footnote ob-upload-hint" role="status">{aiDeclined ? guest ? t("AI remains off for your saved upload. Enable it above to continue, or delete your upload and leave.") : t("AI remains off. You can change your mind by enabling it above; nothing has been uploaded.") : t("Enable AI above to upload and analyze your CV.")}</p>}
-                <input
-                  ref={fileInput}
-                  className="ob-visually-hidden"
-                  id="onboarding-cv-file"
-                  type="file"
-                  tabIndex={-1}
-                  accept=".pdf,.docx"
-                  aria-label={t("Choose a CV file")}
-                  disabled={uploading || !uploadAllowed}
-                  onChange={(event) => {
-                    void selectFile(Array.from(event.target.files ?? []));
-                    event.target.value = "";
-                  }}
-                />
+                {config?.collection_enabled && !uploadAllowed && <p className="ob-footnote" role="status">{t("AI analysis is temporarily unavailable. You can still create a new CV.")}</p>}
                 <button
                   type="button"
-                  disabled={uploading || busy || (!uploadAllowed && !needsAiConsent)}
+                  disabled={uploading || busy || !uploadAllowed}
                   className={`ob-upload-zone${dragging ? " is-dragging" : ""}`}
-                  onClick={() => {
-                    if (needsAiConsent) promptForAiConsent();
-                    else if (uploadAllowed) fileInput.current?.click();
-                  }}
+                  onClick={() => fileInput.current?.click()}
                   onDragOver={(event) => {
                     event.preventDefault();
                     setDragging(true);
@@ -534,27 +681,29 @@ function OnboardingFlow() {
                     )}
                   </span>
                   <strong>
-                    {uploading ? t("Uploading your CV…") : t("Drop your CV here")}
+                    {uploading ? t("Uploading your CV…") : t("Upload & analyze with AI")}
                   </strong>
                   <span>
-                    {t("or")}{" "}<b>{t("browse files on your device")}</b></span>
+                    {t("Drop your CV here or")}{" "}<b>{t("browse files on your device")}</b></span>
                   <small>{t("PDF or DOCX · up to 20 MB")}</small>
                 </button>
+                <AiUploadDisclosure consentOnUpload config={config} extraDetails={<p>{t("We temporarily store your CV to read it and prepare a guidance score. Recover it for 24 hours; expired uploads are removed during daily cleanup. Avoid unnecessary sensitive or third-party information.")}</p>} />
+                {uploadError && (
+                  <p className="ob-error" role="alert">
+                    {t(uploadError)}
+                  </p>
+                )}
+                {uploadError && <SupportHelp topic="CV upload" />}
+                <div className="ob-divider"><span>{t("or")}</span></div>
                 <button type="button" className="ob-create-zone" disabled={uploading || busy} onClick={() => void startNewCv()}>
                   <span className="ob-upload-icon"><FileText size={27} aria-hidden="true" /></span>
                   <strong>{t("Create a new CV")}</strong>
                   <span>{t("Start from a blank main CV if you do not have a file ready. You can still customize it for a job later.")}</span>
                   <small><CheckCircle2 size={14} aria-hidden="true" />{t("Structured editor with live preview")}</small>
                 </button>
-                {uploadError && <SupportHelp topic="CV upload" />}
-                {uploadError && (
-                  <p className="ob-error" role="alert">
-                    {uploadError}
-                  </p>
-                )}
                 {guest && (
                   <button
-                    className="ob-primary"
+                    className="ob-primary ob-continue-file"
                     onClick={() => go("questions")}
                   >
                     {t("Continue with")}{" "}{guest.original_filename}{" "}
@@ -565,15 +714,18 @@ function OnboardingFlow() {
             )}
             {stage === "questions" && hydrated && (newCv || !aiRequired || aiProcessing) && (
               <>
-                <p className="ob-footnote" style={{ display: "block" }}>{question.id === "source" ? t("Optional: helps us learn how people find us. If you've allowed analytics, your answer only counts toward totals. It's never sent to AI.") : t("Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile.")}</p>
+                {failurePanel}
+                {guest && !newCv && (
+                  <AnalysisStatus phase={processing} elapsedMs={parseElapsed} questionsLeft={questionsLeft} slow={parseSlow} onAnotherFile={tryAnotherFile} onCreateNew={() => void startNewCv()} />
+                )}
                 <div className="ob-question-progress">
-                  <span>{t("Question")}{" "}{questionIndex + 1} {" "}{t("of 4")}</span>
+                  <span>{t("{{current}} of {{total}} · ~{{seconds}} sec", { current: questionIndex + 1, total: PRE_SIGNUP_QUESTIONS.length, seconds: remainingSeconds(questionIndex) })}</span>
                   <button
                     type="button"
                     className="ob-text-button"
-                    onClick={() => advanceQuestion(true)}
+                    onClick={() => advanceQuestion(!answered)}
                   >
-                    {t("Skip")}</button>
+                    {answered ? t("Next") : t("Skip")}</button>
                 </div>
                 <div
                   className="ob-progress-track"
@@ -593,36 +745,30 @@ function OnboardingFlow() {
                   <legend>
                     <h1 tabIndex={-1}>{t(question.title)}</h1>
                   </legend>
-                  <p className="ob-description">{t(question.description)}</p>
-                  <div className="ob-options">
-                    {question.options.map(({ value, label }, index) => (
-                      <label
-                        key={value}
-                        className={`ob-option${answers[question.id] === value ? " is-selected" : ""}`}
-                        style={{ animationDelay: `${index * 45}ms` }}
-                      >
-                        <input
-                          type="radio"
-                          name={question.id}
-                          value={value}
-                          checked={answers[question.id] === value}
-                          onChange={() =>
-                            setAnswers((previous) => ({
-                              ...previous,
-                              [question.id]: value,
-                            }))
-                          }
-                        />
-                        <span className="ob-option-copy">
-                          <strong>{t(label)}</strong>
-                        </span>
-                        <span className="ob-radio-mark" aria-hidden="true">
-                          {answers[question.id] === value && (
-                            <Check size={12} />
-                          )}
-                        </span>
-                      </label>
-                    ))}
+                  <p className="ob-why">{t(question.why)}</p>
+                  <div className={`ob-options${question.options.length > 5 ? " is-grid" : ""}`}>
+                    {question.options.map(({ value, label, detail, icon: Icon }, index) => {
+                      const selected = answers[question.id] === value;
+                      return (
+                        <button
+                          type="button"
+                          key={value}
+                          aria-pressed={selected}
+                          className={`ob-option${selected ? " is-selected" : ""}`}
+                          style={{ animationDelay: `${index * 40}ms` }}
+                          onClick={() => chooseAnswer(value)}
+                        >
+                          <span className="ob-option-icon" aria-hidden="true"><Icon size={18} /></span>
+                          <span className="ob-option-copy">
+                            <strong>{t(label)}</strong>
+                            {detail && <small>{t(detail)}</small>}
+                          </span>
+                          <span className="ob-radio-mark" aria-hidden="true">
+                            {selected && <Check size={12} />}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </fieldset>
                 <div className="ob-question-actions">
@@ -636,154 +782,174 @@ function OnboardingFlow() {
                     }
                   >
                     <ArrowLeft size={16} /> {" "}{t("Back")}</button>
-                  <button
-                    type="button"
-                    className="ob-primary"
-                    disabled={!answers[question.id]}
-                    onClick={() => advanceQuestion()}
-                  >
-                    {questionIndex === 3 ? t("Finish & continue") : t("Continue")}
-                    <ArrowRight size={17} />
-                  </button>
                 </div>
-                <ParsingStatus phase={processing} />
+                <p className="ob-footnote ob-question-note">{question.id === "source" ? t("Optional: helps us learn how people find us. If you've allowed analytics, your answer only counts toward totals. It's never sent to AI.") : t("Optional: your answers personalize guidance and are not verified CV facts. Skip any question; clear answers later in your profile.")}</p>
               </>
             )}
             {stage === "signup" && (newCv || !aiRequired || aiProcessing) && (
               <>
                 <h1 tabIndex={-1}>
-                  {emailSent ? t("Check your email") : t("Save your CV")}
+                  {emailSent
+                    ? t("Check your email")
+                    : scoredReview
+                      ? t("Your CV scores {{score}}/100", { score: Math.round(scoredReview.score!) })
+                      : guestFailed ? t("Save your progress") : t("Save your CV")}
                 </h1>
                 <p className="ob-description">
                   {emailSent
-                    ? newCv ? t("Confirm your email to review your new CV and choose your next step. Continue on this device within 24 hours.") : t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
-                    : newCv ? t("Create an account to save your new CV and choose your next step.") : t("Create an account to save your CV and see your score.")}
+                    ? newCv ? t("Confirm your email to review your new CV and choose your next step. Continue on this device within 24 hours.") : scoredReview ? t("Confirm your email to save your CV and start fixing these points. Continue on this device within 24 hours of uploading.") : t("Confirm your email to save your CV and see your score. Recover this upload on this device within 24 hours of uploading.")
+                    : newCv ? t("Create an account to save your new CV and choose your next step.") : scoredReview ? t("Create an account to see your full report and fix these.") : guestFailed ? t("We couldn't analyze this file, so there is nothing to save yet.") : t("Create an account to save your CV and see your score.")}
                 </p>
-                <div className="ob-ready-strip">
-                  <span className="ob-ready-icon">
-                    <FileText size={19} />
-                  </span>
-                  <div>
-                    <strong>{newCv ? t("Your new CV") : guest?.original_filename}</strong>
-                    <span>
-                      {Object.keys(answers).length} {" "}{t("preferences selected")}</span>
+                {failurePanel}
+                {guest && !newCv && processing === "ready" && review && <ScorePreview review={review} />}
+                {(newCv || (!guestFailed && !(processing === "ready" && review))) && (
+                  <div className="ob-ready-strip">
+                    <span className="ob-ready-icon">
+                      <FileText size={19} />
+                    </span>
+                    <div>
+                      <strong>{newCv ? t("Your new CV") : guest?.original_filename}</strong>
+                      <span>
+                        {Object.keys(answers).length} {" "}{t("preferences selected")}</span>
+                    </div>
+                    {processing === "ready" && <CheckCircle2 size={19} />}
                   </div>
-                  {processing === "ready" && <CheckCircle2 size={19} />}
-                </div>
-                {initialized && isAuthenticated ? (
+                )}
+                {guest && !newCv && processing === "parsing" && (
+                  <AnalysisStatus phase={processing} elapsedMs={parseElapsed} slow={parseSlow} onAnotherFile={tryAnotherFile} onCreateNew={() => void startNewCv()} />
+                )}
+                {!guestFailed && (initialized && isAuthenticated ? (
                   <button
                     className="ob-primary"
                     disabled={busy}
                     onClick={() => void continueWithAccount()}
                   >
-                    {t("See my CV score")}{" "}<ArrowRight size={17} />
+                    {scoredReview ? t("Improve my CV") : t("See my CV score")}{" "}<ArrowRight size={17} />
                   </button>
+                ) : emailSent ? (
+                  <div className="ob-email-sent">
+                    <p><Mail size={16} aria-hidden="true" />{t("We sent a verification link to {{email}}.", { email: signupEmail })}</p>
+                    <button
+                      type="button"
+                      className="ob-secondary"
+                      disabled={resendCooldown > 0 || resending || !signupEmail}
+                      onClick={() => void resendVerification()}
+                    >
+                      <RefreshCw size={14} className={resending ? "animate-spin" : ""} aria-hidden="true" />
+                      {resending
+                        ? t("Resending...")
+                        : resendCooldown > 0
+                          ? t("Resend email ({{seconds}}s)", { seconds: resendCooldown })
+                          : t("Resend verification email")}
+                    </button>
+                    {resent && <p className="ob-footnote" role="status">{t("Verification email resent successfully.")}</p>}
+                    <p className="ob-footnote">{t("Can't find it? Check your spam or promotions folder.")}</p>
+                  </div>
                 ) : (
-                  !emailSent && (
-                    <>
-                      <button
-                        type="button"
-                        className="ob-google"
-                        disabled={busy || !initialized}
-                        onClick={() => void continueWithAccount(true)}
+                  <>
+                    <button
+                      type="button"
+                      className="ob-google"
+                      disabled={busy || !initialized}
+                      onClick={() => void continueWithAccount(true)}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        aria-hidden="true"
                       >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="18"
-                          height="18"
-                          aria-hidden="true"
-                        >
-                          <path
-                            fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                          />
-                          <path
-                            fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M5.84 14.09A6.6 6.6 0 0 1 5.49 12c0-.73.13-1.43.35-2.09V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.93z"
-                          />
-                          <path
-                            fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.7 10.7 0 0 0 12 1C7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                          />
-                        </svg>
-                        {t("Continue with Google")}</button>
-                      <div className="ob-divider">
-                        <span>{t("or use your email")}</span>
-                      </div>
-                      <form className="ob-signup-form" onSubmit={submitSignup}>
-                        <label htmlFor="onboarding-name">{t("Full name")}</label>
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09A6.6 6.6 0 0 1 5.49 12c0-.73.13-1.43.35-2.09V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.93z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.7 10.7 0 0 0 12 1C7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        />
+                      </svg>
+                      {t("Continue with Google")}</button>
+                    <div className="ob-divider">
+                      <span>{t("or use your email")}</span>
+                    </div>
+                    <form className="ob-signup-form" onSubmit={submitSignup}>
+                      <label htmlFor="onboarding-name">{t("Full name")}</label>
+                      <input
+                        id="onboarding-name"
+                        name="name"
+                        autoComplete="name"
+                        placeholder={t("Your full name")}
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        required
+                        pattern={t(".*\\S.*")}
+                        disabled={busy}
+                      />
+                      <label htmlFor="onboarding-email">{t("Email address")}</label>
+                      <input
+                        id="onboarding-email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder={t("you@example.com")}
+                        required
+                        disabled={busy}
+                      />
+                      <label htmlFor="onboarding-password">{t("Password")}</label>
+                      <div className="ob-password">
                         <input
-                          id="onboarding-name"
-                          name="name"
-                          autoComplete="name"
-                          placeholder={t("Your full name")}
-                          value={name}
-                          onChange={(event) => setName(event.target.value)}
+                          id="onboarding-password"
+                          name="password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          placeholder={t("At least 8 characters")}
+                          minLength={8}
                           required
-                          pattern={t(".*\\S.*")}
                           disabled={busy}
                         />
-                        <label htmlFor="onboarding-email">{t("Email address")}</label>
-                        <input
-                          id="onboarding-email"
-                          name="email"
-                          type="email"
-                          autoComplete="email"
-                          placeholder={t("you@example.com")}
-                          required
-                          disabled={busy}
-                        />
-                        <label htmlFor="onboarding-password">{t("Password")}</label>
-                        <div className="ob-password">
-                          <input
-                            id="onboarding-password"
-                            name="password"
-                            type={showPassword ? "text" : "password"}
-                            autoComplete="new-password"
-                            placeholder={t("At least 8 characters")}
-                            minLength={8}
-                            required
-                            disabled={busy}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword((value) => !value)}
-                            aria-label={
-                              showPassword ? t("Hide password") : t("Show password")
-                            }
-                          >
-                            {showPassword ? (
-                              <EyeOff size={17} />
-                            ) : (
-                              <Eye size={17} />
-                            )}
-                          </button>
-                        </div>
                         <button
-                          type="submit"
-                          className="ob-primary"
-                          disabled={busy || !initialized}
+                          type="button"
+                          onClick={() => setShowPassword((value) => !value)}
+                          aria-label={
+                            showPassword ? t("Hide password") : t("Show password")
+                          }
                         >
-                          {busy ? (
-                            <Loader2 size={17} className="animate-spin" />
+                          {showPassword ? (
+                            <EyeOff size={17} />
                           ) : (
-                            <>
-                              {newCv ? t("Create account & see my score") : t("Create account & see my score")}{" "}
-                              <ArrowRight size={17} />
-                            </>
+                            <Eye size={17} />
                           )}
                         </button>
-                      </form>
-                    </>
-                  )
+                      </div>
+                      <button
+                        type="submit"
+                        className="ob-primary"
+                        disabled={busy || !initialized}
+                      >
+                        {busy ? (
+                          <Loader2 size={17} className="animate-spin" />
+                        ) : (
+                          <>
+                            {scoredReview ? t("Create account & improve my CV") : t("Create account & see my score")}{" "}
+                            <ArrowRight size={17} />
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </>
+                ))}
+                {!guestFailed && (
+                  <p className="ob-footnote">
+                    <LockKeyhole size={13} /> {" "}{newCv ? t("Your new CV will be saved to your account after sign-up.") : t("Your CV is stored temporarily now and linked to your account after sign-up.")}</p>
                 )}
-                <ParsingStatus phase={processing} />
-                <p className="ob-footnote">
-                  <LockKeyhole size={13} /> {" "}{newCv ? t("Your new CV will be saved to your account after sign-up.") : t("Your CV is stored temporarily now and linked to your account after sign-up.")}</p>
                 <p className="ob-signin">
                   {emailSent ? t("Already verified?") : t("Already have an account?")}{" "}
                   <Link
@@ -804,6 +970,10 @@ function OnboardingFlow() {
                   <ArrowLeft size={15} /> {" "}{t("Review my answers")}</button>
               </>
             )}
+            {guest && !newCv && stage !== "upload" && hydrated && <div className="ob-ai-choice">
+              <label><input type="checkbox" aria-label={t("AI processing for this upload")} checked={aiProcessing} disabled={busy || (!config?.ai_enabled && !aiProcessing)} onChange={event => void changeGuestAi(event.target.checked)} />{t("AI processing")}{config?.ai_provider ? ` ${t("with {{provider}}", { provider: config.ai_provider })}` : ""}</label>
+              <span>{t("You can change this choice at any time.")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</span>
+            </div>}
           </div>
         </div>
       </main>
