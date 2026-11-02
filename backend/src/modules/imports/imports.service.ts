@@ -1,7 +1,9 @@
 import { detectCvLanguage, normalizeLanguage } from "../../shared/localization/languages";
 import type { PrivacyService } from "../privacy/privacy.service";
 import { privacyConfig } from "../privacy/privacy.config";
-import { reviewCv } from "../cv-review/cv-review";
+import { buildAiReviewInput, reviewCv, scoreAiReview, type CvReviewAiInput, type ReviewInput } from "../cv-review/cv-review";
+import { CV_REVIEW_VERSION, type CvReview } from "../cv-review/cv-review.types";
+import type { CvReviewAiOutput } from "../ai/flows/flow-contracts";
 import type { Logger } from "pino";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
 import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
@@ -82,6 +84,11 @@ interface CvParseAiFlowRunner {
     input: Parameters<CvParseAiFlowRunner["parseCvContent"]>[1],
     assertPermission: () => Promise<void>
   ): ReturnType<CvParseAiFlowRunner["parseCvContent"]>;
+  reviewCvContent?(session: SessionContext, input: { review_input: CvReviewAiInput; import_id?: string }): Promise<CvReviewAiOutput>;
+  reviewGuestCvContent?(guest: { guest_import_id: string; guest_lease_id: string },
+    input: { review_input: CvReviewAiInput },
+    assertPermission: () => Promise<void>
+  ): Promise<CvReviewAiOutput>;
 }
 
 const sanitizeFilename = (value: string): string => {
@@ -261,12 +268,17 @@ export class ImportsService {
         canonicalizedContent.metadata.needs_language_confirmation = !detected;
       }
 
+      const cvReview = await this.reviewWithAi(
+        { content: canonicalizedContent, import_status: "parsed", raw_text: effectiveParseResult.rawExtractedText, diagnostics: effectiveParseResult.diagnostics ?? null },
+        await this.userReviewRunner(session, importId)
+      );
+
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
         parser_name: effectiveParseResult.parserName,
         raw_extracted_text: effectiveParseResult.rawExtractedText,
         parsed_content: canonicalizedContent,
-        review_context: { diagnostics: effectiveParseResult.diagnostics ?? null, warnings: effectiveParseResult.warnings },
+        review_context: { diagnostics: effectiveParseResult.diagnostics ?? null, warnings: effectiveParseResult.warnings, cv_review: cvReview },
         error_message: null
       });
 
@@ -493,7 +505,7 @@ export class ImportsService {
 
   private toImportResultView(importRow: ImportRecord): ImportResultView {
     return {
-      review: (importRow.status === "parsed" && importRow.review_context?.cv_review?.version === "cv-review-v1" ? importRow.review_context.cv_review : null) ?? reviewCv({ content: importRow.parsed_content, import_status: importRow.status, raw_text: importRow.raw_extracted_text, diagnostics: importRow.review_context?.diagnostics }),
+      review: (importRow.status === "parsed" && importRow.review_context?.cv_review?.version === CV_REVIEW_VERSION ? importRow.review_context.cv_review : null) ?? reviewCv({ content: importRow.parsed_content, import_status: importRow.status, raw_text: importRow.raw_extracted_text, diagnostics: importRow.review_context?.diagnostics }),
       status: importRow.status,
       module_type: importRow.module_type,
       parser_name: importRow.parser_name,
@@ -531,6 +543,39 @@ export class ImportsService {
     content.metadata.detected_language = detected;
     content.metadata.needs_language_confirmation = !detected;
     return { ...result, parsedContent: content };
+  }
+
+  /** The onboarding score for a parsed guest upload: AI-rated when permitted, otherwise basic. */
+  async reviewGuestFile(result: ParseCvFileResult, allowAi: boolean, assertPermission?: () => Promise<void>, guest?: { guest_import_id: string; guest_lease_id: string }): Promise<CvReview> {
+    const runner = this.aiFlowRunner;
+    return this.reviewWithAi(
+      { content: result.parsedContent, import_status: "parsed", raw_text: result.rawExtractedText, diagnostics: result.diagnostics ?? null },
+      allowAi && guest && assertPermission && runner?.reviewGuestCvContent
+        ? reviewInput => runner.reviewGuestCvContent!(guest, { review_input: reviewInput }, assertPermission)
+        : undefined
+    );
+  }
+
+  private async userReviewRunner(session: SessionContext, importId: string) {
+    const runner = this.aiFlowRunner;
+    if (!runner?.reviewCvContent) return undefined;
+    if (this.privacy && !privacyConfig().ai_required && !(await this.privacy.aiPermission(session.appUser.id))) return undefined;
+    return (reviewInput: CvReviewAiInput) => runner.reviewCvContent!(session, { review_input: reviewInput, import_id: importId });
+  }
+
+  // An AI review failure never fails the upload: the basic review is stored instead.
+  private async reviewWithAi(input: ReviewInput, run?: (reviewInput: CvReviewAiInput) => Promise<CvReviewAiOutput>): Promise<CvReview> {
+    const reviewInput = run ? buildAiReviewInput(input) : null;
+    if (!run || !reviewInput) return reviewCv(input);
+    try {
+      return scoreAiReview(input, await run(reviewInput));
+    } catch (error) {
+      this.logger?.warn(
+        { import_review: "cv_review", reason: "AI_REVIEW_FAILED", error_name: error instanceof Error ? error.name : "unknown" },
+        "AI CV review failed; storing the basic review"
+      );
+      return reviewCv(input);
+    }
   }
 
   private async resolveEffectiveParseResult(

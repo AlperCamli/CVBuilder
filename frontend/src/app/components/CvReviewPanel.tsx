@@ -5,6 +5,11 @@ import { AlertCircle, CheckCircle2, ChevronDown } from "lucide-react";
 import type { CvReview } from "../integration/api-types";
 
 const strengthLabels: Record<string, string> = {
+  "Measurable results": "Your experience shows measurable results.",
+  "Wording and clarity": "Your experience statements are clear and specific.",
+  "Experience depth": "Your roles show real scope and ownership.",
+  "Role focus": "Your CV clearly targets a role.",
+  "Skills backed by experience": "Your skills are backed by your experience.",
   "Text extraction quality": "Your CV text is clear and readable.",
   "Readable text layer": "Your document has selectable text.",
   "Name and contact details": "Your name and contact details are included.",
@@ -49,7 +54,7 @@ export function CvReviewPanel({ review }: { review: CvReview }) {
                 <p className="text-sm mt-1" style={{ color: "var(--color-text-secondary)" }}>{t("out of 100")}</p>
               </div>
             </div>
-            <p className="font-medium mt-4" style={{ color: tone }}>{review.summary.split(". ")[0]}</p>
+            <p className="font-medium mt-4" style={{ color: tone }}>{reviewText(review.summary.split(". ")[0])}</p>
           </>
         )}
       </div>
@@ -75,11 +80,11 @@ export function CvReviewPanel({ review }: { review: CvReview }) {
       <details className="group rounded-xl border p-4 text-xs leading-5" style={{ borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}>
         <summary className="cursor-pointer font-medium flex items-center justify-between gap-2 text-sm" style={{ color: "var(--color-text-primary)" }}>{t("How we evaluate your CV")}<ChevronDown size={16} className="shrink-0 group-open:rotate-180" /></summary>
         <p className="mt-4">{reviewText(review.summary)}</p>
-        <p className="mt-3">{t("Your score reflects the areas we can assess. Job relevance and keyword coverage require a job description.")}</p>
+        <p className="mt-3">{t("Content criteria are rated against a strict rubric, so a high score has to be earned. Structure and parseability are checked automatically.")}</p>
         {!unscorable ? (
         <section aria-label={t("Score breakdown")} className="space-y-3 mt-4">
           <h2 className="font-medium text-base">{t("Score breakdown")}</h2>
-          {review.dimensions.filter(dimension => dimension.id !== "quality" || dimension.score !== null).map(dimension => (
+          {review.dimensions.map(dimension => (
             <details key={dimension.id} className="rounded-xl border p-3" style={{ borderColor: "var(--color-border-secondary)" }}>
               <summary className="cursor-pointer text-sm">
                 <span className="font-medium">{t(dimension.label)}</span>

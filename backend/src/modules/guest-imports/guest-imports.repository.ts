@@ -1,4 +1,5 @@
 import { reviewCv } from "../cv-review/cv-review";
+import type { CvReview } from "../cv-review/cv-review.types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ParseCvFileResult } from "../imports/parsers/cv-parser";
 import type { GuestAnswers, GuestCreate } from "./guest-imports.schemas";
@@ -49,6 +50,8 @@ export interface GuestImportsRepository {
     leaseId: string,
     result: ParseCvFileResult | null,
     revision?: number,
+    // The AI-rated review; without it the basic review of result is stored.
+    aiReview?: CvReview,
   ): Promise<void>;
   claim(id: string, tokenHash: string, userId: string): Promise<string>;
   cleanup(): Promise<number>;
@@ -110,8 +113,8 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
     this.check(error);
     return Boolean(data);
   }
-  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0) {
-    const review = result ? reviewCv({
+  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0, aiReview?: CvReview) {
+    const review = result ? aiReview ?? reviewCv({
       content: result.parsedContent,
       import_status: "parsed",
       raw_text: result.rawExtractedText,

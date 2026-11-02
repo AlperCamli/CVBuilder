@@ -68,9 +68,11 @@ class MemoryGuests implements GuestImportsRepository {
     });
     return true;
   }
-  async finish(id: string, leaseId: string, result: ParseCvFileResult | null) {
+  finishedReviews: unknown[] = [];
+  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, _revision = 0, aiReview?: unknown) {
     const row = this.rows.get(id)!;
     if (row.lease_id !== leaseId) return;
+    this.finishedReviews.push(aiReview);
     Object.assign(row, {
       status: result ? "parsed" : "failed",
       lease_id: null,
@@ -185,6 +187,19 @@ describe("guest onboarding", () => {
       retry_available: true,
       can_resume: true,
     });
+  });
+  it("stores the review computed during processing, with the same permission check and lease", async () => {
+    const { service, repo, parser } = setup();
+    const review = { version: "cv-review-v2", method: "ai" };
+    const withReview = Object.assign(parser, { reviewGuestFile: vi.fn(async () => review) });
+    const created = await service.create(input);
+    await service.process(created.id, created.guest_token);
+    const [result, allowAi, assertPermission, guest] = withReview.reviewGuestFile.mock.calls[0] as unknown as [unknown, boolean, () => Promise<void>, { guest_import_id: string }];
+    expect(result).toBe(await parser.parseGuestFile.mock.results[0].value);
+    expect(allowAi).toBe(false);
+    expect((parser.parseGuestFile.mock.calls[0] as unknown[])[2]).toBe(assertPermission);
+    expect(guest.guest_import_id).toBe(created.id);
+    expect(repo.finishedReviews).toEqual([review]);
   });
   it("rejects mismatched or disguised uploads without sending bytes to AI", async () => {
     const { service, storage, parser } = setup();

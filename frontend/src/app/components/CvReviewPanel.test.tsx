@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CvReviewPanel } from "./CvReviewPanel";
-import { reviewCv } from "../../../../backend/src/modules/cv-review/cv-review";
+import { AI_REVIEW_CRITERIA, reviewCv, scoreAiReview } from "../../../../backend/src/modules/cv-review/cv-review";
 import type { CvContent } from "../integration/api-types";
 
 const content: CvContent = { version: "v1", language: "en", metadata: {}, sections: [{
@@ -33,9 +33,26 @@ describe("CV review presentation", () => {
     expect(evaluation).toContain("Not assessed");
     expect(html).not.toMatch(/<details[^>]*\sopen(?:[\s=>])/);
     expect(html).toContain("Not assessed");
-    expect(html).toContain("Add a job description");
-    expect(html).toContain("Measurable achievements");
+    expect(html).toContain("assessed by the AI review, which was not available");
+    expect(html).toContain("Measurable results");
     expect(html).toContain("Name missing");
     expect(html).toContain("sum of (dimension score × weight)");
+  });
+
+  it("shows AI-rated weaknesses with their CV quote up front and keeps the method collapsed", () => {
+    const review = scoreAiReview({ content }, { criteria: AI_REVIEW_CRITERIA.map(id => ({
+      id, level: id === "wording" ? 1 : 2, assessment: `${id} assessment.`, strength: null,
+      issue: `${id} issue.`, quote: id === "wording" ? "Built Python reporting tools" : null, fix: `${id} fix.`
+    })) });
+    const html = renderToStaticMarkup(<CvReviewPanel review={review} />);
+    const [visible, evaluation] = [html.slice(0, html.indexOf('<details class="group')), html.slice(html.indexOf('<details class="group'))];
+    expect(visible).toContain(`>${review.score}<`);
+    expect(visible).toContain("wording issue. “Built Python reporting tools” wording fix.");
+    expect(visible).not.toContain("Score breakdown");
+    expect(visible).not.toContain("wording assessment.");
+    expect(evaluation).toContain("Score breakdown");
+    expect(evaluation).toContain("wording assessment.");
+    expect(evaluation).toContain("strict rubric");
+    expect(html).not.toMatch(/<details[^>]*\sopen(?:[\s=>])/);
   });
 });

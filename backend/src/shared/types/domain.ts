@@ -120,6 +120,7 @@ export type AiFlowType =
   | "summary"
   | "improve"
   | "cv_parse"
+  | "cv_review"
   | "cover_letter_generation"
   | "cv_translate"
   | "tailoring_analysis"

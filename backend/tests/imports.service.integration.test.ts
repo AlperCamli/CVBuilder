@@ -22,6 +22,7 @@ import type {
   ParseCvFileResult
 } from "../src/modules/imports/parsers/cv-parser";
 import type { AiProvider, AiProviderRequest, AiProviderResult } from "../src/modules/ai/provider/ai-provider";
+import { MockAiProvider } from "../src/modules/ai/provider/mock-ai-provider";
 import type { AiPromptConfigRepository } from "../src/modules/ai/prompts/prompt-config.repository";
 import { type CreateMasterCvPayload, type MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
 import type {
@@ -1015,5 +1016,63 @@ describe("imports service integration checks", () => {
     expect(parsed.parse_summary.warnings).toEqual(["Fallback warning."]);
     expect(parser.extractCalls).toBe(1);
     expect(parser.parseCalls).toBe(1);
+  });
+});
+
+describe("CV review v2 at parse time", () => {
+  const rawText = "Alex Doe alex@example.com Data Analyst at Example Ltd. Built BI dashboards for 40 managers and automated weekly sales reporting.";
+  const parsedContent = (): CvContent => ({
+    version: "v1", language: "en", metadata: {}, sections: [
+      { id: "h", type: "header", title: "Header", order: 0, meta: {}, blocks: [{ id: "h1", type: "header", order: 0, visibility: "visible", fields: { full_name: "Alex Doe", email: "alex@example.com" }, meta: {} }] },
+      { id: "e", type: "experience", title: "Experience", order: 1, meta: {}, blocks: [{ id: "e1", type: "experience", order: 0, visibility: "visible", fields: { role: "Data Analyst", company: "Example Ltd", description: ["Built BI dashboards for 40 managers.", "Automated weekly sales reporting for the regional team."] }, meta: {} }] },
+      { id: "s", type: "skills", title: "Skills", order: 2, meta: {}, blocks: [{ id: "s1", type: "skills", order: 0, visibility: "visible", fields: { skills: ["SQL", "Power BI"] }, meta: {} }] }
+    ]
+  });
+  // cv_parse returns a fixed CV; cv_review goes through the real mock rating, unless it is set to fail.
+  const provider = (failReview = false): AiProvider => {
+    const mock = new MockAiProvider("mock-model");
+    return {
+      providerName: "mock",
+      resolveModelName: () => "mock-model",
+      async generate(request: AiProviderRequest): Promise<AiProviderResult> {
+        if (request.flow_type === "cv_parse") return { provider: "mock", model_name: "mock-model", output_payload: { parsed_content: parsedContent(), warnings: [] } };
+        if (failReview) throw new Error("simulated review outage");
+        return mock.generate(request);
+      }
+    };
+  };
+  const setup = (failReview = false) => {
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from(rawText, "utf-8")), "text/plain", "resume.txt");
+    const parser = new StubCvParser(
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, warnings: [], diagnostics: undefined },
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, parsedContent: createMinimalContent("Fallback."), warnings: [], diagnostics: undefined },
+      true
+    );
+    const tracked = trackedAiService(provider(failReview));
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service);
+    return { userId, repository, tracked, service, session: buildSession(userId) };
+  };
+
+  it("stores the AI-rated review with the parse and links its tracked run to the import", async () => {
+    const { repository, tracked, service, session } = setup();
+    await service.parseImport(session, repository.importId);
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review).toMatchObject({ version: "cv-review-v2", method: "ai", status: "partial", assessed_weight: 95 });
+    expect(result.review.dimensions.find(d => d.id === "wording")!.score).toBe(60);
+    expect(result.review.improvements[0]).toContain("“Built BI dashboards for 40 managers.”");
+    const reviewRun = [...tracked.runs.values()].find(run => run.flow_type === "cv_review")!;
+    expect(reviewRun).toMatchObject({ status: "completed", import_id: repository.importId });
+    expect(JSON.stringify(reviewRun.input_payload)).not.toMatch(/alex@example\.com|Alex Doe/);
+    expect((await repository.findImportDetailById(session.appUser.id, repository.importId))?.importRow.review_context?.cv_review).toEqual(result.review);
+  });
+
+  it("keeps the upload and stores the basic review when the AI review fails", async () => {
+    const { repository, tracked, service, session } = setup(true);
+    const parsed = await service.parseImport(session, repository.importId);
+    expect(parsed.parse_summary.status).toBe("parsed");
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review).toMatchObject({ method: "basic", status: "partial" });
+    expect([...tracked.runs.values()].find(run => run.flow_type === "cv_review")?.status).toBe("failed");
   });
 });

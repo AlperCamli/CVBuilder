@@ -286,3 +286,27 @@ export const tailoringStructureOutputSchema = z
     rationale: z.string().trim().max(280)
   })
   .strict();
+
+// CV review v2: the model rates each content criterion and quotes its evidence; the backend
+// turns levels into points and verifies quotes, so the model never sets the score itself.
+export const CV_REVIEW_CRITERIA = ["impact", "wording", "depth", "focus", "skills_evidence"] as const;
+
+export const cvReviewCriterionOutputSchema = z
+  .object({
+    id: z.enum(CV_REVIEW_CRITERIA),
+    level: z.number().int().min(0).max(4),
+    assessment: z.string().trim().max(280),
+    strength: z.string().trim().max(200).nullable(),
+    issue: z.string().trim().max(220).nullable(),
+    quote: z.string().trim().max(200).nullable(),
+    fix: z.string().trim().max(240).nullable()
+  })
+  .strict();
+
+export const cvReviewOutputSchema = z
+  .object({
+    criteria: z.array(cvReviewCriterionOutputSchema).min(1).max(5)
+  })
+  .strict();
+
+export type CvReviewAiOutput = z.infer<typeof cvReviewOutputSchema>;

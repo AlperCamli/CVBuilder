@@ -59,7 +59,8 @@ import {
   getStandardBlockEditableFields,
   enforceModuleBlockAiPolicy
 } from "./module-block-suggest";
-import { cvParseOutputSchema } from "./flows/flow-contracts";
+import { cvParseOutputSchema, cvReviewOutputSchema, type CvReviewAiOutput } from "./flows/flow-contracts";
+import type { CvReviewAiInput } from "../cv-review/cv-review";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceJobAnalysisOutputPayload } from "./job-analysis-output-coercion";
 import { clampToSchemaLimits } from "./flows/clamp-to-schema";
@@ -1825,6 +1826,29 @@ export class AiService {
     };
   }
 
+  async reviewCvContent(session: SessionContext, input: { review_input: CvReviewAiInput; import_id?: string }): Promise<CvReviewAiOutput> {
+    return this.reviewCvForSubject({ user_id: session.appUser.id }, input);
+  }
+
+  async reviewGuestCvContent(guest: { guest_import_id: string; guest_lease_id: string }, input: { review_input: CvReviewAiInput }, assertPermission: () => Promise<void>): Promise<CvReviewAiOutput> {
+    return this.reviewCvForSubject({ user_id: null, ...guest, assert_permission: assertPermission }, input);
+  }
+
+  // Rates the CV's content criteria. The ratings are scored by cv-review, never used as a score directly.
+  private async reviewCvForSubject(
+    subject: Pick<ExecuteFlowOptions, "user_id" | "guest_import_id" | "guest_lease_id" | "assert_permission">,
+    input: { review_input: CvReviewAiInput; import_id?: string }
+  ): Promise<CvReviewAiOutput> {
+    const executed = await this.executeFlow({
+      flow_type: "cv_review",
+      ...subject,
+      import_id: input.import_id,
+      input_payload: { ...input.review_input },
+      user_prompt: "Rate this CV against the rubric and return the criteria JSON."
+    });
+    return cvReviewOutputSchema.parse(executed.output);
+  }
+
   async generateCoverLetter(
     session: SessionContext,
     input: import("./ai.types").CoverLetterGenerationInput
@@ -2910,7 +2934,7 @@ export class AiService {
         ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
         : options.flow_type === "job_analysis"
           ? coerceJobAnalysisOutputPayload(providerResult.output_payload)
-          : options.flow_type.startsWith("tailoring_")
+          : options.flow_type.startsWith("tailoring_") || options.flow_type === "cv_review"
             ? clampToSchemaLimits(definition.output_schema, providerResult.output_payload)
             : providerResult.output_payload;
 

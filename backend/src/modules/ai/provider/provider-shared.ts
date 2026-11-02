@@ -28,6 +28,7 @@ export const serializeInputPayload = (payload: Record<string, unknown>): string 
 export const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "cv_parse",
+  "cv_review",
   "professional_summary",
   "cv_translate"
 ]);
@@ -38,6 +39,7 @@ export const LARGE_OUTPUT_FLOW_TYPES = new Set<AiFlowType>([
   "tailoring_analysis",
   "import_improve",
   "cv_parse",
+  "cv_review",
   "cv_translate",
   "cover_letter_generation"
 ]);

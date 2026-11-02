@@ -1,74 +1,109 @@
-# CV review v1
+# CV review v2
 
-The server owns the scoring formula. `GET /imports/:id/result` returns `review`
-alongside parsed content. No extra AI request is made for this review. It runs
-against the parsed document in memory, avoiding a second model latency or cost.
-Existing AI parsing and tailoring remain in use. Tailoring priorities from the
-AI job analysis can supply keywords, but only terms present in the actual job
-description are accepted. An AI response cannot directly set numerical scores.
+The server owns the scoring formula. An uploaded CV is reviewed once, when it is
+parsed, and the review is stored in `imports.review_context.cv_review` (guest
+uploads: `guest_imports.review_context.cv_review`, carried into the import by the
+claim). `GET /imports/:id/result` returns that stored `review` alongside parsed
+content; other states fall back to the basic review computed on read.
+
+Five content criteria are rated by one tracked AI run (`flow_type` `cv_review`,
+code-only prompt `cv-review` in `flow-registry.ts`). The model returns a level
+0–4, a one-sentence assessment, a strength, an issue, a quote and a fix per
+criterion. **It never sets a number**: `scoreAiReview` in `cv-review.ts` maps
+levels to points and applies the weights. Structure and parseability are
+deterministic checks.
 
 ## Formula
 
-Each dimension is scored from 0–100 using the sum of its awarded check points
-divided by its available check points. Round the dimension score, then compute:
-
 `total = round(sum(dimension score * weight) / sum(assessed weights))`
 
-| Dimension | Weight | Checks |
-| --- | ---: | --- |
-| Parseability / ATS compatibility | 20 | Extraction quality (60), direct text extraction (40) |
-| Section completeness | 15 | Name/contact (30), experience or projects (30), education/qualifications (20), skills (20) |
-| Job-description relevance | 20 | Job terms in contextual summary/experience/projects (80), target role terms (20) |
-| Keyword coverage | 15 | Unique matched job terms / unique target terms |
-| Content quality | 15 | Statements with 6–45 words (40), recognized initial action verbs (30), absence of checked generic phrases (30) |
-| Measurable achievements | 10 | Fraction of unique experience statements with measurable scope/results; full credit at 50% |
-| Text structure and formatting | 5 | Distinct headings (40), no empty visible placeholders (30), no detected broken replacement/null characters (30) |
+AI levels map onto a concave curve so full credit needs excellent evidence:
+level 0 → 0, 1 → 35, 2 → 60, 3 → 80, 4 → 100. The prompt is calibrated so an
+average CV earns mostly level 2; with clean structure and parsing that is a total
+of 66.
 
-The actual checks, points, evidence with short CV excerpts, missing keywords and suggestions are returned
-in the API. Improvements are ordered by the weighted shortfall of their checks.
-Empty section types, hidden blocks and duplicated narrative statements do not
-earn additional completeness, wording or achievement credit. Dates, phone
-numbers and grades outside experience narratives do not count as achievements.
-Projects and medical sections count alongside conventional experience and skills.
-An optional professional summary is not required for full completeness credit.
+| Dimension | Weight | Scored by |
+| --- | ---: | --- |
+| Measurable results (`impact`) | 25 | AI level, capped by figures in experience statements (below) |
+| Wording and clarity (`wording`) | 20 | AI level |
+| Experience depth (`depth`) | 15 | AI level |
+| Role focus (`focus`) | 15 | AI level |
+| Skills backed by experience (`skills_evidence`) | 10 | AI level |
+| Structure and completeness (`structure`) | 10 | Name/contact (25), experience or projects (25), education (15), skills (15), distinct headings (10), no empty placeholders (5), no broken characters (5) |
+| Parseability / ATS compatibility (`ats`) | 5 | Extraction quality (60), direct text extraction (40) |
+
+Guards on the AI ratings:
+
+- **Impact cap.** The level cannot exceed what the statements' figures support:
+  no experience statements → 1; no statement with a number, amount or count → 2;
+  fewer than a quarter → 3. The dimension's `reason` says when a cap applied.
+  Years and numeric dates do not count as figures; digits glued to letters (Q3,
+  B2B) do not either.
+- **Verified quotes.** A quote is shown only if it appears in the text the model
+  received (ignoring case, spacing, bullets and quotation marks) and is at least
+  8 characters long. Otherwise it is dropped; the rating itself stands.
+- **Complete ratings.** A missing criterion or an output that fails the schema
+  makes the caller store the basic review instead.
+
+Weaknesses (`improvements`) are the AI issue + verified quote + fix and the
+deterministic suggestions, ordered by weighted shortfall
+(`weight * (100 - points) / 100`). Strengths are AI criteria at level 3 or above,
+then deterministic checks at full credit.
+
+## What the AI receives
+
+`buildAiReviewInput` sends the CV language, the counted statements with figures,
+and sections as blocks of heading + lines. Header/contact sections, emails, URLs
+and phone-like digit runs (9+ digits) are removed; date ranges stay. Input is
+capped at 14,000 characters. Hidden blocks and empty sections are not sent.
+Feedback text follows the request's interface language (`languagePolicy`); quotes
+stay in the CV language. The run is linked to the import (or guest import, then
+relinked by the claim), so its cost appears in the AI analytics.
+
+## Basic review (fallback)
+
+`reviewCv` is used when the AI review is not permitted (no AI consent when AI is
+optional), the provider is unavailable or fails, for content edited after the
+upload, and for older uploads. It scores impact (share of experience statements
+with figures; full credit at 50%), wording (English: length, initial action
+verbs, absence of checked generic phrases; other languages: length only, with a
+`reason`), structure and parseability. Depth, focus and skills evidence get
+`score: null` with a reason, so the status is `partial` and the summary says it is
+a basic review. A failed AI review never fails the upload.
 
 ## Partial reviews and failures
 
-- An upload without a job description excludes relevance and keyword coverage,
-  leaving 65% of the rubric available when extraction diagnostics exist.
-- Historical uploads without saved diagnostics exclude parseability too. The
-  API explains that re-upload is needed to assess the source file.
-- Native tailored content is not an uploaded file; parseability is unassessed.
-- English wording rules are not applied to other languages.
+- Historical uploads without saved diagnostics exclude parseability. The API
+  explains that re-upload is needed to assess the source file.
 - Unavailable dimensions get `score: null`, rather than fabricated scores or
   automatic penalties. `assessed_weight` and `status: partial` explain scope.
 - Failed/pending imports, absent or nearly empty readable content, low-confidence
   extraction, binary decoding, heuristic PDF recovery and OCR all withhold the
-  numerical score (`status: unscorable`). OCR recovery is useful for editing, but
-  it does not prove that an ATS can read the original scanned file.
+  numerical score (`status: unscorable`), and no AI review is requested. OCR
+  recovery is useful for editing, but it does not prove that an ATS can read the
+  original scanned file.
 - A failed re-parse clears stale content and extraction evidence so a previous
   successful parse cannot produce a misleading score.
-- Editing recovered content does not erase the source-file extraction evidence.
+- Stored reviews are used only when their `version` is `cv-review-v2`; anything
+  older is recomputed as a basic review on read.
 
-The UI describes unreadable uploads as a **potential ATS compatibility issue**
-and also acknowledges possible parser failure. It offers re-upload and, when
-content was recovered, review in the editor. It avoids encouraging AI improvement
-or immediate tailoring of unreliable recovered content.
+## Presentation
 
-This is a product rubric, not an industry-standard ATS scoring formula, a hiring
-prediction or verified semantic qualification matching. Keyword matching is
-case-insensitive and boundary-aware (including C++, C#, .NET and Node.js).
-Target terms combine validated AI/user priorities and a deterministic list of
-up to 30 frequent non-stopword job-description terms. Repeating a keyword does
-not increase coverage. Generic task verbs are excluded from extracted keywords.
-Terms in summaries or experience count toward contextual
-relevance; a skills list alone is not equivalent to contextual evidence.
+The CV score page shows the score, up to three strengths and up to three
+weaknesses. The method (score breakdown, per-dimension evidence, formula and
+limitations) stays inside the collapsed "How we evaluate your CV" section.
 
-No visual layout, columns, fonts, headers or exported-file compatibility is
-inferred from normalized text. The formatting dimension explicitly reviews
-text structure only. Parsing difficulty as a possible compatibility issue is
-consistent with [Greenhouse's documented parsing limitations](https://support.greenhouse.io/hc/en-us/articles/200989175-Unsuccessful-resume-parse);
-the scoring weights and thresholds are our own product policy.
+This is a product rubric, not an industry-standard ATS scoring formula or a
+hiring prediction. No visual layout, columns, fonts, headers or exported-file
+compatibility is inferred from normalized text. Parsing difficulty as a possible
+compatibility issue is consistent with [Greenhouse's documented parsing limitations](https://support.greenhouse.io/hc/en-us/articles/200989175-Unsuccessful-resume-parse);
+the weights, curve and thresholds are our own product policy.
+
+## Rollout
+
+Apply `supabase/migrations/20261106120000_cv_review_ai_flow.sql` **before
+deploying the backend**: it allows `cv_review` in `ai_runs.flow_type`. Without it
+the run insert fails and every upload gets the basic review.
 
 ## Tailoring comparison (removed)
 
@@ -81,30 +116,23 @@ it is neither written nor read. Legacy `__server_tailoring_review` envelopes in 
 JSON are still stripped on every read and write. Tailoring v2 reports its own
 requirement-based match score instead (see `tailoring-v2-design.md`).
 
-Apply `supabase/migrations/20261006120000_cv_review_evidence.sql` **before deploying
-the backend**. It adds nullable `imports.review_context` and
-`tailored_cvs.tailoring_review` JSONB columns (the latter is now unused). Diagnostics are stored separately
-from editable CV JSON. Existing ownership-scoped repository reads/writes and
-table access policies apply; no new public endpoint or permission is introduced.
+## Evidence storage
 
-If the API schema cache cannot see either new column during rollout, repository
-writes retry only that specific missing-column error. Evidence is temporarily
-stored in reserved server metadata inside the existing CV JSONB column. Reads
-extract that evidence and remove the envelope before returning CV content to
-clients, the editor or AI. Editor saves preserve the stored evidence and ignore
-client-supplied envelopes. Once
-the column is available, a subsequent content save promotes the saved evidence
-to it. Other database failures still fail normally; fallback errors are not hidden.
-The migration also requests a PostgREST schema cache reload.
+`supabase/migrations/20261006120000_cv_review_evidence.sql` added the nullable
+`imports.review_context` and `tailored_cvs.tailoring_review` JSONB columns (the
+latter is now unused). Diagnostics are stored separately from editable CV JSON.
+If the API schema cache cannot see the column during a rollout, repository writes
+retry only that specific missing-column error and temporarily store evidence in
+reserved server metadata inside the CV JSONB column; reads extract and strip it.
 
 ## Verification
 
-`tests/cv-review.unit.test.ts` covers formula consistency, excluded dimensions,
-unsafe extraction, empty/hidden content, repeated statements, false numerical
-impact, contextual versus skills-only matching, technical term boundaries,
-medical/project CVs and language support.
-Import service tests check persistence across fresh service instances and stale
-content cleanup after failure. Frontend render tests check failure presentation,
-partial scoring, evidence visibility and honest decreases. AI service tests verify
-that both draft generation paths persist and return the review of the final
-post-processed content, including inserted skills sections.
+`tests/cv-review.unit.test.ts` covers the level curve and weights, the average
+calibration, the impact cap, quote verification, ordering, incomplete ratings,
+contact redaction in the AI input, unscorable content and the basic fallback
+(dates versus figures, repeated statements, hidden content, other languages,
+medical and project CVs). `tests/imports.service.integration.test.ts` runs a parse
+through the real AI service and mock provider and checks the stored review, the
+tracked run and the fallback when the AI review fails. Guest tests check that the
+review computed during processing is the one persisted. Frontend render tests
+check that weaknesses with quotes are visible and the method stays collapsed.

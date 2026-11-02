@@ -14,7 +14,7 @@ export function AiUploadDisclosure({config, checked = true, disabled = false, on
   const policy = config?.processors.find(row => row.name === provider);
   const details = <>
     {extraDetails}
-    <p>{t("JobSpecificCV sends relevant CV information and your instructions to")}{" "}{provider} {" "}{t("to structure your CV and generate improvements. Your CV score is calculated separately using the app’s scoring rules.")}</p>
+    <p>{t("JobSpecificCV sends relevant CV information and your instructions to")}{" "}{provider} {" "}{t("to structure your CV, rate its content for your CV score and generate improvements. The score itself is calculated from those ratings using the app’s scoring rules.")}</p>
     <p>{t("Review how your information is processed, stored and protected in our")}{" "}<Link to="/privacy">{t("Privacy notice")}</Link>{"."}</p>
     {policy && <p>{policy.safeguards.split(/(?<=\.)\s/)[0]}</p>}
     <p>{config?.ai_required !== false ? t("AI processing is required for JobSpecificCV’s CV-building experience. You can withdraw this choice and enable it again at any time.") : t("Without AI, basic parsing, your guidance score and manual editing still work.")} {" "}{t("Already transmitted information cannot automatically be recalled.")}</p>

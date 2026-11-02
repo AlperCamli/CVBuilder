@@ -26,7 +26,7 @@ export class GuestImportsService {
   constructor(
     private readonly repository: GuestImportsRepository,
     private readonly storage: ImportsRepository,
-    private readonly parser: Pick<ImportsService, "parseGuestFile">,
+    private readonly parser: Pick<ImportsService, "parseGuestFile"> & Partial<Pick<ImportsService, "reviewGuestFile">>,
     private readonly privacy?: PrivacyService,
   ) {}
   async create(input: unknown) {
@@ -150,18 +150,22 @@ export class GuestImportsService {
           ? Buffer.from(bytes.subarray(0, 1024)).includes(Buffer.from("%PDF-"))
           : bytes[0] === 0x50 && bytes[1] === 0x4b;
       if (!validMagic) throw new ValidationError("Unsupported file content");
+      const allowAi = Boolean(row.ai_processing && row.ai_notice_version === NOTICE_VERSION && row.ai_provider === privacyConfig().ai_provider_key && privacyConfig().ai_enabled);
+      const assertPermission = async () => {
+        const current = await this.authorize(id, token);
+        if (current.lease_id !== leaseId || Date.parse(current.lease_expires_at ?? "") <= Date.now() || current.processing_restricted_at || !current.ai_processing || current.ai_notice_version !== NOTICE_VERSION || current.privacy_revision !== row.privacy_revision || current.ai_provider !== privacyConfig().ai_provider_key || !privacyConfig().ai_enabled) {
+          throw new ConflictError("AI permission changed during processing.");
+        }
+      };
+      const guest = { guest_import_id: id, guest_lease_id: leaseId };
       const result = await this.parser.parseGuestFile({
         originalFilename: row.original_filename,
         mimeType: row.mime_type,
         sizeBytes: bytes.length,
         bytes,
-      }, Boolean(row.ai_processing && row.ai_notice_version === NOTICE_VERSION && row.ai_provider === privacyConfig().ai_provider_key && privacyConfig().ai_enabled), async () => {
-        const current = await this.authorize(id, token);
-        if (current.lease_id !== leaseId || Date.parse(current.lease_expires_at ?? "") <= Date.now() || current.processing_restricted_at || !current.ai_processing || current.ai_notice_version !== NOTICE_VERSION || current.privacy_revision !== row.privacy_revision || current.ai_provider !== privacyConfig().ai_provider_key || !privacyConfig().ai_enabled) {
-          throw new ConflictError("AI permission changed during processing.");
-        }
-      }, { guest_import_id: id, guest_lease_id: leaseId });
-      await this.repository.finish(id, leaseId, result, row.privacy_revision ?? 0);
+      }, allowAi, assertPermission, guest);
+      const review = await this.parser.reviewGuestFile?.(result, allowAi, assertPermission, guest);
+      await this.repository.finish(id, leaseId, result, row.privacy_revision ?? 0, review);
     } catch {
       await this.repository.finish(id, leaseId, null, row.privacy_revision ?? 0);
     }

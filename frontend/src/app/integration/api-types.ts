@@ -1157,7 +1157,7 @@ export interface CreatePortalResponseData {
   portal_url: string;
 }
 
-export type ReviewDimensionId = "ats" | "sections" | "relevance" | "keywords" | "quality" | "impact" | "formatting";
+export type ReviewDimensionId = "impact" | "wording" | "depth" | "focus" | "skills_evidence" | "structure" | "ats";
 
 export interface ReviewCheck {
   id: string;
@@ -1178,7 +1178,9 @@ export interface ReviewDimension {
 }
 
 export interface CvReview {
-  version: "cv-review-v1";
+  version: "cv-review-v2";
+  /** "ai": content criteria rated by the AI review; "basic": deterministic checks only. */
+  method: "ai" | "basic";
   status: "complete" | "partial" | "unscorable";
   score: number | null;
   assessed_weight: number;

@@ -1,6 +1,10 @@
 import type { ParseCvFileDiagnostics } from "../imports/parsers/cv-parser";
 
-export type ReviewDimensionId = "ats" | "sections" | "relevance" | "keywords" | "quality" | "impact" | "formatting";
+export const CV_REVIEW_VERSION = "cv-review-v2";
+
+/** AI-rated content criteria first, then the two deterministic dimensions. */
+export type AiReviewCriterionId = "impact" | "wording" | "depth" | "focus" | "skills_evidence";
+export type ReviewDimensionId = AiReviewCriterionId | "structure" | "ats";
 
 export interface ImportReviewContext {
   diagnostics: ParseCvFileDiagnostics | null;
@@ -27,7 +31,9 @@ export interface ReviewDimension {
 }
 
 export interface CvReview {
-  version: "cv-review-v1";
+  version: typeof CV_REVIEW_VERSION;
+  /** "ai": content criteria rated by the AI review; "basic": deterministic checks only. */
+  method: "ai" | "basic";
   status: "complete" | "partial" | "unscorable";
   score: number | null;
   assessed_weight: number;

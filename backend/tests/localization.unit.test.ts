@@ -47,14 +47,15 @@ describe("separate interface and CV language", () => {
     expect(texts.map(text => text.path)).toEqual(expect.arrayContaining(["sections/0/blocks/0/fields/job_title", "sections/0/blocks/0/fields/field_of_study", "sections/0/blocks/0/fields/bullets/0", "sections/0/blocks/0/fields/highlights/0", "sections/0/blocks/0/fields/language", "sections/0/blocks/0/fields/proficiency"]));
     expect(texts.some(text => /\/(name|url|company)$/.test(text.path))).toBe(false);
   });
-  it("silently omits unsupported Turkish wording checks without a penalty", () => {
+  it("assesses Turkish wording by statement length in the basic review and says what was checked", () => {
     const content = createEmptyCvContent("tr");
     content.sections = structuredClone(source.sections);
     content.sections[0].blocks[0].visibility = "visible";
     content.sections[0].blocks[0].fields.description = "Eğitim ve iş deneyimi sayesinde raporları hazırladım ve ekibin çalışmalarına katkı sağladım.";
-    const review = reviewCv({ content });
-    expect(review.dimensions.find(d => d.id === "quality")).toMatchObject({ score: null, reason: null, checks: [] });
-    expect(JSON.stringify(review)).not.toContain("English CVs only");
+    const wording = reviewCv({ content }).dimensions.find(d => d.id === "wording")!;
+    expect(wording.checks.map(c => c.id)).toEqual(["concise"]);
+    expect(wording.score).not.toBeNull();
+    expect(wording.reason).toContain("Only statement length is checked");
   });
   it("omits metadata and every header alias and groups narrative fields by block", () => {
     const content = structuredClone(source);

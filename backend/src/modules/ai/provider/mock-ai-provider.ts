@@ -491,6 +491,23 @@ const generateCvParse = (input: Record<string, unknown>): Record<string, unknown
   };
 };
 
+// An average rating on every criterion, quoting the first CV line, as the strict rubric expects.
+const generateCvReview = (input: Record<string, unknown>): Record<string, unknown> => {
+  const sections = Array.isArray(input.sections) ? (input.sections as Array<{ blocks?: Array<{ lines?: string[] }> }>) : [];
+  const firstLine = sections.flatMap((section) => section.blocks ?? []).flatMap((block) => block.lines ?? [])[0] ?? null;
+  return {
+    criteria: ["impact", "wording", "depth", "focus", "skills_evidence"].map((id) => ({
+      id,
+      level: 2,
+      assessment: "Mock review: the CV shows the basics for this criterion.",
+      strength: null,
+      issue: "Mock review: add more specific evidence.",
+      quote: firstLine ? firstLine.slice(0, 120) : null,
+      fix: "Mock review: describe one concrete result for this statement."
+    }))
+  };
+};
+
 const generateCoverLetter = (input: Record<string, unknown>): Record<string, unknown> => {
   const jobTitle = asString(input.job_title).trim() || "the role";
   const companyName = asString(input.company_name).trim();
@@ -782,6 +799,9 @@ export class MockAiProvider implements AiProvider {
         break;
       case "cover_letter_generation":
         outputPayload = generateCoverLetter(request.input_payload);
+        break;
+      case "cv_review":
+        outputPayload = generateCvReview(request.input_payload);
         break;
       case "tailoring_analysis":
         outputPayload = generateTailoringAnalysis(request.input_payload);
