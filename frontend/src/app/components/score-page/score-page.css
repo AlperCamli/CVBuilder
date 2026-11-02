@@ -1,0 +1,99 @@
+/* CV score page, "guided cascade" (variant 1). Final layout only: the reveal animates opacity,
+   transforms and the marker's background-size, so nothing here moves when it plays. */
+
+.sp-root {
+  --sp-text: #111827;
+  --sp-text-2: #374151;
+  --sp-muted: #6B7280;
+  --sp-border: #E5E7EB;
+  --sp-border-2: #D1D5DB;
+  --sp-teal-600: #0F6E56;
+  --sp-teal-700: #0B5544;
+  --sp-teal-50: #E1F5EE;
+  --sp-teal-25: #F2FAF7;
+  --sp-teal-100: #C8EBDD;
+  --sp-amber: #8A5907;
+  --sp-yellow-50: #FEF6E4;
+  --sp-yellow-25: #FFFBF3;
+  --sp-yellow-100: #F6E3B8;
+  --sp-yellow-600: #B07A10;
+  --sp-tone: var(--sp-amber);
+  --sp-tone-bg: var(--sp-yellow-50);
+  color: var(--sp-text);
+  line-height: 1.5;
+}
+.sp-root[data-tone="good"] { --sp-tone: var(--sp-teal-600); --sp-tone-bg: var(--sp-teal-50); }
+.sp-root[data-tone="low"] { --sp-tone: #B73332; --sp-tone-bg: #FCEBEB; }
+
+.sp-fade { animation: sp-fade-in 200ms linear both; }
+@keyframes sp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- score ---------- */
+.sp-score { background: var(--sp-tone-bg); border-radius: 16px; padding: 24px 16px 22px; text-align: center; }
+.sp-ring { position: relative; width: min(184px, 56vw); aspect-ratio: 1; margin: 0 auto; }
+@media (min-width: 640px) { .sp-ring { width: 200px; } }
+.sp-ring svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.sp-ring-track { stroke: var(--sp-border-2); opacity: .75; }
+.sp-ring-arc { stroke: var(--sp-tone); }
+.sp-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.sp-ring-number { font-size: 52px; font-weight: 600; line-height: 1; color: var(--sp-tone); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+@media (min-width: 640px) { .sp-ring-number { font-size: 56px; } }
+.sp-ring-of { margin-top: 6px; font-size: 13px; color: var(--sp-muted); }
+.sp-verdict { margin: 14px 0 0; font-size: 16px; font-weight: 600; color: var(--sp-tone); }
+.sp-unscored-title { margin: 12px 0 0; font-size: 20px; font-weight: 500; color: var(--sp-tone); }
+.sp-unscored-text { margin: 8px 0 0; font-size: 14px; line-height: 1.6; }
+
+/* ---------- sections ---------- */
+.sp-section { margin-top: 28px; }
+.sp-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sp-heading-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 8px; }
+.sp-heading h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.sp-heading-note { margin-left: auto; font-size: 12px; color: var(--sp-muted); white-space: nowrap; }
+.sp-section[data-kind="strengths"] .sp-heading-icon { background: var(--sp-teal-50); color: var(--sp-teal-600); }
+.sp-section[data-kind="strengths"] h2 { color: var(--sp-teal-700); }
+.sp-section[data-kind="weaknesses"] .sp-heading-icon { background: var(--sp-yellow-50); color: var(--sp-yellow-600); }
+.sp-section[data-kind="weaknesses"] h2 { color: var(--sp-amber); }
+.sp-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+.sp-strength { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px;
+  background: var(--sp-teal-25); border: 1px solid var(--sp-teal-100); font-size: 15px; line-height: 1.5; }
+.sp-check { flex: none; width: 22px; height: 22px; margin-top: 0; }
+.sp-check circle { fill: var(--sp-teal-600); transform-box: fill-box; transform-origin: center; }
+.sp-check path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+.sp-weakness { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 14px; border-radius: 12px;
+  background: var(--sp-yellow-25); border: 1px solid var(--sp-yellow-100); }
+.sp-badge { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--sp-yellow-100);
+  color: var(--sp-amber); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sp-issue { margin: 1px 0 0; font-size: 15px; font-weight: 500; line-height: 1.5; color: var(--sp-text); overflow-wrap: anywhere; }
+.sp-quote { margin: 10px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--sp-yellow-100);
+  font-size: 14px; line-height: 1.65; color: var(--sp-text-2); overflow-wrap: anywhere; }
+.sp-mark { color: inherit; background-color: transparent; padding: 1px 2px; border-radius: 3px;
+  background-image: linear-gradient(transparent 12%, rgba(246, 227, 184, .95) 12%, rgba(246, 227, 184, .95) 94%, transparent 94%);
+  background-repeat: no-repeat; background-size: 100% 100%; background-position: 0 0;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.sp-fix { margin-top: 10px; padding: 10px 12px; background: #fff; border: 1px solid var(--sp-teal-100); border-radius: 10px; }
+.sp-fix-label { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; font-size: 11px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--sp-teal-700); }
+.sp-fix-text { margin: 0; font-size: 14px; line-height: 1.55; color: var(--sp-text-2); overflow-wrap: anywhere; }
+
+/* ---------- how we evaluate (collapsed, secondary) ---------- */
+.sp-how { margin-top: 24px; border: 1px solid var(--sp-border); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: var(--sp-muted); }
+.sp-how > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none;
+  font-size: 14px; font-weight: 500; color: var(--sp-text); }
+.sp-how > summary::-webkit-details-marker { display: none; }
+.sp-how > summary:focus-visible { outline: 2px solid var(--sp-teal-600); outline-offset: 2px; border-radius: 6px; }
+
+/* ---------- skip pill (only while the cascade plays) ---------- */
+.sp-skip { position: fixed; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 40; width: max-content; margin: 0 auto;
+  display: inline-flex; align-items: center; gap: 8px; overflow: hidden; padding: 10px 16px 10px 14px; border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, .08); background: rgba(17, 24, 39, .88); color: #fff; font-size: 13px; font-weight: 500; line-height: 1.2;
+  cursor: pointer; box-shadow: 0 6px 20px -6px rgba(17, 24, 39, .35); }
+.sp-skip:focus-visible { outline: 2px solid var(--sp-teal-600); outline-offset: 2px; }
+.sp-skip-bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 2px; background: var(--sp-teal-100); transform-origin: 0 50%; }
+
+/* ---------- page chrome used by CVScore ---------- */
+.sp-file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: 0; padding: 3px 10px 3px 8px;
+  border: 1px solid #E5E7EB; border-radius: 999px; background: #F9FAFB; font-size: 13px; color: #6B7280; }
+.sp-file-chip svg { flex: none; }
+.sp-file-chip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: #374151; }

@@ -5,7 +5,7 @@ import { isImageBasedReview, scoreResumePath } from "../onboarding/onboarding-fl
 import { AtsImageWarning, ImageBasedActions } from "../components/AtsImageWarning";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
-import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, Loader2, FileText } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
 import { hasCvText } from "../components/AtsImageWarning.helpers";
 import type { CvContent, CvReview } from "../integration/api-types";
@@ -44,6 +44,8 @@ export function CVScore() {
   const [review, setReview] = useState<CvReview | null>(null);
 
   const [loading, setLoading] = useState(true);
+  // The score reveal ends with one pulse on the primary action (marked data-reveal-primary).
+  const actionsRef = useRef<HTMLDivElement>(null);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cvLanguage, setCvLanguage] = useState<string>(params.get("language") ?? (scratch ? newCv?.language ?? "" : ""));
@@ -218,18 +220,18 @@ export function CVScore() {
           style={{
             background: "var(--color-background-primary)",
             borderColor: "var(--color-border-tertiary)",
+            boxShadow: "0 1px 2px rgba(17,24,39,.04), 0 8px 24px -12px rgba(17,24,39,.08)",
           }}
         >
-          <div className="text-center mb-8">
+          <div className="text-center mb-5">
             <h1
-              className="font-medium mb-2"
+              className="font-semibold mb-2"
               style={{ fontSize: "24px", color: "var(--color-text-primary)" }}
             >
               {t("Your CV Score")}</h1>
-            <p
-              style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
-            >
-              {t("Based on")}{" "}{scratch ? t("Your new CV") : fileName || t("uploaded file")}
+            <p className="sp-file-chip">
+              <FileText size={14} aria-hidden="true" />
+              <span>{t("Based on")}</span>{" "}<strong>{scratch ? t("Your new CV") : fileName || t("uploaded file")}</strong>
             </p>
             <p className="mt-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{t("This score is guidance and does not guarantee employment outcomes.")}</p>
           </div>
@@ -263,9 +265,9 @@ export function CVScore() {
             />
           )}
 
-          <div className="mb-8">
+          <div className="mb-6">
             {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, then add your experience to receive useful AI feedback.")}</p> : review ? (
-              <CvReviewPanel review={review} />
+              <CvReviewPanel review={review} reveal={{ key: importId, simple: imageBased, actionsRef }} />
             ) : (
               <p role="status" style={{ color: "var(--color-text-secondary)" }}>
                 {t("A reliable review is unavailable. Please try uploading your CV again.")}</p>
@@ -298,9 +300,10 @@ export function CVScore() {
               onUploadAnother={() => navigate("/app/create")}
             />
           ) : (
-          <div className="space-y-3">
+          <div className="space-y-3" ref={actionsRef}>
             {(fromGuest || scratch) && (
               <button
+                data-reveal-primary=""
                 onClick={handleReviewInEditor}
                 disabled={converting || (!scratch && !parsedContent)}
                 className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2"
@@ -313,11 +316,12 @@ export function CVScore() {
                 {converting ? (
                   <Loader2 size={16} className="animate-spin" />
                 ) : (
-                  <ArrowRight size={16} />
+                  <ArrowRight size={16} data-reveal-arrow="" />
                 )}
                 {t("Continue to CV editor")}</button>
             )}
             <button
+              data-reveal-primary={fromGuest ? undefined : ""}
               onClick={handleCustomizeForJob}
               disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
               className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all hover:shadow-md"
@@ -336,7 +340,7 @@ export function CVScore() {
               ) : (
                 <Sparkles size={16} />
               )}
-              {t("Customize for a job")}<ArrowRight size={16} />
+              {t("Customize for a job")}<ArrowRight size={16} data-reveal-arrow={fromGuest ? undefined : ""} />
             </button>
 
             <button

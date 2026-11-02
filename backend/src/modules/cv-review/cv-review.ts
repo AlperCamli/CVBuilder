@@ -1,7 +1,7 @@
 import type { CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
 import type { ParseCvFileDiagnostics } from "../imports/parsers/cv-parser";
 import type { CvReviewAiOutput } from "../ai/flows/flow-contracts";
-import { CV_REVIEW_VERSION, type AiReviewCriterionId, type CvReview, type ReviewCheck, type ReviewDimension, type ReviewDimensionId } from "./cv-review.types";
+import { CV_REVIEW_VERSION, type AiReviewCriterionId, type CvReview, type ReviewCheck, type ReviewDimension, type ReviewDimensionId, type ReviewImprovementDetail } from "./cv-review.types";
 
 export const REVIEW_WEIGHTS = { impact: 25, wording: 20, depth: 15, focus: 15, skills_evidence: 10, structure: 10, ats: 5 } as const;
 export const AI_REVIEW_CRITERIA: readonly AiReviewCriterionId[] = ["impact", "wording", "depth", "focus", "skills_evidence"];
@@ -66,6 +66,9 @@ const dimension = (id: ReviewDimensionId, checks: ReviewCheck[], reason: string 
   const maximum = checks.reduce((sum, item) => sum + item.max_points, 0);
   return { id, label: LABELS[id], weight: REVIEW_WEIGHTS[id], score: !maximum ? null : round(100 * checks.reduce((sum, item) => sum + item.points, 0) / maximum), reason, checks };
 };
+/** A weakness without a quote or a separate fix: the whole text is the issue. */
+const plainDetail = (text: string): ReviewImprovementDetail => ({ text, issue: text, quote: null, fix: null });
+const plainDetails = (texts: string[]): ReviewImprovementDetail[] => texts.map(plainDetail);
 const narrativeLines = (fields: Record<string, CvJsonValue>): string[] => Object.entries(fields).filter(([key]) => NARRATIVE_KEYS.has(key)).flatMap(([, value]) => strings(value)).flatMap(value => value.split(/\n+|(?:^|\s)[•]\s*/)).map(line => line.trim()).filter(Boolean);
 
 export interface ReviewInput {
@@ -107,6 +110,7 @@ const LIMITATIONS = ["This is our CV review rubric, not an employer's ATS score 
 
 const unscorableReview = (input: ReviewInput): CvReview => {
   const isImport = input.import_status !== undefined;
+  const improvements = isImport ? ["Upload a text-based PDF or DOCX with selectable text and clear section headings.", "Review any recovered content in the editor and check it against the original CV before using it."] : ["Add your contact details, education and experience or projects before requesting a review."];
   return {
     version: CV_REVIEW_VERSION, method: "basic", status: "unscorable", score: null, assessed_weight: 0,
     summary: isImport
@@ -114,7 +118,8 @@ const unscorableReview = (input: ReviewInput): CvReview => {
       : "There is not enough readable CV content to produce a reliable score.",
     dimensions: (Object.keys(REVIEW_WEIGHTS) as ReviewDimensionId[]).map(id => dimension(id, [], "Reliable readable content is required before evaluation.")),
     strengths: [],
-    improvements: isImport ? ["Upload a text-based PDF or DOCX with selectable text and clear section headings.", "Review any recovered content in the editor and check it against the original CV before using it."] : ["Add your contact details, education and experience or projects before requesting a review."],
+    improvements,
+    improvement_details: plainDetails(improvements),
     matched_keywords: [], missing_keywords: [], limitations: LIMITATIONS
   };
 };
@@ -129,6 +134,7 @@ const imageBasedNoTextReview = (): CvReview => ({
   dimensions: (Object.keys(REVIEW_WEIGHTS) as ReviewDimensionId[]).map(id => id === "ats" ? imageBasedAtsDimension() : dimension(id, [], IMAGE_BASED_NOT_ASSESSED)),
   strengths: [],
   improvements: [IMAGE_BASED_IMPROVEMENT, IMAGE_BASED_ADD_CONTENT],
+  improvement_details: plainDetails([IMAGE_BASED_IMPROVEMENT, IMAGE_BASED_ADD_CONTENT]),
   matched_keywords: [], missing_keywords: [], limitations: LIMITATIONS,
   ats_blocker: "image_based"
 });
@@ -142,6 +148,7 @@ const withImageBasedBlocker = (review: CvReview): CvReview => {
     score,
     summary: [`${IMAGE_BASED_HEADLINE}.`, IMAGE_BASED_OCR_NOTE, `${band(score)}.`, scope].filter(Boolean).join(" "),
     improvements: [IMAGE_BASED_IMPROVEMENT, ...review.improvements.filter(text => text !== IMAGE_BASED_IMPROVEMENT)].slice(0, 6),
+    improvement_details: [plainDetail(IMAGE_BASED_IMPROVEMENT), ...(review.improvement_details ?? plainDetails(review.improvements)).filter(item => item.text !== IMAGE_BASED_IMPROVEMENT)].slice(0, 6),
     limitations: [...review.limitations, IMAGE_BASED_OCR_LIMITATION],
     ats_blocker: "image_based"
   };
@@ -183,7 +190,10 @@ const metricsEvidence = ({ narratives, measurable }: ContentAnalysis) => `${meas
 
 export const band = (score: number): string => score >= 85 ? "Strong, competitive CV" : score >= 70 ? "Good foundation, not yet competitive" : score >= 50 ? "Several areas need attention" : "Needs significant work";
 
-const assemble = (method: CvReview["method"], dimensions: ReviewDimension[], strengths: string[], improvements: Array<{ priority: number; text: string }>, limitations: string[]): CvReview => {
+/** A weakness candidate; `detail` holds its parts when they differ from "the text is the issue". */
+interface ImprovementCandidate { priority: number; text: string; detail?: Omit<ReviewImprovementDetail, "text"> }
+
+const assemble = (method: CvReview["method"], dimensions: ReviewDimension[], strengths: string[], improvements: ImprovementCandidate[], limitations: string[]): CvReview => {
   const assessed = dimensions.filter(d => d.score !== null);
   const weight = assessed.reduce((sum, d) => sum + d.weight, 0);
   const score = round(assessed.reduce((sum, d) => sum + d.weight * d.score!, 0) / weight);
@@ -191,11 +201,17 @@ const assemble = (method: CvReview["method"], dimensions: ReviewDimension[], str
   const scope = method === "basic"
     ? "This basic review covers only the dimensions we could check without the AI review."
     : status === "partial" ? "This score covers only the dimensions we could assess." : "All seven review dimensions were assessed.";
-  const ordered = [...new Set(improvements.filter(item => item.priority > 0 && item.text).sort((a, b) => b.priority - a.priority).map(item => item.text))];
-  return { version: CV_REVIEW_VERSION, method, status, score, assessed_weight: weight, summary: `${band(score)}. ${scope}`, dimensions, strengths: strengths.slice(0, 6), improvements: ordered.slice(0, 6), matched_keywords: [], missing_keywords: [], limitations: [...LIMITATIONS, ...limitations] };
+  const sorted = improvements.filter(item => item.priority > 0 && item.text).sort((a, b) => b.priority - a.priority);
+  const ordered = [...new Set(sorted.map(item => item.text))];
+  // Details follow the same order, dedupe (first candidate per text) and cap as `improvements`.
+  const details = ordered.slice(0, 6).map(text => {
+    const detail = sorted.find(item => item.text === text)!.detail;
+    return detail ? { text, ...detail } : plainDetail(text);
+  });
+  return { version: CV_REVIEW_VERSION, method, status, score, assessed_weight: weight, summary: `${band(score)}. ${scope}`, dimensions, strengths: strengths.slice(0, 6), improvements: ordered.slice(0, 6), improvement_details: details, matched_keywords: [], missing_keywords: [], limitations: [...LIMITATIONS, ...limitations] };
 };
 
-const checkImprovements = (dimensions: ReviewDimension[]) => dimensions.filter(d => d.score !== null).flatMap(d => d.checks.filter(c => c.points < c.max_points).map(c => ({ priority: d.weight * (1 - c.points / c.max_points), text: c.suggestion })));
+const checkImprovements = (dimensions: ReviewDimension[]): ImprovementCandidate[] => dimensions.filter(d => d.score !== null).flatMap(d => d.checks.filter(c => c.points < c.max_points).map(c => ({ priority: d.weight * (1 - c.points / c.max_points), text: c.suggestion })));
 const checkStrengths = (dimensions: ReviewDimension[]) => dimensions.filter(d => d.score !== null).flatMap(d => d.checks.filter(c => c.points === c.max_points).map(c => `${c.label}: ${c.evidence}`));
 
 /**
@@ -285,7 +301,7 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
   };
   const cap = impactCap(analysis);
   const strengths: string[] = [];
-  const improvements: Array<{ priority: number; text: string }> = [];
+  const improvements: ImprovementCandidate[] = [];
   const aiDimensions = AI_REVIEW_CRITERIA.map(id => {
     const criterion = byId.get(id)!;
     const capped = id === "impact" && criterion.level > cap.level;
@@ -295,7 +311,12 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
     const issue = level < 4 ? criterion.issue : null;
     const fix = level < 4 ? criterion.fix : null;
     if (level >= 3 && criterion.strength) strengths.push(`${LABELS[id]}: ${criterion.strength}`);
-    if (issue || fix) improvements.push({ priority: REVIEW_WEIGHTS[id] * (100 - points) / 100, text: [issue, quote ? `“${quote}”` : null, fix].filter(Boolean).join(" ") });
+    if (issue || fix) improvements.push({
+      priority: REVIEW_WEIGHTS[id] * (100 - points) / 100,
+      text: [issue, quote ? `“${quote}”` : null, fix].filter(Boolean).join(" "),
+      // Without an issue the fix is the lead line, so there is no separate fix box.
+      detail: issue ? { issue, quote, fix } : { issue: fix!, quote, fix: null }
+    });
     return dimension(id, [{
       id, label: LABELS[id], points, max_points: 100,
       evidence: [criterion.assessment, quote ? `“${quote}”` : null].filter(Boolean).join(" "),

@@ -1181,6 +1181,15 @@ export interface ReviewDimension {
   checks: ReviewCheck[];
 }
 
+/** One weakness split into its parts; `text` is the matching `improvements` entry. */
+export interface ReviewImprovementDetail {
+  text: string;
+  issue: string;
+  /** A line quoted from the CV, without quotation marks. */
+  quote: string | null;
+  fix: string | null;
+}
+
 export interface CvReview {
   version: "cv-review-v2";
   /** "ai": content criteria rated by the AI review; "basic": deterministic checks only. */
@@ -1192,6 +1201,8 @@ export interface CvReview {
   dimensions: ReviewDimension[];
   strengths: string[];
   improvements: string[];
+  /** `improvements` split into issue, quote and fix (same order and length). Absent on older stored reviews. */
+  improvement_details?: ReviewImprovementDetail[];
   matched_keywords: string[];
   missing_keywords: string[];
   limitations: string[];
