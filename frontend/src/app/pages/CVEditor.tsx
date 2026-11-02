@@ -2806,7 +2806,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
           each pane's content, not the scroll containers, so the panes stay scrollable. The
           editor fills the viewport exactly; its panes scroll, the page never does. */}
       <div className="h-screen flex flex-col overflow-hidden" aria-busy={aiLoading}>
-        {location.state?.onboardingAction === "improve" && <p role="status" className="p-4 bg-teal-50 text-teal-900 shrink-0">{t("Add your experience to your new CV, then use the AI tools to improve it.")}</p>}
         <div className="border-b px-6 py-3" style={{ borderColor: "var(--color-border-tertiary)" }} {...aiLockProps}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto">

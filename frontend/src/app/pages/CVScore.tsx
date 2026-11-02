@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { personalizedGuidance } from "../onboarding/pre-signup-questions";
 import { isImageBasedReview, scoreResumePath } from "../onboarding/onboarding-flow";
 import { AtsImageWarning, ImageBasedActions } from "../components/AtsImageWarning";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
@@ -103,7 +103,6 @@ export function CVScore() {
     };
   }, [api, importId, navigate, scratch]);
 
-  const improvements = useMemo(() => review?.improvements ?? [], [review]);
   const parseNeedsManualReview = review?.status === "unscorable" || !review;
   const imageBased = isImageBasedReview(review);
   const recoveredText = hasCvText(parsedContent);
@@ -126,9 +125,9 @@ export function CVScore() {
     return () => { active = false; };
   }, [api]);
 
-  type NextAction = "editor" | "tailor" | "improve";
-  // Free accounts open the editor any time, and tailor and improve once each; a used free
-  // action opens the trial prompt, and checkout returns here to resume it (?action=).
+  type NextAction = "editor" | "tailor";
+  // Free accounts open the editor any time and tailor once; a used free tailoring opens
+  // the trial prompt, and checkout returns here to resume it (?action=).
   const handleAction = useCallback(async (action: NextAction, resumed = false) => {
     if (converting) return;
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
@@ -138,12 +137,10 @@ export function CVScore() {
     try {
       const billing = await api.getBillingPlan();
       const fullAccess = hasAppAccess(billing);
-      const freeAllowed = action === "editor"
-        || (action === "tailor" && billing.free_tier?.tailoring_available === true)
-        || (action === "improve" && (scratch || billing.free_tier?.improve_available === true));
+      const freeAllowed = action === "editor" || billing.free_tier?.tailoring_available === true;
       const resumePath = scoreResumePath({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage, importId });
       if (!fullAccess && !freeAllowed) {
-        showTrialPrompt(action === "tailor" ? "tailoring" : "ai", { returnPath: resumePath });
+        showTrialPrompt("tailoring", { returnPath: resumePath });
         return;
       }
       if (scratch) {
@@ -153,10 +150,6 @@ export function CVScore() {
         completeStep("create_cv");
         clearNewCvOnboarding();
         navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { masterCvId: id, onboardingAction: action } });
-        return;
-      }
-      if (action === "improve") {
-        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload", freeRun: !fullAccess, tailoringAvailable: fullAccess || billing.free_tier?.tailoring_available === true, resumePath } });
         return;
       }
       const detail = await api.getImport(importId!);
@@ -172,13 +165,12 @@ export function CVScore() {
       navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: !(imageBased && !recoveredText) } });
     } catch (err) { setError(err instanceof Error ? err.message : t("Couldn't open your CV. Please try again.")); }
     finally { setConverting(false); }
-  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType, showTrialPrompt, imageBased, recoveredText]);
-  const handleImproveWithAI = () => { void handleAction("improve"); };
+  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, moduleType, showTrialPrompt, imageBased, recoveredText]);
   const handleCustomizeForJob = () => { void handleAction("tailor"); };
   const handleReviewInEditor = () => { void handleAction("editor"); };
   const resumeAction = params.get("action");
   useEffect(() => {
-    if (loading || !cvLanguage || resumed.current || !["editor", "tailor", "improve"].includes(resumeAction ?? "")) return;
+    if (loading || !cvLanguage || resumed.current || !["editor", "tailor"].includes(resumeAction ?? "")) return;
     resumed.current = true;
     void handleAction(resumeAction as NextAction, true);
   }, [loading, cvLanguage, resumeAction, handleAction]);
@@ -294,7 +286,6 @@ export function CVScore() {
               canOpen={!!parsedContent}
               onRebuild={handleReviewInEditor}
               onTailor={handleCustomizeForJob}
-              onImprove={handleImproveWithAI}
               onUploadAnother={() => navigate("/app/create")}
             />
           ) : (
@@ -338,21 +329,6 @@ export function CVScore() {
               )}
               {t("Customize for a job")}<ArrowRight size={16} />
             </button>
-
-            <button
-              onClick={handleImproveWithAI}
-              disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
-              className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
-              style={{
-                background: "transparent",
-                border: "1px solid var(--color-border-tertiary)",
-                color: "var(--color-text-primary)",
-                fontSize: "14px",
-                opacity: converting ? 0.7 : 1,
-              }}
-            >
-              <Sparkles size={16} />
-              {t("Improve with AI")}</button>
 
             {!fromGuest && !scratch && (
               <button

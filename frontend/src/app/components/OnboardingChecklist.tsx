@@ -13,8 +13,7 @@ const HIDDEN_ROUTE_PREFIXES = [
   "/app/checkout",
   "/app/create",
   "/app/upload-processing",
-  "/app/cv-score",
-  "/app/ai-improving"
+  "/app/cv-score"
 ];
 
 const MINIMIZED_STORAGE_KEY = "onboarding:checklist-minimized";

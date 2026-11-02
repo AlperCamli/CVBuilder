@@ -6,7 +6,7 @@ const SCREENS: Record<string, string> = {
   "/guided-journey/pricing": "Guided pricing", "/onboarding": "Upload and onboarding",
   "/privacy": "Privacy notice", "/cookies": "Cookies and storage", "/career-advice": "Career advice",
   "/app": "Dashboard", "/app/onboarding": "Saving uploaded CV", "/app/create": "Create or upload",
-  "/app/upload-processing": "Processing CV", "/app/cv-score": "CV score", "/app/ai-improving": "Improving CV",
+  "/app/upload-processing": "Processing CV", "/app/cv-score": "CV score",
   "/app/create-cv": "Create CV", "/app/medical": "Medical CV", "/app/job-tracker": "Job tracker",
   "/app/resumes": "CV library", "/app/cover-letters": "Cover letter library", "/app/pricing": "Account pricing",
   "/app/profile": "Account profile"
