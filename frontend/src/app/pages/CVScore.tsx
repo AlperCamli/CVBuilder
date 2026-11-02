@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2, FileText } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
+import { scrollContainerOf } from "../components/score-page/scroll-container";
 import { hasCvText } from "../components/AtsImageWarning.helpers";
 import type { CvContent, CvReview } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
@@ -55,7 +56,9 @@ export function CVScore() {
   );
 
   // The app keeps the previous page's scroll position on navigation; the score opens at the top.
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, []);
+  // In the app shell that position belongs to <main>, which the page scrolls in.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { scrollContainerOf(rootRef.current).scrollTo({ top: 0, behavior: "instant" }); }, []);
 
   useEffect(() => {
     if (scratch) { setLoading(false); return; }
@@ -193,6 +196,7 @@ export function CVScore() {
   if (loading) {
     return (
       <div
+        ref={rootRef}
         className="min-h-screen flex items-center justify-center p-8"
         style={{ background: "var(--color-background-secondary)" }}
       >
@@ -204,6 +208,7 @@ export function CVScore() {
 
   return (
     <div
+      ref={rootRef}
       className="min-h-screen flex items-center justify-center p-4 sm:p-8"
       style={{ background: "var(--color-background-secondary)" }}
     >

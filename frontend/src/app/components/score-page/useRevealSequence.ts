@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { animate, motionValue, useMotionValue, type MotionValue } from "motion/react";
 import { itemIds, type RevealMode, type RevealTimeline } from "./reveal-timeline";
+import { scrollContainerOf, visibleBand } from "./scroll-container";
 
 /** Room kept below a followed item for the floating "Show all" pill. */
 const PILL_CLEARANCE = 84;
@@ -78,17 +79,20 @@ export function useRevealSequence({ mode, timeline, actionsRef }: {
     let observer: IntersectionObserver | null = null;
     const pulses: Animation[] = [];
     const elementOf = (id: string) => id === itemIds.actions ? actionsRef?.current ?? null : elements.current.get(id) ?? null;
+    // In the app shell the page scrolls inside <main>, not the window.
+    const scroller = scrollContainerOf(elementOf(itemIds.score) ?? actionsRef?.current ?? null);
 
     const followTo = (element: HTMLElement | null) => {
       if (!element) return;
       const rect = element.getBoundingClientRect();
-      const limit = window.innerHeight - PILL_CLEARANCE;
+      const band = visibleBand(scroller);
+      const limit = band.bottom - PILL_CLEARANCE;
       if (rect.bottom <= limit) return;
       // Just enough to show the item, never so far that its top leaves the screen.
-      const delta = Math.min(rect.bottom - limit + 12, rect.top - TOP_MARGIN);
+      const delta = Math.min(rect.bottom - limit + 12, rect.top - band.top - TOP_MARGIN);
       if (delta <= 4) return;
       autoScrollUntil = performance.now() + AUTO_SCROLL_WINDOW;
-      window.scrollBy({ top: delta, behavior: "smooth" });
+      scroller.scrollBy({ top: delta, behavior: "smooth" });
     };
 
     // One soft ring pulse on the primary action and a nudge of its arrow. WAAPI without fill,
@@ -164,15 +168,15 @@ export function useRevealSequence({ mode, timeline, actionsRef }: {
       if (event.key === "Escape") skipRef.current();
       else if (SCROLL_KEYS.has(event.key)) takeControl();
     };
-    // Pressing on the page scrollbar targets the root element.
-    const onPointer = (event: PointerEvent) => { if (event.target === document.documentElement) takeControl(); };
+    // Pressing on the page scrollbar targets the scroll container (the root element for the window).
+    const onPointer = (event: PointerEvent) => { if (event.target === document.documentElement || event.target === scroller) takeControl(); };
     const onScroll = () => { if (performance.now() > autoScrollUntil) takeControl(); };
     const listeners: Array<[EventTarget, string, EventListener]> = [
       [window, "wheel", onWheel as EventListener],
       [window, "touchstart", onTouch as EventListener],
       [window, "keydown", onKey as EventListener],
       [document, "pointerdown", onPointer as EventListener],
-      [window, "scroll", onScroll as EventListener]
+      [scroller, "scroll", onScroll as EventListener]
     ];
     for (const [target, type, listener] of listeners) target.addEventListener(type, listener, { passive: true });
     const removeListeners = () => { for (const [target, type, listener] of listeners) target.removeEventListener(type, listener); };

@@ -20,6 +20,7 @@ import { useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import { AiExperienceGate } from "./AiExperienceGate";
+import { PrivacyLinks, isEditorRoute } from "./PrivacyControls";
 
 export function Layout() {
   useTranslation();
@@ -154,7 +155,9 @@ export function Layout() {
         </button>
       )}
 
-      <main className="flex-1 overflow-auto transition-all duration-300">
+      {/* The page scrolls here, not in the window: the links sit at the end of the content and a
+          scroll past the end stays here instead of moving the whole shell and bouncing past it. */}
+      <main className="flex-1 overflow-auto overscroll-y-contain transition-all duration-300">
         {authMessage && (
           <div
             className="m-4 px-4 py-3 rounded-lg border flex items-center justify-between"
@@ -176,6 +179,7 @@ export function Layout() {
           </div>
         )}
         <AiExperienceGate><Outlet /></AiExperienceGate>
+        {!isEditorRoute(location.pathname) && <PrivacyLinks />}
       </main>
     </div>
   );

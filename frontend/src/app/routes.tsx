@@ -1,5 +1,5 @@
 import { LanguageChooser } from "./localization/LanguageControls";
-import { PrivacyControls } from "./components/PrivacyControls";
+import { PrivacyControls, isAppShellRoute } from "./components/PrivacyControls";
 import { AnalyticsNavigation } from "./components/AnalyticsNavigation";
 import {
   lazy,
@@ -194,15 +194,13 @@ export function RouteContents({ guidedJourney }: { guidedJourney?: ComponentType
     /^\/designs\/guided-journey\/(editor|languages)\/?$/.test(pathname) ||
     /^\/designs\/template-order\/?$/.test(pathname)
   );
-  // Pages that render the CV editor fill the viewport and scroll inside their panes.
-  const editorRoute = /^\/app\/(cv\/[^/]+|medical|tailor\/[^/]+)\/?$/.test(pathname);
   return (
     <>
       {!reviewTool && <LanguageChooser />}
       {!reviewTool && <AnalyticsNavigation />}
       <RouteSeo />
       <RouteElements guidedJourney={guidedJourney} />
-      {!reviewTool && <PrivacyControls showLinks={!editorRoute} />}
+      {!reviewTool && <PrivacyControls showLinks={!isAppShellRoute(pathname)} />}
     </>
   );
 }

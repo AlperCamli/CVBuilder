@@ -6,6 +6,11 @@ import { ACCOUNT_READY_EVENT, consentSyncPending, PRIVACY_EVENT, hasGlobalPrivac
 import { removeAnalyticsData } from "../integration/analytics";
 import "./privacy.css";
 
+// Pages that render the CV editor fill the viewport and scroll inside their panes, so they show no links.
+export const isEditorRoute = (pathname: string) => /^\/app\/(cv\/[^/]+|medical|tailor\/[^/]+)\/?$/.test(pathname);
+// App shell pages scroll inside <main>, which shows the links at the end of the page.
+export const isAppShellRoute = (pathname: string) => /^\/app(\/|$)/.test(pathname);
+
 export function PrivacyLinks() {
   useTranslation();
   return <nav aria-label={t("Support and privacy links")} className="privacy-links"><Link to={publicPath("/support")}>{t("Support")}</Link><Link to="/privacy">{t("Privacy notice")}</Link><Link to="/cookies">{t("Cookies & storage")}</Link><button type="button" onClick={openPrivacyChoices}>{t("Cookie settings")}</button></nav>;
