@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import { CheckoutScreen } from "./CheckoutScreen";
+import { CheckoutScreen, CheckoutWelcome } from "./CheckoutScreen";
 import { checkoutScreen, trialEndDate } from "../integration/checkout-screen";
 import { i18n } from "../localization/i18n";
 
@@ -93,5 +93,43 @@ describe("checkout mascot screen", () => {
     expect(html).toContain(`${trialEndDate(3, "tr-TR")}: haftalık ₺149,90`);
     expect(html).toContain("Güvenli ödeme altyapısı: Stripe");
     expect(html).toContain("Neden kart gerekiyor?");
+  });
+});
+
+describe("welcome after checkout", () => {
+  const welcome = (billing: { plan_code: "weekly" | "monthly"; subscription_status: string; current_period_end: string | null }, source: "export" | "tailoring" | null, destination = "/app/cv/1?resume=export") =>
+    renderToStaticMarkup(<MemoryRouter><CheckoutWelcome billing={billing} regional={regional as never} source={source} destination={destination} onContinue={() => undefined} /></MemoryRouter>);
+
+  it("welcomes a trial to Pro with the trial chip, the benefits, the task button and the trial dates", () => {
+    const html = welcome({ plan_code: "weekly", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, "export");
+    expect(html).toContain("FREE TRIAL STARTED");
+    expect(html).toContain("Welcome to Pro. Everything is unlocked.");
+    for (const benefit of ["Tailor your CV to every job", "Unlimited PDF &amp; DOCX downloads", "AI improvements", "Cover letters"]) expect(html).toContain(benefit);
+    expect(html).toContain("Download your CV");
+    expect(html).toContain("Free until November 5, then ₺149.90 a week. We’ll email you before your trial ends.");
+  });
+
+  it("uses the same headline for a Pro purchase, with the Pro chip and the renewal date", () => {
+    const html = welcome({ plan_code: "monthly", subscription_status: "active", current_period_end: "2026-12-02T12:00:00Z" }, "tailoring");
+    expect(html).toContain("PRO IS ACTIVE");
+    expect(html).not.toContain("FREE TRIAL STARTED");
+    expect(html).toContain("Welcome to Pro. Everything is unlocked.");
+    expect(html).toContain("Continue tailoring");
+    expect(html).toContain("Your Monthly plan renews on December 2. Manage it anytime in Profile.");
+  });
+
+  it("opens the app when no paywall started checkout, and stays truthful without a date", () => {
+    const html = welcome({ plan_code: "weekly", subscription_status: "trialing", current_period_end: null }, null, "/app");
+    expect(html).toContain("Go to my CVs");
+    expect(html).toContain("We’ll email you before your trial ends.");
+    expect(html).not.toContain("Free until");
+  });
+
+  it("renders the Turkish welcome", async () => {
+    await i18n.changeLanguage("tr");
+    const html = welcome({ plan_code: "weekly", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, "export");
+    expect(html).toContain("ÜCRETSİZ DENEME BAŞLADI");
+    expect(html).toContain("Pro’ya hoş geldiniz. Tüm özellikler açıldı.");
+    expect(html).toContain("5 Kasım tarihine kadar ücretsiz, sonrasında haftalık ₺149,90.");
   });
 });

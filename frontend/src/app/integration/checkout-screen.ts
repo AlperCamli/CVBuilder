@@ -62,6 +62,25 @@ export function trialEndDate(days: number, locale: string, now = Date.now()): st
   return new Date(now + days * 86_400_000).toLocaleDateString(locale, { month: "long", day: "numeric" });
 }
 
+/** A billing period end (trial end or renewal) in the same "November 5" form; null when unknown. */
+export function planDate(iso: string | null, locale: string): string | null {
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(locale, { month: "long", day: "numeric" }) : null;
+}
+
+const CONTINUE_LABEL: Record<CheckoutSource, string> = {
+  export: "Download your CV",
+  tailoring: "Continue tailoring",
+  ai: "Continue with AI",
+  cover_letter: "Write your cover letter",
+};
+
+/** The welcome button names the task the paywall interrupted; without one it opens the app. */
+export function welcomeContinueLabel(source: CheckoutSource | null, destination: string): string {
+  if (source) return CONTINUE_LABEL[source];
+  return /^\/app(\/resumes)?\/?$/.test(destination) ? "Go to my CVs" : "Continue";
+}
+
 export function checkoutScreen({ outcome, plan, trial, eligibility, error = false, source = null, portal = null }: CheckoutScreenInput): CheckoutScreen {
   const used = eligibility === false;
   const paid = (label: string): CheckoutAction => ({ kind: "checkout", plan, withTrial: false, label });

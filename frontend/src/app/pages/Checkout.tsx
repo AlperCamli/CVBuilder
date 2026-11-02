@@ -1,4 +1,4 @@
-import { CheckoutConfirming, CheckoutLoading, CheckoutScreen } from "../components/CheckoutScreen";
+import { CheckoutConfirming, CheckoutLoading, CheckoutScreen, CheckoutWelcome } from "../components/CheckoutScreen";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ApiClientError } from "../integration/api-error";
@@ -9,6 +9,7 @@ import { startStripeCheckout } from "../integration/checkout-redirect";
 import { clearPendingCheckout, setPendingCheckout } from "../integration/pending-checkout";
 import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, resolveReturnPath, safeReturnPath } from "../integration/subscription-flow";
 import { useRegionalPricing } from "../integration/regional-pricing";
+import type { BillingPlanResponseData } from "../integration/api-types";
 import { checkoutKey, checkoutScreen, type CheckoutChoice } from "../integration/checkout-screen";
 import { translate as t } from "../localization/i18n";
 import {
@@ -18,6 +19,16 @@ import {
 
 // A confirmed Stripe session is counted once per page load, whatever re-renders the return.
 const countedSessions = new Set<string>();
+
+// The welcome shows once per Stripe session: a refresh of the return goes straight to the task.
+function takeWelcome(sessionId: string): boolean {
+  const key = `cv-builder:checkout-welcome:${sessionId}`;
+  try {
+    if (window.sessionStorage.getItem(key)) return false;
+    window.sessionStorage.setItem(key, "1");
+  } catch { /* Without storage the welcome may show again on refresh. */ }
+  return true;
+}
 
 export function Checkout() {
   const { api, me, refreshMe } = useAuth();
@@ -40,6 +51,9 @@ export function Checkout() {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [handoffDelayed, setHandoffDelayed] = useState(false);
+  const [welcome, setWelcome] = useState<BillingPlanResponseData | null>(null);
+  // Set before the welcome renders, so a re-run of the confirm effect (refreshMe can change the destination) leaves it on screen.
+  const welcomed = useRef(false);
   const started = useRef(false);
   const counted = useRef(new Set<string>());
 
@@ -52,6 +66,7 @@ export function Checkout() {
   }, [automaticHandoff, plan, trial, destination]);
 
   useEffect(() => {
+    if (welcomed.current) return;
     let active = true;
     setError(null);
     setEligibility(null);
@@ -84,7 +99,13 @@ export function Checkout() {
           }
           clearPendingCheckout();
           await refreshMe();
-          if (active) navigate(destination, { replace: true });
+          if (!active) return;
+          if (outcome === "success" && sessionId && takeWelcome(sessionId)) {
+            welcomed.current = true;
+            setWelcome(billing);
+            return;
+          }
+          navigate(destination, { replace: true });
           return;
         }
         setPortal(hasBillingIssue(billing) ? "payment" : null);
@@ -147,6 +168,8 @@ export function Checkout() {
   }, [outcome, showsScreen, screen.offer, viewDetail]);
 
   if (hidden) return null;
+  if (welcome) return <CheckoutWelcome billing={welcome} regional={regional} source={source} destination={destination}
+    onContinue={() => navigate(destination, { replace: true })} />;
   if (outcome === "success") return <CheckoutConfirming busy={confirming} error={error} onRetry={() => setAttempt(value => value + 1)} />;
   if (eligibility === null && !error) return <CheckoutLoading />;
   return <CheckoutScreen screen={screen} outcome={view} regional={regional} eligibility={eligibility} opening={opening} error={error}

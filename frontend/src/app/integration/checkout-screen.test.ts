@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkoutScreen, trialEndDate, type CheckoutAction } from "./checkout-screen";
+import { checkoutScreen, planDate, trialEndDate, welcomeContinueLabel, type CheckoutAction } from "./checkout-screen";
 import type { CheckoutTarget } from "../../content/pricing";
 
 const actions = (screen: ReturnType<typeof checkoutScreen>) => [screen.primary, screen.secondary].filter((action): action is CheckoutAction => action !== null);
@@ -80,5 +80,24 @@ describe("checkout screens", () => {
     const now = new Date(2026, 10, 2, 12).getTime();
     expect(trialEndDate(3, "en-US", now)).toBe("November 5");
     expect(trialEndDate(3, "tr-TR", now)).toBe("5 Kasım");
+  });
+});
+
+describe("welcome after checkout", () => {
+  it("names the interrupted task, else the app", () => {
+    expect(welcomeContinueLabel("export", "/app/cv/1?resume=export")).toBe("Download your CV");
+    expect(welcomeContinueLabel("tailoring", "/app/cv/1?tailor=1")).toBe("Continue tailoring");
+    expect(welcomeContinueLabel("ai", "/app/cv/1")).toBe("Continue with AI");
+    expect(welcomeContinueLabel("cover_letter", "/app/cover-letters")).toBe("Write your cover letter");
+    expect(welcomeContinueLabel(null, "/app")).toBe("Go to my CVs");
+    expect(welcomeContinueLabel(null, "/app/resumes")).toBe("Go to my CVs");
+    expect(welcomeContinueLabel(null, "/onboarding?step=upload")).toBe("Continue");
+  });
+
+  it("formats the period end like the trial date, and ignores missing or broken dates", () => {
+    expect(planDate("2026-11-05T12:00:00Z", "en-US")).toBe("November 5");
+    expect(planDate("2026-11-05T12:00:00Z", "tr-TR")).toBe("5 Kasım");
+    expect(planDate(null, "en-US")).toBeNull();
+    expect(planDate("not a date", "en-US")).toBeNull();
   });
 });
