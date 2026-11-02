@@ -45,7 +45,7 @@ function utmSource(): string | undefined {
 }
 
 export function trackFunnelEvent(event: FunnelEvent, detail?: string): void {
-  if (typeof window === "undefined" || typeof navigator === "undefined" || BOT_RE.test(navigator.userAgent ?? "")) return;
+  if (typeof window === "undefined" || !window.navigator || BOT_RE.test(window.navigator.userAgent ?? "")) return;
   const body = JSON.stringify({
     event,
     detail: detail && DETAIL_RE.test(detail) ? detail : undefined,
