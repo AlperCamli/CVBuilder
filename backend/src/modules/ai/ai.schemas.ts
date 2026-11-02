@@ -96,7 +96,8 @@ export const aiImportImproveSchema = z
   .object({
     parsed_content: z.record(z.unknown()),
     language: z.string().trim().min(2).max(16).optional(),
-    improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
+    // CV review v2 weaknesses combine issue, quoted evidence and fix (up to ~700 characters).
+    improvement_guidance: z.array(z.string().trim().min(1).max(1000)).max(20).optional(),
     import_id: uuidSchema.optional(),
     module_type: z
       .string()

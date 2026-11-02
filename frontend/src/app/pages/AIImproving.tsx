@@ -25,7 +25,8 @@ export function AIImproving() {
 
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
-  const improvementGuidance = (location.state?.improvements as string[] | undefined) ?? [];
+  // Matches the import-improve limits (20 items, 1000 characters each) so a long review never fails the request.
+  const improvementGuidance = ((location.state?.improvements as string[] | undefined) ?? []).slice(0, 20).map(item => item.slice(0, 1000));
   const moduleType = location.state?.moduleType as string | undefined;
   const source = location.state?.source as string | undefined;
   // Set by the score page for accounts without a trial or Pro: this run is their free one.
