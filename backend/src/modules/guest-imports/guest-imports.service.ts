@@ -14,6 +14,7 @@ import {
 } from "./guest-imports.schemas";
 import type { ImportsRepository } from "../imports/imports.repository";
 import type { ImportsService } from "../imports/imports.service";
+import type { ParseCvFileResult } from "../imports/parsers/cv-parser";
 import {
   ConflictError,
   NotFoundError,
@@ -163,6 +164,7 @@ export class GuestImportsService {
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new GuestProcessTimeout()), this.deadlineMs);
     });
+    let parsed: ParseCvFileResult | undefined;
     const work = (async () => {
       const bytes = await this.storage.downloadStorageObject(
         "imports",
@@ -189,6 +191,7 @@ export class GuestImportsService {
         sizeBytes: bytes.length,
         bytes,
       }, allowAi, assertPermission, guest);
+      parsed = result;
       const review = await this.parser.reviewGuestFile?.(result, allowAi, assertPermission, guest);
       return { result, review };
     })();
@@ -197,6 +200,11 @@ export class GuestImportsService {
       const { result, review } = await Promise.race([work, deadline]);
       await this.repository.finish(id, leaseId, result, row.privacy_revision ?? 0, review);
     } catch (error) {
+      // A slow AI review never fails a parsed upload: finish() stores the basic review instead.
+      if (error instanceof GuestProcessTimeout && parsed) {
+        await this.repository.finish(id, leaseId, parsed, row.privacy_revision ?? 0);
+        return this.status(id, token);
+      }
       await this.repository.finish(
         id, leaseId, null, row.privacy_revision ?? 0, undefined,
         error instanceof GuestProcessTimeout ? { message: GUEST_TIMEOUT_MESSAGE, exhausted: true } : undefined,

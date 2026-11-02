@@ -221,6 +221,15 @@ describe("guest onboarding", () => {
     expect(repo.rows.get(created.id)!.lease_id).toBeNull();
     await expect(service.process(created.id, created.guest_token)).rejects.toThrow(ConflictError);
   });
+  it("keeps a parsed upload with the basic review when the AI review outlives the deadline", async () => {
+    const { service, parser, repo } = setup(20);
+    Object.assign(parser, { reviewGuestFile: vi.fn(() => new Promise(() => undefined)) });
+    const created = await service.create(input);
+    const status = await service.process(created.id, created.guest_token);
+    expect(status).toMatchObject({ status: "parsed", error_message: null });
+    // No AI review is passed, so the repository stores the basic review.
+    expect(repo.finishedReviews.at(-1)).toBeUndefined();
+  });
   it("lets the client resume a parsing row whose lease was cleared", async () => {
     const { service, repo } = setup();
     const created = await service.create(input);
