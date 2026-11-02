@@ -6,7 +6,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import type { GuestImportsRepository } from "./guest-imports.repository";
+import type { GuestImport, GuestImportsRepository } from "./guest-imports.repository";
 import {
   guestAnswersSchema,
   guestCreateSchema,
@@ -22,12 +22,33 @@ import {
 
 export const hashGuestToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
+// Below the function's 300 s maxDuration and the 5 minute lease, so a hung parse
+// is recorded as failed instead of being killed mid-request and left "parsing".
+export const GUEST_PROCESS_DEADLINE_MS = 240_000;
+export const GUEST_TIMEOUT_MESSAGE =
+  "This file took too long to read. Try another PDF or DOCX, or create a new CV instead.";
+class GuestProcessTimeout extends Error {}
+
+/** The token holder's own score, shown before signup; never the parsed CV itself. */
+function reviewPreview(row: GuestImport) {
+  const review = row.status === "parsed" ? row.cv_review : null;
+  if (!review) return null;
+  return {
+    score: typeof review.score === "number" ? review.score : null,
+    status: review.status ?? "unscorable",
+    method: review.method ?? "basic",
+    summary: review.summary ?? "",
+    strengths: (review.strengths ?? []).slice(0, 3),
+    improvements: (review.improvements ?? []).slice(0, 3),
+  };
+}
 export class GuestImportsService {
   constructor(
     private readonly repository: GuestImportsRepository,
     private readonly storage: ImportsRepository,
     private readonly parser: Pick<ImportsService, "parseGuestFile"> & Partial<Pick<ImportsService, "reviewGuestFile">>,
     private readonly privacy?: PrivacyService,
+    private readonly deadlineMs = GUEST_PROCESS_DEADLINE_MS,
   ) {}
   async create(input: unknown) {
     const parsed = guestCreateSchema.safeParse(input);
@@ -89,10 +110,11 @@ export class GuestImportsService {
   }
   async status(id: string, token: string) {
     const row = await this.authorize(id, token);
+    // A cleared lease (privacy change) counts as expired so the client can resume.
+    const leaseExpired =
+      !row.lease_expires_at || Date.parse(row.lease_expires_at) <= Date.now();
     const exhausted =
-      row.status === "parsing" &&
-      row.attempts >= 3 &&
-      Date.parse(row.lease_expires_at ?? "") <= Date.now();
+      row.status === "parsing" && row.attempts >= 3 && leaseExpired;
     return {
       answers: row.answers,
       original_filename: row.original_filename,
@@ -103,9 +125,8 @@ export class GuestImportsService {
         ? "Analysis was interrupted. Please upload your CV again."
         : row.error_message,
       retry_available: row.attempts < 3,
-      can_resume:
-        row.status !== "parsing" ||
-        Date.parse(row.lease_expires_at ?? "") <= Date.now(),
+      can_resume: row.status !== "parsing" || leaseExpired,
+      review: reviewPreview(row),
     };
   }
   async saveAnswers(id: string, token: string, input: unknown) {
@@ -138,7 +159,11 @@ export class GuestImportsService {
     if (!acquired) return this.status(id, token);
     // Keep the request open until results are durable. No detached work that a
     // serverless host can terminate. Stale leases can resume after auth/refresh.
-    try {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new GuestProcessTimeout()), this.deadlineMs);
+    });
+    const work = (async () => {
       const bytes = await this.storage.downloadStorageObject(
         "imports",
         row.storage_path,
@@ -165,9 +190,19 @@ export class GuestImportsService {
         bytes,
       }, allowAi, assertPermission, guest);
       const review = await this.parser.reviewGuestFile?.(result, allowAi, assertPermission, guest);
+      return { result, review };
+    })();
+    work.catch(() => undefined);
+    try {
+      const { result, review } = await Promise.race([work, deadline]);
       await this.repository.finish(id, leaseId, result, row.privacy_revision ?? 0, review);
-    } catch {
-      await this.repository.finish(id, leaseId, null, row.privacy_revision ?? 0);
+    } catch (error) {
+      await this.repository.finish(
+        id, leaseId, null, row.privacy_revision ?? 0, undefined,
+        error instanceof GuestProcessTimeout ? { message: GUEST_TIMEOUT_MESSAGE, exhausted: true } : undefined,
+      );
+    } finally {
+      clearTimeout(timer);
     }
     return this.status(id, token);
   }

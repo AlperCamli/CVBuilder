@@ -25,7 +25,8 @@ export function EmailSent() {
     try {
       const { error: resendError } = await supabase.auth.resend({
         type: "signup",
-        email
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
       });
 
       if (resendError) {
@@ -131,7 +132,7 @@ export function EmailSent() {
           {resending
             ? t("Resending...")
             : cooldown > 0
-              ? `Resend email (${cooldown}s)`
+              ? t("Resend email ({{seconds}}s)", { seconds: cooldown })
               : t("Resend verification email")}
         </button>
 

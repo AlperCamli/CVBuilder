@@ -15,6 +15,15 @@ export interface GuestUpload {
   step: "questions" | "signup";
   question: number;
 }
+/** The token holder's stored review, trimmed for the pre-signup preview. */
+export interface GuestReviewPreview {
+  score: number | null;
+  status: "complete" | "partial" | "unscorable";
+  method: "ai" | "basic";
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+}
 export interface GuestStatus {
   answers: OnboardingAnswers;
   original_filename: string;
@@ -24,6 +33,7 @@ export interface GuestStatus {
   error_message: string | null;
   retry_available: boolean;
   can_resume: boolean;
+  review?: GuestReviewPreview | null;
 }
 export function readGuestUpload(): GuestUpload | null {
   if (typeof window === "undefined") return null;

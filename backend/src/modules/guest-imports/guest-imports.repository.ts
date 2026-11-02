@@ -27,6 +27,12 @@ export interface GuestImport extends GuestCreate {
   error_message: string | null;
   claimed_user_id: string | null;
   claimed_import_id: string | null;
+  cv_review?: CvReview | null;
+}
+/** A failed attempt; exhausted stops further retries of a file that cannot finish in time. */
+export interface GuestFailure {
+  message: string;
+  exhausted?: boolean;
 }
 export interface GuestImportsRepository {
   create(
@@ -52,6 +58,7 @@ export interface GuestImportsRepository {
     revision?: number,
     // The AI-rated review; without it the basic review of result is stored.
     aiReview?: CvReview,
+    failure?: GuestFailure,
   ): Promise<void>;
   claim(id: string, tokenHash: string, userId: string): Promise<string>;
   cleanup(): Promise<number>;
@@ -113,7 +120,7 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
     this.check(error);
     return Boolean(data);
   }
-  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0, aiReview?: CvReview) {
+  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, revision = 0, aiReview?: CvReview, failure?: GuestFailure) {
     const review = result ? aiReview ?? reviewCv({
       content: result.parsedContent,
       import_status: "parsed",
@@ -137,7 +144,9 @@ export class SupabaseGuestImportsRepository implements GuestImportsRepository {
       : {
           status: "failed",
           error_message:
+            failure?.message ??
             "We couldn't read this CV. Try again or choose another PDF or DOCX.",
+          ...(failure?.exhausted ? { attempts: 3 } : {}),
         };
     const { error } = await this.client
       .from("guest_imports")

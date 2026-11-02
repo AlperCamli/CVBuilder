@@ -281,7 +281,6 @@ try {
     const f = await fixture({ signedIn: false });
     try {
       await f.page.goto(`${base}/onboarding`, { waitUntil: "networkidle0" });
-      await f.page.click(".ai-upload-choice input");
       const file = new URL("invalid-upload.txt", output).pathname;
       await writeFile(file, "unsupported CV format");
       await (await f.page.$("#onboarding-cv-file")).uploadFile(file);
@@ -397,7 +396,7 @@ try {
       await f.page.waitForSelector(".ob-create-zone");
       assert.equal(await f.page.evaluate(() => JSON.parse(localStorage.getItem("cv-builder:onboarding-template")).slug), "mosaic-columns-rose");
       await f.page.click(".ob-create-zone");
-      for (let question = 1; question <= 4; question++) { await waitText(f.page, `Question ${question} of 4`); await clickText(f.page, "Skip"); }
+      for (let question = 1; question <= 4; question++) { await waitText(f.page, `${question} of 4 ·`); await clickText(f.page, "Skip"); }
       await clickText(f.page, "See my CV score");
       await waitText(f.page, "Not scored yet.");
       assert.equal(f.requests.filter(row => row.path === "/master-cvs" && row.method === "POST").length, 0);
@@ -414,11 +413,10 @@ try {
     const f = await fixture();
     try {
       await f.page.goto(`${base}/onboarding?template=mosaic-columns-rose`, { waitUntil: "networkidle0" });
-      await f.page.click(".ai-upload-choice input");
       const file = new URL("candidate.pdf", output).pathname;
       await writeFile(file, "%PDF-1.4 synthetic upload transport fixture");
       await (await f.page.$("#onboarding-cv-file")).uploadFile(file);
-      for (let question = 1; question <= 4; question++) { await waitText(f.page, `Question ${question} of 4`); await clickText(f.page, "Skip"); }
+      for (let question = 1; question <= 4; question++) { await waitText(f.page, `${question} of 4 ·`); await clickText(f.page, "Skip"); }
       await clickText(f.page, "See my CV score"); await waitText(f.page, "Your CV Score");
       assert(f.requests.find(row => row.path.endsWith("/claim")));
       await clickText(f.page, "Tailor for a job"); await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");

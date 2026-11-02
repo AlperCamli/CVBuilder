@@ -7,6 +7,7 @@ import {
   hashGuestToken,
 } from "../src/modules/guest-imports/guest-imports.service";
 import type {
+  GuestFailure,
   GuestImport,
   GuestImportsRepository,
 } from "../src/modules/guest-imports/guest-imports.repository";
@@ -69,7 +70,7 @@ class MemoryGuests implements GuestImportsRepository {
     return true;
   }
   finishedReviews: unknown[] = [];
-  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, _revision = 0, aiReview?: unknown) {
+  async finish(id: string, leaseId: string, result: ParseCvFileResult | null, _revision = 0, aiReview?: unknown, failure?: GuestFailure) {
     const row = this.rows.get(id)!;
     if (row.lease_id !== leaseId) return;
     this.finishedReviews.push(aiReview);
@@ -77,7 +78,9 @@ class MemoryGuests implements GuestImportsRepository {
       status: result ? "parsed" : "failed",
       lease_id: null,
       lease_expires_at: null,
-      error_message: result ? null : "Couldn't read this CV",
+      error_message: result ? null : failure?.message ?? "Couldn't read this CV",
+      cv_review: result ? (aiReview as GuestImport["cv_review"]) ?? null : null,
+      ...(failure?.exhausted ? { attempts: 3 } : {}),
     });
   }
   async claim(id: string, hash: string, userId: string) {
@@ -104,7 +107,7 @@ const input = {
   mime_type: "application/pdf",
   size_bytes: pdf.length,
 };
-function setup() {
+function setup(deadlineMs?: number) {
   const repo = new MemoryGuests();
   const storage = {
     createSignedUploadUrl: vi.fn(async (_bucket, path) => ({
@@ -128,7 +131,7 @@ function setup() {
         }) as unknown as ParseCvFileResult,
     ),
   };
-  const service = new GuestImportsService(repo, storage, parser);
+  const service = new GuestImportsService(repo, storage, parser, undefined, deadlineMs);
   return { repo, storage, parser, service };
 }
 
@@ -172,7 +175,7 @@ describe("guest onboarding", () => {
       await expect(service.create(invalid)).rejects.toThrow();
     }
   });
-  it("parses once under parallel processing requests and exposes no score or CV before auth", async () => {
+  it("parses once under parallel processing requests and exposes no CV before auth", async () => {
     const { service, parser } = setup();
     const created = await service.create(input);
     await Promise.all([
@@ -186,7 +189,45 @@ describe("guest onboarding", () => {
       error_message: null,
       retry_available: true,
       can_resume: true,
+      review: null,
     });
+  });
+  it("shows the token holder a compact preview of the stored review once parsed", async () => {
+    const { service, parser } = setup();
+    const review = {
+      version: "cv-review-v2", method: "ai", status: "complete", score: 64, assessed_weight: 100,
+      summary: "Solid base.", dimensions: [{ id: "impact", checks: [{ evidence: "private evidence" }] }],
+      strengths: ["a", "b", "c", "d"], improvements: ["one", "two", "three", "four"],
+      matched_keywords: [], missing_keywords: [], limitations: [],
+    };
+    Object.assign(parser, { reviewGuestFile: vi.fn(async () => review) });
+    const created = await service.create(input);
+    expect((await service.status(created.id, created.guest_token)).review).toBeNull();
+    const status = await service.process(created.id, created.guest_token);
+    expect(status.review).toEqual({
+      score: 64, status: "complete", method: "ai", summary: "Solid base.",
+      strengths: ["a", "b", "c"], improvements: ["one", "two", "three"],
+    });
+    expect(JSON.stringify(status)).not.toContain("private evidence");
+    await expect(service.status(created.id, "b".repeat(43))).rejects.toThrow(NotFoundError);
+  });
+  it("records a parse that outlives the deadline as failed, without further retries", async () => {
+    const { service, repo, parser } = setup(20);
+    parser.parseGuestFile.mockImplementation(() => new Promise(() => undefined));
+    const created = await service.create(input);
+    const status = await service.process(created.id, created.guest_token);
+    expect(status).toMatchObject({ status: "failed", retry_available: false, review: null });
+    expect(status.error_message).toContain("took too long");
+    expect(repo.rows.get(created.id)!.lease_id).toBeNull();
+    await expect(service.process(created.id, created.guest_token)).rejects.toThrow(ConflictError);
+  });
+  it("lets the client resume a parsing row whose lease was cleared", async () => {
+    const { service, repo } = setup();
+    const created = await service.create(input);
+    Object.assign(repo.rows.get(created.id)!, { status: "parsing", attempts: 1, lease_expires_at: null });
+    expect((await service.status(created.id, created.guest_token)).can_resume).toBe(true);
+    Object.assign(repo.rows.get(created.id)!, { attempts: 3 });
+    expect((await service.status(created.id, created.guest_token)).status).toBe("failed");
   });
   it("stores the review computed during processing, with the same permission check and lease", async () => {
     const { service, repo, parser } = setup();

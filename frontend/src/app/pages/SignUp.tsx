@@ -10,6 +10,7 @@ import { stashPostAuthRedirect } from "../integration/post-auth-redirect";
 import { mapAuthErrorMessage } from "../integration/auth-error-mapper";
 import { hasSupabaseConfig } from "../integration/config";
 import { trackSignupPageView } from "../integration/analytics";
+import { trackFunnelEvent } from "../integration/funnel-events";
 
 import { readPendingCheckout } from "../integration/pending-checkout";
 import { checkoutPath } from "../integration/subscription-flow";
@@ -64,7 +65,9 @@ export function SignUp() {
     try {
       stashPostAuthRedirect(postSignupDestination);
       const result = await signUp(name, email, password);
+      trackFunnelEvent("signup_completed", "email");
       if (result.needsEmailVerification) {
+        trackFunnelEvent("email_verification_required");
         // The verification link re-enters the app outside router state, so stash
         // the destination for the authenticated layout to pick up.
         stashPostAuthRedirect(postSignupDestination);
@@ -170,7 +173,7 @@ export function SignUp() {
 
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px" style={{ background: "var(--color-border-secondary)" }} />
-            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{"or"}</span>
+            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t("or")}</span>
             <div className="flex-1 h-px" style={{ background: "var(--color-border-secondary)" }} />
           </div>
 

@@ -13,6 +13,11 @@ import {
   type Locale,
 } from "./i18n";
 
+/** A /tr page already names its language, so a first visit there needs no prompt. */
+export function localeForPath(pathname: string): Locale | null {
+  return pathname === "/tr" || pathname.startsWith("/tr/") ? "tr" : null;
+}
+
 export function LanguageSwitcher() {
   const { i18n: instance } = useTranslation();
   const location = useLocation();
@@ -92,7 +97,11 @@ export function LanguageChooser() {
               replace: true,
             });
         }
-      } else setOpen(true);
+      } else {
+        const implied = localeForPath(location.pathname);
+        if (implied) chooseLocale(implied);
+        else setOpen(true);
+      }
     };
     // React hydrates Suspense boundaries after the surrounding shell's effects.
     // Wait for the public page's own effect before changing its initial language.

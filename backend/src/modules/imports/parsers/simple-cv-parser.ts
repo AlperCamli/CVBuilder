@@ -299,6 +299,21 @@ const getPdfOcrLanguages = (): string => {
 };
 
 const getPdfOcrMaxPages = (): number => envNumber("PDF_OCR_MAX_PAGES", 2, 1, 10);
+// A PDF that never settles (seen in production for OCR candidates) must fall back
+// instead of holding the request until the serverless function is killed.
+const getPdfTextTimeoutMs = (): number => envNumber("PDF_TEXT_TIMEOUT_MS", 45_000, 1_000, 120_000);
+const getPdfOcrTimeoutMs = (): number => envNumber("PDF_OCR_TIMEOUT_MS", 45_000, 1_000, 120_000);
+
+export const withTimeout = <T>(work: Promise<T>, ms: number, label: string): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  work.catch(() => undefined);
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    })
+  ]).finally(() => clearTimeout(timer));
+};
 const getPdfOcrRenderScale = (): number => envNumber("PDF_OCR_RENDER_SCALE", 2, 1, 4);
 const getPdfOcrCachePath = (): string => {
   const rawValue = process.env.PDF_OCR_CACHE_PATH;
@@ -2795,7 +2810,7 @@ const maybeExtractRawText = async (
     attemptedStages.push("pdfjs_text");
 
     try {
-      const pdfJsText = await extractPdfTextWithPdfJs(new Uint8Array(safeBytes));
+      const pdfJsText = await withTimeout(extractPdfTextWithPdfJs(new Uint8Array(safeBytes)), getPdfTextTimeoutMs(), "PDF.js text extraction");
       registerCandidate("pdfjs_text", pdfJsText);
     } catch (error) {
       warnings.push(
@@ -2823,7 +2838,7 @@ const maybeExtractRawText = async (
       attemptedStages.push("pdf_ocr_tesseract");
 
       try {
-        const ocrText = await extractPdfTextWithOcr(new Uint8Array(safeBytes));
+        const ocrText = await withTimeout(extractPdfTextWithOcr(new Uint8Array(safeBytes)), getPdfOcrTimeoutMs(), "OCR");
         if (!ocrText.trim()) {
           warnings.push("PDF OCR completed but returned no readable text.");
         }
