@@ -3,7 +3,8 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { translate as t } from "../localization/i18n";
 import { reviewText } from "../localization/review-text";
 import type { GuestReviewPreview } from "../integration/guest-import";
-import { scoreTone } from "./onboarding-flow";
+import { isImageBasedReview, scoreTone } from "./onboarding-flow";
+import { AtsImageWarning } from "../components/AtsImageWarning";
 
 /** Compact pre-signup version of the score page: overall score and the top fixes. */
 export function ScorePreview({ review }: { review: GuestReviewPreview }) {
@@ -21,8 +22,10 @@ export function ScorePreview({ review }: { review: GuestReviewPreview }) {
   }
   const score = Math.max(0, Math.min(100, Math.round(review.score)));
   const circumference = 2 * Math.PI * 34;
-  const fixes = review.improvements.slice(0, 3);
-  return (
+  const imageBased = isImageBasedReview(review);
+  // The warning already explains the first (ATS) fix of an image-based CV.
+  const fixes = review.improvements.slice(imageBased ? 1 : 0, 3);
+  const preview = (
     <div className={`ob-score-preview is-${scoreTone(score)}`}>
       <div className="ob-score-ring" role="img" aria-label={t("CV score: {{score}} out of 100", { score })}>
         <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
@@ -41,9 +44,16 @@ export function ScorePreview({ review }: { review: GuestReviewPreview }) {
             </ul>
           </>
         ) : (
-          <p className="ob-score-solid"><CheckCircle2 size={16} aria-hidden="true" />{t("Your CV is in good shape. Tailor it to a job to stand out.")}</p>
+          imageBased ? null : <p className="ob-score-solid"><CheckCircle2 size={16} aria-hidden="true" />{t("Your CV is in good shape. Tailor it to a job to stand out.")}</p>
         )}
       </div>
     </div>
+  );
+  if (!imageBased) return preview;
+  return (
+    <>
+      <AtsImageWarning className="ob-ats-warning" />
+      {preview}
+    </>
   );
 }

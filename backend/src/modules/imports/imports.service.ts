@@ -6,7 +6,7 @@ import { CV_REVIEW_VERSION, type CvReview } from "../cv-review/cv-review.types";
 import type { CvReviewAiOutput } from "../ai/flows/flow-contracts";
 import type { Logger } from "pino";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
-import { buildCvPreview, buildCvSummaryText, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
+import { buildCvPreview, buildCvSummaryText, createEmptyCvContent, normalizeCvContent } from "../../shared/cv-content/cv-content.utils";
 import type { ImportRecord, ImportStatus, MasterCvRecord } from "../../shared/types/domain";
 import type { CvContent } from "../../shared/cv-content/cv-content.types";
 import { getCvModule } from "../../shared/cv-modules/module-registry";
@@ -53,6 +53,17 @@ const toMasterCvDetail = (row: MasterCvRecord) => {
 const countBlocks = (content: CvContent): number => {
   return content.sections.reduce((sum, section) => sum + section.blocks.length, 0);
 };
+
+/** An image-based PDF with no usable text: nothing to parse, review or send to AI. */
+const isImageWithoutText = (result: Pick<ParseCvFileResult, "rawExtractedText" | "diagnostics">): boolean =>
+  result.diagnostics?.image_based === true && !result.rawExtractedText.trim();
+
+/**
+ * Such an upload still becomes `parsed`, with the empty sections of a new CV, so signup, the
+ * claim, the score page and "continue to editor" work as for any other CV.
+ */
+const withImagePlaceholder = (content: CvContent, result: ParseCvFileResult, moduleType: string): CvContent =>
+  isImageWithoutText(result) ? { ...content, sections: createEmptyCvContent(content.language, moduleType).sections } : content;
 
 const DEFAULT_IMPORTS_STORAGE_BUCKET = "imports";
 const MAX_AI_PARSE_RAW_TEXT_LENGTH = 40_000;
@@ -258,7 +269,7 @@ export class ImportsService {
         mime_type: detail.sourceFile.mime_type,
         import_id: importId
       }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
-      const canonicalizedContent = canonicalizeImportedCvContent(effectiveParseResult.parsedContent);
+      const canonicalizedContent = withImagePlaceholder(canonicalizeImportedCvContent(effectiveParseResult.parsedContent), effectiveParseResult, cvModule.id);
       const sourcePageCount = await readSourcePageCount(parseInput);
       if (sourcePageCount !== null) canonicalizedContent.metadata.source_page_count = sourcePageCount;
       if (cvModule.id === "standard") {
@@ -535,7 +546,7 @@ export class ImportsService {
     const result = allowAi && (!this.privacy || assertPermission) ? await this.resolveEffectiveParseResult(input, {
       original_filename: input.originalFilename, mime_type: input.mimeType
     }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest) : await this.parser.parse(input);
-    const content = canonicalizeImportedCvContent(result.parsedContent);
+    const content = withImagePlaceholder(canonicalizeImportedCvContent(result.parsedContent), result, getCvModule("standard").id);
     const sourcePageCount = await readSourcePageCount(input);
     if (sourcePageCount !== null) content.metadata.source_page_count = sourcePageCount;
     const detected = detectCvLanguage(result.rawExtractedText);
@@ -597,6 +608,10 @@ export class ImportsService {
     }
 
     const extraction = await this.extractRawTextForAi(parseInput);
+    if (isImageWithoutText(extraction.extracted)) {
+      // Never extracted twice (OCR would run again) and never failed for want of an AI parse.
+      return extraction.precomputedFallbackResult ?? { ...extraction.extracted, rawExtractedText: "", parsedContent: createEmptyCvContent("en") };
+    }
     const aiAttempt = await this.tryParseWithAiFlowRunner(
       extraction.extracted, sourceFile, defaultLanguage, session, promptProfile, assertPermission, guest
     );

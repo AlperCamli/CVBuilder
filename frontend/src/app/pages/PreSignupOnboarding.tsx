@@ -45,6 +45,7 @@ import {
   PARSE_GIVE_UP_MS,
   PARSE_SLOW_MS,
   QUESTION_FUNNEL_DETAIL,
+  isImageBasedReview,
   parsingStage,
   phaseFromStatus,
   previewKind,
@@ -192,6 +193,8 @@ function OnboardingFlow() {
   const parseSlow = processing === "parsing" && parseElapsed > PARSE_SLOW_MS;
   const guestFailed = !!guest && !newCv && processing === "failed";
   const scoredReview = guest && !newCv && processing === "ready" && review && typeof review.score === "number" ? review : null;
+  // A PDF saved as an image: the next step is rebuilding it as an ATS-friendly CV.
+  const imageReview = isImageBasedReview(scoredReview);
 
   useEffect(() => {
     if (!guest || (processing !== "ready" && processing !== "failed")) return;
@@ -824,7 +827,7 @@ function OnboardingFlow() {
                     disabled={busy}
                     onClick={() => void continueWithAccount()}
                   >
-                    {scoredReview ? t("Improve my CV") : t("See my CV score")}{" "}<ArrowRight size={17} />
+                    {imageReview ? t("Build an ATS-friendly CV") : scoredReview ? t("Improve my CV") : t("See my CV score")}{" "}<ArrowRight size={17} />
                   </button>
                 ) : emailSent ? (
                   <div className="ob-email-sent">
@@ -938,7 +941,7 @@ function OnboardingFlow() {
                           <Loader2 size={17} className="animate-spin" />
                         ) : (
                           <>
-                            {scoredReview ? t("Create account & improve my CV") : t("Create account & see my score")}{" "}
+                            {imageReview ? t("Create account & build an ATS-friendly CV") : scoredReview ? t("Create account & improve my CV") : t("Create account & see my score")}{" "}
                             <ArrowRight size={17} />
                           </>
                         )}

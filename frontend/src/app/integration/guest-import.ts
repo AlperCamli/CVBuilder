@@ -23,6 +23,8 @@ export interface GuestReviewPreview {
   summary: string;
   strengths: string[];
   improvements: string[];
+  /** "image_based": the PDF is a picture of text that applicant tracking systems can't read. */
+  ats_blocker?: "image_based" | null;
 }
 export interface GuestStatus {
   answers: OnboardingAnswers;

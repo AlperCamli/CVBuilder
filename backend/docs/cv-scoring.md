@@ -79,19 +79,88 @@ a basic review. A failed AI review never fails the upload.
   automatic penalties. `assessed_weight` and `status: partial` explain scope.
 - Failed/pending imports, absent or nearly empty readable content, low-confidence
   extraction, binary decoding, heuristic PDF recovery and OCR all withhold the
-  numerical score (`status: unscorable`), and no AI review is requested. OCR
-  recovery is useful for editing, but it does not prove that an ATS can read the
-  original scanned file.
+  numerical score (`status: unscorable`), and no AI review is requested, unless
+  the upload is an image-based PDF (next section), which always gets a low score.
+  OCR recovery is useful for editing, but it does not prove that an ATS can read
+  the original file.
 - A failed re-parse clears stale content and extraction evidence so a previous
   successful parse cannot produce a misleading score.
 - Stored reviews are used only when their `version` is `cv-review-v2`; anything
   older is recomputed as a basic review on read.
+
+## Image-based CVs
+
+Some PDFs are pictures of text, typically exports from design tools such as Canva:
+no text layer, or a garbled one. An ATS reads the text layer, so it sees an almost
+empty page. These uploads get a low score that says so, instead of a failure or
+"Score unavailable", and the UI pushes the user to rebuild the CV in the editor.
+
+**Detection** (`simple-cv-parser.ts`, `classifyPdfTextLayer`). Decided from the
+PDF.js result only, before OCR, so it never depends on OCR succeeding:
+
+- Only a PDF that PDF.js opened can be image-based. DOCX, text files and PDFs that
+  PDF.js cannot open (corrupt files, timeouts) are never flagged and keep the
+  existing behavior, including the guest failure message.
+- `text_layer` is `missing` when PDF.js found no words, `ok` when its text is
+  reliable (the same rule that makes it the final text) and has at least
+  `max(MIN_TEXT_LAYER_WORDS = 40, MIN_TEXT_LAYER_WORDS_PER_PAGE = 20 × pages)`
+  words (pages counted up to 5), and `poor` otherwise. Every text PDF stored in
+  production when this was added had at least 120 words.
+- `image_based = text_layer !== "ok"`. The diagnostics also store `page_count` and
+  `ocr` (`recovered`, `no_text`, `failed`, `timed_out`, `disabled`, `skipped_large`).
+- For an image-based PDF, token-heuristic and UTF-8 output is binary noise: it is
+  discarded (`raw_extracted_text` is empty) unless the text is a reliable PDF.js
+  layer or usable OCR.
+
+**Scoring** (`cv-review.ts`). The only change to the formula; every other path is
+unchanged.
+
+| Case | Score | Review |
+| --- | --- | --- |
+| Image-based, OCR recovered usable text (`ocr: "recovered"`) | Content scored as usual (AI or basic), then the total is capped at `IMAGE_BASED_SCORE_CAP = 30` | `ats` dimension score 0 with a reason; ATS improvement first; summary leads with the ATS problem |
+| Image-based, no usable text (OCR failed, timed out, disabled, skipped, or found nothing usable) | Fixed `IMAGE_BASED_NO_TEXT_SCORE = 10` | `method: "basic"`, `status: "partial"`, `assessed_weight: 5`, `ats` = 0, every other dimension `score: null` "Not assessed"; no AI review is requested |
+
+Both set `ats_blocker: "image_based"`, which the API, the guest preview and the
+frontend read. `status: "partial"` (not `unscorable`) makes the UI show the number:
+the score page and the pre-signup preview show "Score unavailable" only when
+`score` is null. The fixed 10 is a product floor, not the weighted average of the
+assessed weight (which would be 0): it signals "very low" without claiming that
+the content itself is worthless.
+
+Why: the ATS problem dominates whatever the content is, so a well-written CV saved
+as an image still has to read as a low score; and an upload we cannot read is
+exactly the user who needs the editor, so it must not end in a dead end. Uploads
+without usable text are parsed with the empty sections of a new CV
+(`createEmptyCvContent`) and `needs_language_confirmation`, so signup, the claim
+(`claim_guest_import` needs `status = 'parsed'` and non-null `parsed_content`), the
+score page and "continue to editor" work unchanged. Neither the AI parse nor the
+AI review runs for them, also when AI analysis is required.
+
+**Version.** `CV_REVIEW_VERSION` stays `cv-review-v2`. The rule only applies to new
+diagnostics (`image_based` is absent from older uploads, so recomputing them gives
+the same review), and bumping the version would discard every stored AI review and
+recompute it as a basic review. `ats_blocker` is optional, so older stored reviews
+remain valid.
+
+**OCR.** OCR (tesseract.js in a worker thread, pages rendered with
+`@napi-rs/canvas`) is optional: an image-based PDF gets its review without it.
+It is capped by `PDF_OCR_TIMEOUT_MS` (30 s) and the worker thread is terminated on
+timeout; it is skipped for image-based PDFs above `PDF_OCR_MAX_BYTES` (8 MB), and
+skipped up front when its runtime files are missing from the deployment.
+`PDF_OCR_ENABLED=false` turns it off. See `environment.md`.
 
 ## Presentation
 
 The CV score page shows the score, up to three strengths and up to three
 weaknesses. The method (score breakdown, per-dimension evidence, formula and
 limitations) stays inside the collapsed "How we evaluate your CV" section.
+
+For an image-based review, the score page and the pre-signup preview show an
+"ATS systems can't read your CV" block above the score, and the primary action is
+"Rebuild as an ATS-friendly CV" (opens the editor with any recovered content, or
+the empty sections, and starts the onboarding tutorial; a free action). The
+pre-signup funnel counts these previews as `onboarding_score_preview` with detail
+`image_based` instead of `scored`.
 
 This is a product rubric, not an industry-standard ATS scoring formula or a
 hiring prediction. No visual layout, columns, fonts, headers or exported-file
@@ -127,6 +196,12 @@ reserved server metadata inside the CV JSONB column; reads extract and strip it.
 
 ## Verification
 
+`tests/image-based-cv.unit.test.ts` covers detection (the real parser in a Node
+child process, with OCR off), both image-based branches and that text PDFs score
+exactly as before; `tests/imports.service.integration.test.ts` and
+`tests/guest-imports.integration.test.ts` check that an image-based upload is
+parsed with a low score, without AI calls, can be claimed and converted, and that
+the guest deadline still fails a parse that never finishes.
 `tests/cv-review.unit.test.ts` covers the level curve and weights, the average
 calibration, the impact cap, quote verification, ordering, incomplete ratings,
 contact redaction in the AI input, unscorable content and the basic fallback

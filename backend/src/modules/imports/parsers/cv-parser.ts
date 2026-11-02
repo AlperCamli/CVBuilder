@@ -10,10 +10,29 @@ export type ParserExtractionStage =
 
 export type ParserExtractionConfidence = "high" | "medium" | "low";
 
+/**
+ * What PDF.js found in a PDF it could open: usable text, too little or garbled text ("poor"),
+ * or no text at all ("missing"). Absent for DOCX/text files and for PDFs PDF.js could not open.
+ */
+export type PdfTextLayer = "ok" | "poor" | "missing";
+
+/** Why OCR did or did not supply the final text of a PDF that needed it. */
+export type PdfOcrOutcome = "recovered" | "no_text" | "failed" | "timed_out" | "disabled" | "skipped_large";
+
 export interface ParseCvFileDiagnostics {
   mime_type: string;
   attempted_stages: ParserExtractionStage[];
   final_stage: ParserExtractionStage;
+  /** PDF page count reported by PDF.js. */
+  page_count?: number | null;
+  text_layer?: PdfTextLayer;
+  /**
+   * A PDF that PDF.js opened but whose text layer is not usable: a picture of text, often a
+   * design-tool export. Decided before OCR, so it never depends on OCR succeeding.
+   */
+  image_based?: boolean;
+  /** Set when OCR was needed; "recovered" means the final text came from OCR. */
+  ocr?: PdfOcrOutcome;
   quality: {
     score: number;
     confidence: ParserExtractionConfidence;

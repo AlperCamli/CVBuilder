@@ -69,9 +69,14 @@ For `application/pdf`, extraction is layered:
 
 The parser always returns `parsed` content when technically possible; extraction quality issues are returned as warnings instead of hard failures.
 
+An image-based PDF (PDF.js opened it but found no usable text layer) is flagged in
+`diagnostics.image_based` / `text_layer` before OCR runs; see `cv-scoring.md`,
+"Image-based CVs". Its upload is parsed and reviewed even when OCR is off or fails.
+
 OCR runtime controls:
 - `PDF_OCR_ENABLED`
-- `PDF_OCR_LANGUAGES` (default `eng`)
+- `PDF_OCR_LANGUAGES` (default `eng+tur`)
+- `PDF_OCR_TIMEOUT_MS` (default `30000`) and `PDF_OCR_MAX_BYTES` (default 8 MB)
 - `PDF_OCR_MAX_PAGES` (default `2`)
 - `PDF_OCR_RENDER_SCALE` (default `2`)
 - `PDF_OCR_CACHE_PATH` (default `/tmp/cv-builder-ocr-cache`)

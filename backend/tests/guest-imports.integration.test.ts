@@ -20,6 +20,9 @@ import type { ImportsRepository } from "../src/modules/imports/imports.repositor
 import { createGuestImportsRouter } from "../src/modules/guest-imports/guest-imports.routes";
 import { ConflictError, NotFoundError } from "../src/shared/errors/app-error";
 import { personalizationGuidance } from "../src/modules/guest-imports/personalization";
+import { ImportsService } from "../src/modules/imports/imports.service";
+import type { CvParser } from "../src/modules/imports/parsers/cv-parser";
+import type { MasterCvRepository } from "../src/modules/master-cv/master-cv.repository";
 
 class MemoryGuests implements GuestImportsRepository {
   rows = new Map<string, GuestImport>();
@@ -206,7 +209,7 @@ describe("guest onboarding", () => {
     const status = await service.process(created.id, created.guest_token);
     expect(status.review).toEqual({
       score: 64, status: "complete", method: "ai", summary: "Solid base.",
-      strengths: ["a", "b", "c"], improvements: ["one", "two", "three"],
+      strengths: ["a", "b", "c"], improvements: ["one", "two", "three"], ats_blocker: null,
     });
     expect(JSON.stringify(status)).not.toContain("private evidence");
     await expect(service.status(created.id, "b".repeat(43))).rejects.toThrow(NotFoundError);
@@ -355,5 +358,46 @@ describe("guest onboarding", () => {
     expect(
       personalizationGuidance({ education: "doctorate" }).join(" "),
     ).toContain("not verified CV facts");
+  });
+});
+
+describe("image-based PDF uploads before signup", () => {
+  const diagnostics = {
+    mime_type: "application/pdf", attempted_stages: ["pdfjs_text", "pdf_token_heuristic"], final_stage: "pdf_token_heuristic",
+    page_count: 1, text_layer: "missing", image_based: true, ocr: "disabled",
+    quality: { score: 55, confidence: "medium", low_confidence: false, natural_language_ratio: 0.5, symbol_ratio: 0.4, repeated_token_ratio: 0.5, entropy_ratio: 0.99 },
+  } as const;
+  // The real ImportsService parse and review around a parser that reports an image without text.
+  function withImageParser(parse: CvParser["parse"], deadlineMs?: number) {
+    const repo = new MemoryGuests();
+    const storage = {
+      createSignedUploadUrl: vi.fn(async (_bucket, path) => ({ storage_path: path, token: "signed-upload-proof" })),
+      downloadStorageObject: vi.fn(async () => pdf),
+    } as unknown as ImportsRepository;
+    const imports = new ImportsService(storage, {} as MasterCvRepository, { parse });
+    return { repo, service: new GuestImportsService(repo, storage, imports, undefined, deadlineMs) };
+  }
+
+  it("is parsed with a low score and an ATS warning instead of failing, and can be claimed", async () => {
+    const { repo, service } = withImageParser(async () => ({
+      parserName: "smart_pdf_parser_v2", rawExtractedText: "", warnings: [], diagnostics: { ...diagnostics, attempted_stages: [...diagnostics.attempted_stages], quality: { ...diagnostics.quality } },
+      parsedContent: { version: "v1", language: "en", metadata: {}, sections: [] },
+    }));
+    const created = await service.create(input);
+    const status = await service.process(created.id, created.guest_token);
+    expect(status).toMatchObject({ status: "parsed", error_message: null });
+    expect(status.review).toMatchObject({ score: 10, status: "partial", method: "basic", ats_blocker: "image_based" });
+    expect(status.review!.improvements[0]).toMatch(/^Rebuild your CV with selectable text/);
+    expect(repo.rows.get(created.id)!.cv_review?.summary).toMatch(/^ATS systems can't read this CV/);
+    const claimed = await service.claim(created.id, created.guest_token, "owner");
+    expect(claimed.import_id).toEqual(expect.any(String));
+  });
+
+  it("still fails with the timeout message when reading the file outlives the deadline", async () => {
+    const { service } = withImageParser(() => new Promise(() => undefined), 20);
+    const created = await service.create(input);
+    const status = await service.process(created.id, created.guest_token);
+    expect(status).toMatchObject({ status: "failed", retry_available: false, review: null });
+    expect(status.error_message).toContain("took too long");
   });
 });

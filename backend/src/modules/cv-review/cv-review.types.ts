@@ -44,4 +44,9 @@ export interface CvReview {
   matched_keywords: string[];
   missing_keywords: string[];
   limitations: string[];
+  /**
+   * A problem that stops applicant tracking systems from reading the source file.
+   * "image_based": the PDF has no usable text layer (see cv-scoring.md). Absent otherwise.
+   */
+  ats_blocker?: "image_based";
 }

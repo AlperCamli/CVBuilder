@@ -41,6 +41,8 @@ function reviewPreview(row: GuestImport) {
     summary: review.summary ?? "",
     strengths: (review.strengths ?? []).slice(0, 3),
     improvements: (review.improvements ?? []).slice(0, 3),
+    // Drives the "ATS systems can't read your CV" warning before signup.
+    ats_blocker: review.ats_blocker ?? null,
   };
 }
 export class GuestImportsService {

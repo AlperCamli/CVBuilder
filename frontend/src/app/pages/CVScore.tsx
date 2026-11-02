@@ -1,11 +1,13 @@
-import { LANGUAGES, translate as t } from "../localization/i18n";
+import { LANGUAGES, documentLocale, i18n, translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { personalizedGuidance } from "../onboarding/pre-signup-questions";
-import { scoreResumePath } from "../onboarding/onboarding-flow";
+import { isImageBasedReview, scoreResumePath } from "../onboarding/onboarding-flow";
+import { AtsImageWarning, ImageBasedActions } from "../components/AtsImageWarning";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
+import { hasCvText } from "../components/AtsImageWarning.helpers";
 import type { CvContent, CvReview } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { useOnboarding } from "../contexts/OnboardingContext";
@@ -72,7 +74,9 @@ export function CVScore() {
 
         setReview(result.review ?? null);
         setParsedContent(result.parsed_content);
-        setCvLanguage(params.get("language") ?? (result.parsed_content?.metadata.needs_language_confirmation ? "" : result.parsed_content?.language ?? ""));
+        // An image without recovered text has no language to confirm: start the new CV in the interface language.
+        const blankImage = isImageBasedReview(result.review) && !hasCvText(result.parsed_content);
+        setCvLanguage(params.get("language") ?? (blankImage ? documentLocale(i18n.language) ?? "en" : result.parsed_content?.metadata.needs_language_confirmation ? "" : result.parsed_content?.language ?? ""));
         setModuleType(result.module_type);
       } catch (err) {
         if (cancelled) {
@@ -101,6 +105,8 @@ export function CVScore() {
 
   const improvements = useMemo(() => review?.improvements ?? [], [review]);
   const parseNeedsManualReview = review?.status === "unscorable" || !review;
+  const imageBased = isImageBasedReview(review);
+  const recoveredText = hasCvText(parsedContent);
 
   const scoreViewTracked = useRef(false);
   useEffect(() => {
@@ -162,10 +168,11 @@ export function CVScore() {
       await applyOnboardingTemplate(api, id, moduleType ?? "standard");
       completeStep("create_cv");
       trackOnboardingStepCompleted({ step: "cv_score", destination: action });
-      navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: true } });
+      // A rebuild without recovered text opens like a new CV: nothing to fit to the upload's length.
+      navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: !(imageBased && !recoveredText) } });
     } catch (err) { setError(err instanceof Error ? err.message : t("Couldn't open your CV. Please try again.")); }
     finally { setConverting(false); }
-  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType, showTrialPrompt]);
+  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType, showTrialPrompt, imageBased, recoveredText]);
   const handleImproveWithAI = () => { void handleAction("improve"); };
   const handleCustomizeForJob = () => { void handleAction("tailor"); };
   const handleReviewInEditor = () => { void handleAction("editor"); };
@@ -196,7 +203,7 @@ export function CVScore() {
       style={{ background: "var(--color-background-secondary)" }}
     >
       <div className="max-w-2xl w-full">
-        {parsedContent && <details className="mb-5 p-4 bg-white border rounded-xl"><summary className="cursor-pointer text-sm font-medium">{t("Review parsed content")}</summary><div className="max-h-96 overflow-y-auto mt-4" lang={cvLanguage || parsedContent.language}>{parsedContent.sections.map(section => <section className="mb-4" key={section.id}><h3 className="font-medium">{section.title}</h3>{section.blocks.map(block => <p key={block.id} className="text-sm whitespace-pre-wrap mt-1">{Object.values(block.fields).map(value => typeof value === "string" ? value : Array.isArray(value) ? value.filter(item=>typeof item==="string").join(" · ") : "").filter(Boolean).join("\n")}</p>)}</section>)}</div></details>}
+        {parsedContent && recoveredText && <details className="mb-5 p-4 bg-white border rounded-xl"><summary className="cursor-pointer text-sm font-medium">{t("Review parsed content")}</summary><div className="max-h-96 overflow-y-auto mt-4" lang={cvLanguage || parsedContent.language}>{parsedContent.sections.map(section => <section className="mb-4" key={section.id}><h3 className="font-medium">{section.title}</h3>{section.blocks.map(block => <p key={block.id} className="text-sm whitespace-pre-wrap mt-1">{Object.values(block.fields).map(value => typeof value === "string" ? value : Array.isArray(value) ? value.filter(item=>typeof item==="string").join(" · ") : "").filter(Boolean).join("\n")}</p>)}</section>)}</div></details>}
         {parsedContent && moduleType !== "medical_uk" && <div className="mb-5 p-4 bg-white border rounded-xl">
           <label className="text-sm font-medium">{t("Source CV language")}
             <select value={cvLanguage} onChange={event => { setCvLanguage(event.target.value); }} className="ml-3 border rounded-lg px-3 py-2">
@@ -249,6 +256,13 @@ export function CVScore() {
             </div>
           )}
 
+          {!scratch && imageBased && (
+            <AtsImageWarning
+              className="mb-6"
+              note={recoveredText ? t("We recovered your text with OCR, so you can start from it in the editor.") : t("We couldn't recover any text, so you'll start from a clean CV.")}
+            />
+          )}
+
           <div className="mb-8">
             {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, then add your experience to receive useful AI feedback.")}</p> : review ? (
               <CvReviewPanel review={review} />
@@ -273,6 +287,17 @@ export function CVScore() {
 
           {freeAccount && <p className="mb-4 text-sm text-slate-600">{t("Your first tailored CV is free. Start a free trial to download it and unlock every AI feature.")}</p>}
           {selectedTemplate && <p className="mb-4 text-sm">{t("Selected template")}: {onboardingTemplateName(selectedTemplate)} <button className="underline" onClick={() => { clearOnboardingTemplate(); setSelectedTemplate(null); setError(null); }}>{t("Use default template")}</button></p>}
+          {!scratch && imageBased ? (
+            <ImageBasedActions
+              recoveredText={recoveredText}
+              converting={converting}
+              canOpen={!!parsedContent}
+              onRebuild={handleReviewInEditor}
+              onTailor={handleCustomizeForJob}
+              onImprove={handleImproveWithAI}
+              onUploadAnother={() => navigate("/app/create")}
+            />
+          ) : (
           <div className="space-y-3">
             {(fromGuest || scratch) && (
               <button
@@ -348,6 +373,7 @@ export function CVScore() {
                 {t("Review parsed result in editor")}</button>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>

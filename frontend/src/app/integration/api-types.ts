@@ -1193,5 +1193,7 @@ export interface CvReview {
   matched_keywords: string[];
   missing_keywords: string[];
   limitations: string[];
+  /** "image_based": the uploaded PDF has no usable text layer, so applicant tracking systems can't read it. */
+  ats_blocker?: "image_based";
 }
 

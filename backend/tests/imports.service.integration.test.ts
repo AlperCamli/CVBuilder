@@ -1076,3 +1076,108 @@ describe("CV review v2 at parse time", () => {
     expect([...tracked.runs.values()].find(run => run.flow_type === "cv_review")?.status).toBe("failed");
   });
 });
+
+describe("image-based PDF uploads", () => {
+  const quality = { score: 55, confidence: "medium" as const, low_confidence: false, natural_language_ratio: 0.55, symbol_ratio: 0.38, repeated_token_ratio: 0.5, entropy_ratio: 0.99 };
+  const noText = { mime_type: "application/pdf", attempted_stages: ["pdfjs_text" as const, "pdf_token_heuristic" as const], final_stage: "pdf_token_heuristic" as const, page_count: 1, text_layer: "missing" as const, image_based: true, ocr: "timed_out" as const, quality };
+  const ocrText = "Alex Doe alex@example.com Data Analyst at Example Ltd. Built BI dashboards for 40 managers and automated weekly sales reporting.";
+  const recovered = { ...noText, attempted_stages: [...noText.attempted_stages, "pdf_ocr_tesseract" as const], final_stage: "pdf_ocr_tesseract" as const, ocr: "recovered" as const, quality: { ...quality, score: 90, confidence: "high" as const } };
+  const emptyContent = (): CvContent => ({ version: "v1", language: "en", metadata: {}, sections: [] });
+  const parsedContent = (): CvContent => ({
+    version: "v1", language: "en", metadata: {}, sections: [
+      { id: "h", type: "header", title: "Header", order: 0, meta: {}, blocks: [{ id: "h1", type: "header", order: 0, visibility: "visible", fields: { full_name: "Alex Doe", email: "alex@example.com" }, meta: {} }] },
+      { id: "e", type: "experience", title: "Experience", order: 1, meta: {}, blocks: [{ id: "e1", type: "experience", order: 0, visibility: "visible", fields: { role: "Data Analyst", company: "Example Ltd", description: ["Built BI dashboards for 40 managers.", "Automated weekly sales reporting for the regional team."] }, meta: {} }] }
+    ]
+  });
+  const pdfBytes = new Uint8Array(Buffer.from("%PDF-1.7 image"));
+  const calls: string[] = [];
+  const provider = (failOnCall: boolean): AiProvider => {
+    const mock = new MockAiProvider("mock-model");
+    return {
+      providerName: "mock",
+      resolveModelName: () => "mock-model",
+      async generate(request: AiProviderRequest): Promise<AiProviderResult> {
+        calls.push(request.flow_type);
+        if (failOnCall) throw new Error("No AI call is expected for an image without text");
+        if (request.flow_type === "cv_parse") return { provider: "mock", model_name: "mock-model", output_payload: { parsed_content: parsedContent(), warnings: [] } };
+        return mock.generate(request);
+      }
+    };
+  };
+
+  it("parses an image without usable text with the empty sections of a new CV, a low score and no AI call", async () => {
+    calls.length = 0;
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, pdfBytes, "application/pdf", "canva.pdf");
+    const parser = new StubCvParser(
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: "", warnings: ["No readable text was extracted from the source file."], diagnostics: noText },
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: "", parsedContent: emptyContent(), warnings: [], diagnostics: noText },
+      true
+    );
+    const tracked = trackedAiService(provider(true));
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service);
+    const session = buildSession(userId);
+    const parsed = await service.parseImport(session, repository.importId);
+    expect(parsed.parse_summary.status).toBe("parsed");
+    expect(parser.extractCalls).toBe(1);
+    expect(parser.parseCalls).toBe(0);
+    expect(calls).toEqual([]);
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review).toMatchObject({ score: 10, status: "partial", method: "basic", ats_blocker: "image_based" });
+    expect(result.raw_extracted_text).toBe("");
+    expect(result.parsed_content?.sections.map(s => s.type)).toEqual(["summary", "experience", "education", "skills"]);
+    expect(result.parsed_content?.metadata).toMatchObject({ detected_language: null, needs_language_confirmation: true });
+    // "Rebuild as an ATS-friendly CV" saves the placeholder as a master CV and opens the editor.
+    await service.updateImportResult(session, repository.importId, { parsed_content: { ...result.parsed_content!, language: "en" } });
+    const converted = await service.createMasterCvFromImport(session, repository.importId, { language: "en" });
+    expect(converted.master_cv.current_content.sections.map(s => s.type)).toEqual(["summary", "experience", "education", "skills"]);
+  });
+
+  it("keeps the same result for a guest when AI analysis is required", async () => {
+    calls.length = 0;
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, pdfBytes, "application/pdf", "canva.pdf");
+    const parser = new StubCvParser(
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: "", warnings: [], diagnostics: noText },
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: "", parsedContent: emptyContent(), warnings: [], diagnostics: noText },
+      true
+    );
+    const runner = {
+      parseCvContent: vi.fn(), reviewCvContent: vi.fn(),
+      parseGuestCvContent: vi.fn(async () => { throw new Error("unexpected AI parse"); }),
+      reviewGuestCvContent: vi.fn(async () => { throw new Error("unexpected AI review"); })
+    };
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, runner as never, undefined, {} as never);
+    const guest = { guest_import_id: randomUUID(), guest_lease_id: randomUUID() };
+    const allow = async () => undefined;
+    const result = await service.parseGuestFile({ originalFilename: "canva.pdf", mimeType: "application/pdf", sizeBytes: pdfBytes.length, bytes: pdfBytes }, true, allow, guest);
+    expect(result.parsedContent.sections).toHaveLength(4);
+    const review = await service.reviewGuestFile(result, true, allow, guest);
+    expect(review).toMatchObject({ score: 10, ats_blocker: "image_based" });
+    expect(runner.parseGuestCvContent).not.toHaveBeenCalled();
+    expect(runner.reviewGuestCvContent).not.toHaveBeenCalled();
+  });
+
+  it("scores OCR-recovered content with the AI review, capped, with the ATS problem first", async () => {
+    calls.length = 0;
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, pdfBytes, "application/pdf", "scan.pdf");
+    const parser = new StubCvParser(
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: ocrText, warnings: [], diagnostics: recovered },
+      { parserName: "smart_pdf_parser_v2", rawExtractedText: ocrText, parsedContent: emptyContent(), warnings: [], diagnostics: recovered },
+      true
+    );
+    const tracked = trackedAiService(provider(false));
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service);
+    const session = buildSession(userId);
+    await service.parseImport(session, repository.importId);
+    expect(calls).toEqual(["cv_parse", "cv_review"]);
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review).toMatchObject({ method: "ai", ats_blocker: "image_based" });
+    expect(result.review.score).toBeLessThanOrEqual(30);
+    expect(result.review.dimensions.find(d => d.id === "ats")!.score).toBe(0);
+    expect(result.review.dimensions.find(d => d.id === "wording")!.score).not.toBeNull();
+    expect(result.review.improvements[0]).toMatch(/^Rebuild your CV with selectable text/);
+    expect(result.parsed_content?.sections.map(s => s.type)).toEqual(["header", "experience"]);
+  });
+});

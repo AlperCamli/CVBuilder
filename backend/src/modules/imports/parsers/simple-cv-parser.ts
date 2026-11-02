@@ -1,5 +1,6 @@
 import { detectCvLanguage } from "../../../shared/localization/languages";
-import { extname } from "node:path";
+import { dirname, extname, join } from "node:path";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import JSZip from "jszip";
 import { normalizeCvContent } from "../../../shared/cv-content/cv-content.utils";
@@ -13,8 +14,11 @@ import type {
   ParseCvFileInput,
   ParseCvFileResult,
   ParserExtractionConfidence,
-  ParserExtractionStage
+  ParserExtractionStage,
+  PdfOcrOutcome,
+  PdfTextLayer
 } from "./cv-parser";
+import { mkdir } from "node:fs/promises";
 
 type SectionType =
   | "header"
@@ -302,18 +306,34 @@ const getPdfOcrMaxPages = (): number => envNumber("PDF_OCR_MAX_PAGES", 2, 1, 10)
 // A PDF that never settles (seen in production for OCR candidates) must fall back
 // instead of holding the request until the serverless function is killed.
 const getPdfTextTimeoutMs = (): number => envNumber("PDF_TEXT_TIMEOUT_MS", 45_000, 1_000, 120_000);
-const getPdfOcrTimeoutMs = (): number => envNumber("PDF_OCR_TIMEOUT_MS", 45_000, 1_000, 120_000);
+// OCR is optional now that image-based PDFs get their own review without it, so it takes a
+// smaller share of the guest processing budget than PDF.js (one page takes ~2 s locally).
+const getPdfOcrTimeoutMs = (): number => envNumber("PDF_OCR_TIMEOUT_MS", 30_000, 1_000, 120_000);
+// Rendering decodes the embedded images on the main thread; very large image PDFs skip OCR.
+const getPdfOcrMaxBytes = (): number => envNumber("PDF_OCR_MAX_BYTES", 8 * 1024 * 1024, 64 * 1024, 50 * 1024 * 1024);
 
-export const withTimeout = <T>(work: Promise<T>, ms: number, label: string): Promise<T> => {
+export class StageTimeoutError extends Error {}
+
+export const withTimeout = <T>(work: Promise<T>, ms: number, label: string, onTimeout?: () => void): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   work.catch(() => undefined);
   return Promise.race([
     work,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+      timer = setTimeout(() => {
+        onTimeout?.();
+        reject(new StageTimeoutError(`${label} timed out after ${Math.round(ms / 1000)}s`));
+      }, ms);
     })
   ]).finally(() => clearTimeout(timer));
 };
+
+// PDF.js reads a real text layer. Below these word counts (per page, over the first pages) the
+// file is effectively a picture of text, and an ATS reading it sees an almost empty page.
+// Every text PDF stored in production so far has at least 120 words.
+export const MIN_TEXT_LAYER_WORDS = 40;
+export const MIN_TEXT_LAYER_WORDS_PER_PAGE = 20;
+const TEXT_LAYER_PAGES_CHECKED = 5;
 const getPdfOcrRenderScale = (): number => envNumber("PDF_OCR_RENDER_SCALE", 2, 1, 4);
 const getPdfOcrCachePath = (): string => {
   const rawValue = process.env.PDF_OCR_CACHE_PATH;
@@ -907,7 +927,7 @@ const extractPdfTextHeuristic = (bytes: Uint8Array): string => {
   return matches.slice(0, 20000).map((token) => decodePdfStringToken(token)).join("\n");
 };
 
-const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
+const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<{ text: string; pageCount: number }> => {
   const pdfjs = (await runtimeImport(resolvePdfJsModuleSpecifier())) as {
     getDocument: (params: Record<string, unknown>) => { promise: Promise<any> };
   };
@@ -920,6 +940,7 @@ const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
   });
 
   const document = await loadingTask.promise;
+  const pageCount: number = document.numPages;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
@@ -972,15 +993,50 @@ const extractPdfTextWithPdfJs = async (bytes: Uint8Array): Promise<string> => {
     await document.destroy();
   }
 
-  return pages.join("\n\n").trim();
+  return { text: pages.join("\n\n").trim(), pageCount };
 };
 
-const extractPdfTextWithOcr = async (bytes: Uint8Array): Promise<string> => {
-  const [{ createCanvas }, pdfjsModule, tesseract] = await Promise.all([
+type TesseractModule = {
+  createWorker: (
+    langs: string,
+    oem?: number,
+    options?: Record<string, unknown>
+  ) => Promise<{ recognize: (image: Buffer) => Promise<{ data?: { text?: unknown } }>; terminate: () => Promise<unknown> }>;
+};
+
+// The OCR worker thread reads these at runtime through computed paths that Vercel's file
+// tracing cannot see (vercel.json includeFiles lists them). If they are missing, tesseract.js's
+// worker crashes without rejecting the job and the parse would wait for its timeout, so OCR is
+// skipped up front instead.
+const OCR_CORE_FILES = ["tesseract-core-lstm.wasm", "tesseract-core-simd-lstm.wasm", "tesseract-core-relaxedsimd-lstm.wasm"];
+export const missingOcrRuntime = (): string | null => {
+  try {
+    require.resolve("tesseract.js/src/worker-script/node/index.js");
+    const coreDirectory = dirname(require.resolve("tesseract.js-core/tesseract-core-lstm.js"));
+    return OCR_CORE_FILES.find((file) => !existsSync(join(coreDirectory, file))) ?? null;
+  } catch (error) {
+    return error instanceof Error ? error.message.split("\n")[0] : "unknown";
+  }
+};
+
+/** OCR of the first pages; onCancel receives a hook that stops the worker thread on timeout. */
+const extractPdfTextWithOcr = async (bytes: Uint8Array, onCancel: (cancel: () => void) => void): Promise<string> => {
+  // A timeout can arrive at any point, also while the worker is still loading language data.
+  let terminated = false;
+  let stopWorker: (() => void) | null = null;
+  const terminate = () => {
+    terminated = true;
+    stopWorker?.();
+  };
+  onCancel(terminate);
+  const [{ createCanvas }, pdfjsModule, tesseractModule] = await Promise.all([
     import("@napi-rs/canvas"),
     runtimeImport(resolvePdfJsModuleSpecifier()),
     import("tesseract.js")
   ]);
+  // CommonJS output exposes createWorker directly; an ESM loader (tsx, Vitest) nests it in default.
+  const imported = tesseractModule as unknown as TesseractModule & { default?: TesseractModule };
+  const tesseract = typeof imported.createWorker === "function" ? imported : imported.default!;
   const pdfjs = pdfjsModule as {
     getDocument: (params: Record<string, unknown>) => { promise: Promise<any> };
   };
@@ -996,45 +1052,53 @@ const extractPdfTextWithOcr = async (bytes: Uint8Array): Promise<string> => {
   const pageTexts: string[] = [];
   const maxPages = Math.min(document.numPages, getPdfOcrMaxPages());
   const renderScale = getPdfOcrRenderScale();
-  const languages = getPdfOcrLanguages();
+  const cachePath = getPdfOcrCachePath();
+  // Without the directory tesseract.js silently skips caching and downloads the language data again.
+  await mkdir(cachePath, { recursive: true }).catch(() => undefined);
 
-  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
-    const page = await document.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: renderScale });
-    const width = Math.max(1, Math.ceil(viewport.width));
-    const height = Math.max(1, Math.ceil(viewport.height));
+  try {
+    if (terminated) return "";
+    const worker = await tesseract.createWorker(getPdfOcrLanguages(), 1, { logger: () => undefined, cachePath });
+    stopWorker = () => {
+      stopWorker = null;
+      void worker.terminate().catch(() => undefined);
+    };
+    if (terminated) stopWorker();
 
-    const canvas = createCanvas(width, height);
-    const context = canvas.getContext("2d");
-    if (!context) {
-      continue;
+    for (let pageNumber = 1; pageNumber <= maxPages && !terminated; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: renderScale });
+      const width = Math.max(1, Math.ceil(viewport.width));
+      const height = Math.max(1, Math.ceil(viewport.height));
+
+      const canvas = createCanvas(width, height);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        continue;
+      }
+
+      await page
+        .render({
+          canvasContext: context as any,
+          viewport
+        })
+        .promise;
+
+      const result = await worker.recognize(canvas.toBuffer("image/png"));
+      const text = typeof result?.data?.text === "string" ? result.data.text : "";
+      if (text.trim().length > 0) {
+        pageTexts.push(text.trim());
+      }
+
+      if (typeof page.cleanup === "function") {
+        page.cleanup();
+      }
     }
-
-    await page
-      .render({
-        canvasContext: context as any,
-        viewport
-      })
-      .promise;
-
-    const imageBytes = canvas.toBuffer("image/png");
-    const result = await tesseract.recognize(imageBytes, languages, {
-      logger: () => undefined,
-      cachePath: getPdfOcrCachePath()
-    });
-
-    const text = typeof result?.data?.text === "string" ? result.data.text : "";
-    if (text.trim().length > 0) {
-      pageTexts.push(text.trim());
+  } finally {
+    terminate();
+    if (typeof document.destroy === "function") {
+      await document.destroy();
     }
-
-    if (typeof page.cleanup === "function") {
-      page.cleanup();
-    }
-  }
-
-  if (typeof document.destroy === "function") {
-    await document.destroy();
   }
 
   return pageTexts.join("\n\n").trim();
@@ -2685,6 +2749,23 @@ const selectBestCandidate = (candidates: ExtractedTextCandidate[]): ExtractedTex
   })[0];
 };
 
+const isReliablePdfJsCandidate = (candidate: ExtractedTextCandidate): boolean =>
+  !candidate.quality.lowConfidence || (candidate.cleanedText.length >= 180 && candidate.quality.symbolRatio < 0.3);
+
+const isReliableOcrCandidate = (candidate: ExtractedTextCandidate): boolean =>
+  !candidate.quality.lowConfidence || (candidate.cleanedText.length >= 220 && candidate.quality.symbolRatio < 0.28);
+
+/** Classifies what PDF.js read from a PDF it opened. Uses only the PDF.js result, never OCR. */
+export const classifyPdfTextLayer = (candidate: ExtractedTextCandidate | null, pageCount: number): PdfTextLayer => {
+  if (!candidate || candidate.quality.tokenCount === 0) {
+    return "missing";
+  }
+
+  const pagesChecked = Math.min(Math.max(pageCount, 1), TEXT_LAYER_PAGES_CHECKED);
+  const minimumWords = Math.max(MIN_TEXT_LAYER_WORDS, MIN_TEXT_LAYER_WORDS_PER_PAGE * pagesChecked);
+  return isReliablePdfJsCandidate(candidate) && candidate.quality.tokenCount >= minimumWords ? "ok" : "poor";
+};
+
 const selectBestPdfCandidate = (candidates: ExtractedTextCandidate[]): ExtractedTextCandidate | null => {
   if (candidates.length === 0) {
     return null;
@@ -2702,25 +2783,13 @@ const selectBestPdfCandidate = (candidates: ExtractedTextCandidate[]): Extracted
     sorted.find((candidate) => candidate.stage === stage) ?? null;
 
   const pdfJsCandidate = bestByStage("pdfjs_text");
-  if (pdfJsCandidate) {
-    const reliablePdfJs =
-      !pdfJsCandidate.quality.lowConfidence ||
-      (pdfJsCandidate.cleanedText.length >= 180 && pdfJsCandidate.quality.symbolRatio < 0.3);
-
-    if (reliablePdfJs) {
-      return pdfJsCandidate;
-    }
+  if (pdfJsCandidate && isReliablePdfJsCandidate(pdfJsCandidate)) {
+    return pdfJsCandidate;
   }
 
   const ocrCandidate = bestByStage("pdf_ocr_tesseract");
-  if (ocrCandidate) {
-    const reliableOcr =
-      !ocrCandidate.quality.lowConfidence ||
-      (ocrCandidate.cleanedText.length >= 220 && ocrCandidate.quality.symbolRatio < 0.28);
-
-    if (reliableOcr) {
-      return ocrCandidate;
-    }
+  if (ocrCandidate && isReliableOcrCandidate(ocrCandidate)) {
+    return ocrCandidate;
   }
 
   const tokenCandidate = bestByStage("pdf_token_heuristic");
@@ -2742,15 +2811,24 @@ const selectBestCandidateForKind = (
   return selectBestCandidate(candidates);
 };
 
+interface PdfLayerDiagnostics {
+  page_count?: number | null;
+  text_layer?: PdfTextLayer;
+  image_based?: boolean;
+  ocr?: PdfOcrOutcome;
+}
+
 const buildDiagnostics = (
   mimeType: string,
   attemptedStages: ParserExtractionStage[],
-  finalCandidate: ExtractedTextCandidate
+  finalCandidate: ExtractedTextCandidate,
+  pdf: PdfLayerDiagnostics = {}
 ): ParseCvFileDiagnostics => {
   return {
     mime_type: mimeType,
     attempted_stages: attemptedStages,
     final_stage: finalCandidate.stage,
+    ...pdf,
     quality: {
       score: finalCandidate.quality.score,
       confidence: finalCandidate.quality.confidence,
@@ -2778,6 +2856,7 @@ const maybeExtractRawText = async (
 
   const candidates: ExtractedTextCandidate[] = [];
   const attemptedStages: ParserExtractionStage[] = [];
+  const pdfLayer: PdfLayerDiagnostics = {};
 
   const registerCandidate = (stage: ParserExtractionStage, rawText: string): void => {
     const candidate = createCandidate(stage, rawText);
@@ -2810,8 +2889,9 @@ const maybeExtractRawText = async (
     attemptedStages.push("pdfjs_text");
 
     try {
-      const pdfJsText = await withTimeout(extractPdfTextWithPdfJs(new Uint8Array(safeBytes)), getPdfTextTimeoutMs(), "PDF.js text extraction");
-      registerCandidate("pdfjs_text", pdfJsText);
+      const pdfJs = await withTimeout(extractPdfTextWithPdfJs(new Uint8Array(safeBytes)), getPdfTextTimeoutMs(), "PDF.js text extraction");
+      registerCandidate("pdfjs_text", pdfJs.text);
+      pdfLayer.page_count = pdfJs.pageCount;
     } catch (error) {
       warnings.push(
         `PDF.js extraction failed (${error instanceof Error ? error.message : "unknown error"}); trying fallback extractors.`
@@ -2819,6 +2899,11 @@ const maybeExtractRawText = async (
     }
 
     const pdfJsCandidate = candidates.find((candidate) => candidate.stage === "pdfjs_text") ?? null;
+    // Only a PDF that PDF.js opened can be image-based; a corrupt or unreadable file is not.
+    if (pdfLayer.page_count !== undefined) {
+      pdfLayer.text_layer = classifyPdfTextLayer(pdfJsCandidate, pdfLayer.page_count ?? 1);
+      pdfLayer.image_based = pdfLayer.text_layer !== "ok";
+    }
 
     if (!pdfJsCandidate || pdfJsCandidate.quality.lowConfidence || pdfJsCandidate.cleanedText.length < 120) {
       attemptedStages.push("pdf_token_heuristic");
@@ -2827,6 +2912,7 @@ const maybeExtractRawText = async (
 
     const bestSoFar = selectBestCandidateForKind("pdf", candidates);
     const shouldTryOcr =
+      pdfLayer.image_based === true ||
       !bestSoFar ||
       bestSoFar.stage === "pdf_token_heuristic" ||
       bestSoFar.quality.lowConfidence ||
@@ -2834,21 +2920,36 @@ const maybeExtractRawText = async (
       bestSoFar.quality.symbolRatio > 0.25 ||
       bestSoFar.quality.naturalLanguageRatio < 0.55;
 
-    if (shouldTryOcr && isPdfOcrEnabled()) {
+    const missingRuntime = shouldTryOcr && isPdfOcrEnabled() ? missingOcrRuntime() : null;
+    if (shouldTryOcr && isPdfOcrEnabled() && pdfLayer.image_based && input.bytes.length > getPdfOcrMaxBytes()) {
+      pdfLayer.ocr = "skipped_large";
+      warnings.push("PDF OCR was skipped because the image-based PDF is too large to render in time.");
+    } else if (shouldTryOcr && isPdfOcrEnabled() && missingRuntime) {
+      pdfLayer.ocr = "failed";
+      warnings.push(`PDF OCR runtime is unavailable (${missingRuntime}); continuing with non-OCR fallbacks.`);
+    } else if (shouldTryOcr && isPdfOcrEnabled()) {
       attemptedStages.push("pdf_ocr_tesseract");
 
+      let cancelOcr: (() => void) | undefined;
       try {
-        const ocrText = await withTimeout(extractPdfTextWithOcr(new Uint8Array(safeBytes)), getPdfOcrTimeoutMs(), "OCR");
+        const ocrText = await withTimeout(
+          extractPdfTextWithOcr(new Uint8Array(safeBytes), (cancel) => { cancelOcr = cancel; }),
+          getPdfOcrTimeoutMs(),
+          "OCR",
+          () => cancelOcr?.()
+        );
         if (!ocrText.trim()) {
           warnings.push("PDF OCR completed but returned no readable text.");
         }
         registerCandidate("pdf_ocr_tesseract", ocrText);
       } catch (error) {
+        pdfLayer.ocr = error instanceof StageTimeoutError ? "timed_out" : "failed";
         warnings.push(
           `PDF OCR extraction failed (${error instanceof Error ? error.message : "unknown error"}); continuing with non-OCR fallbacks.`
         );
       }
     } else if (shouldTryOcr) {
+      pdfLayer.ocr = "disabled";
       warnings.push("PDF OCR fallback is disabled; scanned/image-only PDFs may parse with lower quality.");
     }
 
@@ -2872,7 +2973,23 @@ const maybeExtractRawText = async (
       decodeUtf8(safeBytes)
     );
 
-  const diagnostics = buildDiagnostics(input.mimeType, attemptedStages, finalCandidate);
+  if (resolvedKind === "pdf" && attemptedStages.includes("pdf_ocr_tesseract") && !pdfLayer.ocr) {
+    pdfLayer.ocr = finalCandidate.stage === "pdf_ocr_tesseract" && isReliableOcrCandidate(finalCandidate) ? "recovered" : "no_text";
+  }
+
+  const diagnostics = buildDiagnostics(input.mimeType, attemptedStages, finalCandidate, pdfLayer);
+  // An image-based PDF keeps only text a reader could trust: a real (if thin) PDF.js text layer
+  // or usable OCR. Token-heuristic and UTF-8 output of such files is binary noise, so it is never
+  // structured, sent to the AI parse or shown in the editor.
+  const usableImageText =
+    (finalCandidate.stage === "pdfjs_text" && isReliablePdfJsCandidate(finalCandidate)) ||
+    pdfLayer.ocr === "recovered";
+  const discardText = pdfLayer.image_based === true && !usableImageText;
+  if (pdfLayer.image_based) {
+    warnings.push(
+      `Image-based PDF: text_layer=${pdfLayer.text_layer}; ocr=${pdfLayer.ocr ?? "not_needed"}; pages=${pdfLayer.page_count ?? "unknown"}.`
+    );
+  }
 
   if (resolvedKind === "pdf" && finalCandidate.stage !== "pdfjs_text") {
     warnings.push(
@@ -2907,12 +3024,12 @@ const maybeExtractRawText = async (
     warnings.push("Extraction confidence is medium. Review detected sections before conversion.");
   }
 
-  if (!finalCandidate.cleanedText.trim()) {
+  if (!finalCandidate.cleanedText.trim() || discardText) {
     warnings.push("No readable text was extracted from the source file.");
   }
 
   return {
-    rawText: finalCandidate.cleanedText,
+    rawText: discardText ? "" : finalCandidate.cleanedText,
     warnings,
     diagnostics,
     resolvedKind
@@ -2995,7 +3112,9 @@ const collectStructuredMappingWarnings = (parsedContent: CvContent): string[] =>
 export class SimpleCvParser implements CvParser {
   async extractRawText(input: ParseCvFileInput): Promise<ExtractCvRawTextResult> {
     const extracted = await maybeExtractRawText(input);
-    const fallbackRaw = extracted.rawText || `${input.originalFilename}\n${input.mimeType}\n${input.sizeBytes}`;
+    // An image-based PDF without usable text stays empty: its review and placeholder content
+    // come from the diagnostics, not from the file name.
+    const fallbackRaw = extracted.rawText || (extracted.diagnostics.image_based ? "" : `${input.originalFilename}\n${input.mimeType}\n${input.sizeBytes}`);
 
     return {
       parserName: parserNameForResolvedKind(extracted.resolvedKind),
@@ -3022,6 +3141,7 @@ export class SimpleCvParser implements CvParser {
 }
 
 export const __private = {
+  createCandidate,
   cleanupExtractedText,
   evaluateTextQuality,
   resolveInputFileKind,

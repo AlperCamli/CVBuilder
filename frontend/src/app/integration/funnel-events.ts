@@ -14,7 +14,7 @@ export const FUNNEL_EVENTS = [
   "onboarding_manual_create",
   "onboarding_question_view", // detail: goal | career_stage | education | source
   "onboarding_signup_view",
-  "onboarding_score_preview", // detail: scored | unscored
+  "onboarding_score_preview", // detail: scored | unscored | image_based
   "signup_completed", // detail: google | email
   "email_verification_required",
   "score_view",

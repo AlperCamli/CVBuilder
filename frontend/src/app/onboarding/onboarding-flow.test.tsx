@@ -82,6 +82,35 @@ describe("score preview before signup", () => {
     expect(html).not.toContain("Fourth");
     expect(html).toContain("is-fair");
   });
+  it("leads an image-based preview with the ATS warning and counts it apart", async () => {
+    const image: GuestReviewPreview = {
+      score: 10, status: "partial", method: "basic", ats_blocker: "image_based", strengths: [],
+      summary: "ATS systems can't read this CV because it is saved as an image. We couldn't read any text in it, so your content was not assessed.",
+      improvements: ["Rebuild your CV with selectable text instead of an image so applicant tracking systems can read it. Our editor creates an ATS-friendly CV in a few minutes.", "Add your experience, education and skills in the editor to get a full content score."],
+    };
+    expect(previewKind(image)).toBe("image_based");
+    expect(previewKind({ ...image, ats_blocker: null })).toBe("scored");
+    const html = renderToStaticMarkup(<ScorePreview review={image} />);
+    expect(html).toContain("ATS systems can’t read your CV");
+    expect(html).toContain("design tools like Canva");
+    expect(html).toContain("Rebuild it as an ATS-friendly CV in a few minutes.");
+    expect(html).toContain("10");
+    expect(html).toContain("is-low");
+    // The first fix repeats the warning, so only the next one is listed.
+    expect(html).not.toContain("Our editor creates");
+    expect(html).toContain("Add your experience, education and skills");
+    expect(html).not.toContain("Score unavailable");
+    expect(renderToStaticMarkup(<ScorePreview review={review} />)).not.toContain("ATS systems");
+    await i18n.changeLanguage("tr");
+    const turkish = renderToStaticMarkup(<ScorePreview review={image} />);
+    expect(turkish).toContain("ATS sistemleri CV’ni okuyamıyor");
+    expect(turkish).toContain("Birkaç dakikada ATS uyumlu bir CV olarak yeniden oluştur.");
+    expect(turkish).toContain("deneyimini, eğitimini ve becerilerini");
+    for (const key of ["Create account & build an ATS-friendly CV", "Build an ATS-friendly CV"]) {
+      expect((tr as Record<string, string>)[key]).toBeTruthy();
+      expect((en as Record<string, string>)[key]).toBeTruthy();
+    }
+  });
   it("keeps the unavailable-score message when the CV could not be scored", () => {
     const html = renderToStaticMarkup(<ScorePreview review={{ ...review, score: null, status: "unscorable", summary: "No readable text." }} />);
     expect(html).toContain("Score unavailable");

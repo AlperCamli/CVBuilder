@@ -33,9 +33,16 @@ export function parsingStage(elapsedMs: number) {
   return "Rating your experience…";
 }
 
-export function previewKind(review: GuestReviewPreview | null | undefined): "scored" | "unscored" | null {
+/** Funnel detail of the pre-signup preview; an image-based CV is counted apart from other scored CVs. */
+export function previewKind(review: GuestReviewPreview | null | undefined): "scored" | "unscored" | "image_based" | null {
   if (!review) return null;
+  if (isImageBasedReview(review)) return "image_based";
   return typeof review.score === "number" ? "scored" : "unscored";
+}
+
+/** A review of a PDF saved as an image: the UI leads with the ATS warning and the rebuild action. */
+export function isImageBasedReview(review: { ats_blocker?: string | null } | null | undefined): boolean {
+  return review?.ats_blocker === "image_based";
 }
 
 /** Score band shared with the score page: 80+ strong, 60+ fair, below needs work. */

@@ -65,10 +65,15 @@
 - `EXPORTS_STORAGE_BUCKET` (default: `exports`)
 - `EXPORT_DOWNLOAD_URL_TTL_SECONDS` (default: `600`, min `60`, max `86400`)
 - `PDF_OCR_ENABLED` (default: `true`, defaults to `false` in `test` runtime)
-- `PDF_OCR_LANGUAGES` (default: `eng`, passed to Tesseract OCR)
+- `PDF_OCR_LANGUAGES` (default: `eng+tur`, passed to Tesseract OCR; language data is downloaded from the jsDelivr CDN on first use and cached in `PDF_OCR_CACHE_PATH`)
 - `PDF_OCR_MAX_PAGES` (default: `2`, min `1`, max `10`)
 - `PDF_OCR_RENDER_SCALE` (default: `2`, min `1`, max `4`)
-- `PDF_OCR_CACHE_PATH` (default: `/tmp/cv-builder-ocr-cache`)
+- `PDF_OCR_CACHE_PATH` (default: `/tmp/cv-builder-ocr-cache`, created on first use)
+- `PDF_OCR_TIMEOUT_MS` (default: `30000`, min `1000`, max `120000`; on timeout the OCR worker thread is terminated)
+- `PDF_OCR_MAX_BYTES` (default: `8388608` = 8 MB; larger image-based PDFs skip OCR)
+- `PDF_TEXT_TIMEOUT_MS` (default: `45000`, min `1000`, max `120000`; PDF.js text extraction)
+
+With OCR off, skipped or failing, an image-based PDF is still parsed and reviewed (see `cv-scoring.md`, "Image-based CVs").
 - `BILLING_CHECKOUT_SUCCESS_URL` (default: `${FRONTEND_APP_URL}/app/pricing?checkout=success`)
 - `BILLING_CHECKOUT_CANCEL_URL` (default: `${FRONTEND_APP_URL}/app/pricing?checkout=cancel`)
 - `BILLING_PORTAL_RETURN_URL` (default: `${FRONTEND_APP_URL}/app/pricing`)

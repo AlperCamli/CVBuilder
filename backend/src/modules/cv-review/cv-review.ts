@@ -28,6 +28,23 @@ const CONTACT = /[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/\S+|www\.\S+|\+?\d[\d ()
 const redact = (text: string): string => text.replace(CONTACT, match => /^[\d+]/.test(match) && match.replace(/\D/g, "").length < 9 ? match : "").replace(/\s+/g, " ").trim();
 const MAX_AI_INPUT_CHARS = 14_000;
 
+// Image-based PDFs: the file has no usable text layer (parser diagnostics.image_based), so an ATS
+// cannot read it whatever its content. See cv-scoring.md, "Image-based CVs".
+/** Highest total for an image-based CV whose content was recovered by OCR and scored. */
+export const IMAGE_BASED_SCORE_CAP = 30;
+/** Fixed total for an image-based CV with no usable text (OCR failed, timed out or disabled). */
+export const IMAGE_BASED_NO_TEXT_SCORE = 10;
+// Every sentence below is a key of the frontend review catalog (en.json / tr.json).
+export const IMAGE_BASED_HEADLINE = "ATS systems can't read this CV because it is saved as an image";
+export const IMAGE_BASED_IMPROVEMENT = "Rebuild your CV with selectable text instead of an image so applicant tracking systems can read it. Our editor creates an ATS-friendly CV in a few minutes.";
+const IMAGE_BASED_OCR_NOTE = "We read your content with text recognition (OCR), but the score stays low until the file has selectable text.";
+const IMAGE_BASED_NO_TEXT_NOTE = "We couldn't read any text in it, so your content was not assessed.";
+const IMAGE_BASED_ATS_REASON = "Your CV is saved as an image without a usable text layer, so applicant tracking systems can't read it.";
+const IMAGE_BASED_EVIDENCE = "No usable text layer: the PDF contains pictures of text.";
+const IMAGE_BASED_NOT_ASSESSED = "Not assessed: we couldn't read text in this file.";
+const IMAGE_BASED_ADD_CONTENT = "Add your experience, education and skills in the editor to get a full content score.";
+const IMAGE_BASED_OCR_LIMITATION = "Content read with text recognition (OCR) does not show that an ATS can read the file.";
+
 const strings = (value: CvJsonValue | undefined): string[] => {
   if (typeof value === "string") return value.trim() ? [value.trim()] : [];
   if (typeof value === "number") return [String(value)];
@@ -67,10 +84,16 @@ interface ContentAnalysis {
   measurable: number;
 }
 
+/** A parsed upload whose PDF has no usable text layer. Older diagnostics never set the flag. */
+const isImageBased = (input: ReviewInput): boolean =>
+  input.diagnostics?.image_based === true && input.import_status !== undefined && !["failed", "uploaded", "parsing"].includes(input.import_status);
+const ocrRecovered = (input: ReviewInput): boolean => isImageBased(input) && input.diagnostics?.ocr === "recovered";
+
 const analyze = (input: ReviewInput): ContentAnalysis | null => {
   const diagnostics = input.diagnostics;
   const isImport = input.import_status !== undefined;
-  const unsafeExtraction = Boolean(diagnostics && (diagnostics.quality.low_confidence || diagnostics.quality.confidence === "low" || ["utf8_decode", "pdf_token_heuristic", "pdf_ocr_tesseract"].includes(diagnostics.final_stage)));
+  // Usable OCR text of an image-based PDF is scored; its ATS problem is handled by the image-based rule.
+  const unsafeExtraction = !ocrRecovered(input) && Boolean(diagnostics && (diagnostics.quality.low_confidence || diagnostics.quality.confidence === "low" || ["utf8_decode", "pdf_token_heuristic", "pdf_ocr_tesseract"].includes(diagnostics.final_stage)));
   const visibleSections = (input.content?.sections ?? []).map(section => ({ ...section, blocks: section.blocks.filter(block => block.visibility !== "hidden") }));
   const populated = visibleSections.filter(section => section.blocks.some(block => flattenFields(block.fields).trim()));
   const text = populated.flatMap(section => section.blocks.map(block => flattenFields(block.fields))).join("\n");
@@ -96,7 +119,36 @@ const unscorableReview = (input: ReviewInput): CvReview => {
   };
 };
 
+const imageBasedAtsDimension = (): ReviewDimension =>
+  dimension("ats", [check("text_layer", "Readable text layer", 0, 100, IMAGE_BASED_EVIDENCE, IMAGE_BASED_IMPROVEMENT)], IMAGE_BASED_ATS_REASON);
+
+/** Image-based, no usable text: a fixed low score, the ATS dimension at 0 and nothing else assessed. */
+const imageBasedNoTextReview = (): CvReview => ({
+  version: CV_REVIEW_VERSION, method: "basic", status: "partial", score: IMAGE_BASED_NO_TEXT_SCORE, assessed_weight: REVIEW_WEIGHTS.ats,
+  summary: `${IMAGE_BASED_HEADLINE}. ${IMAGE_BASED_NO_TEXT_NOTE}`,
+  dimensions: (Object.keys(REVIEW_WEIGHTS) as ReviewDimensionId[]).map(id => id === "ats" ? imageBasedAtsDimension() : dimension(id, [], IMAGE_BASED_NOT_ASSESSED)),
+  strengths: [],
+  improvements: [IMAGE_BASED_IMPROVEMENT, IMAGE_BASED_ADD_CONTENT],
+  matched_keywords: [], missing_keywords: [], limitations: LIMITATIONS,
+  ats_blocker: "image_based"
+});
+
+/** Image-based, content recovered by OCR: the content review stands, capped, with the ATS problem first. */
+const withImageBasedBlocker = (review: CvReview): CvReview => {
+  const score = Math.min(review.score ?? 0, IMAGE_BASED_SCORE_CAP);
+  const scope = review.summary.startsWith(`${band(review.score ?? 0)}. `) ? review.summary.slice(band(review.score ?? 0).length + 2) : "";
+  return {
+    ...review,
+    score,
+    summary: [`${IMAGE_BASED_HEADLINE}.`, IMAGE_BASED_OCR_NOTE, `${band(score)}.`, scope].filter(Boolean).join(" "),
+    improvements: [IMAGE_BASED_IMPROVEMENT, ...review.improvements.filter(text => text !== IMAGE_BASED_IMPROVEMENT)].slice(0, 6),
+    limitations: [...review.limitations, IMAGE_BASED_OCR_LIMITATION],
+    ats_blocker: "image_based"
+  };
+};
+
 const atsDimension = (input: ReviewInput): ReviewDimension => {
+  if (isImageBased(input)) return imageBasedAtsDimension();
   const diagnostics = input.diagnostics;
   const isImport = input.import_status !== undefined;
   if (!diagnostics || !isImport) return dimension("ats", [], isImport ? "Extraction diagnostics are unavailable for this older upload. Re-upload to assess parseability." : "No uploaded or exported file was tested. Parseability is not assessed.");
@@ -152,6 +204,7 @@ const checkStrengths = (dimensions: ReviewDimension[]) => dimensions.filter(d =>
  */
 export function reviewCv(input: ReviewInput): CvReview {
   const analysis = analyze(input);
+  if (isImageBased(input) && (!analysis || !ocrRecovered(input))) return imageBasedNoTextReview();
   if (!analysis) return unscorableReview(input);
   const { narratives } = analysis;
   const clear = narratives.filter(line => wordCount(line) >= 6 && wordCount(line) <= 45).length;
@@ -173,7 +226,8 @@ export function reviewCv(input: ReviewInput): CvReview {
     structureDimension(analysis),
     atsDimension(input)
   ];
-  return assemble("basic", dimensions, checkStrengths(dimensions), checkImprovements(dimensions), ["Without the AI review, experience depth, role focus and skills evidence are not assessed."]);
+  const review = assemble("basic", dimensions, checkStrengths(dimensions), checkImprovements(dimensions), ["Without the AI review, experience depth, role focus and skills evidence are not assessed."]);
+  return isImageBased(input) ? withImageBasedBlocker(review) : review;
 }
 
 export interface CvReviewAiInput {
@@ -185,7 +239,7 @@ export interface CvReviewAiInput {
 /** Null when the content cannot be scored: no AI review is requested for it. */
 export function buildAiReviewInput(input: ReviewInput): CvReviewAiInput | null {
   const analysis = analyze(input);
-  if (!analysis) return null;
+  if (!analysis || (isImageBased(input) && !ocrRecovered(input))) return null;
   let budget = MAX_AI_INPUT_CHARS;
   const take = (text: string, max: number) => {
     const value = redact(text).slice(0, Math.min(max, Math.max(0, budget)));
@@ -220,7 +274,7 @@ const impactCap = ({ narratives, measurable }: ContentAnalysis): { level: number
 export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvReview {
   const analysis = analyze(input);
   const aiInput = buildAiReviewInput(input);
-  if (!analysis || !aiInput) return unscorableReview(input);
+  if (!analysis || !aiInput) return isImageBased(input) ? imageBasedNoTextReview() : unscorableReview(input);
   const byId = new Map(output.criteria.map(criterion => [criterion.id, criterion]));
   if (AI_REVIEW_CRITERIA.some(id => !byId.has(id))) throw new Error("AI review is missing a criterion");
   const corpus = looseText(aiInput.sections.flatMap(section => [section.title, ...section.blocks.flatMap(block => [block.heading, ...block.lines])]).join("\n"));
@@ -250,5 +304,6 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
   });
   const deterministic = [structureDimension(analysis), atsDimension(input)];
   const dimensions = [...aiDimensions, ...deterministic];
-  return assemble("ai", dimensions, [...strengths, ...checkStrengths(deterministic)], [...improvements, ...checkImprovements(deterministic)], ["Content criteria are rated by an AI review against a fixed rubric; quoted examples are checked against your CV text."]);
+  const review = assemble("ai", dimensions, [...strengths, ...checkStrengths(deterministic)], [...improvements, ...checkImprovements(deterministic)], ["Content criteria are rated by an AI review against a fixed rubric; quoted examples are checked against your CV text."]);
+  return isImageBased(input) ? withImageBasedBlocker(review) : review;
 }

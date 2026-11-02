@@ -38,7 +38,7 @@ const CHECKOUT_OFFERS = ["trial", "pro"] as const;
 export const FUNNEL_EVENT_DETAILS: Partial<Record<FunnelEvent, readonly string[]>> = {
   cta_click: ["header", "hero", "final", "mascot", "pricing_trial", "pricing_pro", "template", "demo_export"],
   onboarding_question_view: ["goal", "career_stage", "education", "source"],
-  onboarding_score_preview: ["scored", "unscored"],
+  onboarding_score_preview: ["scored", "unscored", "image_based"],
   signup_completed: ["google", "email"],
   score_action: ["editor", "tailor", "improve"],
   paywall_shown: ["export", "ai", "tailoring", "cover_letter", "other"],
