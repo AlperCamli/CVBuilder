@@ -638,7 +638,7 @@ export function ProductDemo({
           </div>
           <p className="pd-dialog-note">
             {t("This is a sample. Start a 3-day trial to tailor and export your own CV.")}</p>
-          <StartLink className="pd-primary" templateSlug={DEMO_TEMPLATES[template].template_slug}>
+          <StartLink className="pd-primary" templateSlug={DEMO_TEMPLATES[template].template_slug} cta="demo_export">
             {t("Start Free Trial")}{" "}<ArrowRight size={15} />
           </StartLink>
           {onExplorePlans && (

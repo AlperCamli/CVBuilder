@@ -11,6 +11,7 @@ import {
   createAdminRateLimiter,
   createAdminRecomputeRateLimiter,
   createAiRateLimiter,
+  createFunnelEventsRateLimiter,
   createTailoringRateLimiter
 } from "../shared/middleware/rate-limit";
 import { createRequireAdmin } from "../shared/middleware/require-admin";
@@ -51,6 +52,7 @@ import { createExportsRouter } from "../modules/exports/exports.routes";
 import { BillingController } from "../modules/billing/billing.controller";
 import { createBillingRouter } from "../modules/billing/billing.routes";
 import { createMonetizationRouter } from "../modules/monetization/monetization.routes";
+import { createFunnelEventsRouter } from "../modules/funnel-events/funnel-events.routes";
 import type { AppServices } from "./build-services";
 
 export const registerV1Routes = (
@@ -87,6 +89,8 @@ export const registerV1Routes = (
   }
   if (services.guestImportsService) router.use(createGuestImportsRouter(services.guestImportsService, authMiddleware));
   if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService, services.monetizationBackfillService));
+  // Anonymous funnel counters: before the product-access/consent guards, no authentication.
+  if (services.funnelEventsService) router.use(createFunnelEventsRouter(services.funnelEventsService, createFunnelEventsRateLimiter(config)));
   // Admin analytics stays outside the product-access/consent guards below and
   // authenticates the Supabase identity only, never creating a product account.
   if (services.adminAnalyticsService && services.adminIdentityProvider) {

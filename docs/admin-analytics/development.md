@@ -23,6 +23,7 @@ Read this before changing the admin analytics dashboard. It covers where the cod
 | `20261103120000_analytics_engagement.sql` | `admin_app.refresh_runs`; `refresh_all`, `process_recompute_queue`, `expire_stale_runs`, `request_recompute`, `recompute_status`, `schedule_refresh_jobs`; materialized views `engagement_user_periods`, `engagement_growth`, `refresh_snapshot`; `feature_events`; Engagement metrics; `data_freshness` (first version) |
 | `20261103130000_analytics_tailoring_acquisition.sql` | `user_onboarding_paths`, `tailoring_v2_sessions*`, `signup_activation`, `try_timestamptz`; Tailoring and Acquisition metrics and drills |
 | `20261104120000_analytics_alerts.sql` | `kpi_health`; `admin_app.alert_rules` / `alert_events` and their definer functions; `evaluate_alerts`, `schedule_alert_job`; `data_freshness` (current version); `audit_recent` with `people_function` (now refuses with 42501 unless the transaction holds an `audit.read` row) |
+| `20261107120000_funnel_daily_stats.sql` | `public.funnel_daily_stats` (anonymous daily event counters, RLS on, no policies) and `public.bump_funnel_event` (service_role only), written by `POST /api/v1/funnel-events` (`backend/src/modules/funnel-events/`); `analytics_private.funnel_rows`; Acquisition metrics `visitor_trend`, `visitor_funnel`, `visitor_event_details`, plus `pre_signup_onboarding` and `onboarding_referrals` over `public.onboarding_monthly_stats` |
 
 **Tests:** `backend/tests/sql/analytics-*.sql`, run by `backend/scripts/verify-privacy-sql.sh`. That script creates a temporary local Postgres, stubs the Supabase roles and schemas, applies **all** migrations, then runs the test files it lists explicitly (a new file must be added to the list). Every test runs after the latest migration, so a later migration that changes a function can break an earlier phase's test.
 
@@ -211,6 +212,8 @@ Deploy order is always **migration → backend → admin**. A push to `main` aut
 - Email delivery for alerts, and scheduled email reports (needs an email provider).
 
 **Known small gaps:**
+- `analytics-monetization.sql` (`in_trial wrong`) and `analytics-engagement.sql` (`monthly cohort grid must stop at the snapshot month`) depend on the current date and fail when "today − 3 days" crosses a month boundary (seen on 2026-11-02). They fail the same way without the visitor-funnel migration.
+- The visitor-funnel metrics count events, not people (no identifiers), and cannot exclude internal accounts; `utm_source` is kept only for the page session (lost on a reload or the Google sign-in redirect).
 - The drill drawer never forwards the page's `include_internal`, so drill lists always exclude admin accounts. The drill filters `outcome` (trial_conversions) and `reason_group` (churned_subscribers) are supported in SQL but not sent by the UI.
 - The backend `MetricMeta` TypeScript interface (`admin-analytics.contract.ts`) lists only the core keys; display keys pass through untyped.
 

@@ -15,6 +15,8 @@ describe("nav", () => {
     expect(monetization.metrics).toHaveLength(10);
     expect(monetization.metrics).toContain("checkout_funnel");
     expect(pageFor("/ai-cost")!.metrics).toHaveLength(8);
+    expect(pageFor("/acquisition")!.metrics).toHaveLength(10);
+    expect(pageFor("/acquisition")!.metrics).toContain("visitor_funnel");
     expect(NAV.filter((n) => n.sections).map((n) => n.label)).toEqual(["Monetization", "AI cost", "Engagement", "Tailoring", "Acquisition"]);
     expect(NAV.filter((n) => !n.ready)).toEqual([]);
     expect(pageFor("/alerts")!.note).toMatch(/filters don't apply/);

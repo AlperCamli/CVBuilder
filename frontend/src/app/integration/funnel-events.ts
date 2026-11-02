@@ -35,9 +35,13 @@ const DETAIL_RE = /^[a-z][a-z0-9_]{0,31}$/;
 const UTM_RE = /^[a-z0-9][a-z0-9_.-]{0,39}$/;
 const BOT_RE = /bot|crawl|spider|slurp|headless|lighthouse|inspectiontool/i;
 
+// Kept in memory only, so the landing page's campaign also attributes later steps of the same page session.
+let sessionUtm: string | undefined;
+
 function utmSource(): string | undefined {
   const value = new URLSearchParams(window.location.search).get("utm_source")?.trim().toLowerCase();
-  return value && UTM_RE.test(value) ? value : undefined;
+  if (value && UTM_RE.test(value)) sessionUtm = value;
+  return sessionUtm;
 }
 
 export function trackFunnelEvent(event: FunnelEvent, detail?: string): void {

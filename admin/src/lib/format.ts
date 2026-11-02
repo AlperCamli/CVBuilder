@@ -86,6 +86,8 @@ export const DIMENSION_LABELS: Record<string, string> = {
   template: "Template",
   onboarding_path: "Onboarding path",
   currency: "Currency",
+  device: "Device",
+  utm_source: "UTM source",
 };
 
 const dateOnly = dateFmt({ day: "numeric", month: "short", year: "numeric" });

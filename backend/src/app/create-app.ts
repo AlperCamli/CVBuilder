@@ -79,7 +79,8 @@ export const createApp = (options?: CreateAppOptions): Express => {
     monetizationBackfillService:
       options?.services?.monetizationBackfillService ?? defaultServices?.monetizationBackfillService,
     adminAnalyticsService: options?.services?.adminAnalyticsService ?? defaultServices?.adminAnalyticsService,
-    adminIdentityProvider: options?.services?.adminIdentityProvider ?? defaultServices?.adminIdentityProvider
+    adminIdentityProvider: options?.services?.adminIdentityProvider ?? defaultServices?.adminIdentityProvider,
+    funnelEventsService: options?.services?.funnelEventsService ?? defaultServices?.funnelEventsService
   };
 
   const app = express();

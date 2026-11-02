@@ -635,7 +635,7 @@ export function MascotRail({
     const className = secondary ? "gj-rail-secondary" : "gj-rail-action";
     if (kind === "signup")
       return (
-        <StartLink className={className}>
+        <StartLink className={className} cta="mascot">
           {label}
           {!secondary && <ArrowRight size={13} />}
         </StartLink>

@@ -1,7 +1,8 @@
 export interface AnalyticsPage { path: string; title: string }
 
 const SCREENS: Record<string, string> = {
-  "/": "Landing", "/guided-journey": "Guided landing", "/pricing": "Pricing",
+  "/": "Landing", "/tr": "Landing (Turkish)", "/guided-journey": "Guided landing", "/pricing": "Pricing",
+  "/tr/pricing": "Pricing (Turkish)", "/support": "Support", "/tr/support": "Support (Turkish)", "/app/checkout": "Checkout",
   "/guided-journey/pricing": "Guided pricing", "/onboarding": "Upload and onboarding",
   "/privacy": "Privacy notice", "/cookies": "Cookies and storage", "/career-advice": "Career advice",
   "/app": "Dashboard", "/app/onboarding": "Saving uploaded CV", "/app/create": "Create or upload",
