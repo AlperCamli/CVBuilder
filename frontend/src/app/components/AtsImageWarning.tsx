@@ -49,9 +49,9 @@ const secondary = { background: "transparent", border: "1px solid var(--color-bo
  * Score page actions for an image-based CV. The rebuild opens the editor (a free action) with the
  * recovered content, or with the empty sections of a new CV when no text could be recovered.
  */
-export function ImageBasedActions({ recoveredText, converting, canOpen, onRebuild, onTailor, onUploadAnother }: {
+export function ImageBasedActions({ recoveredText, converting, canOpen, onRebuild, onTailor, onImprove, onUploadAnother }: {
   recoveredText: boolean; converting: boolean; canOpen: boolean;
-  onRebuild: () => void; onTailor: () => void; onUploadAnother: () => void;
+  onRebuild: () => void; onTailor: () => void; onImprove: () => void; onUploadAnother: () => void;
 }) {
   useTranslation();
   return (
@@ -67,9 +67,14 @@ export function ImageBasedActions({ recoveredText, converting, canOpen, onRebuil
         {t("Rebuild as an ATS-friendly CV")}<ArrowRight size={16} />
       </button>
       {recoveredText && (
-        <button type="button" onClick={onTailor} disabled={converting} className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2" style={{ ...secondary, opacity: converting ? 0.7 : 1 }}>
-          <Sparkles size={16} />{t("Customize for a job")}
-        </button>
+        <>
+          <button type="button" onClick={onTailor} disabled={converting} className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2" style={{ ...secondary, opacity: converting ? 0.7 : 1 }}>
+            <Sparkles size={16} />{t("Customize for a job")}
+          </button>
+          <button type="button" onClick={onImprove} disabled={converting} className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2" style={{ ...secondary, opacity: converting ? 0.7 : 1 }}>
+            <Sparkles size={16} />{t("Improve with AI")}
+          </button>
+        </>
       )}
       <button type="button" onClick={onUploadAnother} disabled={converting} className="w-full px-6 py-3 rounded-lg border text-sm font-medium" style={{ borderColor: "var(--color-border-secondary)", color: "var(--color-text-secondary)" }}>
         {t("Upload another CV")}

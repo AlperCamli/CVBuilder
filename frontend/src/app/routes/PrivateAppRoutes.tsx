@@ -11,6 +11,7 @@ import { SidebarProvider } from "../contexts/SidebarContext";
 import { UpgradePromptProvider } from "../contexts/UpgradePromptContext";
 import { AuthProvider } from "../integration/auth-context";
 import { RequireAuth } from "../integration/auth-route-guards";
+import { AIImproving } from "../pages/AIImproving";
 import { CoverLetterEditor } from "../pages/CoverLetterEditor";
 import { CoverLetters } from "../pages/CoverLetters";
 import { CreateOrUpload } from "../pages/CreateOrUpload";
@@ -68,6 +69,9 @@ export function CVScoreRoute() {
   return <CVScore />;
 }
 
+export function AIImprovingRoute() {
+  return <AIImproving />;
+}
 
 export function CreateCvRedirectRoute() {
   return <Navigate to="/app/cv/master" replace />;

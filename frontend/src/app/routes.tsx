@@ -108,6 +108,11 @@ const CVScoreRoute = lazyRoute(() =>
     default: CVScoreRoute,
   })),
 );
+const AIImprovingRoute = lazyRoute(() =>
+  import("./routes/PrivateAppRoutes").then(({ AIImprovingRoute }) => ({
+    default: AIImprovingRoute,
+  })),
+);
 const CreateCvRedirectRoute = lazyRoute(() =>
   import("./routes/PrivateAppRoutes").then(({ CreateCvRedirectRoute }) => ({
     default: CreateCvRedirectRoute,
@@ -279,6 +284,7 @@ export function RouteElements({
           element={lazyElement(UploadProcessingRoute)}
         />
         <Route path="cv-score" element={lazyElement(CVScoreRoute)} />
+        <Route path="ai-improving" element={lazyElement(AIImprovingRoute)} />
         <Route path="create-cv" element={lazyElement(CreateCvRedirectRoute)} />
         <Route path="medical" element={lazyElement(MedicalCVRoute)} />
         <Route path="cv/:id" element={lazyElement(CVEditorRoute)} />

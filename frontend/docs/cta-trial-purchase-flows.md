@@ -8,11 +8,11 @@ Public Start Free Trial buttons enter `/onboarding`. Users upload an existing PD
 
 Uploaded CVs are claimed by the authenticated account and reviewed on `/app/cv-score?source=guest&import=…`. A new, blank CV reaches `/app/cv-score?source=scratch`; it says “Not scored yet” rather than inventing a score.
 
-The score page offers Continue to CV editor and Customize for a job. (Improve with AI was removed from the score page on 2026-11-02; the `/app/ai-improving` page no longer exists.) Before executing an action it checks the backend subscription state. An inactive account enters `/app/checkout` with the selected action, source, import and language encoded in a validated internal return destination. The checkout screen explains the 3-day trial, card requirement, regional Weekly renewal price and cancellation terms, then opens hosted Stripe Checkout.
+The score page retains Continue to CV editor, Customize for a job, and Improve with AI. Before executing an action it checks the backend subscription state. An inactive account enters `/app/checkout` with the selected action, source, import and language encoded in a validated internal return destination. The checkout screen explains the 3-day trial, card requirement, regional Weekly renewal price and cancellation terms, then opens hosted Stripe Checkout.
 
 Stripe returns to `/app/checkout?checkout=success&session_id=…`. The client asks the backend to confirm that session. The backend retrieves it from Stripe, verifies session/subscription ownership, completion/payment status and active/trialing state, and synchronizes the subscription. Only then does the client return to the saved score action and execute it. Refresh retains the action and import context.
 
-A blank CV is created only after activation. Editor opens the blank document; Customize opens its job form. Actual AI operations retain their consent checks.
+A blank CV is created only after activation. Editor opens the blank document; Customize opens its job form; Improve opens the editor with guidance to add experience before requesting AI improvements. Actual AI operations retain their consent checks.
 
 ## Direct Pro purchase
 
@@ -52,7 +52,7 @@ This supersedes the subscription wall in the sections around it: accounts withou
 | --- | --- | --- | --- |
 | App shell, dashboard, CV score, job tracker, templates, on-screen preview | yes | yes | yes (as free) |
 | Upload/import a new CV, create or duplicate CVs, manual editing (main and tailored), photos, revisions, manual cover letters | yes | yes | yes |
-| Improve with AI from the score page | removed from the UI (2026-11-02); `POST /ai/import-improve` and `users.free_improve_used_at` remain unused | – | – |
+| Improve with AI from the score page | once per account (`users.free_improve_used_at`) | yes | once (backfilled if already used) |
 | AI tailoring session (analysis, questions, cards, refine, finish) | one session per account (`users.free_tailoring_used_at`, `tailoring_sessions.free_tier`) | yes | once (backfilled if already used) |
 | Exports and downloads (any format, CV or cover letter), a second tailoring, all other AI (editor suggestions, translation, cover letter generation, legacy tailoring runs) | trial prompt | yes | trial prompt |
 
