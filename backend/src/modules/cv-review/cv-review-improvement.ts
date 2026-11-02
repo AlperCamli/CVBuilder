@@ -2,7 +2,7 @@ import type { CvContent } from "../../shared/cv-content/cv-content.types";
 import type { CvReviewVerifyAiOutput } from "../ai/flows/flow-contracts";
 import {
   analyze, band, buildAiReviewInput, EXPERIENCE, flattenFields, impactCap, LEVEL_POINTS, looseText, normalize, SKILLS, strings, structureDimension,
-  type ContentAnalysis, type CvReviewAiInput, type ReviewInput
+  type ContentAnalysis, type CvReviewSectionsAiInput, type ReviewInput
 } from "./cv-review";
 import { CV_REVIEW_VERSION, type CvReview, type ReviewDimension, type ReviewDimensionId } from "./cv-review.types";
 
@@ -75,7 +75,7 @@ export function skillsEvidenceR(before: ContentAnalysis, after: ContentAnalysis)
  * counts only when it appears there (ignoring case, spacing, bullets and quotation marks) and is
  * at least 8 characters long.
  */
-export const quoteCorpus = (input: CvReviewAiInput): string => looseText(input.sections.flatMap(section => [section.title, ...section.blocks.flatMap(block => [block.heading, ...block.lines])]).join("\n"));
+export const quoteCorpus = (input: CvReviewSectionsAiInput): string => looseText(input.sections.flatMap(section => [section.title, ...section.blocks.flatMap(block => [block.heading, ...block.lines])]).join("\n"));
 export const verifyQuote = (corpus: string, quote: string | null | undefined): string | null => {
   const loose = quote ? looseText(quote) : "";
   return loose.length >= MIN_QUOTE_CHARS && corpus.includes(loose) ? quote!.trim() : null;
@@ -85,8 +85,8 @@ export interface CvReviewVerifyCriterionInput { id: VerifiedCriterionId; issue: 
 export interface CvReviewVerifyAiInput {
   language: string;
   criteria: CvReviewVerifyCriterionInput[];
-  before: { sections: CvReviewAiInput["sections"] };
-  after: { sections: CvReviewAiInput["sections"] };
+  before: { sections: CvReviewSectionsAiInput["sections"] };
+  after: { sections: CvReviewSectionsAiInput["sections"] };
 }
 
 const clip = (text: string | null | undefined): string | null => {
@@ -126,7 +126,7 @@ export function criterionFeedback(review: CvReview, dimension: ReviewDimension):
 }
 
 /** r per verified criterion: the resolution counts only when its quote is really in the improved text. */
-export function verifiedResolutions(output: CvReviewVerifyAiOutput, sent: readonly VerifiedCriterionId[], after: CvReviewAiInput): Partial<Record<VerifiedCriterionId, number>> {
+export function verifiedResolutions(output: CvReviewVerifyAiOutput, sent: readonly VerifiedCriterionId[], after: CvReviewSectionsAiInput): Partial<Record<VerifiedCriterionId, number>> {
   const corpus = quoteCorpus(after);
   const result: Partial<Record<VerifiedCriterionId, number>> = {};
   for (const id of sent) {

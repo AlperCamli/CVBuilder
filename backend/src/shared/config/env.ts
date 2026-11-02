@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { config as loadDotEnvFile } from "dotenv";
 import { z } from "zod";
 import type { ModelPriceTable } from "../../modules/ai/ai-cost";
+import type { CvReviewInputMode } from "../../modules/cv-review/cv-review.types";
 
 const appEnvSchema = z.enum(["development", "test", "staging", "production"]);
 const aiProviderSchema = z.enum(["mock", "gemini", "openai", "anthropic"]);
@@ -73,6 +74,9 @@ const envSchema = z
     AI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
     // JSON map of model name -> USD per 1M tokens, e.g. {"gpt-6-luna":{"input":0.4,"cached_input":0.1,"output":1.6}}.
     AI_MODEL_PRICING_JSON: z.string().optional(),
+    // raw: the upload's CV review reads the extracted text and runs alongside the AI parse.
+    // structured: it reads the parsed sections after the parse (the previous, slower order).
+    CV_REVIEW_INPUT: z.enum(["raw", "structured"]).default("raw"),
     // Comma-separated emails allowed to see internal admin data (AI token costs).
     ADMIN_EMAILS: z.string().optional(),
     AI_RUN_STALE_AFTER_MS: z.coerce.number().int().min(60_000).max(1_800_000).default(300_000),
@@ -195,6 +199,7 @@ export interface AppConfig {
     runStaleAfterMs: number;
     runSweepIntervalMs: number;
     modelPricing?: ModelPriceTable;
+    cvReviewInput?: CvReviewInputMode;
   };
   adminEmails?: string[];
   analyticsDatabaseUrl?: string;
@@ -333,7 +338,8 @@ export const loadConfig = (rawEnv: NodeJS.ProcessEnv): AppConfig => {
       maxOutputTokensHeavy: parsed.data.AI_MAX_OUTPUT_TOKENS_HEAVY,
       runStaleAfterMs: parsed.data.AI_RUN_STALE_AFTER_MS,
       runSweepIntervalMs: parsed.data.AI_RUN_SWEEP_INTERVAL_MS,
-      modelPricing: parseModelPricing(parsed.data.AI_MODEL_PRICING_JSON)
+      modelPricing: parseModelPricing(parsed.data.AI_MODEL_PRICING_JSON),
+      cvReviewInput: parsed.data.CV_REVIEW_INPUT
     },
     adminEmails: (parsed.data.ADMIN_EMAILS ?? "")
       .split(",")

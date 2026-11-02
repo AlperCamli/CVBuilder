@@ -130,7 +130,7 @@ const noTextDiagnostics = (ocr: ParseCvFileDiagnostics["ocr"]): ParseCvFileDiagn
   page_count: 1, text_layer: "missing", image_based: true, ocr, quality: { ...quality, score: 55, confidence: "medium" }
 });
 const ratings = (level: number): CvReviewAiOutput => ({
-  criteria: AI_REVIEW_CRITERIA.map(id => ({ id, level, assessment: `${id} assessment.`, strength: `${id} strength.`, issue: `${id} issue.`, quote: null, fix: `${id} fix.` }))
+  criteria: AI_REVIEW_CRITERIA.map(id => ({ id, level, assessment: `${id} assessment.`, strength: `${id} strength.`, issue: level === 4 ? null : `${id} issue.`, quote: null, fix: level === 4 ? null : `${id} fix.` }))
 });
 const dim = (review: ReturnType<typeof reviewCv>, id: string) => review.dimensions.find(d => d.id === id)!;
 

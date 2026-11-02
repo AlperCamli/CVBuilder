@@ -295,11 +295,13 @@ export const cvReviewCriterionOutputSchema = z
   .object({
     id: z.enum(CV_REVIEW_CRITERIA),
     level: z.number().int().min(0).max(4),
-    assessment: z.string().trim().max(280),
+    // Backstops for the prompt's word limits: weaknesses are shown as one brief line each.
+    assessment: z.string().trim().max(160),
     strength: z.string().trim().max(200).nullable(),
-    issue: z.string().trim().max(220).nullable(),
-    quote: z.string().trim().max(200).nullable(),
-    fix: z.string().trim().max(240).nullable()
+    issue: z.string().trim().max(120).nullable(),
+    // A quote cut at a word boundary is still a real excerpt, so it still passes the quote check.
+    quote: z.string().trim().max(60).nullable(),
+    fix: z.string().trim().max(140).nullable()
   })
   .strict();
 

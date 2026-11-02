@@ -2,6 +2,9 @@ import type { ParseCvFileDiagnostics } from "../imports/parsers/cv-parser";
 
 export const CV_REVIEW_VERSION = "cv-review-v2";
 
+/** What the upload's AI review reads: the extracted text, alongside the AI parse, or the parsed sections after it. */
+export type CvReviewInputMode = "raw" | "structured";
+
 /** AI-rated content criteria first, then the two deterministic dimensions. */
 export type AiReviewCriterionId = "impact" | "wording" | "depth" | "focus" | "skills_evidence";
 export type ReviewDimensionId = AiReviewCriterionId | "structure" | "ats";

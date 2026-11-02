@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CvContent, CvSection } from "../src/shared/cv-content/cv-content.types";
 import type { ParseCvFileDiagnostics } from "../src/modules/imports/parsers/cv-parser";
 import type { CvReviewAiOutput } from "../src/modules/ai/flows/flow-contracts";
-import { AI_REVIEW_CRITERIA, LEVEL_POINTS, REVIEW_WEIGHTS, buildAiReviewInput, reviewCv, scoreAiReview } from "../src/modules/cv-review/cv-review";
+import { AI_REVIEW_CRITERIA, LEVEL_POINTS, REVIEW_WEIGHTS, buildAiReviewInput, buildRawReviewInput, reviewCv, scoreAiReview } from "../src/modules/cv-review/cv-review";
 
 const section = (type: string, fields: Record<string, string | string[]>): CvSection => ({ id: type, type, title: type, order: 0, meta: {}, blocks: [{ id: `${type}-block`, type, order: 0, visibility: "visible", fields, meta: {} }] });
 const cv = (): CvContent => ({ version: "v1", language: "en", metadata: {}, sections: [
@@ -15,7 +15,8 @@ const diagnostics = (): ParseCvFileDiagnostics => ({ mime_type: "application/pdf
 const imported = (content = cv()) => ({ content, import_status: "parsed", raw_text: "Alex Smith Software engineer at Example Ltd built Python services for 200 users and reduced costs by 30%.", diagnostics: diagnostics() });
 const dimension = (review: ReturnType<typeof reviewCv>, id: string) => review.dimensions.find(d => d.id === id)!;
 const ratings = (levels: Partial<Record<(typeof AI_REVIEW_CRITERIA)[number], number>> = {}, overrides: Partial<CvReviewAiOutput["criteria"][number]> = {}): CvReviewAiOutput => ({
-  criteria: AI_REVIEW_CRITERIA.map(id => ({ id, level: levels[id] ?? 2, assessment: `${id} assessment.`, strength: `${id} strength.`, issue: `${id} issue.`, quote: null, fix: `${id} fix.`, ...overrides }))
+  // A level-4 rating names no gap, as the prompt requires.
+  criteria: AI_REVIEW_CRITERIA.map(id => ({ id, level: levels[id] ?? 2, assessment: `${id} assessment.`, strength: `${id} strength.`, issue: (levels[id] ?? 2) === 4 ? null : `${id} issue.`, quote: null, fix: (levels[id] ?? 2) === 4 ? null : `${id} fix.`, ...overrides }))
 });
 const weighted = (review: ReturnType<typeof reviewCv>) => {
   const assessed = review.dimensions.filter(d => d.score !== null);
@@ -23,6 +24,23 @@ const weighted = (review: ReturnType<typeof reviewCv>) => {
 };
 
 describe("CV review v2: AI-rated content", () => {
+  it("counts a level-4 rating that still names an issue as level 3", () => {
+    const review = scoreAiReview(imported(), ratings({ wording: 4 }, { issue: "Some statements are long." }));
+    expect(dimension(review, "wording").score).toBe(LEVEL_POINTS[3]);
+    expect(review.improvements.join(" ")).toContain("Some statements are long.");
+    expect(dimension(scoreAiReview(imported(), ratings({ wording: 4 })), "wording").score).toBe(LEVEL_POINTS[4]);
+  });
+
+  it("ends a brief issue with a full stop before its quote and fix", () => {
+    const review = scoreAiReview(imported(), ratings({ impact: 1 }, { issue: "Outcomes lack figures", quote: "Delivered reliable SQL reporting tools", fix: "Add your real figures." }));
+    expect(review.improvements).toContain("Outcomes lack figures. “Delivered reliable SQL reporting tools” Add your real figures.");
+  });
+
+  it("shows a quote taken from the extracted text when the review read it", () => {
+    const review = scoreAiReview(imported(), ratings({}, { quote: "Alex Smith Software engineer" }));
+    expect(review.improvements.join(" ")).toContain("“Alex Smith Software engineer”");
+  });
+
   it("maps rating levels onto the strict curve and the fixed weights", () => {
     const review = scoreAiReview(imported(), ratings({ impact: 3, wording: 2, depth: 2, focus: 1, skills_evidence: 4 }));
     expect(review).toMatchObject({ version: "cv-review-v2", method: "ai", status: "complete", assessed_weight: 100 });
@@ -89,6 +107,37 @@ describe("CV review v2: AI input", () => {
     expect(input.sections[0].blocks[0].heading).toContain("2019 - 2021");
     expect(input.sections[2].blocks[0]).toMatchObject({ heading: "", lines: ["Python", "SQL"] });
     expect(input.stats).toEqual({ experience_statements: 3, statements_with_numbers: 2 });
+  });
+
+  it("sends the stated headline but not the name or contact details", () => {
+    const content = cv();
+    content.sections[0].blocks[0].fields.headline = "Data analyst | alex@example.com";
+    const input = buildAiReviewInput(imported(content))!;
+    expect(input.headline).toBe("Data analyst |");
+    expect(JSON.stringify(input)).not.toMatch(/Alex Smith|alex@example\.com/);
+    expect(buildAiReviewInput(imported())!.headline).toBeNull();
+  });
+
+  it("sends the extracted text line by line without contact details", () => {
+    const raw = "Alex Smith\nalex@example.com | +44 20 7946 0958 | https://alex.dev/cv\nSoftware engineer, Example Ltd, 2019 - 2021\nBuilt Python services for 200 users and reduced costs by 30%.";
+    const input = buildRawReviewInput(raw, diagnostics())!;
+    expect(input.text).not.toMatch(/alex@example\.com|7946|alex\.dev/);
+    expect(input.text.split("\n")).toEqual(["Alex Smith", "| |", "Software engineer, Example Ltd, 2019 - 2021", "Built Python services for 200 users and reduced costs by 30%."]);
+    expect(input.language).toBe("en");
+  });
+
+  it("caps the extracted text at whole lines", () => {
+    const line = "Delivered reliable SQL reporting tools for the operations department every week.";
+    const input = buildRawReviewInput(Array.from({ length: 400 }, () => line).join("\n"), diagnostics())!;
+    expect(input.text.length).toBeLessThanOrEqual(14_000);
+    expect(input.text.split("\n").every(l => l === line)).toBe(true);
+  });
+
+  it("requests no raw-text review for text that cannot be scored", () => {
+    expect(buildRawReviewInput("Too short to score.", diagnostics())).toBeNull();
+    expect(buildRawReviewInput(imported().raw_text, { ...diagnostics(), final_stage: "pdf_ocr_tesseract" })).toBeNull();
+    expect(buildRawReviewInput(imported().raw_text, { ...diagnostics(), image_based: true, ocr: "failed" })).toBeNull();
+    expect(buildRawReviewInput(imported().raw_text, { ...diagnostics(), image_based: true, ocr: "recovered" })).not.toBeNull();
   });
 
   it("requests no AI review for content that cannot be scored", () => {

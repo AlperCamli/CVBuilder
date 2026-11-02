@@ -368,7 +368,8 @@ export const buildDefaultServices = (
     aiPromptResolver,
     aiService,
     logger,
-    privacyService
+    privacyService,
+    config.ai.cvReviewInput
   );
   const guestImportsService = new GuestImportsService(
     overrides?.guestImportsRepository ?? new SupabaseGuestImportsRepository(supabaseClients.serviceRoleClient),

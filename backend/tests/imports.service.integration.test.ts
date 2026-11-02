@@ -1060,11 +1060,113 @@ describe("CV review v2 at parse time", () => {
     const result = await service.getImportResult(session, repository.importId);
     expect(result.review).toMatchObject({ version: "cv-review-v2", method: "ai", status: "partial", assessed_weight: 95 });
     expect(result.review.dimensions.find(d => d.id === "wording")!.score).toBe(60);
-    expect(result.review.improvements[0]).toContain("“Built BI dashboards for 40 managers.”");
+    expect(result.review.improvements[0]).toContain("“Built BI dashboards for 40 managers");
     const reviewRun = [...tracked.runs.values()].find(run => run.flow_type === "cv_review")!;
     expect(reviewRun).toMatchObject({ status: "completed", import_id: repository.importId });
-    expect(JSON.stringify(reviewRun.input_payload)).not.toMatch(/alex@example\.com|Alex Doe/);
+    expect((reviewRun.input_payload as { flow_input: Record<string, unknown> }).flow_input).toMatchObject({ language: "en", text: expect.stringContaining("Built BI dashboards") });
+    // The extracted text may still hold the name (the AI parse receives it too); contact details are removed.
+    expect(JSON.stringify(reviewRun.input_payload)).not.toMatch(/alex@example\.com/);
     expect((await repository.findImportDetailById(session.appUser.id, repository.importId))?.importRow.review_context?.cv_review).toEqual(result.review);
+  });
+
+  // The parse cannot finish until the review has started: a review that waited for the parse would hang.
+  const parseAfterReviewStarts = () => {
+    let reviewStarted!: () => void;
+    const started = new Promise<void>(resolve => { reviewStarted = resolve; });
+    const order: string[] = [];
+    const mock = new MockAiProvider("mock-model");
+    const provider: AiProvider = {
+      providerName: "mock",
+      resolveModelName: () => "mock-model",
+      async generate(request: AiProviderRequest): Promise<AiProviderResult> {
+        order.push(`${request.flow_type}:start`);
+        if (request.flow_type === "cv_parse") {
+          await started;
+          order.push("cv_parse:end");
+          return { provider: "mock", model_name: "mock-model", output_payload: { parsed_content: parsedContent(), warnings: [] } };
+        }
+        reviewStarted();
+        return mock.generate(request);
+      }
+    };
+    return { provider, order };
+  };
+
+  it("starts the AI review on the extracted text before the AI parse finishes", async () => {
+    const { provider: blocking, order } = parseAfterReviewStarts();
+    const { repository, service, session, tracked } = (() => {
+      const userId = randomUUID();
+      const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from(rawText, "utf-8")), "text/plain", "resume.txt");
+      const parser = new StubCvParser(
+        { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, warnings: [], diagnostics: undefined },
+        { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, parsedContent: createMinimalContent("Fallback."), warnings: [], diagnostics: undefined },
+        true
+      );
+      const tracked = trackedAiService(blocking);
+      return { repository, tracked, session: buildSession(userId), service: new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service) };
+    })();
+    await service.parseImport(session, repository.importId);
+    expect(order.indexOf("cv_review:start")).toBeLessThan(order.indexOf("cv_parse:end"));
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review).toMatchObject({ method: "ai", status: "partial" });
+    // Structure is still checked on the parsed content that arrived after the review started.
+    expect(result.review.dimensions.find(d => d.id === "structure")!.score).not.toBeNull();
+    expect([...tracked.runs.values()].map(run => run.flow_type).sort()).toEqual(["cv_parse", "cv_review"]);
+  });
+
+  it("reviews the parsed sections after the parse in structured mode", async () => {
+    const userId = randomUUID();
+    const repository = new InMemoryImportsRepository(userId, new Uint8Array(Buffer.from(rawText, "utf-8")), "text/plain", "resume.txt");
+    const parser = new StubCvParser(
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, warnings: [], diagnostics: undefined },
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, parsedContent: createMinimalContent("Fallback."), warnings: [], diagnostics: undefined },
+      true
+    );
+    const tracked = trackedAiService(provider());
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service, undefined, undefined, "structured");
+    const session = buildSession(userId);
+    await service.parseImport(session, repository.importId);
+    const result = await service.getImportResult(session, repository.importId);
+    expect(result.review.improvements[0]).toContain("“Built BI dashboards for 40 managers.”");
+    const reviewRun = [...tracked.runs.values()].find(run => run.flow_type === "cv_review")!;
+    expect((reviewRun.input_payload as { flow_input: Record<string, unknown> }).flow_input).toMatchObject({ sections: expect.any(Array) });
+    expect((reviewRun.input_payload as { flow_input: Record<string, unknown> }).flow_input).not.toHaveProperty("text");
+  });
+
+  it("starts a guest upload's AI review before its AI parse finishes", async () => {
+    let reviewStarted!: () => void;
+    const started = new Promise<void>(resolve => { reviewStarted = resolve; });
+    const order: string[] = [];
+    const mock = new MockAiProvider("mock-model");
+    const runner = {
+      parseCvContent: vi.fn(), reviewCvContent: vi.fn(),
+      parseGuestCvContent: vi.fn(async () => {
+        order.push("cv_parse:start");
+        await started;
+        order.push("cv_parse:end");
+        return { ai_run_id: randomUUID(), parsed_content: parsedContent(), warnings: [], generation_metadata: { provider: "mock", model_name: "mock-model", flow_type: "cv_parse", prompt_key: "cv-parse", prompt_version: "test" } };
+      }),
+      reviewGuestCvContent: vi.fn(async (_guest: unknown, input: { review_input: Record<string, unknown> }) => {
+        order.push("cv_review:start");
+        reviewStarted();
+        return (await mock.generate({ flow_type: "cv_review", model_name: "mock-model", prompt: { prompt_key: "", prompt_version: "", system_prompt: "", user_prompt: "" }, output_schema: undefined as never, input_payload: input.review_input })).output_payload;
+      })
+    };
+    const repository = new InMemoryImportsRepository(randomUUID(), new Uint8Array(Buffer.from(rawText, "utf-8")), "text/plain", "resume.txt");
+    const parser = new StubCvParser(
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, warnings: [], diagnostics: undefined },
+      { parserName: "simple_cv_parser_v1", rawExtractedText: rawText, parsedContent: createMinimalContent("Fallback."), warnings: [], diagnostics: undefined },
+      true
+    );
+    const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, runner as never);
+    const guest = { guest_import_id: randomUUID(), guest_lease_id: randomUUID() };
+    const allow = async () => undefined;
+    const result = await service.parseGuestFile({ originalFilename: "resume.txt", mimeType: "text/plain", sizeBytes: rawText.length, bytes: new Uint8Array(Buffer.from(rawText, "utf-8")) }, true, allow, guest);
+    const review = await service.reviewGuestFile(result, true, allow, guest);
+    expect(order.indexOf("cv_review:start")).toBeLessThan(order.indexOf("cv_parse:end"));
+    expect(review).toMatchObject({ method: "ai" });
+    expect(runner.reviewGuestCvContent).toHaveBeenCalledTimes(1);
+    expect(runner.reviewGuestCvContent.mock.calls[0][1].review_input).toMatchObject({ text: expect.stringContaining("Built BI dashboards") });
   });
 
   it("keeps the upload and stores the basic review when the AI review fails", async () => {
@@ -1171,7 +1273,8 @@ describe("image-based PDF uploads", () => {
     const service = new ImportsService(repository, new InMemoryMasterCvRepository(), parser, undefined, undefined, tracked.service);
     const session = buildSession(userId);
     await service.parseImport(session, repository.importId);
-    expect(calls).toEqual(["cv_parse", "cv_review"]);
+    // The review reads the OCR text, so it runs alongside the parse rather than after it.
+    expect([...calls].sort()).toEqual(["cv_parse", "cv_review"]);
     const result = await service.getImportResult(session, repository.importId);
     expect(result.review).toMatchObject({ method: "ai", ats_blocker: "image_based" });
     expect(result.review.score).toBeLessThanOrEqual(30);

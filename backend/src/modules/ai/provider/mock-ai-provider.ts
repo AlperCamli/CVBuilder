@@ -494,7 +494,11 @@ const generateCvParse = (input: Record<string, unknown>): Record<string, unknown
 // An average rating on every criterion, quoting the first CV line, as the strict rubric expects.
 const generateCvReview = (input: Record<string, unknown>): Record<string, unknown> => {
   const sections = Array.isArray(input.sections) ? (input.sections as Array<{ blocks?: Array<{ lines?: string[] }> }>) : [];
-  const firstLine = sections.flatMap((section) => section.blocks ?? []).flatMap((block) => block.lines ?? [])[0] ?? null;
+  // Raw-text input: quote the first sentence with a figure, as a statement line would be quoted.
+  const sentences = typeof input.text === "string" ? input.text.split(/\n+|(?<=[.!?])\s+/).map((line) => line.trim()) : [];
+  const firstLine = sections.length
+    ? sections.flatMap((section) => section.blocks ?? []).flatMap((block) => block.lines ?? [])[0] ?? null
+    : sentences.find((line) => /\d/.test(line)) ?? sentences[0] ?? null;
   return {
     criteria: ["impact", "wording", "depth", "focus", "skills_evidence"].map((id) => ({
       id,

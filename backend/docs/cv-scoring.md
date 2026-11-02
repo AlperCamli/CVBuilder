@@ -9,7 +9,10 @@ content; other states fall back to the basic review computed on read.
 Five content criteria are rated by one tracked AI run (`flow_type` `cv_review`,
 code-only prompt `cv-review` in `flow-registry.ts`). The model returns a level
 0–4, a one-sentence assessment, a strength, an issue, a quote and a fix per
-criterion. **It never sets a number**: `scoreAiReview` in `cv-review.ts` maps
+criterion. Weaknesses are meant to be read at a glance, so the prompt limits the
+issue to 10 words, the fix to 12 (and it must not repeat the issue), the quote to
+40 characters and the assessment to 20 words; the output schema caps them at 120,
+140, 60 and 160 characters, cut at a word boundary. **It never sets a number**: `scoreAiReview` in `cv-review.ts` maps
 levels to points and applies the weights. Structure and parseability are
 deterministic checks.
 
@@ -34,14 +37,17 @@ of 66.
 
 Guards on the AI ratings:
 
+- **Level 4 names no gap.** A level-4 rating that still names an issue counts as
+  level 3: full credit is only for a criterion where nothing holds the CV back.
+
 - **Impact cap.** The level cannot exceed what the statements' figures support:
   no experience statements → 1; no statement with a number, amount or count → 2;
   fewer than a quarter → 3. The dimension's `reason` says when a cap applied.
   Years and numeric dates do not count as figures; digits glued to letters (Q3,
   B2B) do not either.
-- **Verified quotes.** A quote is shown only if it appears in the text the model
-  received (ignoring case, spacing, bullets and quotation marks) and is at least
-  8 characters long. Otherwise it is dropped; the rating itself stands.
+- **Verified quotes.** A quote is shown only if it appears in the parsed sections
+  or the extracted text of the upload (ignoring case, spacing, bullets and
+  quotation marks) and is at least 8 characters long. Otherwise it is dropped; the rating itself stands.
 - **Complete ratings.** A missing criterion or an output that fails the schema
   makes the caller store the basic review instead.
 
@@ -52,10 +58,27 @@ then deterministic checks at full credit.
 
 ## What the AI receives
 
-`buildAiReviewInput` sends the CV language, the counted statements with figures,
-and sections as blocks of heading + lines. Header/contact sections, emails, URLs
-and phone-like digit runs (9+ digits) are removed; date ranges stay. Input is
-capped at 14,000 characters. Hidden blocks and empty sections are not sent.
+`CV_REVIEW_INPUT` chooses what the upload's review reads (prompt `cv-review`
+v3-2 describes both):
+
+- **`raw` (default).** `buildRawReviewInput` sends the CV language and the text
+  extracted from the file, line by line. The review starts as soon as the text is
+  extracted, so it runs alongside the AI parse instead of after it (about 16 s less
+  waiting). It is only requested for text that could be scored (at least 10 words,
+  reliable extraction, no image-based PDF without OCR text). Once the parse is back,
+  `scoreAiReview` applies everything that needs the parsed CV: the impact cap,
+  structure, parseability and the quote check. If the parsed content is unscorable
+  the AI ratings are discarded; if the parse fails the review is dropped. Emails,
+  URLs and phone-like runs are removed per line, but the candidate's name and other
+  header lines can remain (the AI parse receives the same text); the prompt tells
+  the model to ignore the name.
+- **`structured`** (rollback). `buildAiReviewInput` runs after the parse and sends
+  the CV language, the headline (the stated target title), the counted statements
+  with figures, and sections as blocks of heading + lines. The rest of the header,
+  emails, URLs and phone-like digit runs (9+ digits) are removed; date ranges stay.
+  Hidden blocks and empty sections are not sent.
+
+Both inputs are capped at 14,000 characters (the raw text at whole lines).
 Feedback text follows the request's interface language (`languagePolicy`); quotes
 stay in the CV language. The run is linked to the import (or guest import, then
 relinked by the claim), so its cost appears in the AI analytics.

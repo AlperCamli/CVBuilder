@@ -1,6 +1,7 @@
 import type { CvContent, CvJsonValue, CvSection } from "../../shared/cv-content/cv-content.types";
 import type { ParseCvFileDiagnostics } from "../imports/parsers/cv-parser";
 import type { CvReviewAiOutput } from "../ai/flows/flow-contracts";
+import { detectCvLanguage } from "../../shared/localization/languages";
 import { CV_REVIEW_VERSION, type AiReviewCriterionId, type CvReview, type ReviewCheck, type ReviewDimension, type ReviewDimensionId, type ReviewImprovementDetail } from "./cv-review.types";
 
 export const REVIEW_WEIGHTS = { impact: 25, wording: 20, depth: 15, focus: 15, skills_evidence: 10, structure: 10, ats: 5 } as const;
@@ -92,15 +93,18 @@ const isImageBased = (input: ReviewInput): boolean =>
   input.diagnostics?.image_based === true && input.import_status !== undefined && !["failed", "uploaded", "parsing"].includes(input.import_status);
 const ocrRecovered = (input: ReviewInput): boolean => isImageBased(input) && input.diagnostics?.ocr === "recovered";
 
-export const analyze = (input: ReviewInput): ContentAnalysis | null => {
+// Usable OCR text of an image-based PDF is scored; its ATS problem is handled by the image-based rule.
+const unsafeExtraction = (input: ReviewInput): boolean => {
   const diagnostics = input.diagnostics;
+  return !ocrRecovered(input) && Boolean(diagnostics && (diagnostics.quality.low_confidence || diagnostics.quality.confidence === "low" || ["utf8_decode", "pdf_token_heuristic", "pdf_ocr_tesseract"].includes(diagnostics.final_stage)));
+};
+
+export const analyze = (input: ReviewInput): ContentAnalysis | null => {
   const isImport = input.import_status !== undefined;
-  // Usable OCR text of an image-based PDF is scored; its ATS problem is handled by the image-based rule.
-  const unsafeExtraction = !ocrRecovered(input) && Boolean(diagnostics && (diagnostics.quality.low_confidence || diagnostics.quality.confidence === "low" || ["utf8_decode", "pdf_token_heuristic", "pdf_ocr_tesseract"].includes(diagnostics.final_stage)));
   const visibleSections = (input.content?.sections ?? []).map(section => ({ ...section, blocks: section.blocks.filter(block => block.visibility !== "hidden") }));
   const populated = visibleSections.filter(section => section.blocks.some(block => flattenFields(block.fields).trim()));
   const text = populated.flatMap(section => section.blocks.map(block => flattenFields(block.fields))).join("\n");
-  const unscorable = !input.content || wordCount(text) < 10 || unsafeExtraction || (isImport && ["failed", "uploaded", "parsing"].includes(input.import_status!)) || (isImport && (!input.raw_text?.trim() || wordCount(input.raw_text) < 10));
+  const unscorable = !input.content || wordCount(text) < 10 || unsafeExtraction(input) || (isImport && ["failed", "uploaded", "parsing"].includes(input.import_status!)) || (isImport && (!input.raw_text?.trim() || wordCount(input.raw_text) < 10));
   if (unscorable) return null;
   const narratives = [...new Set(populated.filter(s => EXPERIENCE.has(s.type)).flatMap(s => s.blocks.flatMap(b => narrativeLines(b.fields))))];
   return { content: input.content!, visibleSections, populated, text, narratives, measurable: narratives.filter(hasMetric).length };
@@ -246,14 +250,39 @@ export function reviewCv(input: ReviewInput): CvReview {
   return isImageBased(input) ? withImageBasedBlocker(review) : review;
 }
 
-export interface CvReviewAiInput {
+export interface CvReviewSectionsAiInput {
   language: string;
+  headline: string | null;
   stats: { experience_statements: number; statements_with_numbers: number };
   sections: Array<{ type: string; title: string; blocks: Array<{ id: string; heading: string; lines: string[] }> }>;
 }
+/** The extracted text of an upload, so the review can run alongside the AI parse. */
+export interface CvReviewTextAiInput {
+  language: string;
+  text: string;
+}
+export type CvReviewAiInput = CvReviewSectionsAiInput | CvReviewTextAiInput;
+
+// Line by line, so the layout the AI reads keeps its line breaks.
+const redactLines = (rawText: string): string[] => rawText.split(/\r?\n/).map(redact).filter(Boolean);
+
+/**
+ * Null when the extracted text cannot be scored: no AI review is requested for it. Needs no parsed
+ * content; scoreAiReview still applies the checks that do once the parse is back.
+ */
+export function buildRawReviewInput(rawText: string | null | undefined, diagnostics: ParseCvFileDiagnostics | null | undefined): CvReviewTextAiInput | null {
+  const input: ReviewInput = { content: null, import_status: "parsed", raw_text: rawText, diagnostics };
+  if (!rawText || wordCount(rawText) < 10 || unsafeExtraction(input) || (isImageBased(input) && !ocrRecovered(input))) return null;
+  let text = "";
+  for (const line of redactLines(rawText)) {
+    if (text.length + line.length + 1 > MAX_AI_INPUT_CHARS) break;
+    text += (text ? "\n" : "") + line;
+  }
+  return { language: detectCvLanguage(rawText) ?? "en", text };
+}
 
 /** Null when the content cannot be scored: no AI review is requested for it. */
-export function buildAiReviewInput(input: ReviewInput): CvReviewAiInput | null {
+export function buildAiReviewInput(input: ReviewInput): CvReviewSectionsAiInput | null {
   const analysis = analyze(input);
   if (!analysis || (isImageBased(input) && !ocrRecovered(input))) return null;
   let budget = MAX_AI_INPUT_CHARS;
@@ -275,8 +304,16 @@ export function buildAiReviewInput(input: ReviewInput): CvReviewAiInput | null {
       return { id: `b${++blockNumber}`, heading: take(short.join(" | "), 240), lines: lines.map(line => take(line, 300)).filter(Boolean) };
     }).filter(block => block.heading || block.lines.length)
   })).filter(section => section.blocks.length);
-  return { language: analysis.content.language, stats: { experience_statements: analysis.narratives.length, statements_with_numbers: analysis.measurable }, sections };
+  return { language: analysis.content.language, headline: headline(analysis), stats: { experience_statements: analysis.narratives.length, statements_with_numbers: analysis.measurable }, sections };
 }
+
+// The stated target title lives in the header, which is otherwise left out with the contact details.
+const HEADLINE_KEYS = ["headline", "title", "job_title", "professional_title"];
+const headline = ({ content, populated }: ContentAnalysis): string | null => {
+  const fromHeader = populated.filter(s => HEADER.has(s.type)).flatMap(s => s.blocks.flatMap(b => HEADLINE_KEYS.flatMap(key => strings(b.fields[key]))));
+  const value = redact([...fromHeader, ...strings(content.metadata.headline)][0] ?? "").slice(0, 120);
+  return value || null;
+};
 
 // The AI cannot rate impact above what the statements' figures support.
 export const impactCap = ({ narratives, measurable }: ContentAnalysis): { level: number; reason: string | null } => {
@@ -293,7 +330,9 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
   if (!analysis || !aiInput) return isImageBased(input) ? imageBasedNoTextReview() : unscorableReview(input);
   const byId = new Map(output.criteria.map(criterion => [criterion.id, criterion]));
   if (AI_REVIEW_CRITERIA.some(id => !byId.has(id))) throw new Error("AI review is missing a criterion");
-  const corpus = looseText(aiInput.sections.flatMap(section => [section.title, ...section.blocks.flatMap(block => [block.heading, ...block.lines])]).join("\n"));
+  // The review may have read the parsed sections or the extracted text, so a quote may come from either.
+  const rawText = input.raw_text ?? "";
+  const corpus = looseText([...aiInput.sections.flatMap(section => [section.title, ...section.blocks.flatMap(block => [block.heading, ...block.lines])]), rawText, ...redactLines(rawText)].join("\n"));
   // A quote is shown only when it is really in the CV; fabricated excerpts are dropped.
   const verified = (quote: string | null) => {
     const loose = quote ? looseText(quote) : "";
@@ -304,8 +343,10 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
   const improvements: ImprovementCandidate[] = [];
   const aiDimensions = AI_REVIEW_CRITERIA.map(id => {
     const criterion = byId.get(id)!;
-    const capped = id === "impact" && criterion.level > cap.level;
-    const level = capped ? cap.level : criterion.level;
+    // Level 4 means no gap could be named: a rating that still names an issue counts as level 3.
+    const rated = criterion.level === 4 && criterion.issue ? 3 : criterion.level;
+    const capped = id === "impact" && rated > cap.level;
+    const level = capped ? cap.level : rated;
     const points = LEVEL_POINTS[level];
     const quote = verified(criterion.quote);
     const issue = level < 4 ? criterion.issue : null;
@@ -313,7 +354,8 @@ export function scoreAiReview(input: ReviewInput, output: CvReviewAiOutput): CvR
     if (level >= 3 && criterion.strength) strengths.push(`${LABELS[id]}: ${criterion.strength}`);
     if (issue || fix) improvements.push({
       priority: REVIEW_WEIGHTS[id] * (100 - points) / 100,
-      text: [issue, quote ? `“${quote}”` : null, fix].filter(Boolean).join(" "),
+      // Brief issues often come without a full stop; the quote or fix must not run on from them.
+      text: [issue && (quote || fix) && !/[.!?…:]$/.test(issue) ? `${issue}.` : issue, quote ? `“${quote}”` : null, fix].filter(Boolean).join(" "),
       // Without an issue the fix is the lead line, so there is no separate fix box.
       detail: issue ? { issue, quote, fix } : { issue: fix!, quote, fix: null }
     });

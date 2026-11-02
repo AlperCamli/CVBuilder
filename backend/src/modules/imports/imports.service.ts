@@ -1,8 +1,8 @@
 import { detectCvLanguage, normalizeLanguage } from "../../shared/localization/languages";
 import type { PrivacyService } from "../privacy/privacy.service";
 import { privacyConfig } from "../privacy/privacy.config";
-import { buildAiReviewInput, reviewCv, scoreAiReview, type CvReviewAiInput, type ReviewInput } from "../cv-review/cv-review";
-import { CV_REVIEW_VERSION, type CvReview } from "../cv-review/cv-review.types";
+import { buildAiReviewInput, buildRawReviewInput, reviewCv, scoreAiReview, type CvReviewAiInput, type ReviewInput } from "../cv-review/cv-review";
+import { CV_REVIEW_VERSION, type CvReview, type CvReviewInputMode } from "../cv-review/cv-review.types";
 import type { CvReviewAiOutput } from "../ai/flows/flow-contracts";
 import type { Logger } from "pino";
 import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors/app-error";
@@ -117,6 +117,10 @@ const sanitizeFilename = (value: string): string => {
   return normalized.slice(0, 180);
 };
 
+type ReviewRunner = (reviewInput: CvReviewAiInput) => Promise<CvReviewAiOutput>;
+/** The AI ratings of an upload; null when no AI review was requested. */
+type PendingReview = Promise<CvReviewAiOutput | null>;
+
 export const IMPORT_FAILED_MESSAGE = "Import parsing failed";
 
 export const importFailureMessage = (error: unknown): string =>
@@ -133,8 +137,12 @@ export class ImportsService {
     _legacyAiPromptResolver?: AiPromptResolver,
     private readonly aiFlowRunner?: CvParseAiFlowRunner,
     private readonly logger?: Pick<Logger, "info" | "warn">,
-    private readonly privacy?: PrivacyService
+    private readonly privacy?: PrivacyService,
+    private readonly reviewInput: CvReviewInputMode = "raw"
   ) {}
+
+  // A guest upload's raw-text review, started by parseGuestFile and collected by reviewGuestFile.
+  private readonly guestReviews = new WeakMap<ParseCvFileResult, PendingReview>();
 
   async createImportSession(
     session: SessionContext,
@@ -264,11 +272,15 @@ export class ImportsService {
           cvModule.id !== "standard" ? cvModule.parserSectionHints : undefined
       };
 
+      const runner = this.userReviewRunner(session, importId);
+      runner.catch(() => undefined);
+      let rawReview: PendingReview | undefined;
       const effectiveParseResult = await this.resolveEffectiveParseResult(parseInput, {
         original_filename: detail.sourceFile.original_filename,
         mime_type: detail.sourceFile.mime_type,
         import_id: importId
-      }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile);
+      }, session.appUser.default_cv_language || "en", session, cvModule.promptProfile, undefined, undefined,
+      this.reviewInput === "raw" ? extracted => { rawReview = this.startRawReview(extracted, runner); } : undefined);
       const canonicalizedContent = withImagePlaceholder(canonicalizeImportedCvContent(effectiveParseResult.parsedContent), effectiveParseResult, cvModule.id);
       const sourcePageCount = await readSourcePageCount(parseInput);
       if (sourcePageCount !== null) canonicalizedContent.metadata.source_page_count = sourcePageCount;
@@ -279,10 +291,8 @@ export class ImportsService {
         canonicalizedContent.metadata.needs_language_confirmation = !detected;
       }
 
-      const cvReview = await this.reviewWithAi(
-        { content: canonicalizedContent, import_status: "parsed", raw_text: effectiveParseResult.rawExtractedText, diagnostics: effectiveParseResult.diagnostics ?? null },
-        await this.userReviewRunner(session, importId)
-      );
+      const reviewInput: ReviewInput = { content: canonicalizedContent, import_status: "parsed", raw_text: effectiveParseResult.rawExtractedText, diagnostics: effectiveParseResult.diagnostics ?? null };
+      const cvReview = await this.reviewWithAi(reviewInput, this.reviewInput === "raw" ? rawReview : this.structuredReview(reviewInput, await runner));
 
       const updated = await this.importsRepository.updateImport(session.appUser.id, importId, {
         status: "parsed",
@@ -543,9 +553,12 @@ export class ImportsService {
   async parseGuestFile(input: ParseCvFileInput, allowAi = false, assertPermission?: () => Promise<void>, guest?: { guest_import_id: string; guest_lease_id: string }): Promise<ParseCvFileResult> {
     if (this.privacy && privacyConfig().ai_required && (!allowAi || !assertPermission)) throw new ValidationError("Enable AI processing before analyzing your CV.");
     if (allowAi && (!guest || !assertPermission || !this.aiFlowRunner?.parseGuestCvContent)) throw new ValidationError("Tracked guest AI analysis is unavailable. Please retry later.");
+    const runner = Promise.resolve(this.guestReviewRunner(allowAi, assertPermission, guest));
+    let rawReview: PendingReview | undefined;
     const result = allowAi && (!this.privacy || assertPermission) ? await this.resolveEffectiveParseResult(input, {
       original_filename: input.originalFilename, mime_type: input.mimeType
-    }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest) : await this.parser.parse(input);
+    }, "en", undefined, getCvModule("standard").promptProfile, assertPermission, guest,
+    this.reviewInput === "raw" ? extracted => { rawReview = this.startRawReview(extracted, runner); } : undefined) : await this.parser.parse(input);
     const content = withImagePlaceholder(canonicalizeImportedCvContent(result.parsedContent), result, getCvModule("standard").id);
     const sourcePageCount = await readSourcePageCount(input);
     if (sourcePageCount !== null) content.metadata.source_page_count = sourcePageCount;
@@ -553,33 +566,56 @@ export class ImportsService {
     content.language = detected ?? content.language;
     content.metadata.detected_language = detected;
     content.metadata.needs_language_confirmation = !detected;
-    return { ...result, parsedContent: content };
+    const parsed = { ...result, parsedContent: content };
+    if (rawReview) this.guestReviews.set(parsed, rawReview);
+    return parsed;
   }
 
   /** The onboarding score for a parsed guest upload: AI-rated when permitted, otherwise basic. */
   async reviewGuestFile(result: ParseCvFileResult, allowAi: boolean, assertPermission?: () => Promise<void>, guest?: { guest_import_id: string; guest_lease_id: string }): Promise<CvReview> {
-    const runner = this.aiFlowRunner;
-    return this.reviewWithAi(
-      { content: result.parsedContent, import_status: "parsed", raw_text: result.rawExtractedText, diagnostics: result.diagnostics ?? null },
-      allowAi && guest && assertPermission && runner?.reviewGuestCvContent
-        ? reviewInput => runner.reviewGuestCvContent!(guest, { review_input: reviewInput }, assertPermission)
-        : undefined
-    );
+    const input: ReviewInput = { content: result.parsedContent, import_status: "parsed", raw_text: result.rawExtractedText, diagnostics: result.diagnostics ?? null };
+    return this.reviewWithAi(input, this.reviewInput === "raw"
+      ? this.guestReviews.get(result)
+      : this.structuredReview(input, this.guestReviewRunner(allowAi, assertPermission, guest)));
   }
 
-  private async userReviewRunner(session: SessionContext, importId: string) {
+  private async userReviewRunner(session: SessionContext, importId: string): Promise<ReviewRunner | undefined> {
     const runner = this.aiFlowRunner;
     if (!runner?.reviewCvContent) return undefined;
     if (this.privacy && !privacyConfig().ai_required && !(await this.privacy.aiPermission(session.appUser.id))) return undefined;
-    return (reviewInput: CvReviewAiInput) => runner.reviewCvContent!(session, { review_input: reviewInput, import_id: importId });
+    return reviewInput => runner.reviewCvContent!(session, { review_input: reviewInput, import_id: importId });
+  }
+
+  private guestReviewRunner(allowAi: boolean, assertPermission?: () => Promise<void>, guest?: { guest_import_id: string; guest_lease_id: string }): ReviewRunner | undefined {
+    const runner = this.aiFlowRunner;
+    return allowAi && guest && assertPermission && runner?.reviewGuestCvContent
+      ? reviewInput => runner.reviewGuestCvContent!(guest, { review_input: reviewInput }, assertPermission)
+      : undefined;
+  }
+
+  /**
+   * Raw mode: rates the extracted text as soon as it exists, so the review runs alongside the
+   * AI parse. Its outcome is awaited after the parse, or dropped when the parse fails.
+   */
+  private startRawReview(extracted: ExtractCvRawTextResult, runner: Promise<ReviewRunner | undefined>): PendingReview | undefined {
+    const reviewInput = buildRawReviewInput(extracted.rawExtractedText, extracted.diagnostics);
+    if (!reviewInput) return undefined;
+    const pending = runner.then(run => run ? run(reviewInput) : null);
+    pending.catch(() => undefined);
+    return pending;
+  }
+
+  /** Structured mode: rates the parsed sections, after the parse. */
+  private structuredReview(input: ReviewInput, run?: ReviewRunner): PendingReview | undefined {
+    const reviewInput = run ? buildAiReviewInput(input) : null;
+    return run && reviewInput ? run(reviewInput) : undefined;
   }
 
   // An AI review failure never fails the upload: the basic review is stored instead.
-  private async reviewWithAi(input: ReviewInput, run?: (reviewInput: CvReviewAiInput) => Promise<CvReviewAiOutput>): Promise<CvReview> {
-    const reviewInput = run ? buildAiReviewInput(input) : null;
-    if (!run || !reviewInput) return reviewCv(input);
+  private async reviewWithAi(input: ReviewInput, pending?: PendingReview): Promise<CvReview> {
     try {
-      return scoreAiReview(input, await run(reviewInput));
+      const output = await pending;
+      return output ? scoreAiReview(input, output) : reviewCv(input);
     } catch (error) {
       this.logger?.warn(
         { import_review: "cv_review", reason: "AI_REVIEW_FAILED", error_name: error instanceof Error ? error.name : "unknown" },
@@ -596,7 +632,8 @@ export class ImportsService {
     session: SessionContext | undefined,
     promptProfile: string | null = null,
     assertPermission?: () => Promise<void>,
-    guest?: { guest_import_id: string; guest_lease_id: string }
+    guest?: { guest_import_id: string; guest_lease_id: string },
+    onExtracted?: (extracted: ExtractCvRawTextResult) => void
   ): Promise<ParseCvFileResult> {
     if (session && this.privacy) {
       if (privacyConfig().ai_required) await this.privacy.assertAi(session.appUser.id);
@@ -608,6 +645,7 @@ export class ImportsService {
     }
 
     const extraction = await this.extractRawTextForAi(parseInput);
+    onExtracted?.(extraction.extracted);
     if (isImageWithoutText(extraction.extracted)) {
       // Never extracted twice (OCR would run again) and never failed for want of an AI parse.
       return extraction.precomputedFallbackResult ?? { ...extraction.extracted, rawExtractedText: "", parsedContent: createEmptyCvContent("en") };
