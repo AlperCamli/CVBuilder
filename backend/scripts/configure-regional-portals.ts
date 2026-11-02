@@ -6,6 +6,7 @@ import Stripe from "stripe";
 import {
   regionalPortalParameters,
   portalMatchesPrices,
+  portalAllowsCancellation,
   type PortalPlanPrice,
 } from "../src/modules/billing/portal-setup";
 import type {
@@ -19,7 +20,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help")) {
     console.log(
-      "Usage: npm run stripe:regional-portals [-- --create | --list]",
+      "Usage: npm run stripe:regional-portals [-- --create | --list | --enable-cancellation]",
     );
     console.log(
       "Default: validate all six prices and any configured portals without writing to Stripe.",
@@ -28,14 +29,17 @@ async function main() {
       "--create: create/reuse missing regional configurations and print their bpc_ IDs. Existing configurations are never modified.",
     );
     console.log(
+      "--enable-cancellation: turn on end-of-period cancellation in the configured portals. Nothing else in them changes.",
+    );
+    console.log(
       "--list: list existing portal configuration IDs and allowed prices without making changes. Only STRIPE_SECRET_KEY is required.",
     );
     return;
   }
-  if (args.some((arg) => !["--create", "--list"].includes(arg)))
+  if (args.some((arg) => !["--create", "--list", "--enable-cancellation"].includes(arg)))
     throw new SetupError("Unknown option. Use --help.");
-  if (args.includes("--create") && args.includes("--list"))
-    throw new SetupError("Use --create or --list, not both.");
+  if (args.length > 1)
+    throw new SetupError("Use one option at a time.");
   const env: Record<string, string | undefined> = {};
   for (const name of [".env", ".env.local"]) {
     const filename = resolve(__dirname, "..", name);
@@ -66,7 +70,7 @@ async function main() {
         configuration.features.subscription_update.products ?? []
       ).flatMap((product) => product.prices);
       console.log(
-        `${configuration.id} | default=${configuration.is_default} | active=${configuration.active} | plan_changes=${configuration.features.subscription_update.enabled} | allowed_prices=${priceIds.join(",") || "none"}`,
+        `${configuration.id} | default=${configuration.is_default} | active=${configuration.active} | cancellation=${portalAllowsCancellation(configuration)} | plan_changes=${configuration.features.subscription_update.enabled} | allowed_prices=${priceIds.join(",") || "none"}`,
       );
       count++;
     }
@@ -201,6 +205,22 @@ async function main() {
       throw new SetupError(
         `${variable(market)} did not validate after creation. Check its active status and allowed prices in Stripe.`,
       );
+    if (configuration && !portalAllowsCancellation(configuration) && args.includes("--enable-cancellation")) {
+      configuration = await stripe.billingPortal.configurations.update(
+        configuration.id,
+        {
+          features: { subscription_cancel: { enabled: true, mode: "at_period_end" } },
+          expand: ["features.subscription_update.products"],
+        },
+      );
+      console.log(`${variable(market)}: end-of-period cancellation enabled.`);
+    }
+    if (configuration && !portalAllowsCancellation(configuration)) {
+      console.error(
+        `${variable(market)} (${configuration.id}) does not let customers cancel. Run again with --enable-cancellation.`,
+      );
+      process.exitCode = 1;
+    }
     if (configuration) console.log(`${variable(market)}=${configuration.id}`);
     else
       console.log(

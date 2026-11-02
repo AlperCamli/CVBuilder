@@ -1,9 +1,34 @@
-import type { BillingPlanResponseData } from "./api-types";
+import type { BillingPlanResponseData, MeResponseData } from "./api-types";
 import type { CheckoutTarget } from "../../content/pricing";
 
 export const ONBOARDING_ENTRY_PATH = "/onboarding?step=upload";
 export function hasAppAccess(plan: Pick<BillingPlanResponseData, "plan_code" | "subscription_status" | "app_access">): boolean {
   return plan.app_access ?? (plan.plan_code !== "free" && ["active", "trialing"].includes(plan.subscription_status));
+}
+
+// A renewal failed: Stripe keeps the subscription, so the fix is the billing portal, not a new checkout.
+export function hasBillingIssue(plan: Pick<BillingPlanResponseData, "subscription_status" | "provider"> | null | undefined): boolean {
+  return Boolean(plan?.provider?.provider_subscription_id) && ["past_due", "unpaid", "paused"].includes(plan!.subscription_status);
+}
+
+// The paywall that opened checkout (contract with the paywalls: /app/checkout?trial=1&source=…&next=…).
+export const CHECKOUT_SOURCES = ["export", "ai", "tailoring", "cover_letter"] as const;
+export type CheckoutSource = (typeof CHECKOUT_SOURCES)[number];
+export function checkoutSource(value: unknown): CheckoutSource | null {
+  return CHECKOUT_SOURCES.includes(value as CheckoutSource) ? value as CheckoutSource : null;
+}
+
+// Accounts that finished the entry onboarding return to the app, not to its upload step.
+export function resolveReturnPath(path: string, me: Pick<MeResponseData, "user"> | null): string {
+  return path === ONBOARDING_ENTRY_PATH && me?.user.entry_onboarding_completed_at ? "/app" : path;
+}
+
+export function pricingPath(options: { return_path?: string; source?: CheckoutSource | null } = {}): string {
+  const params = new URLSearchParams();
+  if (options.return_path) params.set("next", safeReturnPath(options.return_path));
+  if (options.source) params.set("source", options.source);
+  const query = params.toString();
+  return query ? `/app/pricing?${query}` : "/app/pricing";
 }
 
 export function canOpenExistingCvWorkspace(path: string): boolean {
@@ -17,8 +42,11 @@ export function safeReturnPath(path: unknown, fallback = ONBOARDING_ENTRY_PATH):
   return path;
 }
 
-export function checkoutPath(options: { plan_code?: CheckoutTarget; with_trial?: boolean; return_path?: string; auto?: boolean } = {}): string {
-  const params = new URLSearchParams({ plan: options.plan_code ?? "weekly", trial: options.with_trial === false ? "0" : "1", next: safeReturnPath(options.return_path) });
+export function checkoutPath(options: { plan_code?: CheckoutTarget; with_trial?: boolean; return_path?: string; auto?: boolean; source?: CheckoutSource | null } = {}): string {
+  const params = new URLSearchParams({ plan: options.plan_code ?? "weekly", trial: options.with_trial === false ? "0" : "1" });
+  const source = checkoutSource(options.source);
+  if (source) params.set("source", source);
+  params.set("next", safeReturnPath(options.return_path));
   if (options.auto) params.set("auto", "1");
   return `/app/checkout?${params}`;
 }

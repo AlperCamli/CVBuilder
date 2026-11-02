@@ -308,10 +308,13 @@ export interface BillingCheckoutInput {
   cancel_url?: string;
   // When false, the Weekly checkout skips the free trial and bills immediately.
   with_trial?: boolean;
+  time_zone?: string;
 }
 
 export interface BillingPortalInput {
   return_url?: string;
+  // Opens the portal directly on trial/subscription cancellation or on the payment method.
+  flow?: "cancel" | "payment_method";
 }
 
 export class BackendApi {

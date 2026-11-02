@@ -1,4 +1,5 @@
 import type { CheckoutTarget } from "../../content/pricing";
+import type { CheckoutSource } from "./subscription-flow";
 
 // Decides what the checkout page says and offers before and after Stripe. Copy is
 // returned as translation keys; the component translates and fills {{plan}}/{{price}}.
@@ -10,7 +11,8 @@ export const checkoutKey = (choice: CheckoutChoice) => `${choice.plan}:${choice.
 
 export type CheckoutAction =
   | ({ kind: "checkout"; label: string } & CheckoutChoice)
-  | { kind: "pricing"; label: string };
+  | { kind: "pricing"; label: string }
+  | { kind: "portal"; label: string };
 
 export type CheckoutMascot = "guide" | "point" | "celebrate" | "thinking";
 
@@ -19,11 +21,11 @@ export interface CheckoutScreen {
   eyebrow: string;
   title: string;
   lead: string;
-  /** "trial" shows the 3-day offer at zero today; "plan" shows offerPlan at its list price. */
-  offer: "trial" | "plan";
+  /** "trial" shows the 3-day offer at zero today; "plan" shows offerPlan at its list price; "none" only the actions. */
+  offer: "trial" | "plan" | "none";
   offerPlan: CheckoutTarget;
   primary: CheckoutAction;
-  secondary: CheckoutAction;
+  secondary: CheckoutAction | null;
 }
 
 export interface CheckoutScreenInput {
@@ -33,6 +35,10 @@ export interface CheckoutScreenInput {
   /** null while the trial check runs or when it failed. */
   eligibility: boolean | null;
   error?: boolean;
+  /** The paywall that sent the user here, for the trial headline. */
+  source?: CheckoutSource | null;
+  /** The account already has a Stripe subscription: "payment" when its renewal failed. */
+  portal?: "payment" | "manage" | null;
 }
 
 const SEE_PLANS: CheckoutAction = { kind: "pricing", label: "See Pro plans" };
@@ -44,9 +50,31 @@ const RETRY_LABEL: Record<CheckoutTarget, string> = {
   annual: "Try annual checkout again",
 };
 
-export function checkoutScreen({ outcome, plan, trial, eligibility, error = false }: CheckoutScreenInput): CheckoutScreen {
+const TRIAL_HEADLINE: Record<CheckoutSource, { title: string; lead: string }> = {
+  export: { title: "Your tailored CV is ready to download", lead: "Start your free trial to download it as PDF or DOCX. Nothing to pay today." },
+  ai: { title: "Unlock every AI feature", lead: "Improve, rewrite and tailor with AI, free for 3 days. Nothing to pay today." },
+  tailoring: { title: "Tailor your CV for every job", lead: "Create a tailored CV for each application, free for 3 days. Nothing to pay today." },
+  cover_letter: { title: "Write a cover letter for every job", lead: "Create a matching cover letter for each application, free for 3 days. Nothing to pay today." },
+};
+
+/** The trial end as the user reads it in their own time zone, e.g. "November 5". */
+export function trialEndDate(days: number, locale: string, now = Date.now()): string {
+  return new Date(now + days * 86_400_000).toLocaleDateString(locale, { month: "long", day: "numeric" });
+}
+
+export function checkoutScreen({ outcome, plan, trial, eligibility, error = false, source = null, portal = null }: CheckoutScreenInput): CheckoutScreen {
   const used = eligibility === false;
   const paid = (label: string): CheckoutAction => ({ kind: "checkout", plan, withTrial: false, label });
+
+  if (portal) {
+    return portal === "payment"
+      ? { mascot: "thinking", eyebrow: "PAYMENT NEEDED", title: "Your last payment didn’t go through",
+          lead: "Update your payment method to keep your Pro subscription. Your CVs and next step are saved.",
+          offer: "none", offerPlan: plan, primary: { kind: "portal", label: "Update payment method" }, secondary: null }
+      : { mascot: "point", eyebrow: "YOUR NEXT STEP", title: "You already have a subscription",
+          lead: "Manage it in the billing portal. Your CVs and next step are saved.",
+          offer: "none", offerPlan: plan, primary: { kind: "portal", label: "Manage subscription" }, secondary: null };
+  }
 
   if (trial && used) {
     return {
@@ -61,8 +89,9 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
       ? { mascot: "guide", eyebrow: "NOTHING TO PAY TODAY", title: "Your free trial is still waiting.",
           lead: "Nothing is charged today. Cancel before the 3 days end and you won’t pay a thing.",
           offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS }
-      : { mascot: "celebrate", eyebrow: "3 DAYS OF PRO, FREE", title: "Activate your 3-day free trial",
-          lead: "Your CV and selected next step are saved. We will take you back automatically after activation.",
+      : { mascot: "celebrate", eyebrow: "3 DAYS OF PRO, FREE",
+          title: source ? TRIAL_HEADLINE[source].title : "Activate your 3-day free trial",
+          lead: source ? TRIAL_HEADLINE[source].lead : "Your CV and selected next step are saved. We will take you back automatically after activation.",
           offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS };
   }
   if (outcome === "cancel") {

@@ -35,6 +35,8 @@ import type {
 } from "./subscriptions.repository";
 import {
   toSubscriptionDetails,
+  trialEndLabel,
+  trialSubmitMessage,
   type StripeCheckoutSessionSummary,
   type StripeGateway,
   type StripeSubscriptionSummary,
@@ -67,6 +69,9 @@ const checkoutRejection = (error: unknown): CheckoutOutcome => {
   if (reason === "pricing_changed") return "rejected_pricing_changed";
   return "failed";
 };
+
+// Stripe keeps these subscriptions; the customer fixes them in the billing portal, not with a new checkout.
+const BILLING_ISSUE_STATUSES = new Set(["past_due", "unpaid", "paused"]);
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -387,6 +392,9 @@ export class BillingService {
     const cancelUrl = this.validateReturnUrl(input.cancel_url, this.options.checkoutCancelUrl);
     const active = await this.subscriptionsRepository.getCurrentForUser(userId);
     if (active && ["active", "trialing"].includes(active.status)) throw new ConflictError("You already have an active subscription. Manage it in the billing portal.", { reason: "subscription_active" });
+    if (active?.provider_subscription_id && BILLING_ISSUE_STATUSES.has(active.status)) {
+      throw new ConflictError("Your last payment didn’t go through. Update your payment method in the billing portal to keep your subscription.", { reason: "subscription_active", billing_issue: true });
+    }
     const regional = this.options.regionalPricing ? await this.options.regionalPricing.resolveCheckout(userId, country, input.pricing_quote, plan.code as PurchasePlan) : null;
     if (!regional && !plan.stripe_price_id) {
       throw new BillingConfigurationError("Stripe price id is missing for requested plan", {
@@ -411,7 +419,12 @@ export class BillingService {
       if (eligible) trialPeriodDays = this.options.trialPeriodDays;
     }
 
-    const reservation = await this.options.regionalPricing?.reserveCheckout(userId, createHash("sha256").update(JSON.stringify({ price: regional?.priceId, trial: trialPeriodDays, successUrl, cancelUrl })).digest("hex"));
+    const locale = user.locale === "tr" ? "tr" : "en";
+    const submitMessage = trialPeriodDays
+      ? trialSubmitMessage(locale, trialEndLabel(locale, trialPeriodDays, input.time_zone, regional?.market))
+      : undefined;
+    // Every Stripe parameter is in the key: an idempotent retry with different parameters fails at Stripe.
+    const reservation = await this.options.regionalPricing?.reserveCheckout(userId, createHash("sha256").update(JSON.stringify({ price: regional?.priceId, trial: trialPeriodDays, successUrl, cancelUrl, submitMessage })).digest("hex"));
     const checkoutSession = await stripeGateway.createCheckoutSession({
       customer_id: customerId,
       price_id: regional?.priceId ?? plan.stripe_price_id!,
@@ -424,6 +437,7 @@ export class BillingService {
       client_reference_id: user.id,
       mode: "subscription",
       trial_period_days: trialPeriodDays,
+      submit_message: submitMessage,
       metadata: {
         app_user_id: user.id,
         ...(trialPeriodDays && await this.subscriptionsRepository.getTrialTransitionGrant(userId) ? { trial_transition: "1" } : {}),
@@ -474,16 +488,33 @@ export class BillingService {
       });
     }
 
-    const portalSession = await stripeGateway.createPortalSession({
+    const base = {
       customer_id: customerId,
       return_url: this.validateReturnUrl(input.return_url, this.options.portalReturnUrl),
       configuration: await this.options.regionalPricing?.portal(userId),
       locale: (await this.requireUser(userId)).locale
-    });
+    };
+    const flow = await this.portalFlow(userId, input.flow);
+    let portalSession: { url: string };
+    try {
+      portalSession = await stripeGateway.createPortalSession({ ...base, flow });
+    } catch (error) {
+      // A portal configuration without cancellation rejects the deep link; the portal home still works.
+      if (!flow) throw error;
+      portalSession = await stripeGateway.createPortalSession(base);
+    }
 
     return {
       portal_url: portalSession.url
     };
+  }
+
+  private async portalFlow(userId: string, intent: CreatePortalInput["flow"]) {
+    if (intent === "payment_method") return { type: "payment_method_update" } as const;
+    if (intent !== "cancel") return undefined;
+    const current = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (!current?.provider_subscription_id || current.cancel_at_period_end || !["active", "trialing"].includes(current.status)) return undefined;
+    return { type: "subscription_cancel", subscription_id: current.provider_subscription_id } as const;
   }
 
   async handleWebhook(payload: Buffer, signature: string | undefined): Promise<BillingWebhookResponseData> {

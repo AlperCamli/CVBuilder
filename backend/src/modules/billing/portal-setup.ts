@@ -69,3 +69,10 @@ export function portalMatchesPrices(
     configured.every((id) => expected.has(id))
   );
 }
+
+// Trial users cancel in the portal; the app promises it takes a couple of clicks.
+export function portalAllowsCancellation(
+  configuration: Pick<Stripe.BillingPortal.Configuration, "features">,
+): boolean {
+  return configuration.features.subscription_cancel?.enabled === true;
+}

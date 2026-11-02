@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import {
   regionalPortalParameters,
   portalMatchesPrices,
+  portalAllowsCancellation,
   type PortalPlanPrice,
 } from "../src/modules/billing/portal-setup";
 
@@ -64,5 +65,11 @@ describe("regional Stripe portal setup", () => {
     expect(portalMatchesPrices(config, prices)).toBe(false);
     config.features.subscription_update.products!.shift();
     expect(portalMatchesPrices(config, prices)).toBe(false);
+  });
+  it("requires cancellation so trial users can cancel from the portal", () => {
+    const created = regionalPortalParameters("TR", prices, "https://app.example", "https://app.example/app/pricing");
+    expect(portalAllowsCancellation(created as unknown as Stripe.BillingPortal.Configuration)).toBe(true);
+    const features = { subscription_cancel: { enabled: false } } as Stripe.BillingPortal.Configuration.Features;
+    expect(portalAllowsCancellation({ features })).toBe(false);
   });
 });

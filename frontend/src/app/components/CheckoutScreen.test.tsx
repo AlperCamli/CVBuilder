@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { CheckoutScreen } from "./CheckoutScreen";
-import { checkoutScreen } from "../integration/checkout-screen";
+import { checkoutScreen, trialEndDate } from "../integration/checkout-screen";
 import { i18n } from "../localization/i18n";
 
 const regional = {
@@ -17,7 +17,8 @@ const regional = {
 function render(input: Parameters<typeof checkoutScreen>[0], opening: string | null = null) {
   const outcome = input.outcome;
   return renderToStaticMarkup(<MemoryRouter><CheckoutScreen screen={checkoutScreen(input)} outcome={outcome}
-    regional={regional as never} eligibility={input.eligibility} opening={opening} error={null} onCheckout={() => undefined} /></MemoryRouter>);
+    regional={regional as never} eligibility={input.eligibility} opening={opening} error={null}
+    plansPath="/app/pricing?next=%2Fapp%2Fcv%2F1&amp;source=export" onCheckout={() => undefined} onPortal={() => undefined} /></MemoryRouter>);
 }
 
 afterEach(async () => { await i18n.changeLanguage("en"); });
@@ -51,5 +52,46 @@ describe("checkout mascot screen", () => {
     const html = render({ outcome: "cancel", plan: "annual", trial: false, eligibility: true }, "weekly:true");
     expect(html.match(/Opening secure checkout…/g)).toHaveLength(1);
     expect(html).toContain("Continue with Yearly");
+  });
+
+  it("lays out today, the reminder and the first charge, with the cancel promise and Stripe", () => {
+    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: true, source: "export" });
+    const date = trialEndDate(3, "en-US");
+    expect(html).toContain("Your tailored CV is ready to download");
+    expect(html).toContain("Today: ₺0<");
+    expect(html).toContain("Reminder email before your trial ends");
+    expect(html).toContain(`${date}: ₺149.90/week`);
+    expect(html).toContain(`Cancel anytime from your Profile in two clicks. If you cancel before ${date}, you won’t be charged.`);
+    expect(html).toContain("Secure checkout powered by Stripe");
+    expect(html).toContain("We never see or store your card details.");
+    expect(html).toContain("What you unlock");
+    for (const question of ["Why do you need a card?", "When will I be charged?", "How do I cancel?"]) expect(html).toContain(`<summary>${question}`);
+    // The plans link keeps the paywall's next step and source.
+    expect(html).toContain('href="/app/pricing?next=%2Fapp%2Fcv%2F1&amp;source=export"');
+  });
+
+  it("keeps the paid variant about its price, without trial dates or the card question", () => {
+    const html = render({ outcome: "start", plan: "monthly", trial: false, eligibility: false });
+    expect(html).toContain("Complete your Pro purchase");
+    expect(html).toContain("₺349.90");
+    expect(html).not.toContain("Reminder email before your trial ends");
+    expect(html).not.toContain("Why do you need a card?");
+    expect(html).toContain("Secure checkout powered by Stripe");
+  });
+
+  it("offers only the billing portal after a failed renewal", () => {
+    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: false, portal: "payment" });
+    expect(html).toContain("Update payment method");
+    expect(html).not.toContain("Start my 3-day free trial");
+    expect(html).not.toContain("/app/pricing");
+  });
+
+  it("renders the Turkish timeline and Stripe block", async () => {
+    await i18n.changeLanguage("tr");
+    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: true });
+    expect(html).toContain("Bugün: ₺0<");
+    expect(html).toContain(`${trialEndDate(3, "tr-TR")}: haftalık ₺149,90`);
+    expect(html).toContain("Güvenli ödeme altyapısı: Stripe");
+    expect(html).toContain("Neden kart gerekiyor?");
   });
 });

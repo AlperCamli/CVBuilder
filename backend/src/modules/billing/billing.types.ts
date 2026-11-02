@@ -53,6 +53,8 @@ export interface CreateCheckoutInput {
   // When explicitly false, the Weekly checkout skips the free trial and bills
   // the user immediately. Defaults to true (trial granted if the user is eligible).
   with_trial?: boolean;
+  // The browser's IANA time zone, for the trial end date shown at Stripe.
+  time_zone?: string;
 }
 
 export interface CreateCheckoutResponseData {
@@ -68,6 +70,8 @@ export interface CreateCheckoutResponseData {
 
 export interface CreatePortalInput {
   return_url?: string;
+  // Opens the portal on the cancellation or payment-method step instead of its home page.
+  flow?: "cancel" | "payment_method";
 }
 
 export interface CreatePortalResponseData {

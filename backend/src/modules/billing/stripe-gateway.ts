@@ -76,13 +76,19 @@ export interface CreateStripeCheckoutInput {
   locale?: "en" | "tr";
   idempotency_key?: string;
   expires_at?: number;
+  /** Shown next to Stripe's submit button. */
+  submit_message?: string;
 }
+
+export type StripePortalFlow = { type: "subscription_cancel"; subscription_id: string } | { type: "payment_method_update" };
 
 export interface CreateStripePortalInput {
   configuration?: string;
   locale?: "en" | "tr";
   customer_id: string;
   return_url: string;
+  /** Opens the portal directly on one step and returns to return_url when it is done. */
+  flow?: StripePortalFlow;
 }
 
 export interface StripePriceSummary { id: string; active: boolean; product_id: string; currency: string; amount: number; interval: string | null; interval_count: number | null }
@@ -125,6 +131,23 @@ export interface StripeGateway {
   retrieveSubscription(subscriptionId: string): Promise<StripeSubscriptionSummary | null>;
   retrieveCustomer(customerId: string): Promise<StripeCustomerSummary | null>;
 }
+
+const isTimeZone = (value: string | undefined): value is string => {
+  if (!value) return false;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: value }); return true; } catch { return false; }
+};
+
+// The trial end as the customer will read it: their browser's time zone when known,
+// otherwise the market's (Turkey has one zone), otherwise UTC.
+export const trialEndLabel = (locale: "en" | "tr", trialDays: number, timeZone?: string, market?: string | null, now = Date.now()): string =>
+  new Date(now + trialDays * 86_400_000).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US", {
+    month: "long", day: "numeric", year: "numeric",
+    timeZone: isTimeZone(timeZone) ? timeZone : market === "TR" ? "Europe/Istanbul" : "UTC"
+  });
+
+export const trialSubmitMessage = (locale: "en" | "tr", trialEnd: string): string => locale === "tr"
+  ? `Bugün ücret alınmaz. Deneme süreniz ${trialEnd} tarihinde sona erer; o tarihe kadar istediğiniz zaman iptal edebilirsiniz.`
+  : `You won't be charged today. Your trial ends on ${trialEnd}; cancel anytime before then.`;
 
 const toMetadataRecord = (metadata: Stripe.Metadata | null | undefined): Record<string, string> => {
   const mapped: Record<string, string> = {};
@@ -366,6 +389,7 @@ export class StripeBillingGateway implements StripeGateway {
         ],
         metadata: input.metadata
       };
+      if (input.submit_message) baseParams.custom_text = { submit: { message: input.submit_message.slice(0, 1200) } };
 
       if (mode === "subscription") {
         baseParams.payment_method_collection = "always";
@@ -407,7 +431,14 @@ export class StripeBillingGateway implements StripeGateway {
         configuration: input.configuration,
         locale: input.locale,
         customer: input.customer_id,
-        return_url: input.return_url
+        return_url: input.return_url,
+        ...(input.flow ? {
+          flow_data: {
+            type: input.flow.type,
+            ...(input.flow.type === "subscription_cancel" ? { subscription_cancel: { subscription: input.flow.subscription_id } } : {}),
+            after_completion: { type: "redirect", redirect: { return_url: input.return_url } }
+          }
+        } : {})
       });
 
       return {
