@@ -131,6 +131,11 @@ export const canUseAiForSectionBlock = (
     return true;
   }
 
+  if (section.type === "summary") {
+    // An empty summary can be written from the rest of the CV (the backend sends it as context).
+    return true;
+  }
+
   if (!hasContentForAi(section, blockReference, moduleType)) {
     return false;
   }

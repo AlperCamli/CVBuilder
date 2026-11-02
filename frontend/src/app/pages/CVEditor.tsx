@@ -3307,6 +3307,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
             instruction={aiInstruction}
             loading={aiLoading}
             error={aiError}
+            isSummary={sections.find((section) => section.id === aiTargetSectionId)?.type === "summary"}
             onInstructionChange={(value) => { setAiInstruction(value); setAiError(null); }}
             onRun={(action, instruction) => { void runAiAction(action, instruction); }}
             onClose={() => { setShowAIPopup(false); setAiTargetBlockId(null); setAiAnchor(null); }}

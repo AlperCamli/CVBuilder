@@ -332,6 +332,7 @@ export function buildSeoRoutes(content) {
         description: tr ? "CV yükleme, dışa aktarma, ücretsiz deneme ve abonelik hakkında yardım alın. JobSpecificCV destek ekibine e-posta ile ulaşın." : "Get help with CV uploads, exports, your free trial, and subscriptions. Contact JobSpecificCV support by email.",
         canonical: absoluteUrl(path), robots: "index, follow", ogType: "website",
         ogImage: OG_IMAGE, includeInSitemap: true,
+        lastmod: "2026-10-24", changefreq: "monthly", priority: "0.5",
         alternates: { en: absoluteUrl("/support"), tr: absoluteUrl("/tr/support"), "x-default": absoluteUrl("/support") }
       };
     }),

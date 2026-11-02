@@ -28,13 +28,15 @@ interface AIBlockInstructionBubbleProps {
   instruction: string;
   loading: boolean;
   error: string | null;
+  // Summaries are written with the rest of the CV as context, so the hint can point at it.
+  isSummary?: boolean;
   onInstructionChange: (value: string) => void;
   onRun: (action: BlockAction, instruction?: string) => void;
   onClose: () => void;
 }
 
 export function AIBlockInstructionBubble({
-  anchor, instruction, loading, error, onInstructionChange, onRun, onClose
+  anchor, instruction, loading, error, isSummary = false, onInstructionChange, onRun, onClose
 }: AIBlockInstructionBubbleProps) {
   useTranslation();
   const inputId = useId();
@@ -88,7 +90,9 @@ export function AIBlockInstructionBubble({
               value={instruction}
               disabled={loading}
               aria-describedby={hintId}
-              placeholder={t("How should this block change? e.g. Focus on my leadership experience")}
+              placeholder={isSummary
+                ? t("How should your summary change? e.g. Highlight my team leadership and my latest project")
+                : t("How should this block change? e.g. Focus on my leadership experience")}
               onChange={(event) => onInstructionChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {

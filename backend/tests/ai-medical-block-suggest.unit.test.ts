@@ -337,4 +337,78 @@ describe("AiService block suggestions on real standard block types", () => {
     expect(String(executeFlow.mock.calls[0]![0].system_prompt_suffix)).toMatch(/one paragraph/);
     expect((applied.updated_block as CvBlock).fields.text).toBe("Operations specialist.\nCoordinates shipments.");
   });
+
+  const summaryWithExperienceCv = (summaryFields: CvBlock["fields"]) => {
+    const cv = createMedicalMasterCv();
+    cv.module_type = "standard";
+    cv.current_content.metadata = { full_name: "Ada", headline: "Operations Lead" };
+    cv.current_content.sections = [
+      { id: "summary-section", type: "summary", title: "Summary", order: 0, meta: {}, blocks: [
+        { id: "summary-block", type: "summary", order: 0, visibility: "visible", fields: summaryFields, meta: {} }
+      ] },
+      { id: "exp-section", type: "experience", title: "Experience", order: 1, meta: {}, blocks: [
+        { id: "exp-block", type: "experience_item", order: 0, visibility: "visible",
+          fields: { role: "Ops Lead", company: "Missafir", description: "Ran a 12-person ops team" }, meta: {} }
+      ] }
+    ];
+    return cv;
+  };
+
+  it("gives summary suggestions the rest of the CV as read-only profile_context", async () => {
+    const cv = summaryWithExperienceCv({ text: "Ops specialist." });
+    const { service, updateById } = makeService(cv);
+    const executeFlow = spyExecuteFlow(service, { suggested_block: { fields: {
+      text: "Operations lead who ran a 12-person team at Missafir.", role: "CEO"
+    } } });
+
+    const applied = await service.suggestBlock(session, {
+      master_cv_id: "master-1", block_id: "summary-block", action_type: "improve",
+      user_instruction: "Mention my team leadership at Missafir."
+    });
+
+    const flowInput = executeFlow.mock.calls[0]![0];
+    expect((flowInput.input_payload as Record<string, unknown>).profile_context).toEqual({
+      headline: "Operations Lead",
+      sections: [{ section: "Experience", entries: [{ role: "Ops Lead", company: "Missafir", description: "Ran a 12-person ops team" }] }]
+    });
+    expect(String(flowInput.system_prompt_suffix)).toMatch(/one paragraph/);
+    expect(String(flowInput.system_prompt_suffix)).toMatch(/PROFILE CONTEXT/);
+
+    expect((applied.updated_block as CvBlock).fields).toEqual({ text: "Operations lead who ran a 12-person team at Missafir." });
+    // Only the summary changes; the experience it drew from is untouched.
+    expect(updateById.mock.calls[0]![2].current_content.sections[1]).toEqual(cv.current_content.sections[1]);
+  });
+
+  it("writes an empty summary from scratch, even when the block has no text field yet", async () => {
+    const { service } = makeService(summaryWithExperienceCv({}));
+    const executeFlow = spyExecuteFlow(service, { suggested_block: { fields: { text: "Operations lead at Missafir." } } });
+
+    const applied = await service.suggestBlock(session, { master_cv_id: "master-1", block_id: "summary-block", action_type: "improve" });
+
+    expect(executeFlow.mock.calls[0]![0].input_payload).toMatchObject({ editable_fields: ["text"], block: { fields: { text: "" } } });
+    expect((applied.updated_block as CvBlock).fields.text).toBe("Operations lead at Missafir.");
+  });
+
+  it("refuses to write an empty summary when the CV has nothing else to draw from", async () => {
+    const cv = summaryWithExperienceCv({ text: "" });
+    cv.current_content.sections = [cv.current_content.sections[0]!];
+    const { service } = makeService(cv);
+    const executeFlow = spyExecuteFlow(service, { suggested_block: { fields: { text: "Invented" } } });
+
+    await expect(
+      service.suggestBlock(session, { master_cv_id: "master-1", block_id: "summary-block", action_type: "improve" })
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(executeFlow).not.toHaveBeenCalled();
+  });
+
+  it("does not send profile_context for non-summary blocks", async () => {
+    const { service } = makeService(summaryWithExperienceCv({ text: "Ops specialist." }));
+    const executeFlow = spyExecuteFlow(service, { suggested_block: { fields: { description: "Led a 12-person ops team" } } });
+
+    await service.suggestBlock(session, { master_cv_id: "master-1", block_id: "exp-block", action_type: "improve" });
+
+    const flowInput = executeFlow.mock.calls[0]![0];
+    expect(flowInput.input_payload).not.toHaveProperty("profile_context");
+    expect(String(flowInput.system_prompt_suffix)).not.toMatch(/PROFILE CONTEXT/);
+  });
 });

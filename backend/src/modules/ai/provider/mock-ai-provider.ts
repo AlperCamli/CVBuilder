@@ -575,7 +575,13 @@ const generateBlockSuggestions = (
     };
   }
 
-  const nextText = buildSuggestionText(primary.text, actionType, keywords, userInstruction, 0);
+  // Summary suggestions carry the rest of the CV; an empty summary is drafted from it.
+  const profileContext = asRecord(input.profile_context);
+  const profileStarter = [
+    asString(profileContext.headline),
+    ...asArray(profileContext.sections).map((section) => `Experience in ${asString(asRecord(section).section)}.`)
+  ].filter(Boolean).join(" ");
+  const nextText = buildSuggestionText(primary.text || profileStarter, actionType, keywords, userInstruction, 0);
   const suggestedBlock = setPrimaryTextField(block, primary.key, nextText);
 
   return {

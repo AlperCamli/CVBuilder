@@ -9,14 +9,15 @@ import { ROUTES } from "./routes.mjs";
 export function sitemapXml(routes) {
   const entries = routes
     .filter((route) => route.includeInSitemap)
-    .map(
-      (route) => `  <url>
-    <loc>${route.canonical}</loc>
-    <lastmod>${route.lastmod}</lastmod>
-    <changefreq>${route.changefreq}</changefreq>
-    <priority>${route.priority}</priority>
-  </url>`
-    )
+    .map((route) => {
+      // Optional tags are omitted when unset; "undefined" makes Search Console
+      // flag the sitemap as invalid.
+      const tags = [`<loc>${route.canonical}</loc>`];
+      if (route.lastmod) tags.push(`<lastmod>${route.lastmod}</lastmod>`);
+      if (route.changefreq) tags.push(`<changefreq>${route.changefreq}</changefreq>`);
+      if (route.priority) tags.push(`<priority>${route.priority}</priority>`);
+      return `  <url>\n${tags.map((tag) => `    ${tag}`).join("\n")}\n  </url>`;
+    })
     .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>

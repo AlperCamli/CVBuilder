@@ -16,12 +16,13 @@ const makeSection = (type: string, data: Record<string, unknown>): EditorSection
 });
 
 describe("cv-editor-ai-guard", () => {
-  it("requires non-empty summary text", () => {
+  it("keeps summary-content detection but allows AI to write an empty summary", () => {
     const emptySummary = makeSection("summary", { text: "   " });
     const filledSummary = makeSection("summary", { text: "Product manager with 6 years of experience" });
 
     expect(hasContentForAi(emptySummary)).toBe(false);
     expect(hasContentForAi(filledSummary)).toBe(true);
+    expect(canUseAiForSectionBlock(emptySummary)).toBe(true);
     expect(canUseAiForSectionBlock(filledSummary)).toBe(true);
   });
 

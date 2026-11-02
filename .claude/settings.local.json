@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
+      "Bash(npx supabase db push:*)",
       "Bash(npx vitest *)",
       "Bash(npm run *)",
       "Bash(npm test *)",

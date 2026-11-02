@@ -20,10 +20,8 @@ import {
 } from "../../shared/cv-content/cv-content.utils";
 import { BULLET_MARKER, looksLikeBulletAnswer, normalizeToBullets } from "../../shared/cv-content/bullet-text";
 import {
-  SUMMARY_SECTION_TYPES,
   narrativeTextFields,
   normalizeBlockNarrativeLists,
-  normalizeCvTypeKey,
   normalizeNarrativeListsInContent
 } from "../../shared/cv-content/narrative-fields";
 import type { CvBlock, CvContent } from "../../shared/cv-content/cv-content.types";
@@ -129,6 +127,7 @@ import {
   TAILORED_SKILLS_MAX_SIZE,
   toUtcDateKey
 } from "./skills-pool";
+import { collectSummaryProfileContext, isSummaryBlock, SUMMARY_PROFILE_CONTEXT_RULE } from "./summary-context";
 
 const asRecord = (value: unknown): Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -193,8 +192,7 @@ export const buildBlockSuggestFormatRule = (block: CvBlock, sectionType: string,
   if (bulletFields.length > 0) {
     return `OUTPUT FORMAT (set by the system): write ${bulletFields.join(", ")} as bullet lines, one achievement or responsibility per line, each line starting with "${BULLET_MARKER}" and separated by "\\n" (usually 3-5 lines, fewer when summarizing or shortening). Never merge them into one paragraph. Keep each field a single string.`;
   }
-  const isSummary = SUMMARY_SECTION_TYPES.has(normalizeCvTypeKey(sectionType)) || normalizeCvTypeKey(block.type) === "summary";
-  if (isSummary) {
+  if (isSummaryBlock(block, sectionType)) {
     return "OUTPUT FORMAT (set by the system): write the summary as one paragraph of 2-4 sentences, without bullet characters or line breaks.";
   }
   return null;
@@ -2092,9 +2090,24 @@ export class AiService {
       return applied;
     }
 
-    const editableFields = getStandardBlockEditableFields(currentBlock.block);
+    // Summaries get the rest of the CV as read-only profile_context, so the user can ask for
+    // details from other sections and an empty summary can be written from scratch.
+    const isSummary = isSummaryBlock(currentBlock.block, sectionType);
+    const blockForAi =
+      isSummary && getStandardBlockEditableFields(currentBlock.block).length === 0
+        ? { ...currentBlock.block, fields: { ...currentBlock.block.fields, text: "" } }
+        : currentBlock.block;
+    const editableFields = getStandardBlockEditableFields(blockForAi);
     if (editableFields.length === 0) {
       throw new ConflictError("AI improvement is not available for this section's factual fields.");
+    }
+
+    const profileContext = isSummary ? collectSummaryProfileContext(target.current_content, input.block_id) : null;
+    const hasExistingText = editableFields.some(
+      (key) => asString(blockForAi.fields[key]).length > 0 || asStringArray(blockForAi.fields[key]).length > 0
+    );
+    if (profileContext && !hasExistingText && profileContext.sections.length === 0) {
+      throw new ConflictError("Add your experience, education, or skills first so AI can write a summary from them.");
     }
 
     const executed = await this.executeFlow({
@@ -2107,18 +2120,22 @@ export class AiService {
       prompt_profile: this.resolveModulePromptProfile(target.module_type),
       input_payload: {
         action_type: input.action_type,
-        block: currentBlock.block,
+        block: blockForAi,
         editable_fields: editableFields,
         user_instruction: input.user_instruction ?? "",
-        job_description: target.linked_job?.job_description ?? ""
+        job_description: target.linked_job?.job_description ?? "",
+        ...(profileContext ? { profile_context: profileContext } : {})
       },
       user_prompt: `Suggest a ${input.action_type} update for block ${input.block_id}.`,
-      system_prompt_suffix: buildBlockSuggestFormatRule(currentBlock.block, sectionType, editableFields)
+      system_prompt_suffix: [
+        buildBlockSuggestFormatRule(blockForAi, sectionType, editableFields),
+        profileContext ? SUMMARY_PROFILE_CONTEXT_RULE : null
+      ].filter(Boolean).join("\n\n") || null
     });
 
     const output = asRecord(executed.output);
     const suggestedBlock = enforceStandardBlockAiPolicy({
-      currentBlock: currentBlock.block,
+      currentBlock: blockForAi,
       suggestedBlock: asRecord(output.suggested_block)
     });
     const applied = await this.applyGeneratedBlockSuggestion({
