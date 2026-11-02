@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CvContent } from "./api-types";
 import type { BackendApi } from "./backend-api";
-import { saveImprovedImport } from "./import-improve";
+import { clampImprovementGuidance, saveImprovedImport } from "./import-improve";
+
+describe("clampImprovementGuidance", () => {
+  it("keeps the request within the import-improve limits", () => {
+    expect(clampImprovementGuidance(undefined)).toEqual([]);
+    const clamped = clampImprovementGuidance(Array(25).fill("x".repeat(1200)));
+    expect(clamped).toHaveLength(20);
+    expect(clamped.every(item => item.length === 1000)).toBe(true);
+  });
+});
 
 const createApi = (targetMasterId: string | null) => ({
   getImport: vi.fn<BackendApi["getImport"]>().mockResolvedValue({ target_master_cv: targetMasterId ? { id: targetMasterId } : null } as Awaited<ReturnType<BackendApi["getImport"]>>),

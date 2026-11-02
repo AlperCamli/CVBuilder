@@ -9,7 +9,7 @@ import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import { trackFunnelEvent } from "../integration/funnel-events";
-import { saveImprovedImport, scoreGain } from "../integration/import-improve";
+import { clampImprovementGuidance, saveImprovedImport, scoreGain } from "../integration/import-improve";
 import { ScoreImprovementResult } from "../components/ScoreImprovementResult";
 import { scoreResumePath } from "../onboarding/onboarding-flow";
 
@@ -25,8 +25,9 @@ export function AIImproving() {
 
   const importId = location.state?.importId as string | undefined;
   const parsedContent = location.state?.parsedContent as CvContent | undefined;
-  // Matches the import-improve limits (20 items, 1000 characters each) so a long review never fails the request.
-  const improvementGuidance = ((location.state?.improvements as string[] | undefined) ?? []).slice(0, 20).map(item => item.slice(0, 1000));
+  const rawImprovements = location.state?.improvements as string[] | undefined;
+  // Memoized: the progress effect depends on it, and a new array on every render restarts the run.
+  const improvementGuidance = useMemo(() => clampImprovementGuidance(rawImprovements), [rawImprovements]);
   const moduleType = location.state?.moduleType as string | undefined;
   const source = location.state?.source as string | undefined;
   // Set by the score page for accounts without a trial or Pro: this run is their free one.

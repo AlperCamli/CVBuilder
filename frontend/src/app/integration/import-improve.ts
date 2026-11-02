@@ -23,3 +23,8 @@ export function scoreGain(value: ImportImproveResponse["score_improvement"]): { 
   const after = Math.round(value.after);
   return after > before ? { before, after } : null;
 }
+
+// Matches the import-improve request limits (20 items, 1000 characters each) so a long review never fails it.
+export function clampImprovementGuidance(items: string[] | undefined): string[] {
+  return (items ?? []).slice(0, 20).map(item => item.slice(0, 1000));
+}
