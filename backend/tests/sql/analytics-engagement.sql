@@ -188,7 +188,10 @@ begin
   select string_agg(period || '=' || active || '/' || cohort_size, ',' order by period) into got
   from analytics.cohort_retention('2026-01-01', '2026-01-31', 'month') where period <= 2;
   if got <> '0=3/3,1=1/3,2=0/3' then raise exception 'monthly cohort wrong: %', got; end if;
-  if (select max(period) from analytics.cohort_retention('2026-01-01', '2026-01-31', 'month')) <> 9 then
+  if (select max(period) from analytics.cohort_retention('2026-01-01', '2026-01-31', 'month'))
+     <> (select (extract(year from age(date_trunc('month', s.as_of at time zone 'UTC'), timestamp '2026-01-01')) * 12
+                 + extract(month from age(date_trunc('month', s.as_of at time zone 'UTC'), timestamp '2026-01-01')))::int
+         from analytics_private.refresh_snapshot s) then
     raise exception 'monthly cohort grid must stop at the snapshot month';
   end if;
   if (select cohort_size from analytics.cohort_retention('2026-01-01', '2026-01-31', 'month', p_include_internal => true) where period = 0) <> 4

@@ -300,7 +300,8 @@ begin
   -- Weekly buckets are cohorts by trial start, gap-filled.
   select string_agg(bucket || '=' || trial_starts, ' ' order by bucket) into got from analytics.trial_to_paid('2026-02-01', '2026-02-28', 'week');
   if got <> '2026-01-26=0 2026-02-02=2 2026-02-09=2 2026-02-16=1 2026-02-23=2' then raise exception 'trial_to_paid weeks wrong: %', got; end if;
-  select string_agg(concat_ws('/', trial_starts, in_trial, coalesce(trial_to_paid::text, 'null')), ' ') into got
+  -- Summed because the 3-day window can span two month buckets.
+  select concat_ws('/', sum(trial_starts), sum(in_trial), coalesce(max(trial_to_paid)::text, 'null')) into got
   from analytics.trial_to_paid(today - 3, today, 'month');
   if got <> '1/1/null' then raise exception 'in_trial wrong: %', got; end if;
   begin perform analytics.trial_to_paid(p_filters => '{"currency":"usd"}'); raise exception 'trial_to_paid accepted currency';
