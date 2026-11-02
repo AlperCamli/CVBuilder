@@ -44,6 +44,24 @@ After activation and CV creation/import conversion, the selected active catalog 
 
 Unavailable templates produce an explicit recovery message and a Use default template option on the score screen. Existing upload/account ownership, expiry and storage-recovery behavior remains enforced. Pre-account browser-only state cannot be restored on another device without its original recovery state.
 
+## Free tier (November 2026)
+
+This supersedes the subscription wall in the sections around it: accounts without an active or trialing subscription use the app before entering a card.
+
+| Capability | Free | Trial / Pro | Release cohort without Pro |
+| --- | --- | --- | --- |
+| App shell, dashboard, CV score, job tracker, templates, on-screen preview | yes | yes | yes (as free) |
+| Upload/import a new CV, create or duplicate CVs, manual editing (main and tailored), photos, revisions, manual cover letters | yes | yes | yes |
+| Improve with AI from the score page | once per account (`users.free_improve_used_at`) | yes | once (backfilled if already used) |
+| AI tailoring session (analysis, questions, cards, refine, finish) | one session per account (`users.free_tailoring_used_at`, `tailoring_sessions.free_tier`) | yes | once (backfilled if already used) |
+| Exports and downloads (any format, CV or cover letter), a second tailoring, all other AI (editor suggestions, translation, cover letter generation, legacy tailoring runs) | trial prompt | yes | trial prompt |
+
+- The backend route map is `classifyAppRequest` in `backend/src/modules/entitlements/access-policy.ts`; `BillingService.authorizeAppRequest` applies it and `claimFreeUse` sets a marker with a conditional update when the free use starts (concurrent requests get one). A failed start releases it; deleting the CV does not. Trialing/Pro accounts never set markers.
+- Refusals are `403` with `details: { reason: "trial_required", surface: "export" | "ai" | "tailoring" | "cover_letter" | "other", action }` and are recorded in `entitlement_denials` with that action and surface.
+- `GET /billing/plan` adds `free_tier: { tailoring_available, improve_available }`; `can_edit_existing_cvs` is true for every account.
+- The frontend no longer redirects from `SubscriptionGate`. Gated actions open the trial prompt (`showTrialPrompt`), which navigates to `/app/checkout?trial=1&source=<surface>&next=<return path>`. Export prompts return with `?resume=export` and the editor reopens the download after activation; score actions resume with `action=`.
+- Funnel events: `score_view`, `score_action`, `free_tailoring_started`, `free_tailoring_finished`, `free_improve_used`, `paywall_shown`.
+
 ## Access and limits
 
 Frontend route checks and backend middleware require active/trialing subscriptions for new document creation, AI, exports and job tailoring. New accounts still activate a trial or purchase Pro before entering the application.

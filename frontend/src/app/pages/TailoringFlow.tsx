@@ -5,7 +5,7 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import { useAuth } from "../integration/auth-context";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
-import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import type { FollowUpQuestion, JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
 import { trackTailoredCvGenerated } from "../integration/analytics";
@@ -56,7 +56,7 @@ export function TailoringFlow() {
   const { id } = useParams();
   const location = useLocation();
   const { api } = useAuth();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, showTrialPrompt } = useUpgradePrompt();
 
   const state = (location.state ?? {}) as TailoringFlowState;
   const masterCvId = state.masterCvId ?? id;
@@ -178,7 +178,10 @@ export function TailoringFlow() {
         }
       });
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "tailoring"));
+        setError(err.message);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "tailored_cv_generation"),
           reason: err.message
@@ -228,7 +231,10 @@ export function TailoringFlow() {
       setFollowUpQuestions(followUpRun.result.questions ?? []);
       setCurrentStep(1);
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "tailoring"));
+        setError(err.message);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message

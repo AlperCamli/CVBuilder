@@ -139,6 +139,8 @@ export interface TailoringSessionView {
     answers: Record<string, TailoringAnswer>;
     questions_completed: boolean;
     error_message: string | null;
+    // The account's one free tailoring (no trial or Pro).
+    free_tier?: boolean;
     created_at: string;
     finished_at: string | null;
   };

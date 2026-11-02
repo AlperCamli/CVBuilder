@@ -7,6 +7,8 @@ import type {
   SyncSubscriptionInput
 } from "../../src/modules/billing/subscriptions.repository";
 import type {
+  FreeTierMarkers,
+  FreeTierUse,
   UsageCounterIncrementInput,
   UsageRepository
 } from "../../src/modules/usage/usage.repository";
@@ -373,6 +375,26 @@ export class InMemoryUsageRepository implements UsageRepository {
 
     this.rows.set(`${updated.user_id}:${updated.period_month}`, updated);
     return updated;
+  }
+
+  readonly freeTier = new Map<string, FreeTierMarkers>();
+
+  async getFreeTierMarkers(userId: string): Promise<FreeTierMarkers> {
+    return { tailoring: null, improve: null, ...this.freeTier.get(userId) };
+  }
+
+  // Synchronous check-and-set, like the conditional UPDATE: concurrent claims cannot both win.
+  async claimFreeTierMarker(userId: string, use: FreeTierUse): Promise<string | null> {
+    const markers = { tailoring: null, improve: null, ...this.freeTier.get(userId) };
+    if (markers[use] !== null) return null;
+    const claimedAt = nowIso();
+    this.freeTier.set(userId, { ...markers, [use]: claimedAt });
+    return claimedAt;
+  }
+
+  async releaseFreeTierMarker(userId: string, use: FreeTierUse, claimedAt: string): Promise<void> {
+    const markers = this.freeTier.get(userId);
+    if (markers?.[use] === claimedAt) this.freeTier.set(userId, { ...markers, [use]: null });
   }
 }
 

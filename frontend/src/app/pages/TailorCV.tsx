@@ -7,7 +7,7 @@ import { useAuth } from "../integration/auth-context";
 import { OnboardingCoachMark } from "../components/OnboardingCoachMark";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
-import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import type { JobAnalysisResult } from "../integration/api-types";
 import { runTailoringFlow } from "../integration/tailoring-run";
 import { trackJobDescriptionPasted } from "../integration/analytics";
@@ -29,7 +29,7 @@ export function TailorCV() {
   const { id } = useParams();
   const location = useLocation();
   const { api } = useAuth();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, showTrialPrompt } = useUpgradePrompt();
   const { completeStep } = useOnboarding();
   const state = (location.state ?? {}) as TailorCvLocationState;
   const prefillJob = state.prefillJob;
@@ -173,7 +173,10 @@ export function TailorCV() {
         }
       });
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "tailoring"));
+        setError(err.message);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message

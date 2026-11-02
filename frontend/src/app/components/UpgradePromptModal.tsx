@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dial
 import { useAuth } from "../integration/auth-context";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { startStripeCheckout } from "../integration/checkout-redirect";
+import { paywallCheckoutPath, trialPromptCopy } from "../integration/entitlement-upsell";
+import { trackFunnelEvent } from "../integration/funnel-events";
 import {
   PAID_PLAN_CARDS,
   WEEKLY_PRICE,
@@ -63,46 +65,6 @@ const postExportPlanBadge = (
   return card.savings ?? card.badge ?? null;
 };
 
-const featureLabel = (feature: string | undefined): string => {
-  switch (feature) {
-    case "export_pdf":
-    case "export_docx":
-      return "exports";
-    case "tailored_cv_generation":
-      return "job-specific CVs";
-    case "ai_action":
-      return "AI actions";
-    default:
-      return "this feature";
-  }
-};
-
-const limitReachedCopy = (feature: string | undefined): { title: string; pitch: string } => {
-  switch (feature) {
-    case "ai_action":
-      return {
-        title: "You've hit your monthly AI limit",
-        pitch: `Unlock unlimited AI improvements and rewrites. See your regional prices below.`
-      };
-    case "export_pdf":
-    case "export_docx":
-      return {
-        title: "You've hit your monthly export limit",
-        pitch: `Unlock unlimited PDF and DOCX exports. See your regional prices below.`
-      };
-    case "tailored_cv_generation":
-      return {
-        title: "You've hit your job-specific CV limit",
-        pitch: `Create unlimited tailored CVs for every application. See your regional prices below.`
-      };
-    default:
-      return {
-        title: "You've hit your Free plan limit",
-        pitch: `Go unlimited. See your regional prices below.`
-      };
-  }
-};
-
 const getCopy = (
   variant: UpgradePromptVariant,
   options: UpgradePromptOptions,
@@ -121,44 +83,22 @@ const getCopy = (
         ctaPrimary: weeklyCta,
         dismiss: "Maybe later"
       };
-    case "export_first_in_session":
+    case "trial_required": {
+      const copy = trialPromptCopy(options.surface ?? "other", trialEligible);
       return {
-        eyebrow: "Heads up",
-        title: "Export without limits",
-        body: trialEligible
-          ? "Free includes 5 exports per month. Weekly starts with a 3-day trial and unlocks unlimited PDF and DOCX exports."
-          : "Free includes 5 exports per month. Upgrade to export as many polished CVs as you need.",
-        ctaPrimary: weeklyCta,
-        dismiss: "Continue with Free"
-      };
-    case "limit_reached": {
-      if (options.requiresPro) {
-        const title = options.feature === "ai_action" ? "You need Pro to use AI tools"
-          : options.feature === "tailored_cv_generation" ? "You need Pro to tailor your CV"
-          : options.feature === "export_pdf" || options.feature === "export_docx" ? "You need Pro to export your CV"
-          : "You need Pro to use this feature";
-        return {
-          eyebrow: "Pro required",
-          title,
-          body: options.reason ?? (trialEligible
-            ? "Start your 3-day free trial or choose Pro to continue."
-            : "Choose a Pro plan to continue."),
-          ctaPrimary: weeklyCta,
-          dismiss: "Not now"
-        };
-      }
-      const { title, pitch } = limitReachedCopy(options.feature);
-      const reasonSentence = options.reason
-        ? `${options.reason.replace(/\.?\s*$/, ".")} `
-        : `You've used all of your free ${featureLabel(options.feature)} for this month. `;
-      return {
-        eyebrow: "Free limit reached",
-        title,
-        body: `${reasonSentence}${pitch}`,
-        ctaPrimary: weeklyCta,
+        ...copy,
+        ctaPrimary: trialEligible ? "Start free trial" : "See Pro plans",
         dismiss: "Not now"
       };
     }
+    case "limit_reached":
+      return {
+        eyebrow: "Limit reached",
+        title: "You've reached your plan limit",
+        body: options.reason ?? "Choose a Pro plan to keep going.",
+        ctaPrimary: weeklyCta,
+        dismiss: "Not now"
+      };
     case "post_export":
       return {
         eyebrow: "Your job-specific CV is exported",
@@ -166,7 +106,7 @@ const getCopy = (
         body:
           "You have seen the core value: one CV tailored for one real job. Choose a plan to create unlimited versions for every application.",
         ctaPrimary: weeklyCta,
-        dismiss: "Continue with Free"
+        dismiss: "Not now"
       };
   }
 };
@@ -182,6 +122,19 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
   const [trialEligible, setTrialEligible] = useState(true);
   const trackedPostExportOpenRef = useRef(false);
   const trackedPostExportDismissRef = useRef(false);
+  const trackedPaywallRef = useRef(false);
+  const isTrialPrompt = variant === "trial_required";
+  const surface = options.surface ?? "other";
+
+  useEffect(() => {
+    if (!open) {
+      trackedPaywallRef.current = false;
+      return;
+    }
+    if (!isTrialPrompt || trackedPaywallRef.current) return;
+    trackedPaywallRef.current = true;
+    trackFunnelEvent("paywall_shown", surface);
+  }, [open, isTrialPrompt, surface]);
 
   useEffect(() => {
     if (!open || !isAuthenticated) {
@@ -286,6 +239,11 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusy(null);
     }
+  };
+
+  const goToTrialCheckout = () => {
+    onClose();
+    navigate(paywallCheckoutPath(surface, options.returnPath ?? `${window.location.pathname}${window.location.search}`, trialEligible));
   };
 
   const goToPricing = () => {
@@ -500,10 +458,14 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                 </button>
               )}
 
+              {isTrialPrompt && options.reason ? (
+                <p className="mb-3" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{t(options.reason)}</p>
+              ) : null}
+
               <button
                 type="button"
-                onClick={() => void startCheckout("weekly")}
-                disabled={busy !== null || !regional.ready}
+                onClick={() => (isTrialPrompt ? goToTrialCheckout() : void startCheckout("weekly"))}
+                disabled={busy !== null || (!isTrialPrompt && !regional.ready)}
                 className="w-full px-5 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                 style={{
                   fontSize: "13px",

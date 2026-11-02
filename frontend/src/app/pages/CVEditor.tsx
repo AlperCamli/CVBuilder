@@ -101,7 +101,15 @@ import type {
   TemplateSummary
 } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
-import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import {
+  isEntitlementExceeded,
+  isTrialRequired,
+  resolveEntitlementFeature,
+  resolvePaywallSurface,
+  withResumeHint,
+  type PaywallSurface
+} from "../integration/entitlement-upsell";
+import type { BillingPlanResponseData } from "../integration/api-types";
 import {
   cvContentToEditorSections,
   editorSectionsToCvContent,
@@ -148,7 +156,6 @@ const formatDateTime = (value: string | null | undefined): string => {
 // Fine slider increment so users can dial in a compact layout precisely.
 const SCALE_STEP = 0.01;
 const MASTER_EXPORT_GUIDE_FLAG = "cv-editor:has-exported-master";
-const EXPORT_UPSELL_SESSION_KEY = "cv-editor:export-upsell-shown";
 const EMPTY_AI_BLOCK_MESSAGE = "This block is empty, please provide some information.";
 
 const clampInRange = (value: number, min: number, max: number): number =>
@@ -487,7 +494,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   const location = useLocation();
   const { api, me } = useAuth();
   const { setSidebarVisible } = useSidebar();
-  const { showUpgradePrompt, ensureProAccess } = useUpgradePrompt();
+  const { showUpgradePrompt, showTrialPrompt, ensureProAccess } = useUpgradePrompt();
   const { completeStep, dismissCoachMark } = useOnboarding();
 
   const routeCvKind = location.state?.cvKind as "master" | "tailored" | undefined;
@@ -1397,26 +1404,34 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     [api, buildCurrentContent, cvKind, language, moduleType, showTemplateGallery]
   );
 
+  // After activation, checkout returns here and the download continues (?resume=export).
+  const exportReturnPath = () => withResumeHint(`${location.pathname}${location.search}`, "export");
+
+  // Free accounts tailor once: a new session while the free one is unused, and their free
+  // session (its tailored CV) stays open to finish and review.
+  const allowFreeTailoring = async (plan: BillingPlanResponseData): Promise<boolean> => {
+    if (plan.free_tier?.tailoring_available) return true;
+    if (cvKind !== "tailored" || !cvId) return false;
+    const active = await api.getActiveTailoringSession(cvId).catch(() => null);
+    return active?.session?.session.free_tier === true;
+  };
+
   const requireProFeature = async (feature: "export_pdf" | "export_docx" | "ai_action" | "tailored_cv_generation") => {
     if (dirty && !(await persistCv("manual"))) return false;
     // Tailoring returns from checkout straight to this editor with the Tailor panel open;
     // the editor resolves master vs tailored from the server, so no history state is needed.
-    return ensureProAccess(feature, feature === "tailored_cv_generation" && cvId ? tailoringReturnPath(cvId) : undefined);
+    if (feature === "tailored_cv_generation") {
+      return ensureProAccess(feature, cvId ? tailoringReturnPath(cvId) : undefined, allowFreeTailoring);
+    }
+    return ensureProAccess(feature, feature === "ai_action" ? undefined : exportReturnPath());
   };
 
-  const maybeShowExportUpsell = async (): Promise<void> => {
-    if (typeof window === "undefined") return;
-    if (onboardingCompleted !== true) return;
-    if (window.sessionStorage.getItem(EXPORT_UPSELL_SESSION_KEY) === "true") return;
-
-    try {
-      const plan = await api.getBillingPlan();
-      if (isPaidPlanCode(plan.plan_code)) return;
-      window.sessionStorage.setItem(EXPORT_UPSELL_SESSION_KEY, "true");
-      showUpgradePrompt("export_first_in_session");
-    } catch {
-      // Don't block export on a billing-plan fetch failure.
-    }
+  // A gated request the server refused (e.g. a trial that just ended) opens the trial prompt.
+  const showPaywallFor = (err: unknown, fallback: PaywallSurface): boolean => {
+    if (!isTrialRequired(err)) return false;
+    const surface = resolvePaywallSurface(err, fallback);
+    showTrialPrompt(surface, { returnPath: surface === "export" ? exportReturnPath() : undefined });
+    return true;
   };
 
   const armPostExportReturnPrompt = async (): Promise<void> => {
@@ -1441,8 +1456,6 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
 
     setExportError(null);
-
-    void maybeShowExportUpsell();
 
     try {
       const history =
@@ -1533,7 +1546,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         void armPostExportReturnPrompt();
       }
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (showPaywallFor(err, "export")) {
+        setShowExportDialog(false);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, format === "pdf" ? "export_pdf" : "export_docx"),
           reason: err.message
@@ -1549,6 +1564,19 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     }
   };
 
+  const resumedExportRef = useRef(false);
+  useEffect(() => {
+    if (loading || !cvId || resumedExportRef.current) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("resume") !== "export") return;
+    resumedExportRef.current = true;
+    params.delete("resume");
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : "", hash: location.hash }, { replace: true, state: location.state });
+    void openExportDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, cvId, location.search]);
+
   const downloadExistingExport = async (exportId: string, format: "pdf" | "docx") => {
     if (!(await requireProFeature(format === "pdf" ? "export_pdf" : "export_docx"))) { setShowExportDialog(false); return; }
     try {
@@ -1562,7 +1590,9 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         page_count: pageCount
       });
     } catch (err) {
-      if (err instanceof Error) {
+      if (showPaywallFor(err, "export")) {
+        setShowExportDialog(false);
+      } else if (err instanceof Error) {
         setExportError(err.message);
       } else {
         setExportError("Download failed.");
@@ -1750,7 +1780,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       }
       setShowSkillsPoolDialog(true);
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (showPaywallFor(err, "ai")) {
+        setShowAIPopup(false);
+        setShowSkillsPoolDialog(false);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message
@@ -1823,7 +1856,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
         await loadAiData(cvKind, cvId);
       }
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (showPaywallFor(err, "ai")) {
+        setShowAIPopup(false);
+        setShowSkillsPoolDialog(false);
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message
@@ -2007,7 +2043,10 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
       setShowAIPopup(false);
       toast.success(t("Block updated with AI."));
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (showPaywallFor(err, "ai")) {
+        setShowAIPopup(false);
+        setShowSkillsPoolDialog(false);
+      } else if (isEntitlementExceeded(err)) {
         setShowAIPopup(false);
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
@@ -2232,7 +2271,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
   useEffect(() => {
     if (!tailorMode || !canTailor || !cvId || tailorAccess === "allowed" || tailorAccessCheckRef.current) return;
     tailorAccessCheckRef.current = true;
-    void ensureProAccess("tailored_cv_generation", tailoringReturnPath(cvId)).then((allowed) => {
+    void ensureProAccess("tailored_cv_generation", tailoringReturnPath(cvId), allowFreeTailoring).then((allowed) => {
       tailorAccessCheckRef.current = false;
       if (allowed) setTailorAccess("allowed");
       else setPaneMode("edit");
@@ -2274,6 +2313,7 @@ export function CVEditor({ forcedModuleType, forcedTitle }: CVEditorProps = {}) 
     cvKind,
     cvId,
     bridge: tailoringBridge,
+    onTrialRequired: (surface) => showTrialPrompt(surface, { returnPath: cvId ? tailoringReturnPath(cvId) : undefined }),
     onTailoredCvCreated: async (tailoredCvId) => {
       const detail = await api.getTailoredCv(tailoredCvId);
       navigate(`/app/cv/${tailoredCvId}`, {

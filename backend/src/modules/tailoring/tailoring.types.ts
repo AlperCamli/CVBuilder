@@ -99,6 +99,8 @@ export interface TailoringSessionRecord {
   base_snapshot: CvContent;
   error_message: string | null;
   finished_at: string | null;
+  // Started as the account's one free tailoring (no trial or Pro).
+  free_tier: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -204,6 +206,7 @@ export interface TailoringSessionView {
     answers: Record<string, TailoringAnswer>;
     questions_completed: boolean;
     error_message: string | null;
+    free_tier: boolean;
     created_at: string;
     finished_at: string | null;
   };

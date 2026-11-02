@@ -8,13 +8,15 @@ import { CvReviewPanel } from "../components/CvReviewPanel";
 import type { CvContent, CvReview } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { useOnboarding } from "../contexts/OnboardingContext";
+import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { ApiClientError } from "../integration/api-error";
+import { trackFunnelEvent } from "../integration/funnel-events";
 import {
   trackOnboardingStepCompleted,
   trackOnboardingStepView,
 } from "../integration/analytics";
 
-import { applyOnboardingTemplate, checkoutPath, hasAppAccess, readOnboardingTemplate, clearOnboardingTemplate, onboardingTemplateName } from "../integration/subscription-flow";
+import { applyOnboardingTemplate, hasAppAccess, readOnboardingTemplate, clearOnboardingTemplate, onboardingTemplateName } from "../integration/subscription-flow";
 import { completeNewCvOnboarding, readNewCvOnboarding, clearNewCvOnboarding } from "../integration/new-cv-onboarding";
 
 export function CVScore() {
@@ -29,6 +31,8 @@ export function CVScore() {
   const resumed = useRef(false);
   const [selectedTemplate, setSelectedTemplate] = useState(readOnboardingTemplate);
   const { completeStep } = useOnboarding();
+  const { showTrialPrompt } = useUpgradePrompt();
+  const [freeAccount, setFreeAccount] = useState(false);
 
   const importId = (location.state?.importId ??
     params.get("import") ??
@@ -97,25 +101,43 @@ export function CVScore() {
   const improvements = useMemo(() => review?.improvements ?? [], [review]);
   const parseNeedsManualReview = review?.status === "unscorable" || !review;
 
+  const scoreViewTracked = useRef(false);
   useEffect(() => {
     trackOnboardingStepView({
       step: "cv_score",
       source: "upload_processing",
     });
+    if (!scoreViewTracked.current) {
+      scoreViewTracked.current = true;
+      trackFunnelEvent("score_view");
+    }
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    void api.getBillingPlan().then(plan => { if (active) setFreeAccount(!hasAppAccess(plan)); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [api]);
+
   type NextAction = "editor" | "tailor" | "improve";
-  const handleAction = useCallback(async (action: NextAction) => {
+  // Free accounts open the editor any time, and tailor and improve once each; a used free
+  // action opens the trial prompt, and checkout returns here to resume it (?action=).
+  const handleAction = useCallback(async (action: NextAction, resumed = false) => {
     if (converting) return;
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
     if (!scratch && (!parsedContent || !importId)) return;
+    if (!resumed) trackFunnelEvent("score_action", action);
     setConverting(true); setError(null);
     try {
       const billing = await api.getBillingPlan();
-      if (!hasAppAccess(billing)) {
+      const fullAccess = hasAppAccess(billing);
+      const freeAllowed = action === "editor"
+        || (action === "tailor" && billing.free_tier?.tailoring_available === true)
+        || (action === "improve" && (scratch || billing.free_tier?.improve_available === true));
+      if (!fullAccess && !freeAllowed) {
         const next = new URLSearchParams({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage });
         if (importId) next.set("import", importId);
-        navigate(checkoutPath({ with_trial: true, return_path: `/app/cv-score?${next}` }));
+        showTrialPrompt(action === "tailor" ? "tailoring" : "ai", { returnPath: `/app/cv-score?${next}` });
         return;
       }
       if (scratch) {
@@ -128,7 +150,7 @@ export function CVScore() {
         return;
       }
       if (action === "improve") {
-        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload" } });
+        navigate("/app/ai-improving", { state: { importId, parsedContent: { ...parsedContent!, language: cvLanguage }, improvements, moduleType, source: "onboarding_upload", freeRun: !fullAccess, tailoringAvailable: fullAccess || billing.free_tier?.tailoring_available === true } });
         return;
       }
       const detail = await api.getImport(importId!);
@@ -143,7 +165,7 @@ export function CVScore() {
       navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: true } });
     } catch (err) { setError(err instanceof Error ? err.message : t("Couldn't open your CV. Please try again.")); }
     finally { setConverting(false); }
-  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType]);
+  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType, showTrialPrompt]);
   const handleImproveWithAI = () => { void handleAction("improve"); };
   const handleCustomizeForJob = () => { void handleAction("tailor"); };
   const handleReviewInEditor = () => { void handleAction("editor"); };
@@ -151,7 +173,7 @@ export function CVScore() {
   useEffect(() => {
     if (loading || !cvLanguage || resumed.current || !["editor", "tailor", "improve"].includes(resumeAction ?? "")) return;
     resumed.current = true;
-    void handleAction(resumeAction as NextAction);
+    void handleAction(resumeAction as NextAction, true);
   }, [loading, cvLanguage, resumeAction, handleAction]);
 
   if (scratch && !newCv) return <div className="p-8"><p role="alert">{t("Your new CV setup has expired. Please start again.")}</p><Link className="underline" to="/onboarding">{t("Create a new CV")}</Link></div>;
@@ -200,7 +222,7 @@ export function CVScore() {
             <p
               style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}
             >
-              {t("Based on")}{" "}{scratch ? t("Your new CV") : fileName || "uploaded file"}
+              {t("Based on")}{" "}{scratch ? t("Your new CV") : fileName || t("uploaded file")}
             </p>
             <p className="mt-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{t("This score is guidance and does not guarantee employment outcomes.")}</p>
           </div>
@@ -228,7 +250,7 @@ export function CVScore() {
           )}
 
           <div className="mb-8">
-            {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, activate your trial, then add your experience to receive useful AI feedback.")}</p> : review ? (
+            {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, then add your experience to receive useful AI feedback.")}</p> : review ? (
               <CvReviewPanel review={review} />
             ) : (
               <p role="status" style={{ color: "var(--color-text-secondary)" }}>
@@ -249,7 +271,7 @@ export function CVScore() {
               {t("Upload another CV")}</button>
           ) : null}
 
-          <p className="mb-4 text-sm text-slate-600">{t("An active 3-day trial or Pro subscription is required to continue. Your selected next step will resume after activation.")}</p>
+          {freeAccount && <p className="mb-4 text-sm text-slate-600">{t("Your first tailored CV is free. Start a free trial to download it and unlock every AI feature.")}</p>}
           {selectedTemplate && <p className="mb-4 text-sm">{t("Selected template")}: {onboardingTemplateName(selectedTemplate)} <button className="underline" onClick={() => { clearOnboardingTemplate(); setSelectedTemplate(null); setError(null); }}>{t("Use default template")}</button></p>}
           <div className="space-y-3">
             {(fromGuest || scratch) && (

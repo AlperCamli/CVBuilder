@@ -1138,6 +1138,8 @@ export interface BillingPlanResponseData {
   cancel_at_period_end: boolean;
   trial_eligible: boolean;
   trial_transition?: { eligible: boolean } | null;
+  // One-time allowances of accounts without a trial or Pro.
+  free_tier?: { tailoring_available: boolean; improve_available: boolean };
   provider: BillingProviderSummary;
   entitlement_summary: EntitlementSummary;
 }

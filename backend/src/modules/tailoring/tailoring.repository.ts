@@ -20,6 +20,7 @@ export interface CreateTailoringSessionPayload {
   job_id: string | null;
   job_snapshot: TailoringJobSnapshot;
   base_snapshot: CvContent;
+  free_tier?: boolean;
 }
 
 export interface UpdateTailoringSessionPayload {
@@ -130,6 +131,7 @@ const toSessionRecord = (row: Record<string, unknown>): TailoringSessionRecord =
   base_snapshot: row.base_snapshot as CvContent,
   error_message: (row.error_message as string | null) ?? null,
   finished_at: (row.finished_at as string | null) ?? null,
+  free_tier: row.free_tier === true,
   created_at: String(row.created_at),
   updated_at: String(row.updated_at)
 });

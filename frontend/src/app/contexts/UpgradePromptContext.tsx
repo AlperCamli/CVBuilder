@@ -3,12 +3,13 @@ import { useTranslation } from "react-i18next";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "../integration/auth-context";
 import { hasAppAccess } from "../integration/subscription-flow";
-import type { EntitlementFeature } from "../integration/entitlement-upsell";
+import { surfaceForFeature, type EntitlementFeature, type PaywallSurface } from "../integration/entitlement-upsell";
+import type { BillingPlanResponseData } from "../integration/api-types";
 import { UpgradePromptModal } from "../components/UpgradePromptModal";
 
 export type UpgradePromptVariant =
   | "welcome"
-  | "export_first_in_session"
+  | "trial_required"
   | "limit_reached"
   | "post_export";
 
@@ -19,7 +20,8 @@ export interface UpgradePromptNextStep {
 
 export interface UpgradePromptOptions {
   feature?: string;
-  requiresPro?: boolean;
+  // trial_required: which paywall copy to show and the checkout source.
+  surface?: PaywallSurface;
   returnPath?: string;
   reason?: string | null;
   exportedCvKind?: "master" | "tailored";
@@ -34,8 +36,14 @@ interface UpgradePromptState {
 }
 
 interface UpgradePromptContextValue {
-  ensureProAccess: (feature: EntitlementFeature, returnPath?: string) => Promise<boolean>;
+  // True with a trial or Pro, or when allowFree accepts the plan (a free use); otherwise opens the trial prompt.
+  ensureProAccess: (
+    feature: EntitlementFeature,
+    returnPath?: string,
+    allowFree?: (plan: BillingPlanResponseData) => boolean | Promise<boolean>
+  ) => Promise<boolean>;
   showUpgradePrompt: (variant: UpgradePromptVariant, options?: UpgradePromptOptions) => void;
+  showTrialPrompt: (surface: PaywallSurface, options?: Omit<UpgradePromptOptions, "surface">) => void;
   dismissUpgradePrompt: () => void;
 }
 
@@ -53,23 +61,35 @@ export function UpgradePromptProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const ensureProAccess = useCallback(async (feature: EntitlementFeature, returnPath?: string) => {
+  const showTrialPrompt = useCallback(
+    (surface: PaywallSurface, options: Omit<UpgradePromptOptions, "surface"> = {}) => {
+      setState({ variant: "trial_required", options: { ...options, surface } });
+    },
+    []
+  );
+
+  const ensureProAccess = useCallback(async (
+    feature: EntitlementFeature,
+    returnPath?: string,
+    allowFree?: (plan: BillingPlanResponseData) => boolean | Promise<boolean>
+  ) => {
     try {
-      if (hasAppAccess(await api.getBillingPlan())) return true;
-      showUpgradePrompt("limit_reached", { feature, returnPath, requiresPro: true });
+      const plan = await api.getBillingPlan();
+      if (hasAppAccess(plan) || (allowFree && (await allowFree(plan)))) return true;
+      showTrialPrompt(surfaceForFeature(feature), { feature, returnPath });
     } catch {
-      showUpgradePrompt("limit_reached", { feature, returnPath, requiresPro: true, reason: t("Could not verify your subscription.") });
+      showTrialPrompt(surfaceForFeature(feature), { feature, returnPath, reason: t("Could not verify your subscription.") });
     }
     return false;
-  }, [api, showUpgradePrompt]);
+  }, [api, showTrialPrompt]);
 
   const dismissUpgradePrompt = useCallback(() => {
     setState(null);
   }, []);
 
   const value = useMemo(
-    () => ({ showUpgradePrompt, dismissUpgradePrompt, ensureProAccess }),
-    [showUpgradePrompt, dismissUpgradePrompt, ensureProAccess]
+    () => ({ showUpgradePrompt, showTrialPrompt, dismissUpgradePrompt, ensureProAccess }),
+    [showUpgradePrompt, showTrialPrompt, dismissUpgradePrompt, ensureProAccess]
   );
 
   return (

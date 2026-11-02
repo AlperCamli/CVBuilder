@@ -1,4 +1,4 @@
-import { isExistingCvWorkspaceRequest } from "../modules/billing/subscription-access";
+import { classifyAppRequest } from "../modules/entitlements/access-policy";
 import { createPrivacyRouter } from "../modules/privacy/privacy.routes";
 import { createProductAccessGuard } from "../modules/privacy/product-access.middleware";
 import { asyncHandler } from "../shared/utils/async-handler";
@@ -106,17 +106,16 @@ export const registerV1Routes = (
       )
     );
   }
-  // Onboarding may claim/read an import and save account answers before activation.
-  // Existing users retain their manual CV workspace; creation, AI, tailoring and exports stay paid.
+  // Accounts without a trial or Pro keep the manual workspace, one free tailoring session and one
+  // free improvement; exports and other AI are gated. classifyAppRequest holds the route map.
   router.use((req, res, next) => {
-    // Express routes accept case variations and a trailing slash by default.
-    const path = req.path.toLowerCase().replace(/\/+$/, "") || "/";
-    const applicationRoute = /^\/(dashboard|master-cvs|tailored-cvs|jobs|cover-letters|cv-revisions|revisions|ai|rendering|cv-photos|exports)(\/|$)/.test(path);
-    const importMutation = /^\/imports(?:\/|$)/.test(path) && !["GET", "HEAD", "OPTIONS"].includes(req.method);
-    if (!applicationRoute && !importMutation) { next(); return; }
+    const policy = classifyAppRequest(req.method, req.path);
+    if (!policy || policy.kind === "free" || policy.kind === "free_use") { next(); return; }
     authMiddleware(req, res, error => {
       if (error) { next(error); return; }
-      void services.billingService.assertSubscriptionAccess(req.auth!.appUser.id, isExistingCvWorkspaceRequest(req.method, req.path), { action: "app_access", surface: path.split("/")[1] }).then(() => next(), next);
+      const userId = req.auth!.appUser.id;
+      const isFreeSession = async (sessionId: string) => (await services.tailoringService?.isFreeSession(userId, sessionId)) ?? false;
+      void services.billingService.authorizeAppRequest(userId, policy, isFreeSession).then(() => next(), next);
     });
   });
   if (services.privacyService) router.use((req, res, next) => {
