@@ -23,6 +23,20 @@ begin
       values(null,g,l,'cv_parse','openai','test-model','pending','{}');
     raise exception 'Duplicate lease accepted';
   exception when unique_violation then null; end;
+  -- The onboarding score (cv_review) is a second guest flow on the same lease, once per flow.
+  insert into public.ai_runs(id,user_id,guest_import_id,guest_lease_id,flow_type,provider,model_name,status,input_payload)
+    values(pending_r,null,g,l,'cv_review','openai','test-model','pending','{}');
+  begin
+    insert into public.ai_runs(user_id,guest_import_id,guest_lease_id,flow_type,provider,model_name,status,input_payload)
+      values(null,g,l,'cv_review','openai','test-model','pending','{}');
+    raise exception 'Duplicate guest review accepted';
+  exception when unique_violation then null; end;
+  begin
+    insert into public.ai_runs(user_id,guest_import_id,guest_lease_id,flow_type,provider,model_name,status,input_payload)
+      values(null,g,l,'tailoring_block','openai','test-model','pending','{}');
+    raise exception 'Guest ran a non-onboarding flow';
+  exception when check_violation then null; end;
+  delete from public.ai_runs where id=pending_r;
   update public.ai_runs set status='completed',completed_at=now(),output_payload='{"parsed_content":{}}',input_tokens=100,output_tokens=20,total_tokens=120 where id=r;
   update public.guest_imports set lease_id=gen_random_uuid() where id=g returning lease_id into l;
   insert into public.ai_runs(id,user_id,guest_import_id,guest_lease_id,flow_type,provider,model_name,status,input_payload)
