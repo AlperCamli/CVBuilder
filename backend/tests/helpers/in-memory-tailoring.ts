@@ -33,6 +33,7 @@ export class InMemoryTailoringRepository implements TailoringRepository {
     const record: TailoringSessionRecord = {
       id: randomUUID(),
       ...payload,
+      free_tier: payload.free_tier === true,
       status: "draft",
       analysis: null,
       analysis_run_id: null,

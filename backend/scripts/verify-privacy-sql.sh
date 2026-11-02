@@ -56,6 +56,7 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/onboarding-funnel-metrics.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/entry-onboarding-marker.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/tailoring-v2.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/free-tier-markers.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/monetization-tracking.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-foundation.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-hardening.sql"

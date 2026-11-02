@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { RegionalPricingService, PurchasePlan } from "./regional-pricing";
 import {
   ConflictError,
-  ForbiddenError,
   BillingConfigurationError,
   BillingPlanValidationError,
   BillingProviderError,
@@ -16,6 +15,8 @@ import type { UsersRepository } from "../users/users.repository";
 import type { EntitlementsService } from "../entitlements/entitlements.service";
 import type { PlanCode, PlanDefinition, ResolvedEntitlements } from "../entitlements/entitlements.types";
 import type { UsageService } from "../usage/usage.service";
+import type { FreeTierUse } from "../usage/usage.repository";
+import { surfaceForAction, trialRequiredError, type AccessAction, type AppRequestPolicy, type PaywallSurface } from "../entitlements/access-policy";
 import type {
   BillingEntitlementsResponseData,
   BillingPlanResponseData,
@@ -56,9 +57,20 @@ interface BillingServiceOptions {
 
 // Which gate refused the request, for paywall analysis.
 export interface DeniedGate {
-  action: GatedAction | "app_access";
-  surface?: string;
+  action: AccessAction;
+  surface?: PaywallSurface;
 }
+
+// A consumed one-time allowance; released when the operation fails before delivering anything.
+export interface FreeUseClaim {
+  use: FreeTierUse;
+  claimed_at: string;
+}
+
+const FREE_USE_SPENT: Record<FreeTierUse, string> = {
+  tailoring: "You've used your free tailored CV. Start your free 3-day trial to tailor your CV for more jobs.",
+  improve: "You've used your free AI improvement. Start your free 3-day trial to unlock every AI feature."
+};
 
 const checkoutRejection = (error: unknown): CheckoutOutcome => {
   const reason = error instanceof ConflictError ? error.details?.reason : undefined;
@@ -196,15 +208,17 @@ export class BillingService {
   }
 
   async getBillingPlan(userId: string): Promise<BillingPlanResponseData> {
-    const [snapshot, transition] = await Promise.all([
-      this.getSnapshot(userId), this.subscriptionsRepository.getTrialTransitionGrant(userId)
+    const [snapshot, transition, markers] = await Promise.all([
+      this.getSnapshot(userId), this.subscriptionsRepository.getTrialTransitionGrant(userId), this.usageService.getFreeTierMarkers(userId)
     ]);
     const trialEligible = await this.isUserTrialEligible(userId, transition);
+    const requireSubscription = this.options.requireSubscription === true;
 
     return {
-      app_access: !this.options.requireSubscription || this.subscriptionAllowsAccess(snapshot.subscription),
-      subscription_required: this.options.requireSubscription === true,
-      can_edit_existing_cvs: Boolean(transition) || !this.options.requireSubscription || this.subscriptionAllowsAccess(snapshot.subscription),
+      app_access: !requireSubscription || this.subscriptionAllowsAccess(snapshot.subscription),
+      subscription_required: requireSubscription,
+      // Every account keeps its manual workspace; Pro adds exports, AI and repeated tailoring.
+      can_edit_existing_cvs: true,
       plan_code: snapshot.current_plan.plan_code as PlanCode,
       subscription_status: snapshot.current_plan.status,
       current_period_start: snapshot.current_plan.current_period_start,
@@ -212,6 +226,10 @@ export class BillingService {
       cancel_at_period_end: snapshot.current_plan.cancel_at_period_end,
       trial_eligible: trialEligible,
       trial_transition: transition ? { eligible: trialEligible } : null,
+      free_tier: {
+        tailoring_available: !requireSubscription || markers.tailoring === null,
+        improve_available: !requireSubscription || markers.improve === null
+      },
       provider: {
         provider: snapshot.subscription?.provider ?? this.options.provider,
         provider_customer_id: snapshot.subscription?.provider_customer_id ?? null,
@@ -262,7 +280,7 @@ export class BillingService {
   }
 
   async assertActionAllowed(userId: string, action: GatedAction): Promise<void> {
-    await this.assertSubscriptionAccess(userId, false, { action });
+    await this.assertSubscriptionAccess(userId, { action });
     const snapshot = await this.getSnapshot(userId);
     const decision = this.entitlementsService.evaluateAction(action, snapshot.entitlements);
 
@@ -277,20 +295,55 @@ export class BillingService {
     }
   }
 
-  async assertSubscriptionAccess(userId: string, allowExistingCvWorkspace = false, gate: DeniedGate = { action: "app_access" }): Promise<void> {
+  async assertSubscriptionAccess(userId: string, gate: DeniedGate = { action: "app_access" }): Promise<void> {
     if (!this.options.requireSubscription) return;
     const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
     if (!this.subscriptionAllowsAccess(subscription)) {
-      if (allowExistingCvWorkspace && await this.subscriptionsRepository.getTrialTransitionGrant(userId)) return;
-      await this.options.monetization?.recordEntitlementDenial({
-        user_id: userId,
-        plan_code: this.entitlementsService.resolveEffectivePlanCode(subscription),
-        action: gate.action,
-        surface: gate.surface,
-        reason: this.denialReason(subscription)
-      });
-      throw new ForbiddenError("Activate your 3-day free trial or purchase Pro to continue.", { reason: "subscription_required" });
+      await this.denyAccess(userId, subscription, gate.action, gate.surface ?? surfaceForAction(gate.action));
     }
+  }
+
+  // Route-level gate for the application API; the route map lives in classifyAppRequest.
+  async authorizeAppRequest(userId: string, policy: AppRequestPolicy, isFreeSession: (sessionId: string) => Promise<boolean>): Promise<void> {
+    if (!this.options.requireSubscription || policy.kind === "free" || policy.kind === "free_use") return;
+    const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (this.subscriptionAllowsAccess(subscription)) return;
+    if (policy.kind === "free_session") {
+      if (await isFreeSession(policy.session_id)) return;
+      await this.denyAccess(userId, subscription, "tailored_cv_generation", "tailoring");
+    }
+    if (policy.kind === "paid") await this.denyAccess(userId, subscription, policy.action, policy.surface);
+  }
+
+  // Starts a one-time free use for an account without a trial or Pro. Returns null when nothing
+  // is consumed (trial/Pro, or no subscription required); the marker is claimed atomically.
+  async claimFreeUse(userId: string, use: FreeTierUse): Promise<FreeUseClaim | null> {
+    const action = use === "tailoring" ? "tailored_cv_generation" : "ai_action";
+    if (this.options.requireSubscription) {
+      const subscription = await this.subscriptionsRepository.getCurrentForUser(userId);
+      if (!this.subscriptionAllowsAccess(subscription)) {
+        const claimedAt = await this.usageService.claimFreeTierUse(userId, use);
+        if (claimedAt) return { use, claimed_at: claimedAt };
+        await this.denyAccess(userId, subscription, action, surfaceForAction(action), FREE_USE_SPENT[use]);
+      }
+    }
+    await this.assertActionAllowed(userId, action);
+    return null;
+  }
+
+  async releaseFreeUse(userId: string, claim: FreeUseClaim | null): Promise<void> {
+    if (claim) await this.usageService.releaseFreeTierUse(userId, claim.use, claim.claimed_at);
+  }
+
+  private async denyAccess(userId: string, subscription: SubscriptionRecord | null, action: AccessAction, surface: PaywallSurface, message?: string): Promise<never> {
+    await this.options.monetization?.recordEntitlementDenial({
+      user_id: userId,
+      plan_code: this.entitlementsService.resolveEffectivePlanCode(subscription),
+      action,
+      surface,
+      reason: this.denialReason(subscription)
+    });
+    throw trialRequiredError(action, surface, message);
   }
 
   private denialReason(subscription: SubscriptionRecord | null): DenialReason {

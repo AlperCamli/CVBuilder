@@ -143,19 +143,19 @@ describe("monetization tracking", () => {
     }));
   });
 
-  it("counts paywall hits with the gate and reason, but not the existing-CV exemption", async () => {
+  it("counts paywall hits with the gate, surface and reason, but not free-tier requests", async () => {
     const f = build({ requireSubscription: true });
     const user = await f.user();
-    await expect(f.billing.assertSubscriptionAccess(user.id, false, { action: "app_access", surface: "ai" })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(f.billing.assertSubscriptionAccess(user.id, { action: "app_access", surface: "ai" })).rejects.toBeInstanceOf(ForbiddenError);
     expect(f.monetization.recordEntitlementDenial).toHaveBeenLastCalledWith({ user_id: user.id, plan_code: "free", action: "app_access", surface: "ai", reason: "no_subscription" });
 
     f.subscriptions.seed({ id: "row-1", user_id: user.id, provider: "stripe", provider_customer_id: "cus_1", provider_subscription_id: "sub_1", plan_code: "weekly", status: "trialing", current_period_start: null, current_period_end: "2026-01-01T00:00:00.000Z", cancel_at_period_end: false, created_at: "2026-01-01", updated_at: "2026-01-01" });
     await expect(f.billing.assertActionAllowed(user.id, "export_pdf")).rejects.toBeInstanceOf(ForbiddenError);
-    expect(f.monetization.recordEntitlementDenial).toHaveBeenLastCalledWith(expect.objectContaining({ action: "export_pdf", reason: "trial_expired" }));
+    expect(f.monetization.recordEntitlementDenial).toHaveBeenLastCalledWith(expect.objectContaining({ action: "export_pdf", surface: "export", reason: "trial_expired" }));
 
     f.monetization.recordEntitlementDenial.mockClear();
-    f.subscriptions.transitionGrants.set(user.id, { redeemed_at: null });
-    await f.billing.assertSubscriptionAccess(user.id, true);
+    await f.billing.authorizeAppRequest(user.id, { kind: "free" }, async () => false);
+    await f.billing.authorizeAppRequest(user.id, { kind: "free_session", session_id: "s1" }, async () => true);
     expect(f.monetization.recordEntitlementDenial).not.toHaveBeenCalled();
   });
 

@@ -29,6 +29,8 @@ export interface BillingPlanResponseData {
   // "subscribe" CTA once the trial has been consumed.
   trial_eligible: boolean;
   trial_transition: { eligible: boolean } | null;
+  // One-time allowances of accounts without a trial or Pro (always true when no subscription is required).
+  free_tier: { tailoring_available: boolean; improve_available: boolean };
   provider: BillingProviderSummary;
   entitlement_summary: ResolvedEntitlements;
 }

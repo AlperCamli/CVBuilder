@@ -10,9 +10,23 @@ export interface UsageCounterIncrementInput {
   storage_bytes_delta?: number;
 }
 
+export type FreeTierUse = "tailoring" | "improve";
+
+export type FreeTierMarkers = Record<FreeTierUse, string | null>;
+
+const FREE_TIER_COLUMNS: Record<FreeTierUse, "free_tailoring_used_at" | "free_improve_used_at"> = {
+  tailoring: "free_tailoring_used_at",
+  improve: "free_improve_used_at"
+};
+
 export interface UsageRepository {
   getOrCreateCurrentMonth(userId: string): Promise<UsageCounterRecord>;
   incrementCurrentMonth(userId: string, input: UsageCounterIncrementInput): Promise<UsageCounterRecord>;
+  getFreeTierMarkers(userId: string): Promise<FreeTierMarkers>;
+  // Sets the marker only while it is unset; returns the stored time, or null when it was already used.
+  claimFreeTierMarker(userId: string, use: FreeTierUse): Promise<string | null>;
+  // Undoes a claim whose operation failed before it delivered anything; a later claim is left alone.
+  releaseFreeTierMarker(userId: string, use: FreeTierUse, claimedAt: string): Promise<void>;
 }
 
 const mapUsageCounterRow = (row: Record<string, unknown>): UsageCounterRecord => {
@@ -84,5 +98,52 @@ export class SupabaseUsageRepository implements UsageRepository {
     }
 
     return mapUsageCounterRow(row as Record<string, unknown>);
+  }
+
+  async getFreeTierMarkers(userId: string): Promise<FreeTierMarkers> {
+    const { data, error } = await this.supabaseClient
+      .from("users")
+      .select("free_tailoring_used_at,free_improve_used_at")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerError("Failed to load free-tier usage", { reason: error.message });
+    }
+
+    return {
+      tailoring: (data?.free_tailoring_used_at as string | null | undefined) ?? null,
+      improve: (data?.free_improve_used_at as string | null | undefined) ?? null
+    };
+  }
+
+  async claimFreeTierMarker(userId: string, use: FreeTierUse): Promise<string | null> {
+    const column = FREE_TIER_COLUMNS[use];
+    const claimedAt = new Date().toISOString();
+    const { data, error } = await this.supabaseClient
+      .from("users")
+      .update({ [column]: claimedAt })
+      .eq("id", userId)
+      .is(column, null)
+      .select("id");
+
+    if (error) {
+      throw new InternalServerError("Failed to record free-tier usage", { reason: error.message });
+    }
+
+    return Array.isArray(data) && data.length > 0 ? claimedAt : null;
+  }
+
+  async releaseFreeTierMarker(userId: string, use: FreeTierUse, claimedAt: string): Promise<void> {
+    const column = FREE_TIER_COLUMNS[use];
+    const { error } = await this.supabaseClient
+      .from("users")
+      .update({ [column]: null })
+      .eq("id", userId)
+      .eq(column, claimedAt);
+
+    if (error) {
+      throw new InternalServerError("Failed to release free-tier usage", { reason: error.message });
+    }
   }
 }

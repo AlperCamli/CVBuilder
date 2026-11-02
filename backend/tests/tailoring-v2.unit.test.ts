@@ -34,6 +34,11 @@ import type { TailoringAnalysis } from "../src/modules/tailoring/tailoring.types
 import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 import type { AiRunRecord, AiSuggestionRecord, JobRecord, MasterCvRecord, TailoredCvRecord } from "../src/shared/types/domain";
 import { InMemoryTailoringRepository } from "./helpers/in-memory-tailoring";
+import { InMemorySubscriptionsRepository, InMemoryUsageRepository } from "./helpers/in-memory";
+import { BillingService } from "../src/modules/billing/billing.service";
+import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
+import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
+import { UsageService } from "../src/modules/usage/usage.service";
 
 const NOW = "2026-10-27T10:00:00.000Z";
 
@@ -302,6 +307,8 @@ const createHarness = (
     override?: (request: AiProviderRequest, mockOutput: Record<string, unknown>) => Record<string, unknown> | undefined;
     // Active ai_prompt_configs rows (DB prompt overrides) for non-code-only flows.
     promptRows?: Array<Record<string, unknown>>;
+    // A real BillingService instead of the always-allowing stub.
+    billing?: BillingService;
   } = {}
 ) => {
   const masters = new Map<string, MasterCvRecord>();
@@ -435,8 +442,12 @@ const createHarness = (
       return record;
     }
   };
-  const billingService = {
+  const billingService = options.billing ?? {
     async assertActionAllowed() {},
+    async claimFreeUse() {
+      return null;
+    },
+    async releaseFreeUse() {},
     async recordTailoredCvGenerationUsage(userId: string) {
       usageCalls.push(userId);
     },
@@ -747,6 +758,73 @@ describe("TailoringService", () => {
     const other = { ...session, appUser: { ...session.appUser, email: "someone@example.com" } };
     expect(harness.service.isAdmin(session)).toBe(true);
     expect(harness.service.isAdmin(other)).toBe(false);
+  });
+});
+
+describe("TailoringService free tier", () => {
+  const freeTierHarness = () => {
+    const usage = new InMemoryUsageRepository();
+    const subscriptions = new InMemorySubscriptionsRepository();
+    const billing = new BillingService(
+      { getById: async (id: string) => ({ id }) } as never,
+      subscriptions,
+      new UsageService(usage),
+      new EntitlementsService(createPlanCatalog({ freeUsageLimitsEnabled: false, weeklyStripePriceId: "price_weekly" })),
+      null,
+      { requireSubscription: true, provider: "stripe", trialPeriodDays: 3, stripeWebhookSecret: null, checkoutSuccessUrl: "http://localhost/s", checkoutCancelUrl: "http://localhost/c", portalReturnUrl: "http://localhost/p" }
+    );
+    return { ...createHarness({ billing }), usage, subscriptions };
+  };
+
+  it("runs one free session end to end and refuses a second one", async () => {
+    const h = freeTierHarness();
+    const created = await h.service.createSession(session, { cv_id: "master-1", job: JOB });
+    expect(created.session.free_tier).toBe(true);
+    expect(await h.service.isFreeSession(USER_ID, created.session.id)).toBe(true);
+    expect((await h.usage.getFreeTierMarkers(USER_ID)).tailoring).not.toBeNull();
+    const analyzed = await h.service.analyze(session, created.session.id);
+    await h.service.completeQuestions(session, created.session.id);
+    const ready = (await h.service.getSession(session, created.session.id)).tasks.filter((task) => task.status === "ready");
+    await Promise.all(ready.map((task) => h.service.runTask(session, analyzed.session.id, task.id)));
+    expect((await h.service.finish(session, created.session.id)).session.free_tier).toBe(true);
+
+    const tailoredCount = h.tailoredCvs.size;
+    for (const cvId of ["master-1", created.session.tailored_cv_id]) {
+      await expect(h.service.createSession(session, { cv_id: cvId, job: { ...JOB, job_title: "Another role" } })).rejects.toMatchObject({
+        statusCode: 403,
+        details: { reason: "trial_required", surface: "tailoring", action: "tailored_cv_generation" }
+      });
+    }
+    expect(h.tailoredCvs.size).toBe(tailoredCount);
+    expect(await h.service.isFreeSession(USER_ID, created.session.id)).toBe(true);
+  });
+
+  it("grants the free session to only one of two concurrent requests", async () => {
+    const h = freeTierHarness();
+    const results = await Promise.allSettled([
+      h.service.createSession(session, { cv_id: "master-1", job: JOB }),
+      h.service.createSession(session, { cv_id: "master-1", job: { ...JOB, job_title: "Second tab" } })
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { details: { reason: "trial_required" } } });
+    expect(h.tailoredCvs.size).toBe(1);
+  });
+
+  it("returns the free session when it could not be created", async () => {
+    const h = freeTierHarness();
+    await expect(h.service.createSession(session, { cv_id: "missing-cv", job: JOB })).rejects.toBeInstanceOf(NotFoundError);
+    expect((await h.usage.getFreeTierMarkers(USER_ID)).tailoring).toBeNull();
+    expect((await h.service.createSession(session, { cv_id: "master-1", job: JOB })).session.free_tier).toBe(true);
+  });
+
+  it("never consumes the marker for trialing accounts", async () => {
+    const h = freeTierHarness();
+    h.subscriptions.seed({ id: "sub-row", user_id: USER_ID, provider: "stripe", provider_customer_id: "cus_1", provider_subscription_id: "sub_1", plan_code: "weekly", status: "trialing", current_period_start: null, current_period_end: new Date(Date.now() + 86400000).toISOString(), cancel_at_period_end: false, created_at: NOW, updated_at: NOW });
+    const first = await h.service.createSession(session, { cv_id: "master-1", job: JOB });
+    const second = await h.service.createSession(session, { cv_id: "master-1", job: { ...JOB, job_title: "Another role" } });
+    expect([first.session.free_tier, second.session.free_tier]).toEqual([false, false]);
+    expect((await h.usage.getFreeTierMarkers(USER_ID)).tailoring).toBeNull();
+    expect(await h.service.isFreeSession(USER_ID, first.session.id)).toBe(false);
   });
 });
 

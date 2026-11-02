@@ -299,7 +299,8 @@ export class TailoringService {
   async createSession(session: SessionContext, input: CreateTailoringSessionInput): Promise<TailoringSessionView> {
     const userId = session.appUser.id;
     await this.options.privacy?.assertAi(userId);
-    await this.billingService.assertActionAllowed(userId, "tailored_cv_generation");
+    // Without a trial or Pro this starts the account's one free tailoring (or is refused).
+    const freeUse = await this.billingService.claimFreeUse(userId, "tailoring");
 
     const job = {
       job_title: input.job.job_title.trim(),
@@ -307,21 +308,33 @@ export class TailoringService {
       job_description: input.job.job_description.trim()
     };
 
-    const master = await this.masterCvRepository.findById(userId, input.cv_id);
-    const tailored = master
-      ? await this.createTailoredCopy(userId, master, job)
-      : await this.retargetTailoredCv(userId, input.cv_id, job);
+    let created: TailoringSessionRecord;
+    try {
+      const master = await this.masterCvRepository.findById(userId, input.cv_id);
+      const tailored = master
+        ? await this.createTailoredCopy(userId, master, job)
+        : await this.retargetTailoredCv(userId, input.cv_id, job);
 
-    await this.repository.archiveActiveSessions(userId, tailored.id);
-    const created = await this.repository.createSession({
-      user_id: userId,
-      tailored_cv_id: tailored.id,
-      job_id: tailored.job_id,
-      job_snapshot: job,
-      base_snapshot: tailored.current_content
-    });
+      await this.repository.archiveActiveSessions(userId, tailored.id);
+      created = await this.repository.createSession({
+        user_id: userId,
+        tailored_cv_id: tailored.id,
+        job_id: tailored.job_id,
+        job_snapshot: job,
+        base_snapshot: tailored.current_content,
+        free_tier: freeUse !== null
+      });
+    } catch (error) {
+      await this.billingService.releaseFreeUse(userId, freeUse).catch(() => undefined);
+      throw error;
+    }
 
     return this.buildView(session, created);
+  }
+
+  async isFreeSession(userId: string, sessionId: string): Promise<boolean> {
+    const record = await this.repository.findSessionById(userId, sessionId);
+    return record?.free_tier === true && record.tailored_cv_id !== null;
   }
 
   private async createTailoredCopy(
@@ -1702,6 +1715,7 @@ export class TailoringService {
         answers: record.answers,
         questions_completed: record.questions_completed,
         error_message: record.error_message,
+        free_tier: record.free_tier,
         created_at: record.created_at,
         finished_at: record.finished_at
       },

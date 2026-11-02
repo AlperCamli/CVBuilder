@@ -8,7 +8,7 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { useAuth } from "../integration/auth-context";
 import { ApiClientError } from "../integration/api-error";
-import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import { buildCoverLetterExportFilename, triggerBlobDownload } from "../integration/export-filenames";
 import type { CoverLetterDetail, CoverLetterExportSummaryItem } from "../integration/api-types";
 
@@ -86,7 +86,7 @@ export function CoverLetterEditor() {
   const { jobId } = useParams();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, showTrialPrompt } = useUpgradePrompt();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +279,9 @@ export function CoverLetterEditor() {
 
       await loadExportHistory(coverLetter.id);
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "export"));
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, format === "pdf" ? "export_pdf" : "export_docx"),
           reason: err.message
@@ -303,7 +305,9 @@ export function CoverLetterEditor() {
         buildCoverLetterExportFilename(title, coverLetter?.job, format)
       );
     } catch (err) {
-      if (err instanceof Error) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "export"));
+      } else if (err instanceof Error) {
         setExportError(err.message);
       } else {
         setExportError("Download failed.");
@@ -334,7 +338,9 @@ export function CoverLetterEditor() {
       setContent(generated.content);
       markDirty();
     } catch (err) {
-      if (isEntitlementExceeded(err)) {
+      if (isTrialRequired(err)) {
+        showTrialPrompt(resolvePaywallSurface(err, "cover_letter"));
+      } else if (isEntitlementExceeded(err)) {
         showUpgradePrompt("limit_reached", {
           feature: resolveEntitlementFeature(err, "ai_action"),
           reason: err.message

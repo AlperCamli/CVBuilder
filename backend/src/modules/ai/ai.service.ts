@@ -1275,8 +1275,24 @@ export class AiService {
     session: SessionContext,
     input: ImportImproveInput
   ): Promise<ImportImproveResponse> {
-    await this.billingService.assertActionAllowed(session.appUser.id, "ai_action");
+    // Without a trial or Pro this is the account's one free improvement (or is refused).
+    const freeUse = await this.billingService.claimFreeUse(session.appUser.id, "improve");
+    const release = () => this.billingService.releaseFreeUse(session.appUser.id, freeUse).catch(() => undefined);
+    try {
+      const result = await this.runImportImprove(session, input);
+      // Nothing was eligible for improvement, so the free run stays available.
+      if (!result.generation_metadata.attempted_runs) await release();
+      return result;
+    } catch (error) {
+      await release();
+      throw error;
+    }
+  }
 
+  private async runImportImprove(
+    session: SessionContext,
+    input: ImportImproveInput
+  ): Promise<ImportImproveResponse> {
     const normalizedContent = normalizeCvContent(
       asRecord(input.parsed_content),
       input.language ?? "en"

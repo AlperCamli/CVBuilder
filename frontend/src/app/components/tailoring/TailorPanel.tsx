@@ -646,7 +646,7 @@ export function TailorPanel({
           <ScoreMeter view={view} />
           <div className="grid gap-2">
             <button type="button" onClick={onExport} className="px-4 py-2.5 rounded-lg font-medium inline-flex items-center justify-center gap-2" style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "white" }}>
-              <Download size={14} /> {t("Export CV")}
+              <Download size={14} /> {t("Download your CV")}
             </button>
             {onCoverLetter ? (
               <button type="button" onClick={onCoverLetter} className="px-4 py-2.5 rounded-lg border font-medium inline-flex items-center justify-center gap-2" style={{ fontSize: "13px", borderColor: "var(--color-border-secondary)" }}>
@@ -840,6 +840,11 @@ export function TailorPanel({
           <div className="min-w-0">
             <p className="flex items-center gap-1.5" style={{ fontSize: "11px", color: "var(--color-teal-700)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
               <Target size={12} /> {t("Tailoring")}
+              {view?.session.free_tier ? (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full" style={{ fontSize: "10px", background: "var(--color-teal-50)", textTransform: "none", letterSpacing: 0 }}>
+                  {t("Free tailoring (1 of 1)")}
+                </span>
+              ) : null}
             </p>
             <p className="truncate" style={{ fontSize: "15px", fontWeight: 600 }}>{headerTitle}</p>
             {headerSubtitle ? <p className="truncate" style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{headerSubtitle}</p> : null}

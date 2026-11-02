@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import type { BackendApi } from "../../integration/backend-api";
 import { ApiClientError } from "../../integration/api-error";
+import { isTrialRequired, resolvePaywallSurface, type PaywallSurface } from "../../integration/entitlement-upsell";
+import { trackFunnelEvent } from "../../integration/funnel-events";
 import type { CvContent, CvJsonValue } from "../../integration/api-types";
 import {
   applyTailoringSuggestion,
@@ -140,8 +142,12 @@ export function useTailoringSession(options: {
   bridge: MutableRefObject<TailoringEditorBridge>;
   onTailoredCvCreated: (tailoredCvId: string) => Promise<void> | void;
   onMasterCvUpdated?: () => void;
+  // A further session needs a trial or Pro: the caller opens the trial prompt.
+  onTrialRequired?: (surface: PaywallSurface) => void;
 }) {
   const { api, open, cvKind, cvId, bridge, onTailoredCvCreated, onMasterCvUpdated } = options;
+  const onTrialRequired = useRef(options.onTrialRequired);
+  onTrialRequired.current = options.onTrialRequired;
   const [view, setView] = useState<TailoringSessionView | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -413,6 +419,10 @@ export function useTailoringSession(options: {
             job: { job_title: job.job_title, company_name: job.company_name || null, job_description: job.job_description }
           });
         } catch (startError) {
+          if (isTrialRequired(startError) && onTrialRequired.current) {
+            onTrialRequired.current(resolvePaywallSurface(startError, "tailoring"));
+            return false;
+          }
           setIssue({
             tone: "error",
             text: describeError(startError, "Couldn't start tailoring."),
@@ -420,6 +430,7 @@ export function useTailoringSession(options: {
           });
           return false;
         }
+        if (created.session.free_tier) trackFunnelEvent("free_tailoring_started");
         if (created.session.tailored_cv_id !== cvId) {
           return await openTailoredCv(created.session.tailored_cv_id, created);
         }
@@ -880,7 +891,9 @@ export function useTailoringSession(options: {
         setIssue(saveFailedIssue("Your latest edits couldn't be saved, so tailoring isn't finished yet.", retry));
         return false;
       }
-      updateView(await api.finishTailoringSession(current.session.id));
+      const finished = await api.finishTailoringSession(current.session.id);
+      updateView(finished);
+      if (finished.session.free_tier && !current.session.finished_at) trackFunnelEvent("free_tailoring_finished");
       return true;
     } catch (finishError) {
       setIssue({

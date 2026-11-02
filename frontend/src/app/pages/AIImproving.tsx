@@ -7,7 +7,8 @@ import type { CvContent } from "../integration/api-types";
 import { useAuth } from "../integration/auth-context";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
-import { isEntitlementExceeded, resolveEntitlementFeature } from "../integration/entitlement-upsell";
+import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
+import { trackFunnelEvent } from "../integration/funnel-events";
 
 import { applyOnboardingTemplate } from "../integration/subscription-flow";
 
@@ -16,7 +17,7 @@ export function AIImproving() {
   const navigate = useNavigate();
   const location = useLocation();
   const { api } = useAuth();
-  const { showUpgradePrompt } = useUpgradePrompt();
+  const { showUpgradePrompt, showTrialPrompt } = useUpgradePrompt();
   const { completeStep } = useOnboarding();
 
   const importId = location.state?.importId as string | undefined;
@@ -24,6 +25,9 @@ export function AIImproving() {
   const improvementGuidance = (location.state?.improvements as string[] | undefined) ?? [];
   const moduleType = location.state?.moduleType as string | undefined;
   const source = location.state?.source as string | undefined;
+  // Set by the score page for accounts without a trial or Pro: this run is their free one.
+  const freeRun = location.state?.freeRun === true;
+  const tailoringAvailable = location.state?.tailoringAvailable !== false;
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -88,8 +92,9 @@ export function AIImproving() {
 
               await applyOnboardingTemplate(api, converted.master_cv.id, moduleType ?? "standard");
               completeStep("create_cv");
+              if (freeRun) trackFunnelEvent("free_improve_used");
 
-              if (source === "onboarding_upload") {
+              if (source === "onboarding_upload" && tailoringAvailable) {
                 navigate(`/app/tailor/${converted.master_cv.id}`, {
                   state: {
                     source: "onboarding_upload_ai_improved"
@@ -107,7 +112,10 @@ export function AIImproving() {
                 }
               });
             } catch (err) {
-              if (isEntitlementExceeded(err)) {
+              if (isTrialRequired(err)) {
+                showTrialPrompt(resolvePaywallSurface(err, "ai"));
+                setError(err.message);
+              } else if (isEntitlementExceeded(err)) {
                 showUpgradePrompt("limit_reached", {
                   feature: resolveEntitlementFeature(err, "ai_action"),
                   reason: err.message
@@ -129,7 +137,7 @@ export function AIImproving() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [api, completeStep, improvementGuidance, importId, navigate, parsedContent, source, steps, showUpgradePrompt]);
+  }, [api, completeStep, freeRun, improvementGuidance, importId, navigate, parsedContent, source, steps, showTrialPrompt, showUpgradePrompt, tailoringAvailable]);
 
   const currentStepData = steps[currentStep];
 

@@ -14,7 +14,7 @@ All tables are `service_role` only (no browser access). Amounts are in Stripe mi
 | `billing_invoices` | Stripe invoice (and legacy lifetime purchase, `provider_invoice_id = lifetime_<cs_id>`) | Webhooks `invoice.finalized/paid/payment_failed/voided/marked_uncollectible`, `charge.refunded`. The invoice is re-read from Stripe on every event, so the row is the latest state. |
 | `subscription_events` | Status / plan / cancel-flag change of a subscription | DB trigger on `subscriptions` (covers webhook syncs, superseding, legacy purchases) + erasure worker |
 | `checkout_attempts` | `POST /billing/checkout` call | `BillingService.createCheckoutSession`; resolved by `checkout.session.completed/expired` and checkout cancel |
-| `entitlement_denials` | Day × user × plan × action × surface × reason (with `count`) | `assertSubscriptionAccess` / `assertActionAllowed` when they refuse |
+| `entitlement_denials` | Day × user × plan × action × surface × reason (with `count`) | `authorizeAppRequest` / `assertActionAllowed` / `claimFreeUse` when they refuse |
 | `user_activity_days` | User × active day | Authenticated requests (at most one write per user per day per instance) |
 | `fx_rates` | Month × currency pair | Daily refresh cron |
 | `billing_price_catalog` | Stripe price id configured in env (current + `STRIPE_HISTORICAL_PRICES`) | Daily refresh cron |
@@ -53,9 +53,13 @@ New columns:
   `plan_code` comes from the plan line (not proration credits); it is null for prices not configured in env.
 - Refunds of legacy lifetime purchases are not tracked (one-time charges have no invoice); the
   `lifetime_<cs_id>` row keeps `amount_refunded = 0`.
-- **`entitlement_denials`**: `action = 'app_access'` is the route-level paywall, with `surface` = first path
-  segment (`ai`, `exports`, `dashboard`, ...). Other actions (`export_pdf`, `ai_action`, ...) come from
-  the service-level checks. Reasons: `no_subscription`, `subscription_inactive`, `trial_expired`,
+- **`entitlement_denials`**: `action` is the refused capability (`export_pdf`, `export_docx`, `ai_action`,
+  `tailored_cv_generation`; `app_access` for a generic gate) and `surface` is the paywall the frontend shows
+  (`export`, `ai`, `tailoring`, `cover_letter`, `other`). Rows recorded before 2026-11-07 used
+  `action = 'app_access'` with `surface` = first path segment (`ai`, `exports`, `dashboard`, ...) for the
+  route-level paywall. Since then accounts without a trial or Pro keep the manual workspace, one free
+  tailoring session and one free import improvement (`users.free_*_used_at`), so only exports, other AI
+  and a second tailoring are refused. Reasons: `no_subscription`, `subscription_inactive`, `trial_expired`,
   `free_limit`. Hits blocked only in the frontend never reach the backend.
 - **Consent**: `entitlement_denials.user_id` and `user_activity_days` are only written for users with
   analytics consent (`users.analytics`) and without restricted processing. Without consent the denial is counted in the anonymous

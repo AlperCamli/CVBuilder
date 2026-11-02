@@ -259,6 +259,8 @@ const makeService = (providerGenerate: (request: AiProviderRequest) => Promise<A
 
   const billingService = {
     assertActionAllowed: vi.fn().mockResolvedValue(undefined),
+    claimFreeUse: vi.fn().mockResolvedValue(null),
+    releaseFreeUse: vi.fn().mockResolvedValue(undefined),
     recordAiActionUsage: vi.fn().mockResolvedValue(undefined)
   } as unknown as BillingService;
 
@@ -373,6 +375,7 @@ describe("AiService parallel import_improve flow", () => {
       expect.arrayContaining(["experience-short", "experience-long", "education-block"])
     );
     expect(billingService.recordAiActionUsage).toHaveBeenCalledTimes(1);
+    expect(billingService.releaseFreeUse).not.toHaveBeenCalled();
   });
 
   it("strips accidental skills fields and standalone skills lists from non-skills blocks", async () => {
@@ -494,6 +497,8 @@ describe("AiService parallel import_improve flow", () => {
     const { service, failedRuns, billingService } = makeService(async () => {
       throw new Error("provider down");
     });
+    const claim = { use: "improve", claimed_at: "2026-11-02T10:00:00.000Z" };
+    vi.mocked(billingService.claimFreeUse).mockResolvedValueOnce(claim as never);
 
     await expect(
       service.improveImportedContent(session, {
@@ -503,6 +508,9 @@ describe("AiService parallel import_improve flow", () => {
 
     expect(failedRuns.some((run) => run.runId === "run-1")).toBe(true);
     expect(billingService.recordAiActionUsage).toHaveBeenCalledTimes(1);
+    // A free improvement that delivered nothing stays available.
+    expect(billingService.claimFreeUse).toHaveBeenCalledWith(session.appUser.id, "improve");
+    expect(billingService.releaseFreeUse).toHaveBeenCalledWith(session.appUser.id, claim);
   });
 
   it("completes without billing when no eligible tasks exist", async () => {
@@ -516,6 +524,7 @@ describe("AiService parallel import_improve flow", () => {
 
     expect(aiProvider.generate).not.toHaveBeenCalled();
     expect(billingService.recordAiActionUsage).not.toHaveBeenCalled();
+    expect(billingService.releaseFreeUse).toHaveBeenCalledTimes(1);
     expect(result.generation_metadata.attempted_runs).toBe(0);
     expect(result.improved_content.sections).toHaveLength(1);
   });

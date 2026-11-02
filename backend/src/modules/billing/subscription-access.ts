@@ -1,4 +1,5 @@
-// Existing-user manual editing never permits document creation, inference or exports.
+// Manual CV work that needs no AI consent (see product-access.middleware). Subscription
+// access is decided by classifyAppRequest in entitlements/access-policy.
 // The controllers still enforce ownership and validate payloads for each operation.
 export function isExistingCvWorkspaceRequest(method: string, path: string): boolean {
   path = path.toLowerCase().replace(/\/+$/, "") || "/";

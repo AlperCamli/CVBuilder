@@ -1,5 +1,5 @@
 import type { UsageCounterRecord } from "../../shared/types/domain";
-import type { UsageRepository } from "./usage.repository";
+import type { FreeTierMarkers, FreeTierUse, UsageRepository } from "./usage.repository";
 
 export class UsageService {
   constructor(private readonly usageRepository: UsageRepository) {}
@@ -25,5 +25,17 @@ export class UsageService {
     return this.usageRepository.incrementCurrentMonth(userId, {
       ai_actions_increment: 1
     });
+  }
+
+  async getFreeTierMarkers(userId: string): Promise<FreeTierMarkers> {
+    return this.usageRepository.getFreeTierMarkers(userId);
+  }
+
+  async claimFreeTierUse(userId: string, use: FreeTierUse): Promise<string | null> {
+    return this.usageRepository.claimFreeTierMarker(userId, use);
+  }
+
+  async releaseFreeTierUse(userId: string, use: FreeTierUse, claimedAt: string): Promise<void> {
+    await this.usageRepository.releaseFreeTierMarker(userId, use, claimedAt);
   }
 }
