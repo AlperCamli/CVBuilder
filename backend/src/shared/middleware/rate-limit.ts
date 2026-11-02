@@ -139,6 +139,23 @@ export const createAdminRecomputeRateLimiter = (config: AppConfig): RequestHandl
   });
 };
 
+// Anonymous funnel counters: a visit sends a handful of events, so this only stops scripted floods.
+export const createFunnelEventsRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
+    keyGenerator: (request: Request): string => `funnel-ip:${ipKeyGenerator(request.ip ?? "")}`,
+    handler: handleRateLimited
+  });
+};
+
 // Runs before the admin token check, so unauthenticated probing is capped too.
 export const createAdminIpRateLimiter = (config: AppConfig): RequestHandler => {
   if (config.appEnv === "test") {

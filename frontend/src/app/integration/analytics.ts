@@ -1,5 +1,6 @@
 import { analyticsAllowed, PRIVACY_EVENT, CONSENT_KEY, getPrivacyConfig } from "./privacy";
 import { analyticsPage, type AnalyticsPage } from "./analytics-pages";
+import { trackFunnelEvent } from "./funnel-events";
 type AnalyticsValue = string | number | boolean | null | undefined;
 
 export type AnalyticsParams = Record<string, AnalyticsValue>;
@@ -28,6 +29,8 @@ let pageSequence = 0;
 let lastQueuedPage = -1;
 type PendingEvent = { name: string; params: AnalyticsParams; at: number };
 let pendingEvents: PendingEvent[] = [];
+let nextScreenEvents: { name: string; params: AnalyticsParams }[] = [];
+const newAccountsTracked = new Set<string>();
 const MAX_PENDING_EVENTS = 100;
 const EVENT_MAX_AGE_MS = 60_000;
 const GA_SCRIPT_ID = "ga4-google-tag";
@@ -60,11 +63,14 @@ const shouldSkipAnalytics = (): boolean =>
 
 const SAFE_PARAMS = new Set(["step", "question", "file_extension", "file_mime_type", "file_size_bucket", "file_type", "answered_questions", "plan_code", "plan_name", "trial_applied", "trial_period_days", "value", "currency", "cv_kind", "format", "source", "cta_index", "article_slug", "category_slug"]);
 SAFE_PARAMS.add("action");
+for (const key of ["destination", "post_auth_destination", "cta_text", "location"]) SAFE_PARAMS.add(key);
+// Paths are reduced to their screen label, which drops IDs and query strings.
+const PATH_PARAMS = new Set(["source", "destination", "post_auth_destination"]);
 for (const key of ["flow", "surface", "path_selected", "method", "verification_required", "skipped", "completed_steps", "onboarding_completed_before", "module_type", "parse_status", "parse_quality", "parse_needs_manual_review", "parser_name", "page_count", "section_count", "block_count", "master_cv_loaded", "generated_question_count", "answered_follow_up_count", "selected_keyword_count", "selected_topic_count", "has_company", "has_job_posting_url", "has_location", "has_notes", "has_role", "has_template", "pasted_character_count", "download_available", "export_status", "has_redirect_state", "result"]) SAFE_PARAMS.add(key);
 const cleanParams = (params: AnalyticsParams = {}): AnalyticsParams =>
   Object.fromEntries(
     Object.entries(params).filter(([key, value]) => SAFE_PARAMS.has(key) && value !== undefined && value !== null)
-      .map(([key, value]) => [key, key === "source" && typeof value === "string" && value.startsWith("/") ? analyticsPage(value)?.path ?? "other" : value])
+      .map(([key, value]) => [key, PATH_PARAMS.has(key) && typeof value === "string" && value.startsWith("/") ? analyticsPage(value)?.path ?? "other" : value])
       .filter(([, value]) => typeof value !== "string" || (value.length <= 128 && !value.includes("@") && !/https?:|[?#]|[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}/i.test(value)))
   );
 
@@ -88,13 +94,51 @@ function flushEvents() {
 export function trackPageView(pathname: string): void {
   if (!hasWindow() || pathname === currentPathname) return;
   currentPathname = pathname; currentPage = analyticsPage(pathname); pageSequence++;
-  if (!currentPage || !analyticsAllowed() || !GA_MEASUREMENT_ID) return;
-  lastQueuedPage = pageSequence;
-  queueEvent("page_view", pageParams());
-  if (analyticsReady) {
-    window.gtag?.("config", GA_MEASUREMENT_ID, {send_page_view: false, ...pageParams()});
-    flushEvents();
-  } else scheduleAnalytics();
+  const deferred = currentPage ? nextScreenEvents.splice(0) : [];
+  if (currentPage && analyticsAllowed() && GA_MEASUREMENT_ID) {
+    lastQueuedPage = pageSequence;
+    queueEvent("page_view", pageParams());
+    if (analyticsReady) {
+      window.gtag?.("config", GA_MEASUREMENT_ID, {send_page_view: false, ...pageParams()});
+      flushEvents();
+    } else scheduleAnalytics();
+  }
+  for (const event of deferred) trackEvent(event.name, event.params);
+}
+
+// Auth callbacks are never reported as screens, so an event raised there is sent with the next screen.
+export function trackEventOnNextScreen(eventName: string, params: AnalyticsParams = {}): void {
+  if (!hasWindow() || !analyticsAllowed()) return;
+  if (currentPage) trackEvent(eventName, params);
+  else if (nextScreenEvents.length < 10) nextScreenEvents.push({name: eventName, params});
+}
+
+type AuthUser = { id: string; created_at?: string; last_sign_in_at?: string; app_metadata?: { provider?: string } };
+const NEW_ACCOUNT_WINDOW_MS = 10 * 60_000;
+
+// An OAuth account is new when its first sign-in is that sign-up (created and signed in together, moments ago).
+// Returning users have a later last_sign_in_at; an email account that links Google keeps provider "email".
+export function isNewOAuthAccount(user: AuthUser, provider: string, now = Date.now()): boolean {
+  const created = Date.parse(user.created_at ?? "");
+  const signedIn = Date.parse(user.last_sign_in_at ?? "");
+  return user.app_metadata?.provider === provider && Number.isFinite(created) && Number.isFinite(signedIn)
+    && Math.abs(signedIn - created) < 60_000 && now - created < NEW_ACCOUNT_WINDOW_MS;
+}
+
+/** Email signups are counted where the form is submitted; Google signups only return through the auth callback. */
+export function trackGoogleSignupCompleted(user: AuthUser, now = Date.now()): boolean {
+  if (newAccountsTracked.has(user.id) || !isNewOAuthAccount(user, "google", now)) return false;
+  newAccountsTracked.add(user.id);
+  trackFunnelEvent("signup_completed", "google");
+  trackEventOnNextScreen("pre_signup_account_created", {method: "google", verification_required: false});
+  return true;
+}
+
+/** A start/upgrade button on the public landing or pricing page; `location` is its placement. */
+export function trackCtaClick(location: string, destination?: string): void {
+  if (!hasWindow() || window.location.pathname.startsWith("/designs")) return;
+  trackFunnelEvent("cta_click", location);
+  trackEvent("cta_click", {location, destination});
 }
 
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
@@ -290,7 +334,7 @@ export function markPaymentCompletedTracked(key: string): void {
 
 export function removeAnalyticsData() {
   if (!hasWindow()) return;
-  generation++; initializing = null; analyticsReady = false; pendingEvents = []; lastQueuedPage = -1;
+  generation++; initializing = null; analyticsReady = false; pendingEvents = []; nextScreenEvents = []; lastQueuedPage = -1;
   (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] = true;
   window.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
   document.getElementById(GA_SCRIPT_ID)?.remove();

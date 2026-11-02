@@ -39,6 +39,7 @@ import {
   type Concept,
 } from "./concepts";
 import { weeklyPriceComparison } from "./weekly-pricing";
+import { trackCtaClick } from "../../integration/analytics";
 
 export function StartLink({
   children = (
@@ -49,11 +50,14 @@ export function StartLink({
   className = "cv-button",
   to = CV_START_PATH,
   templateSlug,
+  cta,
 }: {
   children?: ReactNode;
   className?: string;
   to?: string;
   templateSlug?: string;
+  /** Placement reported as a cta_click (landing and pricing only). */
+  cta?: string;
 }) {
   useTranslation();
   return (
@@ -61,7 +65,11 @@ export function StartLink({
       to={templateSlug ? `${to}${to.includes("?") ? "&" : "?"}template=${encodeURIComponent(templateSlug)}` : to}
       state={{ from: "/app/create" }}
       className={className}
-      onClick={() => { clearPendingCheckout(); if (templateSlug) rememberOnboardingTemplate(templateSlug); }}
+      onClick={() => {
+        clearPendingCheckout();
+        if (templateSlug) rememberOnboardingTemplate(templateSlug);
+        if (cta) trackCtaClick(cta, to);
+      }}
     >
       {children}
     </Link>
@@ -407,6 +415,7 @@ export function RegionalPricingCards({
   };
   const choosePro = () => {
     if (!regional.ready) return;
+    trackCtaClick("pricing_pro", "/signup");
     // The paid weekly choice is explicit: do not imply unverified trial terms.
     setPendingCheckout({
       plan_code: period,
@@ -468,7 +477,7 @@ export function RegionalPricingCards({
             <span>{"/"}{t("3 days")}</span>
           </div>
           <div className="cv-price-caption">{t("Credit card required to activate.")}</div>
-          <StartLink className="cv-button cv-button-outline">
+          <StartLink className="cv-button cv-button-outline" cta="pricing_trial">
             {t("Start Free Trial")}{" "}<ArrowUpRight size={17} />
           </StartLink>
           <ul>

@@ -149,7 +149,7 @@ export function TemplateShowcase({
                     {t("The next one")}<br />
                     {t("could be yours.")}</h3>
                   <p>{t("Your story. A fresh start.")}</p>
-                  <StartLink className="cv-text-link" templateSlug={current.slug}>
+                  <StartLink className="cv-text-link" templateSlug={current.slug} cta="template">
                     {t("Create my CV")}{" "}<ArrowRight size={17} />
                   </StartLink>
                   <small>{t("3-day free trial. Card required to activate.")}</small>
@@ -213,7 +213,7 @@ export function TemplateShowcase({
                   <strong>{current.name}</strong>
                   <p>{t(current.detail)}</p>
                 </div>
-                <StartLink templateSlug={current.slug}>
+                <StartLink templateSlug={current.slug} cta="template">
                   {t("Create my CV")}{" "}<ArrowRight size={17} />
                 </StartLink>
                 <small className="ts-free-note">
@@ -332,7 +332,7 @@ export function TemplateShowcase({
                 ))}
               </div>
               <div className="ts-lookbook-cta">
-                <StartLink templateSlug={current.slug}>
+                <StartLink templateSlug={current.slug} cta="template">
                   {t("Make it yours")}{" "}<ArrowRight size={17} />
                 </StartLink>
                 <span>{t("3-day free trial. Your selected style opens in the editor.")}</span>
@@ -369,7 +369,7 @@ export function TemplateShowcase({
           </div>
           <div className="ts-preview-footer">
             <span>{t("Choose your template in the CV editor.")}</span>
-            <StartLink className="ts-modal-cta" templateSlug={templates[preview ?? selected].slug}>
+            <StartLink className="ts-modal-cta" templateSlug={templates[preview ?? selected].slug} cta="template">
               {t("Start Free Trial")}{" "}<ArrowRight size={16} />
             </StartLink>
           </div>

@@ -107,6 +107,7 @@ import {
   type AdminIdentityProvider
 } from "../modules/admin-analytics/admin-identity";
 import { getAnalyticsDb } from "../shared/db/analytics-db";
+import { FunnelEventsService } from "../modules/funnel-events/funnel-events.service";
 import {
   SupabaseTailoringRepository,
   type TailoringRepository
@@ -138,6 +139,7 @@ export interface AppServices {
   monetizationBackfillService?: MonetizationBackfillService;
   adminAnalyticsService?: AdminAnalyticsService;
   adminIdentityProvider?: AdminIdentityProvider;
+  funnelEventsService?: FunnelEventsService;
 }
 
 export interface ServiceOverrides {
@@ -412,6 +414,7 @@ export const buildDefaultServices = (
       overrides?.adminIdentityProvider ?? new SupabaseAdminIdentityProvider(supabaseClients.serviceRoleClient),
     monetizationBackfillService: stripeGateway
       ? new MonetizationBackfillService(supabaseClients.serviceRoleClient, stripeGateway, billingService, monetizationRefreshService, logger)
-      : undefined
+      : undefined,
+    funnelEventsService: new FunnelEventsService(supabaseClients.serviceRoleClient, logger)
   };
 };

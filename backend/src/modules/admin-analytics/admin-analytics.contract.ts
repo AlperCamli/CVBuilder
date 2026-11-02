@@ -13,7 +13,9 @@ export const DIMENSIONS = [
   "ai_provider",
   "template",
   "onboarding_path",
-  "currency"
+  "currency",
+  "device",
+  "utm_source"
 ] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];

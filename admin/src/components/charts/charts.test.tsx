@@ -128,6 +128,20 @@ describe("FunnelChart", () => {
     expect(onStepClick.mock.calls[0][0].step).toBe("Paid");
     expect(onStepClick.mock.calls[0][1].dimension).toBe("TR");
   });
+
+  it("names what the funnel counts from the users measure label", () => {
+    render(
+      <FunnelChart
+        rows={rows}
+        meta={meta({ shape: "funnel", measures: { users: { label: "Events", unit: "count" } } })}
+        currency="usd"
+        dimensionLabel="Market"
+        minGroup={5}
+      />,
+    );
+    expect(screen.getByText("Events per step; bars relative to the first step")).toBeTruthy();
+    expect(screen.queryByText(/Users per step/)).toBeNull();
+  });
 });
 
 describe("CohortHeatmap", () => {

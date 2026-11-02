@@ -12,6 +12,8 @@ export const DIMENSIONS = [
   "template",
   "onboarding_path",
   "currency",
+  "device",
+  "utm_source",
 ] as const;
 export const GRAINS = ["day", "week", "month"] as const;
 export const CURRENCIES = ["native", "usd", "try"] as const;

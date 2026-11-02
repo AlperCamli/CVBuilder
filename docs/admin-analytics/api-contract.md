@@ -51,7 +51,9 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
 }
 ```
 
-`Dimension = "market" | "plan" | "locale" | "ai_flow" | "ai_model" | "ai_provider" | "template" | "onboarding_path" | "currency"`
+`Dimension = "market" | "plan" | "locale" | "ai_flow" | "ai_model" | "ai_provider" | "template" | "onboarding_path" | "currency" | "device" | "utm_source"`
+
+`device` (`mobile` / `desktop`) and `utm_source` (`(none)` without one) exist only on the anonymous visitor-funnel metrics (`public.funnel_daily_stats`).
 
 ## Metric query parameters (`GET /admin/metrics/:name`)
 

@@ -1,6 +1,6 @@
 # Admin Analytics — Deployed metrics inventory
 
-The SQL functions in production as of **2026-10-28**, after migrations up to `20261104120000_analytics_alerts.sql`. This file is the authoritative list of names and output columns. [metrics-plan.md](metrics-plan.md) is the original plan; names and columns changed during the build.
+The SQL functions in production as of **2026-10-28**, after migrations up to `20261104120000_analytics_alerts.sql`, plus the visitor-funnel metrics of `20261107120000_funnel_daily_stats.sql` (Acquisition; not yet deployed when written). This file is the authoritative list of names and output columns. [metrics-plan.md](metrics-plan.md) is the original plan; names and columns changed during the build.
 
 - **Definitions** (what each number means, deviations from the KB) live in each function's `comment on function` (`meta.definition`). They are shown in the app's info popover and in the KB file named under `kb`.
 - **Contract** (signature, meta keys, shapes, currency rules): [api-contract.md](api-contract.md).
@@ -84,6 +84,11 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 ### Acquisition
 | Function | Shape | Breakdowns / filters | Flags | Columns |
 |---|---|---|---|---|
+| `visitor_trend` | timeseries (plot: landing_views, onboarding_starts, signups, checkout_redirects) | – / locale, device, utm_source | – | **landing_views**, pricing_views, cta_clicks, onboarding_starts, signups, checkout_redirects, checkout_successes (anonymous event counts, `funnel_daily_stats`, from 2026-11-07) |
+| `visitor_funnel` | funnel | locale, device, utm_source | – | steps `landing_view → cta_click → onboarding_view → onboarding_started → signup_view → signup_completed → score_view → checkout_view → checkout_redirect → checkout_success`; users (= events, not people), conversion_from_prev/start |
+| `visitor_event_details` | breakdown (`event: detail`) | – / locale, device, utm_source | – | **events**, share_of_event, event, detail |
+| `pre_signup_onboarding` | funnel (one per `onboarding_path`) | – / onboarding_path | – | steps `started → signed_up` per path (upload, manual_create) from `onboarding_monthly_stats` (whole months); users, conversion_from_prev/start, first_month, last_month |
+| `onboarding_referrals` | breakdown | – / – | C | **signups**, share, first_month, last_month (referral answer; sources under 5 hidden) |
 | `signups` | timeseries | see Overview | D | – |
 | `activation_funnel` | funnel | market, locale, onboarding_path | D | steps `signed_up → cv_imported → master_cv → tailored_cv → exported → job_applied` (7-day windows; exported / signed_up = Overview activation rate); users, conversion_from_prev/start, dropped, pending, median_seconds_from_signup |
 | `onboarding_segments` | breakdown (mixed segments) | – / market, locale, onboarding_path | C | segment, **activation_rate**, users, mature_7d, master_7d_rate, mature_14d, subscribed_14d_rate, paid_14d_rate, median_seconds_to_first_export, ai_cost_per_user, ai_runs, unpriced_runs, consent_coverage, fx_provisional |

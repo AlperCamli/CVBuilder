@@ -137,6 +137,21 @@ export const TAILORING: PageSection[] = [
 
 export const ACQUISITION: PageSection[] = [
   {
+    title: "Visitors (anonymous, before signup)",
+    metrics: [
+      { name: "visitor_trend", title: "Visitor trend", shape: "timeseries" },
+      { name: "visitor_funnel", title: "Visitor funnel", shape: "funnel" },
+      { name: "visitor_event_details", title: "Funnel event details", shape: "breakdown", topN: 12 },
+    ],
+  },
+  {
+    title: "Pre-signup onboarding",
+    metrics: [
+      { name: "pre_signup_onboarding", title: "Pre-signup onboarding", shape: "funnel" },
+      { name: "onboarding_referrals", title: "Referral sources", shape: "breakdown" },
+    ],
+  },
+  {
     title: "Signups and activation",
     metrics: [
       { name: "signups", title: "Signups", shape: "timeseries" },

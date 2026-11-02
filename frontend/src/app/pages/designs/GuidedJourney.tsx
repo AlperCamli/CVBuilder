@@ -203,7 +203,7 @@ export default function GuidedJourney({
           <LanguageSwitcher />
           <Link to="/signin" className="cv-signin">
             {t("Sign in")}</Link>
-          <StartLink to="/onboarding" className="cv-button cv-button-small">
+          <StartLink to="/onboarding" className="cv-button cv-button-small" cta="header">
             {t("Start Free Trial")}{" "}<ArrowUpRight size={15} />
           </StartLink>
         </div>
@@ -231,7 +231,7 @@ export default function GuidedJourney({
                 <p>
                   {t("Upload your CV, paste a job description, and get a cleaner, ATS-friendly version focused on the role in front of you.")}</p>
                 <div className="cv-hero-actions">
-                  <StartLink to="/onboarding">
+                  <StartLink to="/onboarding" cta="hero">
                     {t("Start Free Trial")}{" "}<ArrowRight size={17} />
                   </StartLink>
                   <button
@@ -359,7 +359,7 @@ export default function GuidedJourney({
               <span>{t("A CV that’s ready for it.")}</span>
             </h2>
             <p>{t("Bring your experience. We’ll help you put it to work.")}</p>
-            <StartLink to="/onboarding">
+            <StartLink to="/onboarding" cta="final">
               {t("Let’s tailor my CV")}{" "}<ArrowRight size={17} />
             </StartLink>
             <TrialAssurance />

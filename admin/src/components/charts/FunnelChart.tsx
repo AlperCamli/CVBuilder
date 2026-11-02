@@ -29,9 +29,11 @@ export function FunnelChart({ rows, meta, currency, dimensionLabel, minGroup, to
   const funnels = useMemo(() => buildFunnels(rows, topN), [rows, topN]);
   const tip = useHoverTip();
   const multiple = funnels.length > 1;
+  // Some funnels count events or attempts rather than users; the metric's measure label says which.
+  const unitLabel = meta?.measures?.users?.label ?? "Users";
   const caption = multiple
-    ? `Users per step by ${dimensionLabel.toLowerCase()}; bars relative to each funnel's first step`
-    : "Users per step; bars relative to the first step";
+    ? `${unitLabel} per step by ${dimensionLabel.toLowerCase()}; bars relative to each funnel's first step`
+    : `${unitLabel} per step; bars relative to the first step`;
 
   const table = (
     <DataTable
@@ -39,7 +41,7 @@ export function FunnelChart({ rows, meta, currency, dimensionLabel, minGroup, to
       meta={meta}
       currency={currency}
       label="Funnel steps"
-      labels={{ dimension: dimensionLabel, users: "Users", conversion_from_prev: "From previous", conversion_from_start: "From start" }}
+      labels={{ dimension: dimensionLabel, users: unitLabel, conversion_from_prev: "From previous", conversion_from_start: "From start" }}
     />
   );
 
@@ -47,7 +49,7 @@ export function FunnelChart({ rows, meta, currency, dimensionLabel, minGroup, to
     <TipBody
       title={multiple ? `${f.label} · ${s.step}` : s.step}
       rows={[
-        { label: "Users", value: count.format(s.users) },
+        { label: unitLabel, value: count.format(s.users) },
         ...(s.previous !== null
           ? [
               { label: "Lost since previous", value: count.format(Math.max(0, s.previous - s.users)) },
