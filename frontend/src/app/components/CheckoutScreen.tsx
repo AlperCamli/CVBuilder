@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BellRing, CalendarCheck, Check, ChevronDown, CreditCard, Loader2, LockKeyhole, PauseCircle, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, BellRing, CalendarCheck, Check, ChevronDown, CreditCard, Download, Loader2, LockKeyhole, Mail, PauseCircle, ShieldCheck, Sparkles, Target } from "lucide-react";
 import { Link } from "react-router";
 import type { CheckoutTarget } from "../../content/pricing";
-import { checkoutKey, trialEndDate, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
+import type { BillingPlanResponseData } from "../integration/api-types";
+import { checkoutKey, planDate, trialEndDate, welcomeContinueLabel, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
 import { formatMoney, type useRegionalPricing } from "../integration/regional-pricing";
+import type { CheckoutSource } from "../integration/subscription-flow";
 import { localeCode, translate as t } from "../localization/i18n";
 import { PricingAvailability } from "./PricingAvailability";
 import { SupportHelp } from "./SupportHelp";
@@ -200,6 +202,46 @@ export function CheckoutConfirming({ busy, error, onRetry }: { busy: boolean; er
     {busy
       ? <p role="status" className="checkout-screen-waiting"><Loader2 className="animate-spin" size={16} aria-hidden="true" />{t("Confirming…")}</p>
       : <button className="checkout-screen-primary" type="button" onClick={onRetry}>{t("Check activation again")}<ArrowRight size={16} aria-hidden="true" /></button>}
+  </CheckoutShell>;
+}
+
+const WELCOME_BENEFITS = [
+  { Icon: Target, title: "Tailor your CV to every job", text: "Paste a job posting, get a matched CV in about 2 minutes." },
+  { Icon: Download, title: "Unlimited PDF & DOCX downloads", text: "Download every version you make." },
+  { Icon: Sparkles, title: "AI improvements", text: "Rewrite any section in one click." },
+  { Icon: Mail, title: "Cover letters", text: "Written for each application." },
+];
+
+/** After Stripe confirms: one welcome for a trial or Pro (only the chip and the last line differ), then one button back to the task. */
+export function CheckoutWelcome({ billing, regional, source, destination, onContinue }: {
+  billing: Pick<BillingPlanResponseData, "plan_code" | "subscription_status" | "current_period_end">;
+  regional: Regional; source: CheckoutSource | null; destination: string; onContinue: () => void;
+}) {
+  const trial = billing.subscription_status === "trialing";
+  const date = planDate(billing.current_period_end, localeCode());
+  const weekly = regional.prices?.plans.find(item => item.code === "weekly")?.amount;
+  const price = regional.prices && weekly !== undefined ? formatMoney(weekly, regional.prices.currency) : null;
+  const plan = billing.plan_code in PLAN_NAME ? PLAN_NAME[billing.plan_code as CheckoutTarget] : null;
+  const terms = trial
+    ? date
+      ? price ? t("Free until {{date}}, then {{price}} a week. We’ll email you before your trial ends.", { date, price })
+        : t("Free until {{date}}. We’ll email you before your trial ends.", { date })
+      : t("We’ll email you before your trial ends.")
+    : date && plan ? t("Your {{plan}} plan renews on {{date}}. Manage it anytime in Profile.", { plan: t(plan), date })
+      : t("Manage your plan anytime in Profile.");
+  return <CheckoutShell mascot="celebrate" eyebrow={t(trial ? "FREE TRIAL STARTED" : "PRO IS ACTIVE")}
+    title={t("Welcome to Pro. Everything is unlocked.")} lead={t("Here’s what you can do now.")}
+    footer={<footer className="checkout-screen-footer checkout-screen-footer-center"><SupportHelp topic="Payment" /></footer>}>
+    <ul className="checkout-screen-benefits">
+      {WELCOME_BENEFITS.map(({ Icon, title, text }) => <li key={title}>
+        <span><Icon size={16} aria-hidden="true" /></span>
+        <div><strong>{t(title)}</strong><p>{t(text)}</p></div>
+      </li>)}
+    </ul>
+    <button className="checkout-screen-primary" type="button" onClick={onContinue}>
+      {t(welcomeContinueLabel(source, destination))}<ArrowRight size={16} aria-hidden="true" />
+    </button>
+    <p className="checkout-screen-terms checkout-screen-terms-center">{terms}</p>
   </CheckoutShell>;
 }
 
