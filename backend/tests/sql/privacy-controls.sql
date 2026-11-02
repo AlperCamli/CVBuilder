@@ -96,7 +96,7 @@ begin
     raise exception 'Late export registered';
   exception when others then if sqlerrm<>'privacy_subject_unavailable' then raise; end if; end;
   if not public.acquire_privacy_job(job) or public.acquire_privacy_job(job) then raise exception 'Concurrent job lease accepted'; end if;
-  foreach tbl in array array['cover_letter_exports','exports','imports','cv_block_revisions','ai_suggestions','ai_runs','cover_letters','tailored_cvs','jobs','master_cvs','files','usage_counters','subscriptions'] loop
+  foreach tbl in array array['cover_letter_exports','exports','cv_score_improvements','imports','cv_block_revisions','ai_suggestions','ai_runs','cover_letters','tailored_cvs','jobs','master_cvs','files','usage_counters','subscriptions'] loop
     execute format('delete from public.%I where user_id=$1',tbl) using u;
   end loop;
   delete from public.guest_imports where claimed_user_id=u;

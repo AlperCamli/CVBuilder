@@ -1,4 +1,4 @@
-import type { CvContent } from "./api-types";
+import type { CvContent, ImportImproveResponse } from "./api-types";
 import type { BackendApi } from "./backend-api";
 
 type SaveApi = Pick<BackendApi, "getImport" | "putMasterCvContent" | "patchImportResult" | "createMasterCvFromImport">;
@@ -14,4 +14,12 @@ export async function saveImprovedImport(api: SaveApi, importId: string, content
   }
   await api.patchImportResult(importId, content);
   return (await api.createMasterCvFromImport(importId, { language })).master_cv.id;
+}
+
+/** The score change to celebrate after an improvement, only when the score really went up. */
+export function scoreGain(value: ImportImproveResponse["score_improvement"]): { before: number; after: number } | null {
+  if (!value || !Number.isFinite(value.before) || !Number.isFinite(value.after)) return null;
+  const before = Math.round(value.before);
+  const after = Math.round(value.after);
+  return after > before ? { before, after } : null;
 }

@@ -310,3 +310,23 @@ export const cvReviewOutputSchema = z
   .strict();
 
 export type CvReviewAiOutput = z.infer<typeof cvReviewOutputSchema>;
+
+// Improvement score: after "Improve with AI" the model only says whether each original issue was
+// resolved and quotes the improved text; cv-review-improvement turns that into points.
+export const CV_REVIEW_VERIFY_CRITERIA = ["wording", "depth", "focus"] as const;
+
+export const cvReviewVerifyCriterionOutputSchema = z
+  .object({
+    id: z.enum(CV_REVIEW_VERIFY_CRITERIA),
+    resolution: z.enum(["none", "partial", "full"]),
+    evidence_quote: z.string().trim().max(300).nullable()
+  })
+  .strict();
+
+export const cvReviewVerifyOutputSchema = z
+  .object({
+    criteria: z.array(cvReviewVerifyCriterionOutputSchema).min(1).max(3)
+  })
+  .strict();
+
+export type CvReviewVerifyAiOutput = z.infer<typeof cvReviewVerifyOutputSchema>;

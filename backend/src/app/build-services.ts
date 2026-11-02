@@ -3,6 +3,7 @@ import { SupabaseCvLanguagesRepository } from "../modules/cv-languages/cv-langua
 import { PrivacyService } from "../modules/privacy/privacy.service";
 import { GuestImportsService } from "../modules/guest-imports/guest-imports.service";
 import { SupabaseGuestImportsRepository, type GuestImportsRepository } from "../modules/guest-imports/guest-imports.repository";
+import { SupabaseCvScoreImprovementsRepository, type CvScoreImprovementsRepository } from "../modules/cv-review/cv-score-improvements.repository";
 import type { Logger } from "pino";
 import type { AppConfig } from "../shared/config/env";
 import {
@@ -152,6 +153,7 @@ export interface ServiceOverrides {
   masterCvRepository?: MasterCvRepository;
   importsRepository?: ImportsRepository;
   guestImportsRepository?: GuestImportsRepository;
+  cvScoreImprovementsRepository?: CvScoreImprovementsRepository;
   jobsRepository?: JobsRepository;
   coverLettersRepository?: CoverLettersRepository;
   tailoredCvRepository?: TailoredCvRepository;
@@ -338,7 +340,14 @@ export const buildDefaultServices = (
     billingService,
     privacyService,
     new SupabaseCvLanguagesRepository(supabaseClients.serviceRoleClient),
-    { modelPricing: config.ai.modelPricing ?? {} }
+    {
+      modelPricing: config.ai.modelPricing ?? {},
+      logger,
+      scoreImprovements: {
+        imports: importsRepository,
+        store: overrides?.cvScoreImprovementsRepository ?? new SupabaseCvScoreImprovementsRepository(supabaseClients.serviceRoleClient)
+      }
+    }
   );
   const tailoringService = new TailoringService(
     overrides?.tailoringRepository ?? new SupabaseTailoringRepository(supabaseClients.serviceRoleClient),

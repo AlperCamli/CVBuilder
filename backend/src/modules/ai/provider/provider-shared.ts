@@ -29,6 +29,7 @@ export const HEAVY_MODEL_FLOW_TYPES = new Set<AiFlowType>([
   "tailored_draft",
   "cv_parse",
   "cv_review",
+  "cv_review_verify",
   "professional_summary",
   "cv_translate"
 ]);

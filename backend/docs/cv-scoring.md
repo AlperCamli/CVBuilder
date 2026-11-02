@@ -168,11 +168,87 @@ compatibility is inferred from normalized text. Parsing difficulty as a possible
 compatibility issue is consistent with [Greenhouse's documented parsing limitations](https://support.greenhouse.io/hc/en-us/articles/200989175-Unsuccessful-resume-parse);
 the weights, curve and thresholds are our own product policy.
 
+## Improvement score
+
+After "Improve with AI" the score must rise for every verified fix and never drop.
+A fresh AI rating is too noisy for that (it may not "see" the improvement), so the
+new score is anchored on the stored review and computed by
+`cv-review-improvement.ts`. The scoring math above (`reviewCv`, `scoreAiReview`,
+`LEVEL_POINTS`, weights, total) is reused, never changed.
+
+**Formula.** For every dimension of the stored review whose `score` is not null:
+
+```
+gap   = 100 - before
+after = before + gap * BETA * ln(1 + ALPHA * r) / ln(1 + ALPHA)
+```
+
+`IMPROVEMENT_BETA = 0.6` (r = 1 closes 60% of the gap) and `IMPROVEMENT_ALPHA = 4`
+(the first fixes count most: r = 0.5 gives 68% of the r = 1 gain). `r` is clamped to
+[0, 1]. The total is the usual `round(sum(score * weight) / sum(assessed weights))`
+with the weights stored in the review, computed from the unrounded dimension
+points (stored dimension scores are rounded to two decimals).
+
+**r per dimension**, measured on the improved content against the stored content:
+
+| Dimension | r |
+| --- | --- |
+| `impact` | Share of unique experience statements with figures (the scoring's figure rule): `max(0, (after - before) / (1 - before))`, 0 when `before = 1`. The result is also capped at `max(before points, LEVEL_POINTS[impact cap level of the improved content])`. The improve flow does not invent numbers, so this is usually 0. |
+| `skills_evidence` | Of the listed skills that experience/project text did not mention before, the share mentioned there after (case-insensitive whole-term match). |
+| `wording`, `depth`, `focus` | AI-verified: `none` = 0, `partial` = 0.5, `full` = 1. |
+| `structure` | Not the formula: the deterministic structure check runs on the improved content and the higher of the two results is kept. |
+| `ats` | Unchanged: the source file did not change. |
+
+**AI verification** (`flow_type` `cv_review_verify`, code-only prompt
+`cv-review-verify` in `flow-registry.ts`). Only criteria the stored review scored
+(non-null, below 100) are sent, each with its original issue, fix and quote, plus
+the before and after CV as sections built by `buildAiReviewInput` (same redaction,
+14,000-character cap per side). Where the issue comes from: AI reviews store the
+fix in the dimension's check `suggestion` and "assessment “quote”" in its
+`evidence`; the issue only survives in `improvements` ("issue “quote” fix"), which
+keeps the top six, so the assessment stands in when it was cut. Basic reviews send
+their failing checks' evidence and suggestions. The model returns per criterion a
+`resolution` (`none`, `partial`, `full`) and an `evidence_quote` copied from the
+after text; it never outputs numbers. A resolution counts only when its quote
+passes the scoring's quote rule against the after text (at least 8 characters,
+ignoring case, spacing, bullets and quotation marks); otherwise it is `none`.
+
+**Guarantees** (unit-tested with random cases): every dimension and the total stay
+≥ before and ≤ 100; r = 0 changes nothing; r > 0 on an assessed dimension below 100
+raises the unrounded total strictly (except impact, where the cap can hold it).
+The returned `after` is never below the stored score.
+
+**Scope and fail-safe.** A basic review (`method: "basic"`) gets the formula on the
+dimensions it scored (impact, wording, structure, ats). Unscorable and image-based
+(`ats_blocker`) reviews get no improvement score. If the verify run fails or its
+output is invalid, wording, depth and focus use r = 0 (the deterministic r still
+apply) and a warning is logged. The score never fails the improvement and never
+claims or releases a free-tier use.
+
+**API and storage.** `POST /ai/import-improve` accepts an optional `import_id`.
+When the upload belongs to the user and has a stored v2 review, the response adds
+`score_improvement: { before, after }` (otherwise `null`); client scores are never
+read. Each result is stored in `public.cv_score_improvements` (`score_before`,
+`score_after`, `review_after`: the recomputed review in the `CvReview` shape, same
+`method`, with a limitation saying it was updated after an AI improvement). The
+table is backend-only (RLS on, no policies, no browser grants), part of the data
+download and deleted by account erasure before `imports`; deleting the upload
+clears `import_id`. After saving, the improve page shows the score going from
+before to after with one Continue button when `after > before`, otherwise it moves
+on as before. Note that saving the improved upload (`PATCH /imports/:id/result`)
+clears the import's stored review, so a retry returns `null`.
+
 ## Rollout
 
 Apply `supabase/migrations/20261106120000_cv_review_ai_flow.sql` **before
 deploying the backend**: it allows `cv_review` in `ai_runs.flow_type`. Without it
 the run insert fails and every upload gets the basic review.
+
+Apply `supabase/migrations/20261109120000_cv_score_improvements.sql` before
+deploying this backend: it allows `cv_review_verify`
+and creates `cv_score_improvements`. Without it the verify run insert fails (the
+score falls back to r = 0 for wording, depth and focus) and storing the result
+fails with a logged warning; the improvement itself still succeeds.
 
 ## Tailoring comparison (removed)
 
@@ -211,3 +287,11 @@ through the real AI service and mock provider and checks the stored review, the
 tracked run and the fallback when the AI review fails. Guest tests check that the
 review computed during processing is the one persisted. Frontend render tests
 check that weaknesses with quotes are visible and the method stays collapsed.
+`tests/cv-review-improvement.unit.test.ts` covers the improvement formula and its
+guarantees (random cases), each r rule, issue recovery, quote parity with the
+scoring, the fail-safe and a worked example (66 → 75);
+`tests/cv-score-improvement.integration.test.ts` runs `improveImportedContent` with
+the mock provider and checks the response, the stored row, the tracked verify run and
+the free-use markers; `tests/sql/cv-score-improvements.sql` checks the table's
+privileges, constraints and erasure; `ScoreImprovementResult.test.tsx` checks the
+result state.

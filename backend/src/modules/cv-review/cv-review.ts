@@ -12,8 +12,8 @@ const LABELS: Record<ReviewDimensionId, string> = {
   skills_evidence: "Skills backed by experience", structure: "Structure and completeness", ats: "Parseability / ATS compatibility"
 };
 const HEADER = new Set(["personal_info", "header", "contact", "contact_info"]);
-const EXPERIENCE = new Set(["experience", "work_experience", "employment", "clinical_experience", "projects", "volunteer", "audit_qi", "teaching", "management_leadership"]);
-const SKILLS = new Set(["skills", "clinical_skills", "additional_skills", "technical_skills"]);
+export const EXPERIENCE = new Set(["experience", "work_experience", "employment", "clinical_experience", "projects", "volunteer", "audit_qi", "teaching", "management_leadership"]);
+export const SKILLS = new Set(["skills", "clinical_skills", "additional_skills", "technical_skills"]);
 const EDUCATION = new Set(["education", "medical_qualifications", "qualifications"]);
 const NARRATIVE_KEYS = new Set(["description", "summary", "text", "content", "bullets", "achievements", "responsibilities", "highlights", "details", "outcomes", "duties", "evaluation"]);
 const ACTION = /^(?:[•*\-–]\s*)?(?:achieved|administered|analysed|analyzed|automated|built|collaborated|coordinated|created|delivered|designed|developed|diagnosed|directed|drove|established|evaluated|implemented|improved|increased|launched|led|managed|mentored|optimized|organised|organized|provided|reduced|researched|resolved|supported|taught|trained|treated)\b/i;
@@ -21,7 +21,7 @@ const GENERIC = /\b(?:hard[- ]working|team player|results[- ]driven|go[- ]getter
 // Only narrative text is checked. Years and numeric dates are not results; any other figure that
 // is not glued to letters (Q3, B2B) counts as measurable scope or outcome.
 const DATES = /\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b|\b\d{1,2}[./]\d{4}\b|\b(?:19|20)\d{2}\b/g;
-const hasMetric = (line: string): boolean => /(?<!\p{L})\d/u.test(line.replace(DATES, " "));
+export const hasMetric = (line: string): boolean => /(?<!\p{L})\d/u.test(line.replace(DATES, " "));
 // Contact details are not needed to judge content and are not sent to the AI review.
 const CONTACT = /[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/\S+|www\.\S+|\+?\d[\d ()-]{7,}\d/gi;
 // Phone-like runs need 9+ digits, so date ranges such as "2019 - 2021" stay in headings.
@@ -45,17 +45,17 @@ const IMAGE_BASED_NOT_ASSESSED = "Not assessed: we couldn't read text in this fi
 const IMAGE_BASED_ADD_CONTENT = "Add your experience, education and skills in the editor to get a full content score.";
 const IMAGE_BASED_OCR_LIMITATION = "Content read with text recognition (OCR) does not show that an ATS can read the file.";
 
-const strings = (value: CvJsonValue | undefined): string[] => {
+export const strings = (value: CvJsonValue | undefined): string[] => {
   if (typeof value === "string") return value.trim() ? [value.trim()] : [];
   if (typeof value === "number") return [String(value)];
   if (Array.isArray(value)) return value.flatMap(strings);
   if (value && typeof value === "object") return Object.values(value).flatMap(strings);
   return [];
 };
-const flattenFields = (fields: Record<string, CvJsonValue>): string => Object.values(fields).flatMap(strings).join("\n");
-const normalize = (text: string): string => text.normalize("NFKC").toLowerCase().replace(/̇/g, "").replace(/\s+/g, " ").trim();
+export const flattenFields = (fields: Record<string, CvJsonValue>): string => Object.values(fields).flatMap(strings).join("\n");
+export const normalize = (text: string): string => text.normalize("NFKC").toLowerCase().replace(/̇/g, "").replace(/\s+/g, " ").trim();
 // Quote matching ignores case, spacing, bullets and quotation marks, nothing else.
-const looseText = (text: string): string => normalize(text).replace(/[“”"‘’'«»•*]/g, "").replace(/\s+/g, " ").trim();
+export const looseText = (text: string): string => normalize(text).replace(/[“”"‘’'«»•*]/g, "").replace(/\s+/g, " ").trim();
 const tokens = (text: string): string[] => normalize(text).match(/\.net\b|[\p{L}\p{N}][\p{L}\p{N}.]*(?:\+\+|#)?/gu) ?? [];
 const wordCount = (text: string) => tokens(text).length;
 const example = (text: string | undefined): string => text ? ` Example: “${text.slice(0, 160)}${text.length > 160 ? "…" : ""}”` : "";
@@ -75,7 +75,7 @@ export interface ReviewInput {
   diagnostics?: ParseCvFileDiagnostics | null;
 }
 
-interface ContentAnalysis {
+export interface ContentAnalysis {
   content: CvContent;
   visibleSections: CvSection[];
   populated: CvSection[];
@@ -89,7 +89,7 @@ const isImageBased = (input: ReviewInput): boolean =>
   input.diagnostics?.image_based === true && input.import_status !== undefined && !["failed", "uploaded", "parsing"].includes(input.import_status);
 const ocrRecovered = (input: ReviewInput): boolean => isImageBased(input) && input.diagnostics?.ocr === "recovered";
 
-const analyze = (input: ReviewInput): ContentAnalysis | null => {
+export const analyze = (input: ReviewInput): ContentAnalysis | null => {
   const diagnostics = input.diagnostics;
   const isImport = input.import_status !== undefined;
   // Usable OCR text of an image-based PDF is scored; its ATS problem is handled by the image-based rule.
@@ -159,7 +159,7 @@ const atsDimension = (input: ReviewInput): ReviewDimension => {
   ]);
 };
 
-const structureDimension = ({ content, populated, visibleSections, text }: ContentAnalysis): ReviewDimension => {
+export const structureDimension = ({ content, populated, visibleSections, text }: ContentAnalysis): ReviewDimension => {
   const contactText = [...populated.filter(s => HEADER.has(s.type)).flatMap(s => s.blocks.map(b => flattenFields(b.fields))), ...Object.entries(content.metadata).filter(([key]) => ["name", "full_name", "email", "phone"].includes(key)).flatMap(([, value]) => strings(value))].join("\n");
   const hasName = populated.some(s => HEADER.has(s.type) && field(s, "name", "full_name", "first_name")) || Boolean(strings(content.metadata.full_name ?? content.metadata.name).length);
   const hasContact = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(contactText) || /\+?\d[\d ()-]{7,}\d/.test(contactText);
@@ -181,7 +181,7 @@ const structureDimension = ({ content, populated, visibleSections, text }: Conte
 
 const metricsEvidence = ({ narratives, measurable }: ContentAnalysis) => `${measurable}/${narratives.length} unique experience statements include measurable scope or results; full credit at 50%.${example(narratives.find(hasMetric))}`;
 
-const band = (score: number): string => score >= 85 ? "Strong, competitive CV" : score >= 70 ? "Good foundation, not yet competitive" : score >= 50 ? "Several areas need attention" : "Needs significant work";
+export const band = (score: number): string => score >= 85 ? "Strong, competitive CV" : score >= 70 ? "Good foundation, not yet competitive" : score >= 50 ? "Several areas need attention" : "Needs significant work";
 
 const assemble = (method: CvReview["method"], dimensions: ReviewDimension[], strengths: string[], improvements: Array<{ priority: number; text: string }>, limitations: string[]): CvReview => {
   const assessed = dimensions.filter(d => d.score !== null);
@@ -263,7 +263,7 @@ export function buildAiReviewInput(input: ReviewInput): CvReviewAiInput | null {
 }
 
 // The AI cannot rate impact above what the statements' figures support.
-const impactCap = ({ narratives, measurable }: ContentAnalysis): { level: number; reason: string | null } => {
+export const impactCap = ({ narratives, measurable }: ContentAnalysis): { level: number; reason: string | null } => {
   if (!narratives.length) return { level: 1, reason: "Capped at level 1: no experience statements were found." };
   if (!measurable) return { level: 2, reason: "Capped at level 2: no experience statement includes a number, amount or count." };
   if (measurable / narratives.length < 0.25) return { level: 3, reason: "Capped at level 3: fewer than a quarter of experience statements include a number, amount or count." };

@@ -508,6 +508,20 @@ const generateCvReview = (input: Record<string, unknown>): Record<string, unknow
   };
 };
 
+// Every sent criterion counts as partly resolved, quoting the first improved line.
+const generateCvReviewVerify = (input: Record<string, unknown>): Record<string, unknown> => {
+  const after = (input.after ?? {}) as { sections?: Array<{ blocks?: Array<{ lines?: string[] }> }> };
+  const firstLine = (after.sections ?? []).flatMap((section) => section.blocks ?? []).flatMap((block) => block.lines ?? []).find((line) => line.length >= 8) ?? null;
+  const criteria = Array.isArray(input.criteria) ? (input.criteria as Array<{ id?: string }>) : [];
+  return {
+    criteria: criteria.map((criterion) => ({
+      id: criterion.id,
+      resolution: firstLine ? "partial" : "none",
+      evidence_quote: firstLine ? firstLine.slice(0, 200) : null
+    }))
+  };
+};
+
 const generateCoverLetter = (input: Record<string, unknown>): Record<string, unknown> => {
   const jobTitle = asString(input.job_title).trim() || "the role";
   const companyName = asString(input.company_name).trim();
@@ -802,6 +816,9 @@ export class MockAiProvider implements AiProvider {
         break;
       case "cv_review":
         outputPayload = generateCvReview(request.input_payload);
+        break;
+      case "cv_review_verify":
+        outputPayload = generateCvReviewVerify(request.input_payload);
         break;
       case "tailoring_analysis":
         outputPayload = generateTailoringAnalysis(request.input_payload);

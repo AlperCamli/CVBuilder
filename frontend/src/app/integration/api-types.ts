@@ -815,6 +815,8 @@ export interface ImportImproveResponse {
     sub_run_ids?: string[];
     partial_success?: boolean;
   };
+  /** The upload's CV score before and after this improvement; null when it could not be computed. */
+  score_improvement?: { before: number; after: number } | null;
 }
 
 export interface AiSuggestResponse {

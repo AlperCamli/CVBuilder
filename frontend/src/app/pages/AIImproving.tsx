@@ -9,7 +9,8 @@ import { useOnboarding } from "../contexts/OnboardingContext";
 import { useUpgradePrompt } from "../contexts/UpgradePromptContext";
 import { isEntitlementExceeded, isTrialRequired, resolveEntitlementFeature, resolvePaywallSurface } from "../integration/entitlement-upsell";
 import { trackFunnelEvent } from "../integration/funnel-events";
-import { saveImprovedImport } from "../integration/import-improve";
+import { saveImprovedImport, scoreGain } from "../integration/import-improve";
+import { ScoreImprovementResult } from "../components/ScoreImprovementResult";
 import { scoreResumePath } from "../onboarding/onboarding-flow";
 
 import { applyOnboardingTemplate } from "../integration/subscription-flow";
@@ -40,6 +41,8 @@ export function AIImproving() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  // Set when the improvement raised the CV score: the page shows it before moving on.
+  const [result, setResult] = useState<{ before: number; after: number; next: () => void } | null>(null);
 
   const steps = useMemo(
     () => [
@@ -90,6 +93,7 @@ export function AIImproving() {
               const improved = await api.postImportImprove({
                 parsed_content: parsedContent as unknown as Record<string, unknown>,
                 improvement_guidance: improvementGuidance,
+                import_id: importId,
                 ...(moduleType ? { module_type: moduleType } : {})
               });
 
@@ -100,23 +104,33 @@ export function AIImproving() {
               completeStep("create_cv");
               if (freeRun) trackFunnelEvent("free_improve_used");
 
-              if (source === "onboarding_upload" && tailoringAvailable) {
-                navigate(`/app/tailor/${converted.master_cv.id}`, {
+              const next = () => {
+                if (source === "onboarding_upload" && tailoringAvailable) {
+                  navigate(`/app/tailor/${converted.master_cv.id}`, {
+                    state: {
+                      source: "onboarding_upload_ai_improved"
+                    }
+                  });
+                  return;
+                }
+
+                navigate(`/app/cv/${converted.master_cv.id}`, {
                   state: {
-                    source: "onboarding_upload_ai_improved"
+                    cvKind: "master",
+                    masterCvId: converted.master_cv.id,
+                    aiImproved: true,
+                    isUploaded: true
                   }
                 });
+              };
+
+              const gain = scoreGain(improved.score_improvement);
+              if (gain) {
+                setIsFinalizing(false);
+                setResult({ ...gain, next });
                 return;
               }
-
-              navigate(`/app/cv/${converted.master_cv.id}`, {
-                state: {
-                  cvKind: "master",
-                  masterCvId: converted.master_cv.id,
-                  aiImproved: true,
-                  isUploaded: true
-                }
-              });
+              next();
             } catch (err) {
               if (isTrialRequired(err)) {
                 showTrialPrompt(resolvePaywallSurface(err, "ai"), { returnPath: resumePath });
@@ -146,6 +160,25 @@ export function AIImproving() {
   }, [api, completeStep, freeRun, improvementGuidance, importId, navigate, parsedContent, resumePath, source, steps, showTrialPrompt, showUpgradePrompt, tailoringAvailable]);
 
   const currentStepData = steps[currentStep];
+
+  if (result) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-6"
+        style={{ background: "var(--color-background-secondary)" }}
+      >
+        <div
+          className="w-full max-w-xl rounded-2xl border p-7"
+          style={{
+            background: "var(--color-background-primary)",
+            borderColor: "var(--color-border-tertiary)"
+          }}
+        >
+          <ScoreImprovementResult before={result.before} after={result.after} onContinue={result.next} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

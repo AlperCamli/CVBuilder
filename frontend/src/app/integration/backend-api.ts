@@ -274,6 +274,8 @@ export interface ImportImproveInput {
   language?: string;
   improvement_guidance?: string[];
   module_type?: string;
+  /** The upload being improved; the server answers with score_improvement from its stored review. */
+  import_id?: string;
 }
 
 export interface CoverLetterGenerationInput {

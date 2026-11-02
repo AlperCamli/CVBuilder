@@ -77,6 +77,8 @@ export interface ImportImproveInput {
   language?: string;
   improvement_guidance?: string[];
   module_type?: string;
+  /** The upload being improved: its stored CV review anchors score_improvement. */
+  import_id?: string;
 }
 
 export interface CoverLetterGenerationInput {
@@ -273,4 +275,9 @@ export interface ImportImproveResponse {
     sub_run_ids?: string[];
     partial_success?: boolean;
   };
+  /**
+   * The upload's CV score before and after this improvement (cv-scoring.md, "Improvement score").
+   * Null without import_id, without a stored v2 review, or when it could not be computed.
+   */
+  score_improvement?: { before: number; after: number } | null;
 }

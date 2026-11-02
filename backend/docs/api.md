@@ -325,7 +325,8 @@ Body:
 {
   "parsed_content": {},
   "language": "en",
-  "improvement_guidance": ["optional", "hints"]
+  "improvement_guidance": ["optional", "hints"],
+  "import_id": "optional uuid of the upload being improved"
 }
 ```
 
@@ -343,9 +344,16 @@ Response `200`:
     "flow_type": "import_improve",
     "prompt_key": "import-improve",
     "prompt_version": "phase5-v1"
-  }
+  },
+  "score_improvement": { "before": 62, "after": 71 }
 }
 ```
+
+Notes:
+- `score_improvement` is `null` without `import_id`, when the upload has no stored v2 review, when the
+  review is unscorable or image-based, or when nothing could be computed. It is computed from the
+  stored review only, never from client values, and a failure never fails the request. See
+  `cv-scoring.md`, "Improvement score".
 
 ### 11) `POST /ai/blocks/suggest` (master or tailored target)
 

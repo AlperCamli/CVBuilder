@@ -59,8 +59,13 @@ import {
   getStandardBlockEditableFields,
   enforceModuleBlockAiPolicy
 } from "./module-block-suggest";
-import { cvParseOutputSchema, cvReviewOutputSchema, type CvReviewAiOutput } from "./flows/flow-contracts";
+import { cvParseOutputSchema, cvReviewOutputSchema, cvReviewVerifyOutputSchema, type CvReviewAiOutput, type CvReviewVerifyAiOutput } from "./flows/flow-contracts";
 import type { CvReviewAiInput } from "../cv-review/cv-review";
+import { computeScoreImprovement, type CvReviewVerifyAiInput } from "../cv-review/cv-review-improvement";
+import { CV_REVIEW_VERSION } from "../cv-review/cv-review.types";
+import type { CvScoreImprovementsRepository } from "../cv-review/cv-score-improvements.repository";
+import type { ImportsRepository } from "../imports/imports.repository";
+import type { Logger } from "pino";
 import { evaluateTailoredDraftSemanticContent } from "./tailored-draft-semantic-validation";
 import { coerceJobAnalysisOutputPayload } from "./job-analysis-output-coercion";
 import { clampToSchemaLimits } from "./flows/clamp-to-schema";
@@ -781,7 +786,12 @@ export class AiService {
     private readonly billingService: BillingService,
     private readonly privacy?: PrivacyService,
     private readonly cvLanguages: CvLanguagesRepository = builtInCvLanguages,
-    private readonly options: { modelPricing?: ModelPriceTable } = {}
+    private readonly options: {
+      modelPricing?: ModelPriceTable;
+      logger?: Pick<Logger, "warn">;
+      // Improvement score after Improve with AI: the stored import review and where results are kept.
+      scoreImprovements?: { imports: Pick<ImportsRepository, "findImportDetailById">; store: CvScoreImprovementsRepository };
+    } = {}
   ) {}
 
   async listTranslationLanguages() {
@@ -1278,15 +1288,65 @@ export class AiService {
     // Without a trial or Pro this is the account's one free improvement (or is refused).
     const freeUse = await this.billingService.claimFreeUse(session.appUser.id, "improve");
     const release = () => this.billingService.releaseFreeUse(session.appUser.id, freeUse).catch(() => undefined);
+    let result: ImportImproveResponse;
     try {
-      const result = await this.runImportImprove(session, input);
+      result = await this.runImportImprove(session, input);
       // Nothing was eligible for improvement, so the free run stays available.
       if (!result.generation_metadata.attempted_runs) await release();
-      return result;
     } catch (error) {
       await release();
       throw error;
     }
+    // Outside the free-use block: the score never claims or releases a free use, and never fails the improvement.
+    const scoreImprovement = input.import_id && result.generation_metadata.attempted_runs
+      ? await this.importScoreImprovement(session, input.import_id, result.improved_content)
+      : null;
+    return { ...result, score_improvement: scoreImprovement };
+  }
+
+  // The improved score is anchored on the review stored with the upload, never on a client value.
+  private async importScoreImprovement(session: SessionContext, importId: string, improvedContent: CvContent): Promise<{ before: number; after: number } | null> {
+    const deps = this.options.scoreImprovements;
+    if (!deps) return null;
+    const userId = session.appUser.id;
+    try {
+      const row = (await deps.imports.findImportDetailById(userId, importId))?.importRow;
+      const review = row?.review_context?.cv_review;
+      if (!row || row.user_id !== userId || !row.parsed_content || review?.version !== CV_REVIEW_VERSION) return null;
+      const improvement = await computeScoreImprovement({
+        review,
+        before: { content: row.parsed_content, import_status: row.status, raw_text: row.raw_extracted_text, diagnostics: row.review_context?.diagnostics ?? null },
+        after_content: improvedContent,
+        verify: verifyInput => this.verifyCvReviewImprovement(session, { verify_input: verifyInput, import_id: importId }),
+        onVerifyFailure: error => this.options.logger?.warn(
+          { import_review: "cv_review_verify", reason: "AI_VERIFY_FAILED", error_name: error instanceof Error ? error.name : "unknown" },
+          "AI improvement verification failed; scoring wording, depth and focus without it"
+        )
+      });
+      if (!improvement) return null;
+      try {
+        await deps.store.create({ user_id: userId, import_id: importId, score_before: improvement.before, score_after: improvement.after, review_after: improvement.review_after });
+      } catch (error) {
+        this.options.logger?.warn({ import_review: "cv_score_improvement", reason: "STORE_FAILED", error_name: error instanceof Error ? error.name : "unknown" }, "CV score improvement could not be stored");
+      }
+      return { before: improvement.before, after: improvement.after };
+    } catch (error) {
+      this.options.logger?.warn({ import_review: "cv_score_improvement", reason: "SCORE_FAILED", error_name: error instanceof Error ? error.name : "unknown" }, "CV score improvement failed; returning the improvement without it");
+      return null;
+    }
+  }
+
+  // Checks which review issues the improved CV resolved. Resolutions are turned into points by
+  // cv-review-improvement after quote verification, never used as a score directly.
+  async verifyCvReviewImprovement(session: SessionContext, input: { verify_input: CvReviewVerifyAiInput; import_id?: string }): Promise<CvReviewVerifyAiOutput> {
+    const executed = await this.executeFlow({
+      flow_type: "cv_review_verify",
+      user_id: session.appUser.id,
+      import_id: input.import_id,
+      input_payload: { ...input.verify_input },
+      user_prompt: "Compare the improved CV with the original and return the criteria JSON."
+    });
+    return cvReviewVerifyOutputSchema.parse(executed.output);
   }
 
   private async runImportImprove(
@@ -2950,7 +3010,7 @@ export class AiService {
         ? coerceTailoredDraftOutputPayload(asRecord(providerResult.output_payload))
         : options.flow_type === "job_analysis"
           ? coerceJobAnalysisOutputPayload(providerResult.output_payload)
-          : options.flow_type.startsWith("tailoring_") || options.flow_type === "cv_review"
+          : options.flow_type.startsWith("tailoring_") || options.flow_type === "cv_review" || options.flow_type === "cv_review_verify"
             ? clampToSchemaLimits(definition.output_schema, providerResult.output_payload)
             : providerResult.output_payload;
 

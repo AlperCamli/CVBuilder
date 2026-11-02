@@ -97,6 +97,7 @@ export const aiImportImproveSchema = z
     parsed_content: z.record(z.unknown()),
     language: z.string().trim().min(2).max(16).optional(),
     improvement_guidance: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
+    import_id: uuidSchema.optional(),
     module_type: z
       .string()
       .trim()
