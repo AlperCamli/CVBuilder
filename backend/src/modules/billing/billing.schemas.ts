@@ -8,13 +8,15 @@ export const billingCheckoutSchema = z
     plan_code: z.string().trim().min(1).max(64),
     success_url: z.string().trim().url().max(2000).optional(),
     cancel_url: z.string().trim().url().max(2000).optional(),
-    with_trial: z.boolean().optional()
+    with_trial: z.boolean().optional(),
+    time_zone: z.string().trim().min(1).max(64).optional()
   })
   .strict();
 
 export const billingPortalSchema = z
   .object({
-    return_url: z.string().trim().url().max(2000).optional()
+    return_url: z.string().trim().url().max(2000).optional(),
+    flow: z.enum(["cancel", "payment_method"]).optional()
   })
   .strict()
   .default({});

@@ -26,6 +26,16 @@ The cancellation return uses the approved mint upgrade-card design and the exist
 
 Ordinary app navigation never consumes a saved purchase intent. Existing subscribers manage subscription changes through the billing portal rather than creating duplicate subscriptions.
 
+## Trial activation screen and billing recovery (November 2026)
+
+- The trial screen shows a timeline (today at zero, a reminder email before the trial ends, the first weekly charge on today + trial days in the user's locale and regional price), the two-click cancel promise, a Stripe trust block, what Pro unlocks and a short FAQ. Paywalls open `/app/checkout?trial=1&source=<export|ai|tailoring|cover_letter>&next=…`; `source` picks the headline and survives Pricing, Stripe and the return.
+- Trial Stripe sessions carry `custom_text.submit.message` in the account language with the trial end date in the browser's time zone (`time_zone` on the checkout request; Turkey or UTC otherwise).
+- Profile shows Cancel trial / Cancel subscription, which opens the Stripe portal directly on the cancellation step (`flow: "cancel"`; falls back to the portal home if the configuration refuses), and Manage billing. Portal configurations must allow cancellation: `npm run stripe:regional-portals` reports it and `-- --enable-cancellation` turns it on.
+- A `past_due`/`unpaid`/`paused` Stripe subscription is not sent to a new checkout: Checkout, Pricing and Profile offer Update payment method (`flow: "payment_method"`).
+- Purchases from in-app Pricing return to `next` when present; accounts that finished the entry onboarding return to `/app` instead of the upload step. Signup → pay → onboarding from the landing is unchanged.
+- `checkout.session.expired` resolves the attempt as `expired`; `20261107150000_checkout_expiry.sql` backfills attempts open for over 25 hours and expires them hourly with pg_cron.
+- Funnel counters: `checkout_view`, `checkout_redirect`, `checkout_success` (trial|pro) and `checkout_canceled`, next to the existing GA4 events.
+
 ## Template selection
 
 Template showcase start links and Make It Yours carry the actual catalog slug in the onboarding URL and retain it in browser storage for the 24-hour onboarding window. Preview-dialog CTAs use the previewed template; showcase CTAs use the currently selected template. Demo export handoffs also retain their selected style.

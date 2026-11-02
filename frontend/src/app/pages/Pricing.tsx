@@ -1,12 +1,12 @@
-import { hasAppAccess } from "../integration/subscription-flow";
+import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, safeReturnPath } from "../integration/subscription-flow";
 import { SupportHelp } from "../components/SupportHelp";
 import { useRegionalPricing } from "../integration/regional-pricing";
 import { PricingAvailability } from "../components/PricingAvailability";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { BillingPlanResponseData, EntitlementSummary, UsageSummary } from "../integration/api-types";
@@ -28,8 +28,6 @@ const formatTrialEnd = (iso: string | null): string | null => {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
-import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
-
 export function Pricing() {
   const regional = useRegionalPricing();
   useTranslation();
@@ -44,6 +42,12 @@ export function Pricing() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [entitlements, setEntitlements] = useState<EntitlementSummary | null>(null);
   const paymentCompletedTrackedRef = useRef(false);
+  // Opened from a paywall's checkout: purchases return to its next step (Checkout sends
+  // onboarded accounts to the app when there is none).
+  const query = new URLSearchParams(location.search);
+  const nextParam = query.get("next");
+  const returnPath = safeReturnPath(nextParam);
+  const source = checkoutSource(query.get("source"));
 
   useEffect(() => {
     setSidebarVisible(true);
@@ -91,19 +95,20 @@ export function Pricing() {
     setBusyTarget(target);
     setError(null);
     try {
-      navigate(checkoutPath({ plan_code: target, with_trial: false, return_path: ONBOARDING_ENTRY_PATH, auto: true }));
+      navigate(checkoutPath({ plan_code: target, with_trial: false, return_path: returnPath, source, auto: true }));
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusyTarget(null);
     }
   };
 
-  const openPortal = async () => {
+  const openPortal = async (flow?: "payment_method") => {
     setBusyTarget("portal");
     setError(null);
     try {
       const response = await api.createBillingPortal({
-        return_url: `${window.location.origin}/app/pricing`
+        return_url: `${window.location.origin}${pricingPath({ return_path: nextParam ?? undefined, source })}`,
+        ...(flow ? { flow } : {})
       });
       window.location.href = response.portal_url;
     } catch (err) {
@@ -126,6 +131,7 @@ export function Pricing() {
   const isTrialing = subscriptionStatus === "trialing";
   const isLegacyPaidPlan = isLegacyPaidPlanCode(currentPlanCode);
   const hasPaidPlan = isPaidPlanCode(currentPlanCode);
+  const billingIssue = hasBillingIssue(plan);
   // Default to eligible only until the plan loads, to avoid flashing the wrong
   // Weekly CTA; once loaded this reflects the backend's authoritative decision.
   const trialEligible = plan?.trial_eligible ?? true;
@@ -163,9 +169,9 @@ export function Pricing() {
   const resolveCta = (card: PlanCard): { label: string; disabled: boolean; onClick?: () => void } => {
     if (card.code === "trial") {
       return {
-        label: hasPaidPlan ? "Included in your subscription" : trialEligible ? "Start Free Trial" : "Trial already used",
-        disabled: hasPaidPlan || !trialEligible,
-        onClick: () => navigate(checkoutPath({ with_trial: true, return_path: ONBOARDING_ENTRY_PATH }))
+        label: hasPaidPlan || billingIssue ? "Included in your subscription" : trialEligible ? "Start Free Trial" : "Trial already used",
+        disabled: hasPaidPlan || billingIssue || !trialEligible,
+        onClick: () => navigate(checkoutPath({ with_trial: true, return_path: returnPath, source }))
       };
     }
 
@@ -185,12 +191,22 @@ export function Pricing() {
       label:
         t("Choose {{plan}}", { plan: card.name }),
       disabled: false,
-      onClick: () => { if (hasPaidPlan) void openPortal(); else void startCheckout(card.code as CheckoutTarget); }
+      onClick: () => {
+        if (billingIssue) void openPortal("payment_method");
+        else if (hasPaidPlan) void openPortal();
+        else void startCheckout(card.code as CheckoutTarget);
+      }
     };
   };
 
   return (
     <div className="p-8">
+      {nextParam && (
+        <Link to={checkoutPath({ with_trial: true, return_path: returnPath, source })} className="max-w-7xl mx-auto mb-4 flex items-center gap-1.5"
+          style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+          <ArrowLeft size={13} aria-hidden="true" />{t("Back")}
+        </Link>
+      )}
       <div className="max-w-4xl mx-auto text-center mb-10">
         <h1 className="font-medium mb-3" style={{ fontSize: "28px", color: "var(--color-text-primary)" }}>
           {t("Choose your plan")}</h1>
@@ -214,6 +230,27 @@ export function Pricing() {
           <Sparkles size={16} style={{ color: "var(--color-teal-600)" }} />
           <span style={{ fontSize: "13px", color: "var(--color-teal-800)" }}>
             {t("You're on a free trial. Your first charge is on")}{" "}<strong>{trialEnd}</strong>{t(". Cancel any time before then in the billing portal.")}</span>
+        </div>
+      )}
+
+      {billingIssue && (
+        <div
+          className="max-w-3xl mx-auto mb-6 p-4 rounded-lg border flex flex-wrap items-center gap-3"
+          style={{ borderColor: "var(--color-red-200)", background: "var(--color-red-50)" }}
+        >
+          <AlertTriangle size={16} style={{ color: "var(--color-red-600)" }} aria-hidden="true" />
+          <span className="flex-1" style={{ fontSize: "13px", color: "var(--color-red-700)", minWidth: "200px" }}>
+            {t("Your last payment didn’t go through. Update your payment method to keep your Pro subscription.")}</span>
+          <button
+            type="button"
+            onClick={() => void openPortal("payment_method")}
+            disabled={busyTarget === "portal"}
+            className="px-4 py-2 rounded-lg font-medium inline-flex items-center gap-2"
+            style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)" }}
+          >
+            {busyTarget === "portal" && <Loader2 size={14} className="animate-spin" />}
+            {t("Update payment method")}
+          </button>
         </div>
       )}
 
@@ -387,7 +424,7 @@ export function Pricing() {
                   {usage.limits.ai_actions !== null ? ` / ${usage.limits.ai_actions}` : t(" / unlimited")}
                 </div>
                 <div>
-                  {t("Remaining storage:")}{" "}{entitlements.remaining.storage_bytes ?? "unlimited"}
+                  {t("Remaining storage:")}{" "}{entitlements.remaining.storage_bytes ?? t("unlimited")}
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
+import { checkoutPath, hasBillingIssue, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
 import { chooseLocale } from "../localization/i18n";
 import { localeCode } from "../localization/i18n";
 import { translate as t } from "../localization/i18n";
@@ -19,7 +19,7 @@ export function Profile() {
   const { api, refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingBusy, setBillingBusy] = useState<"checkout" | "portal" | "cancel" | "payment_method" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -106,16 +106,19 @@ export function Profile() {
   };
 
   const openCheckout = async () => {
+    // Checkout sends accounts that finished onboarding to the app instead of the upload step.
     navigate(checkoutPath({ with_trial: billingPlan?.trial_eligible !== false, return_path: ONBOARDING_ENTRY_PATH }));
   };
 
-  const openPortal = async () => {
-    setBillingBusy(true);
+  // "cancel" and "payment_method" open the portal directly on that step.
+  const openPortal = async (flow?: "cancel" | "payment_method") => {
+    setBillingBusy(flow ?? "portal");
     setError(null);
 
     try {
       const response = await api.createBillingPortal({
-        return_url: `${window.location.origin}/app/profile`
+        return_url: `${window.location.origin}/app/profile`,
+        ...(flow ? { flow } : {})
       });
       window.location.href = response.portal_url;
     } catch (err) {
@@ -133,11 +136,17 @@ export function Profile() {
       } else {
         setError(t("Failed to open billing portal."));
       }
-      setBillingBusy(false);
+      setBillingBusy(null);
     }
   };
 
   const planCode = billingPlan?.plan_code ?? meData?.current_plan.plan_code ?? "free";
+  const billingIssue = hasBillingIssue(billingPlan);
+  const isTrialing = planCode !== "free" && billingPlan?.subscription_status === "trialing";
+  const periodEnd = billingPlan?.current_period_end ?? meData?.current_plan.current_period_end ?? null;
+  const cancelScheduled = billingPlan?.cancel_at_period_end ?? meData?.current_plan.cancel_at_period_end ?? false;
+  const periodEndLabel = periodEnd ? new Date(periodEnd).toLocaleDateString(localeCode(), { month: "long", day: "numeric", year: "numeric" }) : null;
+  const busyLabel = (key: typeof billingBusy, label: string) => billingBusy === key ? t("Redirecting...") : label;
 
   return (
     <div className="p-8">
@@ -258,27 +267,42 @@ export function Profile() {
                   {t("Manage your subscription and billing")}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between p-4 rounded-lg" style={{ background: "var(--color-background-secondary)" }}>
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg" style={{ background: "var(--color-background-secondary)" }}>
+              <div className="flex-1" style={{ minWidth: "220px" }}>
                 <p className="font-medium mb-0.5" style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>
-                  {planCode === "free" ? t("Subscription inactive") : `${planCode.toUpperCase()} ${t("Plan")}`}</p>
-                <p style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  {planCode === "free" ? t("Activate a trial or purchase Pro to access the application.") : usage
-                    ? t("Unlimited CVs and exports with your subscription.")
-                    : t("Loading usage...")}
+                  {billingIssue ? t("Payment failed") : isTrialing ? t("Free trial") : planCode === "free" ? t("Subscription inactive") : `${planCode.toUpperCase()} ${t("Plan")}`}</p>
+                <p style={{ fontSize: "12px", color: billingIssue ? "var(--color-red-700)" : "var(--color-text-secondary)" }}>
+                  {billingIssue
+                    ? t("Your last payment didn’t go through. Update your payment method to keep your Pro subscription.")
+                    : isTrialing && periodEndLabel
+                      ? cancelScheduled
+                        ? t("Your trial is canceled. You keep Pro until {{date}} and won’t be charged.", { date: periodEndLabel })
+                        : t("Your trial ends on {{date}}. Cancel before then and you won’t be charged. We’ll email you a reminder first.", { date: periodEndLabel })
+                      : planCode === "free" ? t("Activate a trial or purchase Pro to access the application.") : usage
+                        ? t("Unlimited CVs and exports with your subscription.")
+                        : t("Loading usage...")}
                 </p>
-                {planCode !== "free" && meData?.current_plan.current_period_end && (
-                  <p style={{ fontSize: "12px", color: meData.current_plan.cancel_at_period_end ? "var(--color-red-600)" : "var(--color-teal-700)", marginTop: "4px" }}>
-                    {meData.current_plan.cancel_at_period_end ? t("Expires on ") : t("Renews on ")}
-                    {new Date(meData.current_plan.current_period_end).toLocaleDateString(localeCode(), { month: "long", day: "numeric", year: "numeric" })}
+                {planCode !== "free" && !isTrialing && periodEndLabel && (
+                  <p style={{ fontSize: "12px", color: cancelScheduled ? "var(--color-red-600)" : "var(--color-teal-700)", marginTop: "4px" }}>
+                    {cancelScheduled ? t("Expires on ") : t("Renews on ")}
+                    {periodEndLabel}
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
-                {planCode === "free" ? (
+              <div className="flex flex-wrap gap-2">
+                {billingIssue ? (
                   <button
-                    onClick={() => void openCheckout()}
-                    disabled={billingBusy}
+                    onClick={() => void openPortal("payment_method")}
+                    disabled={billingBusy !== null}
+                    className="px-4 py-2 rounded-lg font-medium"
+                    style={{ fontSize: "13px", background: "var(--color-teal-600)", color: "var(--color-teal-50)", opacity: billingBusy ? 0.7 : 1 }}
+                  >
+                    {busyLabel("payment_method", t("Update payment method"))}
+                  </button>
+                ) : planCode === "free" ? (
+                  <button
+                    onClick={() => { setBillingBusy("checkout"); void openCheckout(); }}
+                    disabled={billingBusy !== null}
                     className="px-4 py-2 rounded-lg font-medium"
                     style={{
                       fontSize: "13px",
@@ -290,19 +314,37 @@ export function Profile() {
                     {billingBusy ? t("Redirecting...") : billingPlan?.trial_eligible ? t("Start Free Trial") : t("Choose Pro")}
                   </button>
                 ) : (
-                  <button
-                    onClick={() => void openPortal()}
-                    disabled={billingBusy}
-                    className="px-4 py-2 rounded-lg font-medium"
-                    style={{
-                      fontSize: "13px",
-                      background: "var(--color-teal-600)",
-                      color: "var(--color-teal-50)",
-                      opacity: billingBusy ? 0.7 : 1
-                    }}
-                  >
-                    {billingBusy ? t("Redirecting...") : t("Manage billing")}
-                  </button>
+                  <>
+                    {!cancelScheduled && (
+                      <button
+                        onClick={() => void openPortal("cancel")}
+                        disabled={billingBusy !== null}
+                        className="px-4 py-2 rounded-lg font-medium border"
+                        style={{
+                          fontSize: "13px",
+                          background: "var(--color-background-primary)",
+                          borderColor: "var(--color-border-secondary)",
+                          color: "var(--color-text-primary)",
+                          opacity: billingBusy ? 0.7 : 1
+                        }}
+                      >
+                        {busyLabel("cancel", isTrialing ? t("Cancel trial") : t("Cancel subscription"))}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => void openPortal()}
+                      disabled={billingBusy !== null}
+                      className="px-4 py-2 rounded-lg font-medium"
+                      style={{
+                        fontSize: "13px",
+                        background: "var(--color-teal-600)",
+                        color: "var(--color-teal-50)",
+                        opacity: billingBusy ? 0.7 : 1
+                      }}
+                    >
+                      {busyLabel("portal", t("Manage billing"))}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

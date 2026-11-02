@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, CreditCard, Loader2, LockKeyhole, PauseCircle, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, BellRing, CalendarCheck, Check, ChevronDown, CreditCard, Loader2, LockKeyhole, PauseCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 import type { CheckoutTarget } from "../../content/pricing";
-import { checkoutKey, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
+import { checkoutKey, trialEndDate, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
 import { formatMoney, type useRegionalPricing } from "../integration/regional-pricing";
-import { translate as t } from "../localization/i18n";
+import { localeCode, translate as t } from "../localization/i18n";
 import { PricingAvailability } from "./PricingAvailability";
 import { SupportHelp } from "./SupportHelp";
 import "./checkout-screen.css";
@@ -13,7 +13,7 @@ type Regional = ReturnType<typeof useRegionalPricing>;
 
 const PLAN_NAME: Record<CheckoutTarget, string> = { weekly: "Weekly", monthly: "Monthly", annual: "Yearly" };
 const BILLED: Record<CheckoutTarget, string> = { weekly: "billed weekly", monthly: "billed monthly", annual: "billed yearly" };
-const FEATURES = ["Tailor your CV to every opportunity", "Unlimited PDF & DOCX exports", "AI improvements whenever you need them"];
+const UNLOCKS = ["Tailor your CV to every opportunity", "Unlimited PDF & DOCX exports", "AI improvements whenever you need them", "Cover letters for every application"];
 
 /** The mascot card shared by every checkout state: start, cancelled, confirming and loading. */
 export function CheckoutShell({ mascot, eyebrow, title, lead, status, footer, children }: {
@@ -37,16 +37,69 @@ export function CheckoutShell({ mascot, eyebrow, title, lead, status, footer, ch
   </section>;
 }
 
-export function CancelAnytime({ trial }: { trial: boolean }) {
+export function CancelAnytime({ trial, endDate }: { trial: boolean; endDate?: string }) {
   return <div className="checkout-screen-cancel">
     <span><ShieldCheck size={17} aria-hidden="true" /></span>
     <div>
       <strong>{t("Cancel anytime")}</strong>
-      <p>{t(trial
-        ? "Cancel before the 3 days end and you won’t be charged. It takes a couple of clicks in billing settings — no calls, no forms."
-        : "No commitment. Cancel in a couple of clicks in billing settings and keep Pro until the end of the period you paid for.")}</p>
+      <p>{trial
+        ? endDate ? t("Cancel anytime from your Profile in two clicks. If you cancel before {{date}}, you won’t be charged.", { date: endDate })
+          : t("Cancel before the 3 days end and you won’t be charged. It takes a couple of clicks in billing settings — no calls, no forms.")
+        : t("No commitment. Cancel in a couple of clicks in billing settings and keep Pro until the end of the period you paid for.")}</p>
     </div>
   </div>;
+}
+
+/** Today, the reminder, then the first charge: what happens after "Start my free trial". */
+function TrialTimeline({ today, endDate, renewal }: { today: string; endDate: string; renewal: string | null }) {
+  return <ol className="checkout-screen-timeline" aria-label={t("How your free trial works")}>
+    <li>
+      <span><Sparkles size={14} aria-hidden="true" /></span>
+      <div><strong>{t("Today: {{amount}}", { amount: today })}</strong><p>{t("Full Pro access starts right away.")}</p></div>
+    </li>
+    <li>
+      <span><BellRing size={14} aria-hidden="true" /></span>
+      <div><strong>{t("Reminder email before your trial ends")}</strong><p>{t("So you can decide in time. No surprises.")}</p></div>
+    </li>
+    <li>
+      <span><CalendarCheck size={14} aria-hidden="true" /></span>
+      <div>
+        <strong>{renewal ? t("{{date}}: {{price}}/week", { date: endDate, price: renewal }) : endDate}</strong>
+        <p>{t("Your weekly plan starts, unless you cancel before then.")}</p>
+      </div>
+    </li>
+  </ol>;
+}
+
+function StripeTrust() {
+  return <div className="checkout-screen-trust">
+    <span className="checkout-screen-trust-icon"><LockKeyhole size={16} aria-hidden="true" /></span>
+    <div>
+      <strong>{t("Secure checkout powered by Stripe")}</strong>
+      <p>{t("We never see or store your card details.")}</p>
+    </div>
+    <span className="checkout-screen-stripe" aria-hidden="true">stripe</span>
+  </div>;
+}
+
+function CheckoutFaq({ trial, endDate, renewal }: { trial: boolean; endDate: string; renewal: string | null }) {
+  const items = trial ? [
+    { question: "Why do you need a card?", answer: t("It keeps the free trial to one per person and lets Pro continue without interruption if you stay. You pay nothing today, and your card details are stored by Stripe, not by us.") },
+    { question: "When will I be charged?", answer: renewal
+      ? t("Not today. If you keep Pro, your first payment of {{price}} is on {{date}}, then every week. We’ll email you a reminder before your trial ends.", { price: renewal, date: endDate })
+      : t("Not today. If you keep Pro, your first weekly payment is on {{date}}. We’ll email you a reminder before your trial ends.", { date: endDate }) },
+    { question: "How do I cancel?", answer: t("Open your Profile, choose Cancel trial and confirm. That’s it: no forms, no calls. You keep Pro until your trial ends.") },
+  ] : [
+    { question: "When will I be charged?", answer: t("When you confirm at Stripe. Your plan then renews at the price shown until you cancel.") },
+    { question: "How do I cancel?", answer: t("Open your Profile, choose Cancel subscription and confirm. You keep Pro until the end of the period you paid for.") },
+  ];
+  return <section className="checkout-screen-faq" aria-labelledby="checkout-faq-title">
+    <h2 id="checkout-faq-title">{t("Questions")}</h2>
+    {items.map(item => <details key={item.question}>
+      <summary>{t(item.question)}<ChevronDown size={15} aria-hidden="true" /></summary>
+      <p>{item.answer}</p>
+    </details>)}
+  </section>;
 }
 
 interface CheckoutScreenProps {
@@ -54,66 +107,87 @@ interface CheckoutScreenProps {
   outcome: "start" | "cancel";
   regional: Regional;
   eligibility: boolean | null;
-  /** Key of the action whose Stripe checkout is opening, if any. */
+  /** Key of the action whose Stripe checkout is opening ("portal" for the billing portal), if any. */
   opening: string | null;
   error: string | null;
+  /** Pricing page that keeps the paywall's next step and source. */
+  plansPath: string;
   onCheckout: (choice: CheckoutChoice) => void;
+  onPortal: () => void;
 }
 
-export function CheckoutScreen({ screen, outcome, regional, eligibility, opening, error, onCheckout }: CheckoutScreenProps) {
+export function CheckoutScreen({ screen, outcome, regional, eligibility, opening, error, plansPath, onCheckout, onPortal }: CheckoutScreenProps) {
   const prices = regional.prices;
   const amount = (plan: CheckoutTarget) => prices?.plans.find(item => item.code === plan)?.amount;
   const money = (value: number | undefined) => prices && value !== undefined ? formatMoney(value, prices.currency) : "—";
   const weekly = amount("weekly");
+  const trialDays = prices?.plans.find(item => item.code === "weekly")?.trial_days;
+  const endDate = trialEndDate(trialDays && trialDays > 0 ? trialDays : 3, localeCode());
+  const renewal = weekly !== undefined ? money(weekly) : null;
   const trialOffer = screen.offer === "trial";
-  const label = (action: CheckoutAction) => action.kind === "pricing" ? t(action.label)
-    : t(action.label, { plan: t(PLAN_NAME[action.plan]), price: money(amount(action.plan)) });
+  // "₺0" / "$0" rather than "₺0,00".
+  const zero = prices ? new Intl.NumberFormat(localeCode(), { style: "currency", currency: prices.currency.toUpperCase(), currencyDisplay: "narrowSymbol", maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(0) : "—";
+  const label = (action: CheckoutAction) => action.kind === "checkout"
+    ? t(action.label, { plan: t(PLAN_NAME[action.plan]), price: money(amount(action.plan)) }) : t(action.label);
 
   const renderAction = (action: CheckoutAction, className: string) => {
-    if (action.kind === "pricing") return <Link className={className} to="/app/pricing">{label(action)}{className.endsWith("primary") && <ArrowRight size={16} aria-hidden="true" />}</Link>;
-    const busy = opening === checkoutKey(action);
-    const disabled = opening !== null || !regional.ready || eligibility === null || (action.withTrial && eligibility !== true);
-    return <button className={className} type="button" disabled={disabled} onClick={() => onCheckout({ plan: action.plan, withTrial: action.withTrial })}>
+    const arrow = className.endsWith("primary") && <ArrowRight size={16} aria-hidden="true" />;
+    if (action.kind === "pricing") return <Link className={className} to={plansPath}>{label(action)}{arrow}</Link>;
+    const busy = opening === (action.kind === "portal" ? "portal" : checkoutKey(action));
+    const disabled = opening !== null || (action.kind === "checkout" && (!regional.ready || eligibility === null || (action.withTrial && eligibility !== true)));
+    return <button className={className} type="button" disabled={disabled}
+      onClick={() => action.kind === "portal" ? onPortal() : onCheckout({ plan: action.plan, withTrial: action.withTrial })}>
       {busy && <Loader2 className="animate-spin" size={16} aria-hidden="true" />}
-      {busy ? t("Opening secure checkout…") : label(action)}
-      {!busy && className.endsWith("primary") && <ArrowRight size={16} aria-hidden="true" />}
+      {busy ? t(action.kind === "portal" ? "Redirecting..." : "Opening secure checkout…") : label(action)}
+      {!busy && arrow}
     </button>;
   };
-  const linksToPlans = screen.primary.kind === "pricing" || screen.secondary.kind === "pricing";
+  const linksToPlans = screen.primary.kind === "pricing" || screen.secondary?.kind === "pricing";
+  const actions = <>
+    {error && <p role="alert" className="checkout-screen-error">{t(error)}</p>}
+    {renderAction(screen.primary, "checkout-screen-primary")}
+    {screen.secondary && renderAction(screen.secondary, "checkout-screen-secondary")}
+  </>;
 
   return <CheckoutShell
     mascot={screen.mascot} eyebrow={t(screen.eyebrow)} title={t(screen.title)} lead={t(screen.lead)}
-    status={outcome === "cancel" && <><PauseCircle size={15} aria-hidden="true" />{t("Checkout wasn’t completed. You can still pick up here.")}</>}
+    status={outcome === "cancel" && screen.offer !== "none" && <><PauseCircle size={15} aria-hidden="true" />{t("Checkout wasn’t completed. You can still pick up here.")}</>}
     footer={<>
       <footer className="checkout-screen-footer">
-        {!linksToPlans && <Link to="/app/pricing"><ArrowLeft size={13} aria-hidden="true" />{t("Back to plans")}</Link>}
+        {!linksToPlans && screen.offer !== "none" && <Link to={plansPath}><ArrowLeft size={13} aria-hidden="true" />{t("Back to plans")}</Link>}
         <SupportHelp topic="Payment" />
       </footer>
-      {outcome === "cancel" && <p className="checkout-screen-next"><CreditCard size={13} aria-hidden="true" />{t("After activation, we’ll take you back to your selected next step.")}</p>}
+      {outcome === "cancel" && screen.offer !== "none" && <p className="checkout-screen-next"><CreditCard size={13} aria-hidden="true" />{t("After activation, we’ll take you back to your selected next step.")}</p>}
     </>}>
-    <PricingAvailability {...regional} />
-    <div className="checkout-screen-offer">
-      <div>
-        <strong>{trialOffer ? t("3 days of Pro, on us") : t("Pro {{plan}}", { plan: t(PLAN_NAME[screen.offerPlan]) })}</strong>
-        <p>{t(trialOffer ? "Full access from the moment you activate." : "Unlimited CVs, exports and AI tools.")}</p>
-      </div>
-      <div className="checkout-screen-price">
-        <strong>{money(trialOffer ? 0 : amount(screen.offerPlan))}</strong>
-        <span>{t(trialOffer ? "today" : BILLED[screen.offerPlan])}</span>
-      </div>
-    </div>
-    <ul className="checkout-screen-features">
-      {FEATURES.map(feature => <li key={feature}><span><Check size={13} aria-hidden="true" /></span>{t(feature)}</li>)}
-    </ul>
-    <CancelAnytime trial={trialOffer} />
-    <p className="checkout-screen-terms">{trialOffer
-      ? weekly !== undefined ? t("Card required to start. After 3 days, {{amount}} is billed weekly until you cancel.", { amount: money(weekly) })
-        : t("Credit card required. Renewal terms will be shown before you activate your trial.")
-      : t("Your plan renews automatically at the price shown until you cancel.")}</p>
-    {error && <p role="alert" className="checkout-screen-error">{t(error)}</p>}
-    {renderAction(screen.primary, "checkout-screen-primary")}
-    {renderAction(screen.secondary, "checkout-screen-secondary")}
-    <p className="checkout-screen-reassurance"><LockKeyhole size={12} aria-hidden="true" />{t("Secure payment details handled by Stripe.")}</p>
+    {screen.offer === "none" ? actions : <>
+      <PricingAvailability {...regional} />
+      {trialOffer
+        ? <TrialTimeline today={zero} endDate={endDate} renewal={renewal} />
+        : <div className="checkout-screen-offer">
+          <div>
+            <strong>{t("Pro {{plan}}", { plan: t(PLAN_NAME[screen.offerPlan]) })}</strong>
+            <p>{t("Unlimited CVs, exports and AI tools.")}</p>
+          </div>
+          <div className="checkout-screen-price">
+            <strong>{money(amount(screen.offerPlan))}</strong>
+            <span>{t(BILLED[screen.offerPlan])}</span>
+          </div>
+        </div>}
+      <CancelAnytime trial={trialOffer} endDate={endDate} />
+      {actions}
+      <p className="checkout-screen-terms">{trialOffer
+        ? weekly !== undefined ? t("Card required to start. After 3 days, {{amount}} is billed weekly until you cancel.", { amount: money(weekly) })
+          : t("Credit card required. Renewal terms will be shown before you activate your trial.")
+        : t("Your plan renews automatically at the price shown until you cancel.")}</p>
+      <StripeTrust />
+      <section className="checkout-screen-unlocks" aria-labelledby="checkout-unlocks-title">
+        <h2 id="checkout-unlocks-title">{t("What you unlock")}</h2>
+        <ul className="checkout-screen-features">
+          {UNLOCKS.map(feature => <li key={feature}><span><Check size={13} aria-hidden="true" /></span>{t(feature)}</li>)}
+        </ul>
+      </section>
+      <CheckoutFaq trial={trialOffer} endDate={endDate} renewal={renewal} />
+    </>}
   </CheckoutShell>;
 }
 

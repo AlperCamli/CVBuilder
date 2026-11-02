@@ -3,8 +3,11 @@ import { startStripeCheckout } from "./checkout-redirect";
 import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 import { readPendingCheckout, setPendingCheckout } from "./pending-checkout";
+import { trackFunnelEvent } from "./funnel-events";
 
 vi.mock("./analytics", () => ({ rememberCheckoutAttribution: vi.fn(), trackPaymentStarted: vi.fn() }));
+vi.mock("./funnel-events", () => ({ trackFunnelEvent: vi.fn() }));
+const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const prices = { market: "TR", currency: "try", available: true, quote: "signed-quote", plans: [{ code: "weekly", amount: 6990, interval: "week", interval_count: 1, trial_days: 3 }] };
 function fixture() {
@@ -40,8 +43,9 @@ describe("authoritative checkout terms", () => {
     const intent = readPendingCheckout()!;
     await startStripeCheckout(api as unknown as BackendApi, intent.plan_code, { withTrial: intent.with_trial, source: "post_signup_checkout_resume" });
     expect(window.confirm).not.toHaveBeenCalled();
-    expect(api.createBillingCheckout).toHaveBeenCalledWith({ plan_code: "weekly", pricing_quote: "signed-quote", success_url: "https://app.example/app/pricing?checkout=success", cancel_url: "https://app.example/app/pricing?checkout=cancel" });
+    expect(api.createBillingCheckout).toHaveBeenCalledWith({ plan_code: "weekly", pricing_quote: "signed-quote", success_url: "https://app.example/app/pricing?checkout=success", cancel_url: "https://app.example/app/pricing?checkout=cancel", time_zone: timeZone });
     expect(window.location.href).toBe("https://checkout.stripe.test/session");
+    expect(trackFunnelEvent).toHaveBeenCalledExactlyOnceWith("checkout_redirect", "trial");
     expect(rememberCheckoutAttribution).toHaveBeenCalledWith(expect.objectContaining({ plan_code: "weekly", trial_applied: true, trial_period_days: 3, currency: currency.toUpperCase(), value: 0 }));
     expect(trackPaymentStarted).toHaveBeenCalledWith(expect.objectContaining({ trial_applied: true, value: 0, currency: currency.toUpperCase() }));
   });
@@ -52,13 +56,14 @@ describe("authoritative checkout terms", () => {
     expect(api.getBillingPlan).not.toHaveBeenCalled();
     expect(api.createBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ plan_code: "weekly", with_trial: false }));
     expect(trackPaymentStarted).toHaveBeenCalledWith(expect.objectContaining({ trial_applied: false, value: 69.9, currency: "TRY" }));
+    expect(trackFunnelEvent).toHaveBeenCalledExactlyOnceWith("checkout_redirect", "pro");
   });
 
   it("sends explicit paid intent only after a trial-ineligible user confirms the displayed price", async () => {
     const api = fixture();
     await startStripeCheckout(api as unknown as BackendApi, "weekly");
     expect(window.confirm).toHaveBeenCalledOnce();
-    expect(api.createBillingCheckout).toHaveBeenCalledWith({ plan_code: "weekly", with_trial: false, pricing_quote: "signed-quote", success_url: "https://app.example/app/pricing?checkout=success", cancel_url: "https://app.example/app/pricing?checkout=cancel" });
+    expect(api.createBillingCheckout).toHaveBeenCalledWith({ plan_code: "weekly", with_trial: false, pricing_quote: "signed-quote", success_url: "https://app.example/app/pricing?checkout=success", cancel_url: "https://app.example/app/pricing?checkout=cancel", time_zone: timeZone });
     expect(window.location.href).toBe("https://checkout.stripe.test/session");
   });
   it("makes browser Back from Stripe land on the cancel page", async () => {
@@ -75,6 +80,19 @@ describe("authoritative checkout terms", () => {
     onPageShow({ persisted: true });
     expect(window.location.reload).toHaveBeenCalledOnce();
   });
+  it("keeps the paywall source and next step on the Stripe return pages", async () => {
+    const api = fixture();
+    api.getBillingPlan.mockResolvedValue({ trial_eligible: true });
+    await startStripeCheckout(api as unknown as BackendApi, "weekly", { withTrial: true, returnPath: "/app/cv/abc?export=pdf", paywallSource: "export" });
+    const { success_url, cancel_url } = api.createBillingCheckout.mock.calls[0][0] as { success_url: string; cancel_url: string };
+    for (const url of [new URL(success_url), new URL(cancel_url)]) {
+      expect(url.pathname).toBe("/app/checkout");
+      expect(url.searchParams.get("source")).toBe("export");
+      expect(url.searchParams.get("next")).toBe("/app/cv/abc?export=pdf");
+      expect(url.searchParams.get("trial")).toBe("1");
+    }
+    expect(new URL(success_url).searchParams.get("session_id")).toBe("{CHECKOUT_SESSION_ID}");
+  });
   it("leaves history alone when no checkout is created", async () => {
     const api = fixture();
     vi.mocked(window.confirm).mockReturnValue(false);
@@ -86,6 +104,7 @@ describe("authoritative checkout terms", () => {
     vi.mocked(window.confirm).mockReturnValue(false);
     await expect(startStripeCheckout(api as unknown as BackendApi, "weekly")).rejects.toThrow();
     expect(api.createBillingCheckout).not.toHaveBeenCalled();
+    expect(trackFunnelEvent).not.toHaveBeenCalled();
   });
   it("requires confirmation when signup changes the displayed market or prices", async () => {
     const api = fixture();

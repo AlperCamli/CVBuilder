@@ -4,7 +4,12 @@ import { translate as t } from "../localization/i18n";
 import type { CheckoutTarget } from "../../content/pricing";
 import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
-import { checkoutPath } from "./subscription-flow";
+import { checkoutPath, type CheckoutSource } from "./subscription-flow";
+import { trackFunnelEvent } from "./funnel-events";
+
+const browserTimeZone = (): string | undefined => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; } catch { return undefined; }
+};
 
 // Creates a Stripe Checkout session for the given plan and sends the browser to
 // it. Shared by the in-app pricing page, the public pricing page, and the
@@ -13,7 +18,7 @@ import { checkoutPath } from "./subscription-flow";
 export async function startStripeCheckout(
   api: BackendApi,
   plan: CheckoutTarget,
-  options?: { withTrial?: boolean; source?: string; returnPath?: string }
+  options?: { withTrial?: boolean; source?: string; returnPath?: string; paywallSource?: CheckoutSource | null }
 ): Promise<void> {
   const base = window.location.origin;
   const prices = await api.getBillingPrices();
@@ -32,13 +37,15 @@ export async function startStripeCheckout(
       withTrial = false;
     }
   }
-  const returnPage = options?.returnPath ? `${base}${checkoutPath({ plan_code: plan, with_trial: withTrial, return_path: options.returnPath })}` : null;
+  const returnPage = options?.returnPath ? `${base}${checkoutPath({ plan_code: plan, with_trial: withTrial, return_path: options.returnPath, source: options.paywallSource })}` : null;
   const checkoutInput = {
     pricing_quote: prices.quote,
     plan_code: plan,
     success_url: returnPage ? `${returnPage}&checkout=success&session_id={CHECKOUT_SESSION_ID}` : `${base}/app/pricing?checkout=success`,
     cancel_url: returnPage ? `${returnPage}&checkout=cancel` : `${base}/app/pricing?checkout=cancel`,
-    ...(plan === "weekly" && withTrial === false ? { with_trial: false } : {})
+    ...(plan === "weekly" && withTrial === false ? { with_trial: false } : {}),
+    // Stripe shows the trial end date in the user's own time zone.
+    ...(browserTimeZone() ? { time_zone: browserTimeZone() } : {})
   };
   let response;
   try { response = await api.createBillingCheckout(checkoutInput); }
@@ -77,6 +84,7 @@ export async function startStripeCheckout(
   // Browser Back from Stripe must land where Stripe's own back link does: swap the
   // page that started checkout for the cancel page, and reload if the browser restores
   // the frozen "Opening secure checkout…" page from its back-forward cache.
+  trackFunnelEvent("checkout_redirect", response.trial_applied ? "trial" : "pro");
   window.history.replaceState(window.history.state, "", checkoutInput.cancel_url);
   window.addEventListener("pageshow", event => { if (event.persisted) window.location.reload(); }, { once: true });
   window.location.href = response.checkout_url;
