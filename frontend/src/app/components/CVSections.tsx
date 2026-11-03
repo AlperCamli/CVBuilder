@@ -18,6 +18,7 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  LayoutTemplate,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -61,8 +62,11 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
 
   const socialLinks = data.socialLinks || [];
   const photoShape = data.photoShape === "square" ? "square" : "circle";
+  // Unset means "template default": the template's header_photo_position token decides.
   const photoPosition =
-    data.photoPosition === "center" || data.photoPosition === "right" ? data.photoPosition : "left";
+    data.photoPosition === "left" || data.photoPosition === "center" || data.photoPosition === "right"
+      ? data.photoPosition
+      : undefined;
 
   // Resolve the stored photo (a managed files.id) to a signed URL for the thumbnail.
   // Legacy inline data URIs (and absolute URLs) are already displayable.
@@ -276,6 +280,22 @@ export function HeaderSection({ data, isHidden, onToggleVisibility, onChange }: 
                 <p style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginBottom: "4px" }}>
                   {t("Position")}</p>
                 <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title={t("Template default photo position")}
+                    aria-label={t("Template default photo position")}
+                    aria-pressed={photoPosition === undefined}
+                    onClick={() => onChange({ ...data, photoPosition: undefined })}
+                    className="flex items-center gap-1 p-1.5 rounded-lg border transition-colors"
+                    style={{
+                      borderColor: photoPosition === undefined ? "var(--color-teal-600)" : "var(--color-border-secondary)",
+                      background: photoPosition === undefined ? "var(--color-teal-50)" : "transparent",
+                      color: photoPosition === undefined ? "var(--color-teal-800)" : "var(--color-text-secondary)"
+                    }}
+                  >
+                    <LayoutTemplate size={16} />
+                    <span style={{ fontSize: "11px", lineHeight: "16px" }}>{t("Auto")}</span>
+                  </button>
                   {([
                     { position: "left", Icon: AlignLeft, label: "Left" },
                     { position: "center", Icon: AlignCenter, label: "Middle top" },

@@ -36,6 +36,7 @@ export interface ExportDocumentTheme {
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
+  header_photo_ring_hex?: string;
   section_heading_style?: "plain" | "ruled";
   academic_entry_style?: boolean;
   /** Signature palette roles, shared by the preview and PDF exporter. */
@@ -137,6 +138,7 @@ const toTheme = (presentation: RenderingPresentation): ExportDocumentTheme => {
     header_alignment: presentation.theme.tokens.header_alignment,
     header_photo_size: presentation.theme.tokens.header_photo_size,
     header_photo_position: presentation.theme.tokens.header_photo_position,
+    header_photo_ring_hex: presentation.theme.tokens.header_photo_ring_hex,
     header_background_hex: presentation.theme.tokens.header_background_hex,
     header_text_color_hex: presentation.theme.tokens.header_text_color_hex,
     header_accent_color_hex: presentation.theme.tokens.header_accent_color_hex,

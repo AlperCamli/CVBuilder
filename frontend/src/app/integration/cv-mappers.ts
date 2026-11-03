@@ -64,9 +64,10 @@ const asString = (value: unknown): string => {
   return "";
 };
 
-const normalizePhotoPosition = (value: unknown): "left" | "center" | "right" => {
+// An unset (or invalid) position stays undefined so the template's header_photo_position applies.
+const normalizePhotoPosition = (value: unknown): "left" | "center" | "right" | undefined => {
   const normalized = asString(value);
-  return normalized === "center" || normalized === "right" ? normalized : "left";
+  return normalized === "left" || normalized === "center" || normalized === "right" ? normalized : undefined;
 };
 
 const asBoolean = (value: unknown): boolean => {
@@ -1352,8 +1353,10 @@ export const cvContentToEditorSections = (
     return [...direct, ...handles];
   };
 
+  const photoPosition = normalizePhotoPosition(metadata.photo_position);
+  const { photo_position: _photoPosition, ...metadataWithoutPhotoPosition } = content.metadata;
   const metadataWithHeaderFallback: Record<string, CvJsonValue> = {
-    ...content.metadata,
+    ...metadataWithoutPhotoPosition,
     full_name: toJsonValue(
       firstNonEmpty(
         asString(metadata.full_name),
@@ -1367,7 +1370,7 @@ export const cvContentToEditorSections = (
     location: toJsonValue(firstNonEmpty(asString(metadata.location), getHeaderField("location"))),
     photo: toJsonValue(asString(metadata.photo)),
     photo_shape: toJsonValue(asString(metadata.photo_shape) || "circle"),
-    photo_position: toJsonValue(normalizePhotoPosition(metadata.photo_position)),
+    ...(photoPosition ? { photo_position: photoPosition } : {}),
     urls: toJsonValue(
       dedupe([
         ...asStringArray(content.metadata.urls),
@@ -1392,7 +1395,7 @@ export const cvContentToEditorSections = (
         location: asString(normalizedMetadata.location),
         photo: asString(normalizedMetadata.photo),
         photoShape: asString(normalizedMetadata.photo_shape) || "circle",
-        photoPosition: normalizePhotoPosition(normalizedMetadata.photo_position),
+        ...(photoPosition ? { photoPosition } : {}),
         socialLinks: extractSocialLinks(metadataWithHeaderFallback)
       }
     }
@@ -2165,8 +2168,11 @@ export const editorSectionsToCvContent = (
       )
     : []) as CvJsonValue;
 
+  // Omit photo_position when unset so the template default applies (and a cleared choice is dropped).
+  const { photo_position: _existingPhotoPosition, ...existingMetadata } = existing?.metadata ?? {};
+  const photoPosition = normalizePhotoPosition(headerData.photoPosition);
   const metadata: Record<string, CvJsonValue> = {
-    ...(existing?.metadata ?? {}),
+    ...existingMetadata,
     full_name: toJsonValue(asString(headerData.name)),
     headline: toJsonValue(asString(headerData.title)),
     email: toJsonValue(asString(headerData.email)),
@@ -2174,7 +2180,7 @@ export const editorSectionsToCvContent = (
     location: toJsonValue(asString(headerData.location)),
     photo: toJsonValue(asString(headerData.photo)),
     photo_shape: toJsonValue(asString(headerData.photoShape) || "circle"),
-    photo_position: toJsonValue(normalizePhotoPosition(headerData.photoPosition)),
+    ...(photoPosition ? { photo_position: photoPosition } : {}),
     social_links: socialLinks,
     urls: urlList
   };

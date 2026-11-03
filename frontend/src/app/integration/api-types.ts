@@ -377,6 +377,7 @@ export interface PresentationStyleTokens {
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: "left" | "center" | "right";
+  header_photo_ring_hex?: string;
   section_heading_style?: "plain" | "ruled";
   academic_entry_style?: boolean;
   /** Signature palette roles, shared by the preview and PDF exporter. */

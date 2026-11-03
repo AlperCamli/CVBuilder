@@ -40,6 +40,8 @@ export interface PresentationStyleTokens {
   header_alignment?: "left" | "center";
   header_photo_size?: number;
   header_photo_position?: PhotoPosition;
+  /** Optional frame drawn around the header photo. */
+  header_photo_ring_hex?: string;
   section_heading_style?: "plain" | "ruled";
   academic_entry_style?: boolean;
   /** Signature palette roles, shared by the preview and PDF exporter. */
@@ -136,6 +138,7 @@ const DEFAULT_PROFILE: TemplateProfile = {
   tokens: {
     font_family: buildCvFontFamily("source-serif-4"),
     font_asset_key: "source-serif-4",
+    header_photo_size: 88,
     heading_color_hex: "#111827",
     accent_color_hex: "#0f5ea6",
     body_color_hex: "#1f2937",
@@ -157,6 +160,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("noto-sans"),
       font_asset_key: "noto-sans",
+      header_photo_size: 80,
       heading_color_hex: "#121212",
       accent_color_hex: "#4b5563",
       body_color_hex: "#1f1f1f",
@@ -175,6 +179,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("new-computer-modern"),
       font_asset_key: "new-computer-modern",
+      header_photo_size: 88,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#1d4ed8",
       body_color_hex: "#1f2937",
@@ -192,6 +197,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("ibm-plex-sans"),
       font_asset_key: "ibm-plex-sans",
+      header_photo_size: 96,
       heading_color_hex: "#111827",
       accent_color_hex: "#0f766e",
       body_color_hex: "#1f2937",
@@ -210,6 +216,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("libertinus-serif"),
       font_asset_key: "libertinus-serif",
+      header_photo_size: 88,
       heading_color_hex: "#111827",
       accent_color_hex: "#334155",
       body_color_hex: "#1f2937",
@@ -228,8 +235,9 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
       academic_entry_style: true,
       font_family: buildCvFontFamily("latin-modern-roman"),
       font_asset_key: "latin-modern-roman",
+      header_photo_size: 88,
+      header_photo_position: "center",
       header_alignment: "center",
-      header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
       accent_color_hex: "#111111",
@@ -249,8 +257,9 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("new-computer-modern"),
       font_asset_key: "new-computer-modern",
+      header_photo_size: 88,
+      header_photo_position: "center",
       header_alignment: "center",
-      header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#1f2937",
@@ -270,8 +279,9 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("latin-modern-roman"),
       font_asset_key: "latin-modern-roman",
+      header_photo_size: 88,
+      header_photo_position: "center",
       header_alignment: "center",
-      header_photo_size: 76,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
       accent_color_hex: "#111111",
@@ -291,7 +301,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("libertinus-serif"),
       font_asset_key: "libertinus-serif",
-      header_photo_size: 76,
+      header_photo_size: 96,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
       accent_color_hex: "#111111",
@@ -311,7 +321,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("latin-modern-roman"),
       font_asset_key: "latin-modern-roman",
-      header_photo_size: 76,
+      header_photo_size: 80,
       section_heading_style: "ruled",
       heading_color_hex: "#111111",
       accent_color_hex: "#334155",
@@ -331,7 +341,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("libertinus-serif"),
       font_asset_key: "libertinus-serif",
-      header_photo_size: 84,
+      header_photo_size: 100,
       section_heading_style: "ruled",
       heading_color_hex: "#1c1917",
       accent_color_hex: "#7c2d12",
@@ -351,9 +361,9 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("new-computer-modern"),
       font_asset_key: "new-computer-modern",
-      header_alignment: "center",
-      header_photo_size: 108,
+      header_photo_size: 120,
       header_photo_position: "center",
+      header_alignment: "center",
       section_heading_style: "ruled",
       heading_color_hex: "#111827",
       accent_color_hex: "#4338ca",
@@ -373,7 +383,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("source-serif-4"),
       font_asset_key: "source-serif-4",
-      header_photo_size: 76,
+      header_photo_size: 88,
       section_heading_style: "ruled",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0e7490",
@@ -393,7 +403,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("ibm-plex-sans"),
       font_asset_key: "ibm-plex-sans",
-      header_photo_size: 80,
+      header_photo_size: 96,
       section_heading_style: "ruled",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#2563eb",
@@ -413,7 +423,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("source-sans-3"),
       font_asset_key: "source-sans-3",
-      header_photo_size: 92,
+      header_photo_size: 108,
+      header_photo_ring_hex: "#a21caf",
       section_heading_style: "ruled",
       heading_color_hex: "#111827",
       accent_color_hex: "#a21caf",
@@ -433,7 +444,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("source-serif-4"),
       font_asset_key: "source-serif-4",
-      header_photo_size: 72,
+      header_photo_size: 88,
       section_heading_style: "ruled",
       heading_color_hex: "#102a43",
       accent_color_hex: "#1d4ed8",
@@ -453,7 +464,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("new-computer-modern"),
       font_asset_key: "new-computer-modern",
-      header_photo_size: 72,
+      header_photo_size: 88,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#2563eb",
       body_color_hex: "#1f2937",
@@ -472,7 +483,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("ibm-plex-sans"),
       font_asset_key: "ibm-plex-sans",
-      header_photo_size: 80,
+      header_photo_size: 100,
+      header_photo_ring_hex: "#0f766e",
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0f766e",
       body_color_hex: "#1f2937",
@@ -491,7 +503,8 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("source-sans-3"),
       font_asset_key: "source-sans-3",
-      header_photo_size: 104,
+      header_photo_size: 124,
+      header_photo_ring_hex: "#be123c",
       heading_color_hex: "#111827",
       accent_color_hex: "#be123c",
       body_color_hex: "#1f2937",
@@ -510,7 +523,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("ibm-plex-sans"),
       font_asset_key: "ibm-plex-sans",
-      header_photo_size: 80,
+      header_photo_size: 96,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#4f46e5",
       body_color_hex: "#1f2937",
@@ -529,7 +542,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("latin-modern-roman"),
       font_asset_key: "latin-modern-roman",
-      header_photo_size: 72,
+      header_photo_size: 80,
       heading_color_hex: "#111111",
       accent_color_hex: "#3f3f46",
       body_color_hex: "#1f2937",
@@ -547,6 +560,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("source-sans-3"),
       font_asset_key: "source-sans-3",
+      header_photo_size: 80,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0d9488",
       body_color_hex: "#1f2937",
@@ -565,6 +579,7 @@ const TEMPLATE_PROFILES: Record<string, TemplateProfile> = {
     tokens: {
       font_family: buildCvFontFamily("noto-sans"),
       font_asset_key: "noto-sans",
+      header_photo_size: 96,
       heading_color_hex: "#0f172a",
       accent_color_hex: "#0f766e",
       body_color_hex: "#1f2937",

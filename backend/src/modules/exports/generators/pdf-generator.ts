@@ -35,7 +35,9 @@ const TWO_COLUMN_GAP = 20;
 const SIDEBAR_OUTER_WIDTH = 170;
 const HORIZON_SIDEBAR_WIDTH = 200;
 const SIDEBAR_INNER_PADDING = 12;
-const HEADER_PHOTO_GAP = 16;
+const HEADER_PHOTO_GAP = 20;
+const HEADER_STACKED_PHOTO_GAP = 12;
+const HEADER_PHOTO_RING_WIDTH = 2;
 
 const SIDEBAR_SECTION_TYPES = new Set([
   "skills",
@@ -102,6 +104,7 @@ interface PlacedImage {
   height: number;
   imageRef: PDFImage;
   shape: "circle" | "square";
+  ringHex?: string;
 }
 
 interface BlockShape {
@@ -146,6 +149,7 @@ interface Style {
   bulletSize: number;
   timelineDateSize: number;
   photoSize: number;
+  photoRingHex?: string;
   headerAlignment: "left" | "center";
   sectionHeadingStyle: "plain" | "ruled";
   sidebarInnerWidth: number;
@@ -448,16 +452,18 @@ const addLinkAnnotation = (
 const buildHeaderBlock = (
   model: ExportDocumentModel,
   style: Style,
-  photo: PDFImage | null
+  photo: PDFImage | null,
+  // Stack the photo above left-aligned text instead of centering both (Horizon rail).
+  stackStart = false
 ): BlockShape => {
   const lines: PlacedLine[] = [];
   const images: PlacedImage[] = [];
 
   const photoPosition = photo ? model.photo_position : "left";
-  const stackedPhoto = photoPosition === "center";
+  const stackedPhoto = Boolean(photo) && (stackStart || photoPosition === "center");
   const rightPhoto = photoPosition === "right";
   const sidePhoto = Boolean(photo) && !stackedPhoto;
-  const centerHeader = style.headerAlignment === "center" || stackedPhoto;
+  const centerHeader = !stackStart && (style.headerAlignment === "center" || stackedPhoto);
   const textX = sidePhoto && !rightPhoto ? style.photoSize + HEADER_PHOTO_GAP : 0;
   const textMaxWidth = sidePhoto
     ? style.innerWidth - style.photoSize - HEADER_PHOTO_GAP
@@ -465,7 +471,9 @@ const buildHeaderBlock = (
 
   if (photo) {
     images.push({
-      xOffset: stackedPhoto
+      xOffset: stackStart
+        ? 0
+        : stackedPhoto
         ? (style.innerWidth - style.photoSize) / 2
         : rightPhoto
           ? style.innerWidth - style.photoSize
@@ -474,7 +482,8 @@ const buildHeaderBlock = (
       width: style.photoSize,
       height: style.photoSize,
       imageRef: photo,
-      shape: model.photo_shape === "square" ? "square" : "circle"
+      shape: model.photo_shape === "square" ? "square" : "circle",
+      ringHex: style.photoRingHex
     });
   }
 
@@ -482,7 +491,7 @@ const buildHeaderBlock = (
   const titleLH = style.headerTitleSize * 1.4;
   const contactLH = style.headerContactSize * 1.55;
 
-  let textY = stackedPhoto ? style.photoSize + 8 * style.fontScale : 0;
+  let textY = stackedPhoto ? style.photoSize + HEADER_STACKED_PHOTO_GAP * style.fontScale : 0;
   textY += appendTextLines(lines, model.title, {
     font: style.fonts.bold,
     fontWeight: "bold",
@@ -554,7 +563,14 @@ const buildHeaderBlock = (
     );
   }
 
-  const height = photo && !stackedPhoto ? Math.max(textY, style.photoSize) : textY;
+  // A side photo and the text block are centered against each other, like the preview.
+  if (sidePhoto) {
+    const offset = (style.photoSize - textY) / 2;
+    if (offset > 0) lines.forEach(line => { line.yFromTop += offset; });
+    else images.forEach(image => { image.yFromTop -= offset; });
+  }
+
+  const height = sidePhoto ? Math.max(textY, style.photoSize) : textY;
   return { lines, shapes: [], images, height };
 };
 
@@ -1210,6 +1226,15 @@ const drawBlock = (
     const imageX = leftX + image.xOffset;
     const imageY = topY - image.yFromTop - image.height;
     drawCoverClippedImage(page, image.imageRef, imageX, imageY, image.width, image.height, image.shape);
+    if (image.ringHex) {
+      // The ring sits just outside the photo edge, matching the preview's box-shadow.
+      const ringWidth = HEADER_PHOTO_RING_WIDTH * style.fontScale;
+      const borderColor = hexToRgb(image.ringHex);
+      if (image.shape === "circle") page.drawEllipse({ x: imageX + image.width / 2, y: imageY + image.height / 2,
+        xScale: (image.width + ringWidth) / 2, yScale: (image.height + ringWidth) / 2, borderColor, borderWidth: ringWidth });
+      else page.drawRectangle({ x: imageX - ringWidth / 2, y: imageY - ringWidth / 2, width: image.width + ringWidth,
+        height: image.height + ringWidth, borderColor, borderWidth: ringWidth });
+    }
   }
 
   for (const line of block.shape.lines) {
@@ -1386,6 +1411,7 @@ export const generatePdfDocument = async (
     bulletSize: (ledger || contour ? theme.body_text_size : 12) * fontScale,
     timelineDateSize: 11 * fontScale,
     photoSize: (theme.header_photo_size ?? 72) * fontScale,
+    photoRingHex: theme.header_photo_ring_hex,
     headerAlignment: theme.header_alignment ?? "left",
     sectionHeadingStyle: mosaic || ledger ? "ruled" : theme.section_heading_style ?? "plain",
     sidebarInnerWidth,
@@ -1413,7 +1439,9 @@ export const generatePdfDocument = async (
   // Signature headers use measured text and the same embedded fonts as body content.
   const headerWidth = horizon ? sidebarInnerWidth : filledHeader ? innerWidth - (contour ? 32 : 48) * fontScale - (contour ? 8 : 0) : innerWidth;
   const headerStyle = { ...style, innerWidth: ledger ? innerWidth * 0.66 - 24 * fontScale : headerWidth };
-  const headerShape = buildHeaderBlock(ledger ? { ...documentModel, contact_items: [], social_links: [] } : documentModel, headerStyle, photoImage);
+  // The Horizon rail is too narrow for a side photo, so it always stacks above the name.
+  const headerShape = buildHeaderBlock(ledger ? { ...documentModel, contact_items: [], social_links: [] } : documentModel,
+    headerStyle, photoImage, horizon);
   if (ledger) {
     const rightX = innerWidth * 0.66 + 16 * fontScale;
     const rightWidth = innerWidth * 0.34 - 16 * fontScale;
@@ -1439,7 +1467,6 @@ export const generatePdfDocument = async (
   }
   if (horizon) {
     headerShape.lines.forEach(line => { line.alignCenter = false; });
-    if (documentModel.photo_position === "center") headerShape.images.forEach(image => { image.xOffset = 0; });
   }
   const insetX = filledHeader ? (contour ? 16 : 24) * fontScale + (contour ? 8 : 0) : 0;
   const insetY = filledHeader ? (contour ? 16 : 24) * fontScale : editorial ? 18 * fontScale + 6 : 0;

@@ -33,6 +33,12 @@ const families: Array<{
   { layout: "contour-cards", name: "Contour", font: "noto-sans", palettes: ["rose", "cobalt", "forest"] }
 ];
 
+// Sized against each family's name scale so the photo reads as part of the header.
+const photoSizes: Record<SignatureLayout, number> = {
+  "studio-banner": 100, "editorial-index": 104, "horizon-rail": 108,
+  "mosaic-columns": 104, "ledger-split": 88, "contour-cards": 96
+};
+
 /** A variant changes palette roles, never the CV content or family composition. */
 export const SIGNATURE_TEMPLATES = families.flatMap(family => family.palettes.map((paletteName, index) => ({
   slug: index === 0 ? family.layout : `${family.layout}-${paletteName}`,
@@ -52,8 +58,9 @@ export const SIGNATURE_TEMPLATE_PROFILES: Record<string, TemplateProfile> = Obje
       layout, mode: layout, skills_display: layout === "ledger-split" || layout === "contour-cards" ? "inline" : "bulleted",
       tokens: {
         font_family: buildCvFontFamily(font), font_asset_key: font,
-        header_photo_size: 64,
-        header_photo_position: layout === "horizon-rail" || layout === "mosaic-columns" ? "center" : "right",
+        header_photo_size: photoSizes[layout],
+        header_photo_position: layout === "horizon-rail" || layout === "mosaic-columns" ? "center" : layout === "ledger-split" ? "left" : "right",
+        header_photo_ring_hex: dark ? palette.highlight : palette.accent,
         header_alignment: layout === "mosaic-columns" ? "center" : "left",
         header_background_hex: dark ? palette.ink : filled ? palette.surface : "#ffffff",
         header_text_color_hex: dark ? "#ffffff" : palette.ink,

@@ -42,7 +42,7 @@ describe("cv module mapper support", () => {
     expect(roundTripped.metadata.photo_shape).toBe("square");
   });
 
-  it("defaults invalid or missing photo position metadata to left", () => {
+  it("keeps invalid or missing photo position metadata unset so the template default applies", () => {
     const invalidContent: CvContent = {
       version: "v1",
       language: "en",
@@ -58,14 +58,40 @@ describe("cv module mapper support", () => {
       sections: []
     };
 
-    expect(
-      cvContentToEditorSections(invalidContent, "standard").find((section) => section.type === "header")
-        ?.data.photoPosition
-    ).toBe("left");
-    expect(
-      cvContentToEditorSections(missingContent, "standard").find((section) => section.type === "header")
-        ?.data.photoPosition
-    ).toBe("left");
+    for (const content of [invalidContent, missingContent]) {
+      const editorSections = cvContentToEditorSections(content, "standard");
+      const header = editorSections.find((section) => section.type === "header");
+
+      expect(header?.data.photoPosition).toBeUndefined();
+      expect(editorSectionsToCvContent(editorSections, "en", content, "standard").metadata).not.toHaveProperty(
+        "photo_position"
+      );
+    }
+  });
+
+  it("round-trips explicit photo positions and drops a cleared one", () => {
+    for (const position of ["left", "center", "right"] as const) {
+      const content: CvContent = {
+        version: "v1",
+        language: "en",
+        metadata: { photo_position: position },
+        sections: []
+      };
+      const editorSections = cvContentToEditorSections(content, "standard");
+
+      expect(editorSections.find((section) => section.type === "header")?.data.photoPosition).toBe(position);
+      expect(editorSectionsToCvContent(editorSections, "en", content, "standard").metadata.photo_position).toBe(
+        position
+      );
+
+      const clearedSections = editorSections.map((section) =>
+        section.type === "header" ? { ...section, data: { ...section.data, photoPosition: undefined } } : section
+      );
+
+      expect(editorSectionsToCvContent(clearedSections, "en", content, "standard").metadata).not.toHaveProperty(
+        "photo_position"
+      );
+    }
   });
 
   it("round-trips descriptor-driven medical module sections without losing fields or block types", () => {

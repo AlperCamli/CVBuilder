@@ -371,18 +371,22 @@ function buildHeaderBlocks(
   const photoPosition = header.photo
     ? header.photo_position ?? theme.tokens.header_photo_position ?? "left"
     : "left";
-  const stackedPhoto = photoPosition === "center";
+  // The Horizon rail is too narrow for a side photo, so it always stacks above the name.
+  const stackedPhoto = horizon || photoPosition === "center";
   const centerHeader = !horizon && (theme.tokens.header_alignment === "center" || stackedPhoto);
   const headerPhotoSize = theme.tokens.header_photo_size ?? 72;
+  const photoRing = theme.tokens.header_photo_ring_hex;
 
   blocks.push({
     key: "header-main",
     column: "full",
     node: (
       <div
-        className="flex items-start gap-4"
+        className="flex"
         style={{
-          alignItems: horizon ? "flex-start" : stackedPhoto ? "center" : undefined,
+          // Side photos and the text block are centered against each other, like the PDF.
+          alignItems: horizon ? "flex-start" : "center",
+          gap: stackedPhoto ? scaledPx(12) : "20px",
           overflowWrap: signature ? "anywhere" : undefined,
           flexDirection: stackedPhoto ? "column" : photoPosition === "right" ? "row-reverse" : undefined,
           justifyContent: stackedPhoto ? "center" : undefined
@@ -396,6 +400,7 @@ function buildHeaderBlocks(
               width: scaledPx(headerPhotoSize),
               height: scaledPx(headerPhotoSize),
               borderRadius: header.photo_shape === "square" ? "0px" : "999px",
+              boxShadow: photoRing ? `0 0 0 ${scaledPx(2)} ${photoRing}` : undefined,
               objectFit: "cover",
               flexShrink: 0
             }}

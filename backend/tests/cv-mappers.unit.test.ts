@@ -44,28 +44,14 @@ describe("cv-mappers experience compatibility", () => {
     expect(restored.metadata.photo_shape).toBe("square");
   });
 
-  it("defaults invalid or missing photo position metadata to left", () => {
-    const invalidSections = cvContentToEditorSections({
-      version: "v1",
-      language: "en",
-      metadata: {
-        photo_position: "bottom"
-      },
-      sections: []
-    } as any);
-    const missingSections = cvContentToEditorSections({
-      version: "v1",
-      language: "en",
-      metadata: {},
-      sections: []
-    } as any);
+  it("keeps invalid or missing photo position metadata unset so the template default applies", () => {
+    for (const metadata of [{ photo_position: "bottom" }, {}]) {
+      const content = { version: "v1", language: "en", metadata, sections: [] };
+      const sections = cvContentToEditorSections(content as any);
 
-    expect((invalidSections.find((section) => section.type === "header")?.data as any)?.photoPosition).toBe(
-      "left"
-    );
-    expect((missingSections.find((section) => section.type === "header")?.data as any)?.photoPosition).toBe(
-      "left"
-    );
+      expect((sections.find((section) => section.type === "header")?.data as any)?.photoPosition).toBeUndefined();
+      expect(editorSectionsToCvContent(sections, "en", content as any).metadata).not.toHaveProperty("photo_position");
+    }
   });
 
   it("merges legacy experience_items into the previous real experience entry", () => {

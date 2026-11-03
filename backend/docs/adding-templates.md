@@ -85,7 +85,8 @@ Common style tokens:
   font_family: buildCvFontFamily("latin-modern-roman"),
   font_asset_key: "latin-modern-roman",
   header_alignment: "center",
-  header_photo_size: 76,
+  header_photo_size: 88,
+  header_photo_position: "center",
   section_heading_style: "ruled",
   heading_color_hex: "#111111",
   accent_color_hex: "#111111",
@@ -99,7 +100,7 @@ Common style tokens:
 }
 ```
 
-`header_photo_position` can be used as a template fallback, but user metadata `photo_position` wins.
+`header_photo_position` is the template's default; it applies while the user leaves the editor's photo Position on Auto, and an explicit user `photo_position` wins. Size the photo against the header's name scale (current templates use 80–124pt), and give centered headers a `"center"` default so a side photo doesn't push the text off-axis. The Horizon rail always stacks the photo above the name. `header_photo_ring_hex` optionally draws a 2pt ring outside the photo in the preview and PDF.
 
 ## Font Matching
 

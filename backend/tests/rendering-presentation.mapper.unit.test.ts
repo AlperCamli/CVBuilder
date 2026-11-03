@@ -317,6 +317,32 @@ describe("rendering presentation mapper", () => {
     expect(fallbackPresentation.header.photo_position).toBe("left");
   });
 
+  it("falls back to the template photo position token when metadata has none", () => {
+    const payload = renderingPayload();
+    payload.template.template = {
+      id: "template-latex-photo-statement",
+      name: "LaTeX Photo Statement",
+      slug: "latex-photo-statement",
+      status: "active",
+      module_type: "standard",
+      preview_config: null,
+      export_config: null,
+      created_at: "2026-06-23T00:00:00.000Z",
+      updated_at: "2026-06-23T00:00:00.000Z"
+    };
+
+    const defaultPresentation = mapRenderingPayloadToPresentation(payload, {}, payload.template.template);
+    expect(defaultPresentation.theme.tokens.header_photo_position).toBe("center");
+    expect(defaultPresentation.header.photo_position).toBe("center");
+
+    const explicitPresentation = mapRenderingPayloadToPresentation(
+      payload,
+      { photo_position: "left" },
+      payload.template.template
+    );
+    expect(explicitPresentation.header.photo_position).toBe("left");
+  });
+
   it("applies LaTeX template profile tokens", () => {
     const expectedProfiles = [
       {
@@ -326,7 +352,8 @@ describe("rendering presentation mapper", () => {
         mode: "classic-single-column",
         fontKey: "latin-modern-roman",
         fontFamily: "Latin Modern Roman",
-        photoSize: 76,
+        photoSize: 88,
+        templatePhotoPosition: "center",
         headerAlignment: "center",
         bodyTextSize: 11
       },
@@ -337,7 +364,8 @@ describe("rendering presentation mapper", () => {
         mode: "classic-single-column",
         fontKey: "new-computer-modern",
         fontFamily: "New Computer Modern",
-        photoSize: 76,
+        photoSize: 88,
+        templatePhotoPosition: "center",
         headerAlignment: "center",
         bodyTextSize: 10.8
       },
@@ -348,7 +376,8 @@ describe("rendering presentation mapper", () => {
         mode: "classic-single-column",
         fontKey: "latin-modern-roman",
         fontFamily: "Latin Modern Roman",
-        photoSize: 76,
+        photoSize: 88,
+        templatePhotoPosition: "center",
         headerAlignment: "center",
         bodyTextSize: 10.8
       },
@@ -359,7 +388,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "libertinus-serif",
         fontFamily: "Libertinus Serif",
-        photoSize: 76,
+        photoSize: 96,
         headerAlignment: undefined,
         bodyTextSize: 10.8
       },
@@ -370,7 +399,7 @@ describe("rendering presentation mapper", () => {
         mode: "compact-single-column",
         fontKey: "latin-modern-roman",
         fontFamily: "Latin Modern Roman",
-        photoSize: 76,
+        photoSize: 80,
         headerAlignment: undefined,
         bodyTextSize: 10.6
       },
@@ -381,7 +410,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "libertinus-serif",
         fontFamily: "Libertinus Serif",
-        photoSize: 84,
+        photoSize: 100,
         headerAlignment: undefined,
         bodyTextSize: 10.9
       },
@@ -392,7 +421,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "new-computer-modern",
         fontFamily: "New Computer Modern",
-        photoSize: 108,
+        photoSize: 120,
         headerAlignment: "center",
         templatePhotoPosition: "center",
         bodyTextSize: 11
@@ -404,7 +433,7 @@ describe("rendering presentation mapper", () => {
         mode: "timeline-split",
         fontKey: "source-serif-4",
         fontFamily: "Source Serif 4",
-        photoSize: 76,
+        photoSize: 88,
         headerAlignment: undefined,
         bodyTextSize: 10.8
       },
@@ -415,7 +444,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "ibm-plex-sans",
         fontFamily: "IBM Plex Sans",
-        photoSize: 80,
+        photoSize: 96,
         headerAlignment: undefined,
         bodyTextSize: 10.6
       },
@@ -426,7 +455,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "source-sans-3",
         fontFamily: "Source Sans 3",
-        photoSize: 92,
+        photoSize: 108,
         headerAlignment: undefined,
         bodyTextSize: 10.9
       }
@@ -470,7 +499,7 @@ describe("rendering presentation mapper", () => {
         mode: "classic-single-column",
         fontKey: "source-serif-4",
         fontFamily: "Source Serif 4",
-        photoSize: 72,
+        photoSize: 88,
         accent: "#1d4ed8"
       },
       {
@@ -480,7 +509,7 @@ describe("rendering presentation mapper", () => {
         mode: "timeline-split",
         fontKey: "new-computer-modern",
         fontFamily: "New Computer Modern",
-        photoSize: 72,
+        photoSize: 88,
         accent: "#2563eb"
       },
       {
@@ -490,7 +519,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "ibm-plex-sans",
         fontFamily: "IBM Plex Sans",
-        photoSize: 80,
+        photoSize: 100,
         accent: "#0f766e"
       },
       {
@@ -500,7 +529,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "source-sans-3",
         fontFamily: "Source Sans 3",
-        photoSize: 104,
+        photoSize: 124,
         accent: "#be123c"
       },
       {
@@ -510,7 +539,7 @@ describe("rendering presentation mapper", () => {
         mode: "portfolio-two-column",
         fontKey: "ibm-plex-sans",
         fontFamily: "IBM Plex Sans",
-        photoSize: 80,
+        photoSize: 96,
         accent: "#4f46e5"
       },
       {
@@ -520,7 +549,7 @@ describe("rendering presentation mapper", () => {
         mode: "compact-single-column",
         fontKey: "latin-modern-roman",
         fontFamily: "Latin Modern Roman",
-        photoSize: 72,
+        photoSize: 80,
         accent: "#3f3f46"
       }
     ];
