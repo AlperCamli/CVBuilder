@@ -1156,6 +1156,8 @@ export interface CreateCheckoutResponseData {
   plan_name: string;
   trial_applied: boolean;
   trial_period_days: number | null;
+  // Present when a promotion_token was accepted; amount_due is the discounted first payment (minor units).
+  promotion?: { slug: string; percent_off: number; amount_due: number | null };
 }
 
 export interface CreatePortalResponseData {

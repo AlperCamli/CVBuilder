@@ -1,5 +1,6 @@
 import type { CheckoutTarget } from "../../content/pricing";
 import type { CheckoutSource } from "./subscription-flow";
+import type { PromotionUnavailableDetail } from "./promotion-offer";
 
 // Decides what the checkout page says and offers before and after Stripe. Copy is
 // returned as translation keys; the component translates and fills {{plan}}/{{price}}.
@@ -12,7 +13,8 @@ export const checkoutKey = (choice: CheckoutChoice) => `${choice.plan}:${choice.
 export type CheckoutAction =
   | ({ kind: "checkout"; label: string } & CheckoutChoice)
   | { kind: "pricing"; label: string }
-  | { kind: "portal"; label: string };
+  | { kind: "portal"; label: string }
+  | { kind: "switch_account"; label: string };
 
 export type CheckoutMascot = "guide" | "point" | "celebrate" | "thinking";
 
@@ -39,11 +41,25 @@ export interface CheckoutScreenInput {
   source?: CheckoutSource | null;
   /** The account already has a Stripe subscription: "payment" when its renewal failed. */
   portal?: "payment" | "manage" | null;
+  /** Checkout refused the emailed offer (409 promotion_unavailable). */
+  promotionIssue?: PromotionUnavailableDetail | null;
+  /** An active emailed offer discounts this plan: no trial pitch in its place. */
+  promotion?: boolean;
 }
 
 const SEE_PLANS: CheckoutAction = { kind: "pricing", label: "See Pro plans" };
 const START_TRIAL: CheckoutAction = { kind: "checkout", plan: "weekly", withTrial: true, label: "Start my 3-day free trial" };
 const PAID_WEEKLY: CheckoutAction = { kind: "checkout", plan: "weekly", withTrial: false, label: "Continue with Weekly · {{price}}" };
+const REGULAR_PRICE_LABEL = "Continue at the regular price · {{price}}";
+const PROMOTION_ISSUE: Record<PromotionUnavailableDetail, { title: string; lead: string }> = {
+  ended: { title: "This offer has ended", lead: "The discount is no longer available, but you can still get Pro at the regular price. Your CV and next step are saved." },
+  upcoming: { title: "Your offer hasn’t started yet", lead: "The discount opens at the time in your email. You can come back then, or continue at the regular price now." },
+  wrong_account: { title: "This offer belongs to another account", lead: "The discount is linked to the email address we sent it to. Sign in with that account to use it, or continue here at the regular price." },
+  plan_not_eligible: { title: "The offer doesn’t cover this plan", lead: "Your discount applies to one plan only. You can continue with this plan at the regular price or compare the plans." },
+  redeemed: { title: "You’ve already used this offer", lead: "The discount can be used once per account. You can still continue at the regular price." },
+  invalid: { title: "We couldn’t verify this offer", lead: "The offer link may be incomplete or out of date. You can still continue at the regular price." },
+};
+
 const RETRY_LABEL: Record<CheckoutTarget, string> = {
   weekly: "Try weekly checkout again",
   monthly: "Try monthly checkout again",
@@ -81,7 +97,7 @@ export function welcomeContinueLabel(source: CheckoutSource | null, destination:
   return /^\/app(\/resumes)?\/?$/.test(destination) ? "Go to my CVs" : "Continue";
 }
 
-export function checkoutScreen({ outcome, plan, trial, eligibility, error = false, source = null, portal = null }: CheckoutScreenInput): CheckoutScreen {
+export function checkoutScreen({ outcome, plan, trial, eligibility, error = false, source = null, portal = null, promotionIssue = null, promotion = false }: CheckoutScreenInput): CheckoutScreen {
   const used = eligibility === false;
   const paid = (label: string): CheckoutAction => ({ kind: "checkout", plan, withTrial: false, label });
 
@@ -93,6 +109,17 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
       : { mascot: "point", eyebrow: "YOUR NEXT STEP", title: "You already have a subscription",
           lead: "Manage it in the billing portal. Your CVs and next step are saved.",
           offer: "none", offerPlan: plan, primary: { kind: "portal", label: "Manage subscription" }, secondary: null };
+  }
+
+  // Never a silent fallback to full price: say why, then offer the regular price.
+  if (promotionIssue) {
+    const copy = PROMOTION_ISSUE[promotionIssue];
+    return {
+      mascot: "thinking", eyebrow: "ABOUT YOUR OFFER", title: copy.title, lead: copy.lead,
+      offer: "plan", offerPlan: plan,
+      primary: promotionIssue === "wrong_account" ? { kind: "switch_account", label: "Sign in with the emailed account" } : paid(REGULAR_PRICE_LABEL),
+      secondary: promotionIssue === "wrong_account" ? paid(REGULAR_PRICE_LABEL) : SEE_PLANS,
+    };
   }
 
   if (trial && used) {
@@ -114,7 +141,7 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
           offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS };
   }
   if (outcome === "cancel") {
-    return eligibility === true
+    return eligibility === true && !promotion
       ? { mascot: "guide", eyebrow: "GIVE PRO A TRY", title: "Why don’t you try the free trial first?",
           lead: "A little time to see what Pro can do. All the features. Three days to explore.",
           offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: paid("Continue with {{plan}} · {{price}}") }

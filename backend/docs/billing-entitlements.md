@@ -197,6 +197,18 @@ A public (unauthenticated) pricing page lives at `/pricing` and is linked from t
 
 The shared `startStripeCheckout` helper builds the Checkout session for all three entry points (in-app pricing, public pricing resume, and the upsell modal) so success/cancel URLs and the `with_trial` opt-out stay consistent.
 
+## Promotional Checkout
+
+A promotion (`promotions` row plus cohorts, created by `npm run promotion:setup` from `promotions/<slug>/campaign.json`; see `docs/promotions/spec.md`) gives each recipient a personal link token (`?promo=`). Module: `src/modules/promotions/`.
+
+- `GET /promotions/offer?token=` (public) resolves the token to `active | upcoming | ended | redeemed | ineligible | invalid`, counts the open (`open_count`, `first_opened_at`), and prices only the promoted plans in the token owner's saved billing market (else the request country). `discounted_amount = amount - round(amount * percent_off / 100)`, Stripe's rounding.
+- `POST /billing/checkout` with `promotion_token` validates, in order: token exists (`invalid`), belongs to the signed-in user (`wrong_account`), not redeemed (`redeemed`), promotion not archived (`ended`), cohort window `[starts_at, ends_at)` open (`upcoming` / `ended`), `plan_code` in `plan_codes` (`plan_not_eligible`). A failure is `409` with `details: { reason: "promotion_unavailable", detail }`, before any market lock, reservation or Stripe call. It never falls back to the full price.
+- A valid promotion adds `discounts: [{ coupon: stripe_coupon_id }]` to the Checkout session and `promotion_slug`, `promotion_cohort`, `promotion_id` to the session and subscription metadata. When `replaces_trial` is set the trial is skipped entirely (no `trial_period_days`, no "Trial eligibility changed" `pricing_changed`), whatever `with_trial` says. The pricing quote still binds the list price; the coupon applies on top.
+- The coupon and promotion id are part of the checkout reservation key, so a pending regular checkout and a promotional one are different reservations (the second gets `checkout_pending` until the first is cancelled or expires).
+- `checkout_attempts.promotion_id` is set on the opened attempt (rejected attempts are recorded as `failed` without it).
+- The response adds `promotion: { slug, percent_off, amount_due }`, `amount_due` being the discounted first payment in minor units.
+- `checkout.session.completed` with `metadata.promotion_id` sets `promotion_recipients.redeemed_at` and `redeemed_checkout_session_id` after the subscription sync, only while `redeemed_at` is null, so replays and later sessions keep the first redemption.
+
 ## Configuration
 
 Environment variables (see `src/shared/config/env.ts`):
@@ -215,7 +227,7 @@ Environment variables (see `src/shared/config/env.ts`):
 ## Known Limitations (Intentional for Phase 4C)
 
 - no advanced invoicing workflows
-- no coupon/campaign management
+- no coupon/campaign management beyond link-token promotions (see Promotional Checkout)
 - no team/org billing
 - no event replay ledger table for webhook dedup analytics
 - no deep billing analytics pipeline

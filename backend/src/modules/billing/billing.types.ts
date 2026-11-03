@@ -57,6 +57,8 @@ export interface CreateCheckoutInput {
   with_trial?: boolean;
   // The browser's IANA time zone, for the trial end date shown at Stripe.
   time_zone?: string;
+  // A promotion link token (?promo=); checkout fails with 409 promotion_unavailable rather than charge full price.
+  promotion_token?: string;
 }
 
 export interface CreateCheckoutResponseData {
@@ -68,6 +70,8 @@ export interface CreateCheckoutResponseData {
   plan_name: string;
   trial_applied: boolean;
   trial_period_days: number | null;
+  // amount_due: the discounted first payment in minor units (null without regional pricing).
+  promotion?: { slug: string; percent_off: number; amount_due: number | null };
 }
 
 export interface CreatePortalInput {

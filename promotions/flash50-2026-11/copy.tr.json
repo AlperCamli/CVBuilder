@@ -1,0 +1,49 @@
+{
+  "locale": "tr",
+  "lang": "tr",
+  "dir": "ltr",
+
+  "subject": "Pro’da ilk aya %50 indirim, sadece 24 saat",
+  "preheader": "İlana uygun CV’ler, sınırsız PDF ve DOCX indirme, yapay zekâ araçları: hepsi yarı fiyatına. İstediğiniz zaman iptal edin.",
+
+  "brand_name": "JobSpecificCV",
+  "wordmark": "jobspecificCV",
+  "site_url": "https://jobspecificcv.com",
+  "logo_url": "https://jobspecificcv.com/images/logo.png",
+  "image_url": "https://jobspecificcv.com/images/email/celebrate.png",
+  "image_alt": "Heyecanla sevinen JobSpecificCV maskotu",
+  "image_width": 240,
+  "image_height": 290,
+
+  "eyebrow": "SADECE 24 SAAT",
+  "headline": "Pro’nun ilk ayı %50\u00a0indirimli",
+  "lead": "İş aramanız için tüm Pro araçları, ilk ay yarı fiyatına. Hemen başlayın, istediğiniz zaman iptal edin.",
+
+  "greeting_with_name": "Merhaba {{first_name}},",
+  "greeting_fallback": "Merhaba,",
+  "intro": "Önümüzdeki 24 saat boyunca aylık Pro’nun ilk ayı yarı fiyatına. Her başvurunuza, o ilana göre hazırlanmış bir CV ile gidin.",
+
+  "cta": "%50 indirimle Pro’ya geçin",
+  "urgency": "Kampanya bitişi: {{ends_at_display}}",
+
+  "benefits_title": "Pro ile neler açılıyor",
+  "benefits": [
+    { "title": "CV’nizi her işe göre uyarlayın", "text": "İş ilanını yapıştırın, yaklaşık 2 dakikada ilana uygun bir CV alın." },
+    { "title": "Sınırsız PDF ve DOCX indirme", "text": "Oluşturduğunuz her sürümü indirin." },
+    { "title": "Yapay zekâ iyileştirmeleri ve ön yazılar", "text": "Herhangi bir bölümü tek tıkla yeniden yazın, her başvuruya özel ön yazı hazırlayın." }
+  ],
+  "cta_secondary": "İlk ayda %50 indirimi yakalayın",
+
+  "terms": "Aylık Pro’nun ilk ayında %50 indirim; ödeme abone olduğunuzda alınır. Sonraki aylarda normal aylık fiyat uygulanır, istediğiniz zaman iptal edebilirsiniz. Ödemeden önce net fiyatı görürsünüz. Bu kampanya 3 günlük ücretsiz denemenin yerine geçer; haftalık ve yıllık planlarda geçerli değildir. Kampanya bitişi: {{ends_at_display}}.",
+  "signoff": "JobSpecificCV ekibi",
+
+  "footer_reason": "Bu e-postayı JobSpecificCV hesabınız olduğu için alıyorsunuz.",
+  "unsubscribe_prefix": "Bu tür kampanya e-postalarını almak istemiyor musunuz?",
+  "unsubscribe_label": "Abonelikten çıkın",
+  "footer_address": "Tuzla, İstanbul, Türkiye · contact@jobspecificcv.com",
+
+  "ends_at_display": {
+    "A": "5 Kasım Perşembe, 10:00 (İstanbul saati)",
+    "B": "5 Kasım Perşembe, 18:00 (İstanbul saati)"
+  }
+}

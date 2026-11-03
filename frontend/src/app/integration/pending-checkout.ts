@@ -9,6 +9,8 @@ export interface PendingCheckoutIntent {
   plan_code: CheckoutTarget;
   with_trial?: boolean;
   return_path?: string;
+  /** A ?promo= link token for this plan (only set for a plan the offer covers). */
+  promotion_token?: string;
 }
 
 const STORAGE_KEY = "cv-builder:pending-checkout";
@@ -36,7 +38,8 @@ export function readPendingCheckout(): PendingCheckoutIntent | null {
     return {
       plan_code: parsed.plan_code,
       ...(typeof parsed.return_path === "string" ? { return_path: safeReturnPath(parsed.return_path) } : {}),
-      with_trial: typeof parsed.with_trial === "boolean" ? parsed.with_trial : undefined
+      with_trial: typeof parsed.with_trial === "boolean" ? parsed.with_trial : undefined,
+      ...(typeof parsed.promotion_token === "string" && /^[A-Za-z0-9_-]{1,256}$/.test(parsed.promotion_token) ? { promotion_token: parsed.promotion_token } : {})
     };
   } catch {
     return null;

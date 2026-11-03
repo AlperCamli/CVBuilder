@@ -189,6 +189,14 @@ Behavior:
 - ensures Stripe customer linkage
 - creates Stripe Checkout session for subscription mode
 
+Optional `promotion_token` (a `?promo=` link token): the token must belong to the signed-in user, its cohort window must be open, `plan_code` must be in the promotion's `plan_codes`, and the offer must be unredeemed and unarchived. Otherwise `409 CONFLICT` with `details: { "reason": "promotion_unavailable", "detail": "ended" | "upcoming" | "wrong_account" | "plan_not_eligible" | "redeemed" | "invalid" }` (no fallback to the full price). On success the coupon is applied, the trial is skipped when the promotion replaces it, and the response adds:
+
+```json
+{ "promotion": { "slug": "flash50-2026-11", "percent_off": 50, "amount_due": 14995 } }
+```
+
+`amount` stays the list price; `amount_due` is the discounted first payment (minor units, `null` without regional pricing).
+
 Response `200`:
 
 ```json
@@ -254,6 +262,31 @@ Response `200`:
 Possible errors:
 - `BILLING_WEBHOOK_SIGNATURE_INVALID`
 - `BILLING_NOT_CONFIGURED`
+
+### `GET /promotions/offer?token=<token>`
+
+Auth:
+- none (rate-limited per IP; `Cache-Control: no-store`)
+
+Behavior:
+- resolves a promotion link token; every call with a known token increments `open_count`, the first sets `first_opened_at`
+- `status`: `active` (cohort window `[starts_at, ends_at)` open), `upcoming`, `ended` (also archived), `redeemed`, `ineligible` (paying, deletion pending or restricted), `invalid` (unknown token: `promotion` and `prices` are `null`)
+- `prices` covers only `plan_codes`, in the token owner's saved billing market else the signed request country; `null` when paid pricing is unavailable
+- never returns the recipient's email or name
+
+Response `200`:
+
+```json
+{
+  "status": "active",
+  "promotion": { "slug": "flash50-2026-11", "percent_off": 50, "plan_codes": ["monthly"], "duration": "once",
+                 "duration_in_months": null, "replaces_trial": true, "starts_at": "2026-11-04T07:00:00Z", "ends_at": "2026-11-05T07:00:00Z" },
+  "prices": { "market": "TR", "currency": "try", "plans": [{ "code": "monthly", "amount": 29990, "discounted_amount": 14995 }] }
+}
+```
+
+Errors:
+- `VALIDATION_ERROR` when `token` is missing
 
 ---
 

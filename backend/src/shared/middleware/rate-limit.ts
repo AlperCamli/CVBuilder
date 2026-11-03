@@ -156,6 +156,23 @@ export const createFunnelEventsRateLimiter = (config: AppConfig): RequestHandler
   });
 };
 
+// Public unsubscribe links: a person clicks once, so a low per-IP budget only stops token guessing.
+export const createMarketingRateLimiter = (config: AppConfig): RequestHandler => {
+  if (config.appEnv === "test") {
+    return passThrough;
+  }
+
+  return rateLimit({
+    windowMs: ONE_MINUTE_MS,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { forwardedHeader: process.env.VERCEL !== "1" },
+    keyGenerator: (request: Request): string => `marketing-ip:${ipKeyGenerator(request.ip ?? "")}`,
+    handler: handleRateLimited
+  });
+};
+
 // Runs before the admin token check, so unauthenticated probing is capped too.
 export const createAdminIpRateLimiter = (config: AppConfig): RequestHandler => {
   if (config.appEnv === "test") {

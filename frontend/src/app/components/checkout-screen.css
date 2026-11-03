@@ -79,3 +79,6 @@
   .checkout-screen-mascot { width:100px; height:150px; right:0; bottom:0; }
   .checkout-screen-price strong { font-size:21px; }
 }
+.checkout-screen-price-promo { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:baseline; gap:2px 8px; }
+.checkout-screen-price-was { color:#7b8a80; font-size:13px; }
+.checkout-screen-price-promo span:last-child { margin-left:0; }

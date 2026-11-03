@@ -78,6 +78,8 @@ export function LanguageChooser() {
       isLanguagePreview() ||
       location.pathname.startsWith("/designs") ||
       /^\/(auth\/callback|reset-password|app)(\/|$)/.test(location.pathname) ||
+      // An unsubscribe link already names its language and must not open behind a dialog.
+      /^\/(tr\/)?unsubscribe\/?$/.test(location.pathname) ||
       handled.current
     )
       return;

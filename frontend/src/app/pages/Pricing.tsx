@@ -1,7 +1,9 @@
 import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, safeReturnPath } from "../integration/subscription-flow";
 import { SupportHelp } from "../components/SupportHelp";
-import { useRegionalPricing } from "../integration/regional-pricing";
+import { formatMoney, useRegionalPricing } from "../integration/regional-pricing";
 import { PricingAvailability } from "../components/PricingAvailability";
+import { PromotionBanner } from "../components/PromotionBanner";
+import { usePromotionOffer } from "../integration/promotion-offer";
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
@@ -30,6 +32,8 @@ const formatTrialEnd = (iso: string | null): string | null => {
 
 export function Pricing() {
   const regional = useRegionalPricing();
+  // An emailed ?promo= offer (or this tab's remembered one); checkout reads its token.
+  const promo = usePromotionOffer();
   useTranslation();
   const { setSidebarVisible } = useSidebar();
   const { api } = useAuth();
@@ -207,6 +211,7 @@ export function Pricing() {
           <ArrowLeft size={13} aria-hidden="true" />{t("Back")}
         </Link>
       )}
+      <PromotionBanner promo={promo} layout="card" />
       <div className="max-w-4xl mx-auto text-center mb-10">
         <h1 className="font-medium mb-3" style={{ fontSize: "28px", color: "var(--color-text-primary)" }}>
           {t("Choose your plan")}</h1>
@@ -303,9 +308,17 @@ export function Pricing() {
               const isBusy =
                 (card.code !== "trial" && busyTarget === card.code) ||
                 (card.code !== "trial" && currentPlanCode === card.code && busyTarget === "portal");
+              // The emailed offer discounts its plan's first payment (never alongside a plan already held).
+              const list = card.code !== "trial" ? regional.prices?.plans.find(item => item.code === card.code) : undefined;
+              const promoCovered = card.code !== "trial" && !hasPaidPlan && promo.covers(card.code);
+              const promoPrice = promoCovered && card.code !== "trial"
+                ? promo.planPrice(card.code, list && regional.prices ? { amount: list.amount, currency: regional.prices.currency } : null)
+                : null;
+              const percentOff = promo.offer?.promotion?.percent_off;
               // The trial badge is misleading once the weekly trial is used.
-              const badge =
-                card.code === "weekly" && !trialEligible ? null : card.badge;
+              const badge = promoCovered && percentOff
+                ? t("{{percent}}% off first month", { percent: percentOff })
+                : card.code === "weekly" && !trialEligible ? null : card.badge;
               return (
                 <div
                   key={card.code}
@@ -339,6 +352,22 @@ export function Pricing() {
                   <p className="mb-4" style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
                     {t(card.description)}
                   </p>
+                  {promoPrice ? (
+                  <div className="mb-6">
+                    <s className="block" style={{ fontSize: "15px", color: "var(--color-text-secondary)" }}>
+                      <span className="sr-only">{t("Regular price:")}{" "}</span>{formatMoney(promoPrice.amount, promoPrice.currency)}
+                    </s>
+                    <span className="font-medium" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
+                      <span className="sr-only">{t("First month:")}{" "}</span>{formatMoney(promoPrice.discounted_amount, promoPrice.currency)}
+                    </span>
+                    <span style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
+                      {" "}{"/"}{t("first month")}
+                    </span>
+                    <p className="mt-1 font-medium" style={{ fontSize: "12px", color: "var(--color-teal-700)" }}>
+                      {t("then {{price}}/month · cancel anytime", { price: formatMoney(promoPrice.amount, promoPrice.currency) })}
+                    </p>
+                  </div>
+                  ) : (
                   <div className="mb-6">
                     <span className="font-medium" style={{ fontSize: "32px", color: "var(--color-text-primary)" }}>
                       {card.weeklyPrice}
@@ -355,6 +384,7 @@ export function Pricing() {
                       </p>
                     ) : null}
                   </div>
+                  )}
                   <ul className="space-y-3 mb-6 flex-1">
                     {card.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2">
@@ -391,7 +421,9 @@ export function Pricing() {
                     }}
                   >
                     {isBusy ? <Loader2 size={14} className="animate-spin" /> : null}
-                    {t(cta.label)}
+                    {promoCovered && percentOff && !cta.disabled
+                      ? t("Get {{percent}}% off {{plan}}", { percent: percentOff, plan: card.name })
+                      : t(cta.label)}
                   </button>
                 </div>
               );

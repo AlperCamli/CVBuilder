@@ -18,7 +18,7 @@ const browserTimeZone = (): string | undefined => {
 export async function startStripeCheckout(
   api: BackendApi,
   plan: CheckoutTarget,
-  options?: { withTrial?: boolean; source?: string; returnPath?: string; paywallSource?: CheckoutSource | null }
+  options?: { withTrial?: boolean; source?: string; returnPath?: string; paywallSource?: CheckoutSource | null; promotionToken?: string | null }
 ): Promise<void> {
   const base = window.location.origin;
   const prices = await api.getBillingPrices();
@@ -30,6 +30,9 @@ export async function startStripeCheckout(
     rememberDisplayedPrices(prices);
     if (!window.confirm(t("Pricing changed. Continue with {{price}}?", { price: formatMoney(planPrice.amount, prices.currency) }))) throw new Error(t("Review the current prices before continuing."));
   }
+  // A promotion replaces the trial: the discounted first payment is charged now.
+  const promotionToken = options?.promotionToken ?? null;
+  if (promotionToken) withTrial = false;
   if (plan === "weekly" && withTrial !== false) {
     const billing = await api.getBillingPlan();
     if (!billing.trial_eligible) {
@@ -43,7 +46,8 @@ export async function startStripeCheckout(
     plan_code: plan,
     success_url: returnPage ? `${returnPage}&checkout=success&session_id={CHECKOUT_SESSION_ID}` : `${base}/app/pricing?checkout=success`,
     cancel_url: returnPage ? `${returnPage}&checkout=cancel` : `${base}/app/pricing?checkout=cancel`,
-    ...(plan === "weekly" && withTrial === false ? { with_trial: false } : {}),
+    ...((plan === "weekly" && withTrial === false) || promotionToken ? { with_trial: false } : {}),
+    ...(promotionToken ? { promotion_token: promotionToken } : {}),
     // Stripe shows the trial end date in the user's own time zone.
     ...(browserTimeZone() ? { time_zone: browserTimeZone() } : {})
   };
@@ -58,7 +62,7 @@ export async function startStripeCheckout(
   const value =
     response.plan_code === "weekly" && response.trial_applied
       ? 0
-      : (response.amount ?? planPrice.amount) / 100;
+      : (response.promotion?.amount_due ?? response.amount ?? planPrice.amount) / 100;
   const currency = (response.currency ?? prices.currency).toUpperCase();
 
   rememberCheckoutAttribution({
@@ -68,7 +72,8 @@ export async function startStripeCheckout(
     trial_applied: response.trial_applied,
     trial_period_days: response.trial_period_days,
     value,
-    currency
+    currency,
+    ...(response.promotion ? { promotion_slug: response.promotion.slug } : {})
   });
 
   trackPaymentStarted({
@@ -78,7 +83,8 @@ export async function startStripeCheckout(
     trial_applied: response.trial_applied,
     trial_period_days: response.trial_period_days,
     value,
-    currency
+    currency,
+    promotion_slug: response.promotion?.slug
   });
 
   // Browser Back from Stripe must land where Stripe's own back link does: swap the

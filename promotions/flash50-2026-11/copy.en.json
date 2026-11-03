@@ -1,0 +1,49 @@
+{
+  "locale": "en",
+  "lang": "en",
+  "dir": "ltr",
+
+  "subject": "50% off your first month of Pro, 24h only",
+  "preheader": "Tailored CVs, unlimited PDF & DOCX downloads and AI tools at half price. Cancel anytime.",
+
+  "brand_name": "JobSpecificCV",
+  "wordmark": "jobspecificCV",
+  "site_url": "https://jobspecificcv.com",
+  "logo_url": "https://jobspecificcv.com/images/logo.png",
+  "image_url": "https://jobspecificcv.com/images/email/celebrate.png",
+  "image_alt": "The JobSpecificCV mascot, cheering",
+  "image_width": 240,
+  "image_height": 290,
+
+  "eyebrow": "24 HOURS ONLY",
+  "headline": "50% off your first month of\u00a0Pro",
+  "lead": "Every Pro tool for your job search, at half price for the first month. Start today, cancel anytime.",
+
+  "greeting_with_name": "Hi {{first_name}},",
+  "greeting_fallback": "Hi there,",
+  "intro": "For the next 24 hours, your first month of monthly Pro is half price, so every application can go out with a CV made for that job.",
+
+  "cta": "Get 50% off Pro",
+  "urgency": "Offer ends {{ends_at_display}}",
+
+  "benefits_title": "What you unlock with Pro",
+  "benefits": [
+    { "title": "Tailor your CV to every job", "text": "Paste a job posting and get a matched CV in about 2 minutes." },
+    { "title": "Unlimited PDF & DOCX downloads", "text": "Download every version you make." },
+    { "title": "AI improvements and cover letters", "text": "Rewrite any section in one click and get a cover letter for each application." }
+  ],
+  "cta_secondary": "Claim 50% off your first month",
+
+  "terms": "50% off your first month of monthly Pro, charged when you subscribe. After that, the regular monthly price applies; cancel anytime. You’ll see the exact price before you pay. This offer replaces the 3-day free trial and doesn’t apply to weekly or annual plans. Offer ends {{ends_at_display}}.",
+  "signoff": "The JobSpecificCV team",
+
+  "footer_reason": "You’re receiving this email because you have a JobSpecificCV account.",
+  "unsubscribe_prefix": "Don’t want offers like this?",
+  "unsubscribe_label": "Unsubscribe",
+  "footer_address": "Tuzla, Istanbul, Türkiye · contact@jobspecificcv.com",
+
+  "ends_at_display": {
+    "A": "Thursday, Nov 5 at 10:00 Istanbul time (07:00 UTC)",
+    "B": "Thursday, Nov 5 at 18:00 Istanbul time (15:00 UTC)"
+  }
+}

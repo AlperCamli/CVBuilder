@@ -9,7 +9,7 @@ const SCREENS: Record<string, string> = {
   "/app/upload-processing": "Processing CV", "/app/cv-score": "CV score", "/app/ai-improving": "Improving CV",
   "/app/create-cv": "Create CV", "/app/medical": "Medical CV", "/app/job-tracker": "Job tracker",
   "/app/resumes": "CV library", "/app/cover-letters": "Cover letter library", "/app/pricing": "Account pricing",
-  "/app/profile": "Account profile"
+  "/app/profile": "Account profile", "/unsubscribe": "Email unsubscribe", "/tr/unsubscribe": "Email unsubscribe (Turkish)"
 };
 const AUTH_SCREENS: Record<string, string> = {"/signin": "Sign in", "/signup": "Sign up", "/forgot-password": "Password recovery", "/email-sent": "Email verification"};
 

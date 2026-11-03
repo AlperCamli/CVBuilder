@@ -9,7 +9,8 @@ export const billingCheckoutSchema = z
     success_url: z.string().trim().url().max(2000).optional(),
     cancel_url: z.string().trim().url().max(2000).optional(),
     with_trial: z.boolean().optional(),
-    time_zone: z.string().trim().min(1).max(64).optional()
+    time_zone: z.string().trim().min(1).max(64).optional(),
+    promotion_token: z.string().trim().min(1).max(256).optional()
   })
   .strict();
 

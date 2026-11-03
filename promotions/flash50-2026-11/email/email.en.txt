@@ -1,0 +1,38 @@
+jobspecificCV
+
+24 HOURS ONLY
+50% off your first month of Pro
+
+Every Pro tool for your job search, at half price for the first month.
+Start today, cancel anytime.
+
+Hi {{first_name}},
+
+For the next 24 hours, your first month of monthly Pro is half price, so
+every application can go out with a CV made for that job.
+
+Get 50% off Pro:
+{{offer_url}}
+
+Offer ends {{ends_at_display}}
+
+What you unlock with Pro
+- Tailor your CV to every job: Paste a job posting and get a matched CV
+  in about 2 minutes.
+- Unlimited PDF & DOCX downloads: Download every version you make.
+- AI improvements and cover letters: Rewrite any section in one click
+  and get a cover letter for each application.
+
+50% off your first month of monthly Pro, charged when you subscribe.
+After that, the regular monthly price applies; cancel anytime. You’ll
+see the exact price before you pay. This offer replaces the 3-day free
+trial and doesn’t apply to weekly or annual plans. Offer ends
+{{ends_at_display}}.
+
+The JobSpecificCV team
+
+--
+You’re receiving this email because you have a JobSpecificCV account.
+Don’t want offers like this? Unsubscribe: {{unsubscribe_url}}
+Tuzla, Istanbul, Türkiye · contact@jobspecificcv.com
+JobSpecificCV · https://jobspecificcv.com

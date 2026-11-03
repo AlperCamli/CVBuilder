@@ -38,6 +38,7 @@ const SignInRoute = lazyRoute(() =>
   })),
 );
 const PrivacyNoticeRoute = lazyRoute(() => import("./pages/PrivacyNotice"));
+const UnsubscribeRoute = lazyRoute(() => import("./pages/Unsubscribe"));
 const GuidedJourneyRoute = lazyRoute(() => import("./pages/GuidedJourneyPage"));
 const OnboardingRoute = lazyRoute(() => import("./pages/PreSignupOnboarding"));
 const OnboardingResumeRoute = lazyRoute(() => import("./pages/OnboardingResume").then(({ OnboardingResume }) => ({ default: OnboardingResume })));
@@ -214,6 +215,9 @@ export function RouteElements({
       <Route path="/tr/support" element={<Support />} />
       <Route path="/privacy" element={lazyElement(PrivacyNoticeRoute)} />
       <Route path="/cookies" element={lazyElement(PrivacyNoticeRoute)} />
+      {/* Marketing email unsubscribe links. Not prerendered and noindex (route-seo, vercel.json). */}
+      <Route path="/unsubscribe" element={lazyElement(UnsubscribeRoute)} />
+      <Route path="/tr/unsubscribe" element={lazyElement(UnsubscribeRoute)} />
       <Route path="/" element={lazyElement(guidedJourney)} />
       <Route path="/tr" element={lazyElement(guidedJourney)} />
       <Route path="/tr/pricing" element={lazyElement(guidedJourney)} />

@@ -54,6 +54,8 @@ export type CheckoutAttribution = {
   trial_period_days?: number | null;
   value?: number;
   currency?: string;
+  /** The campaign slug when a promotion discounted this checkout (never the link token). */
+  promotion_slug?: string;
 };
 
 const hasWindow = (): boolean => typeof window !== "undefined";
@@ -63,6 +65,8 @@ const shouldSkipAnalytics = (): boolean =>
 
 const SAFE_PARAMS = new Set(["step", "question", "file_extension", "file_mime_type", "file_size_bucket", "file_type", "answered_questions", "plan_code", "plan_name", "trial_applied", "trial_period_days", "value", "currency", "cv_kind", "format", "source", "cta_index", "article_slug", "category_slug"]);
 SAFE_PARAMS.add("action");
+// Promotion campaign dimension: the public slug and offer status only, never the link token.
+for (const key of ["promotion_slug", "promotion_status"]) SAFE_PARAMS.add(key);
 for (const key of ["destination", "post_auth_destination", "cta_text", "location"]) SAFE_PARAMS.add(key);
 // Paths are reduced to their screen label, which drops IDs and query strings.
 const PATH_PARAMS = new Set(["source", "destination", "post_auth_destination"]);

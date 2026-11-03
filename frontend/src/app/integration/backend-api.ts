@@ -311,6 +311,8 @@ export interface BillingCheckoutInput {
   // When false, the Weekly checkout skips the free trial and bills immediately.
   with_trial?: boolean;
   time_zone?: string;
+  // A ?promo= link token; the server applies the discount or answers 409 promotion_unavailable.
+  promotion_token?: string;
 }
 
 export interface BillingPortalInput {

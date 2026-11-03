@@ -4,6 +4,7 @@ import type { BackendApi } from "./backend-api";
 import { rememberCheckoutAttribution, trackPaymentStarted } from "./analytics";
 import { readPendingCheckout, setPendingCheckout } from "./pending-checkout";
 import { trackFunnelEvent } from "./funnel-events";
+import { ApiClientError } from "./api-error";
 
 vi.mock("./analytics", () => ({ rememberCheckoutAttribution: vi.fn(), trackPaymentStarted: vi.fn() }));
 vi.mock("./funnel-events", () => ({ trackFunnelEvent: vi.fn() }));
@@ -105,6 +106,42 @@ describe("authoritative checkout terms", () => {
     await expect(startStripeCheckout(api as unknown as BackendApi, "weekly")).rejects.toThrow();
     expect(api.createBillingCheckout).not.toHaveBeenCalled();
     expect(trackFunnelEvent).not.toHaveBeenCalled();
+  });
+  it("sends the emailed offer's token without a trial and records the discounted first payment", async () => {
+    const api = fixture();
+    api.createBillingCheckout.mockResolvedValue({ checkout_url: "https://checkout.stripe.test/session", checkout_session_id: "session", plan_code: "monthly", plan_name: "Monthly", trial_applied: false, trial_period_days: null, amount: 29990, currency: "try", promotion: { slug: "flash50-2026-11", percent_off: 50, amount_due: 14995 } } as never);
+    // The pending checkout that survived signup carries the token.
+    setPendingCheckout({ plan_code: "monthly", with_trial: false, promotion_token: "a1b2c3d4e5f6" });
+    const intent = readPendingCheckout()!;
+    await startStripeCheckout(api as unknown as BackendApi, intent.plan_code, { withTrial: intent.with_trial, promotionToken: intent.promotion_token });
+    expect(api.createBillingCheckout).toHaveBeenCalledWith(expect.objectContaining({ plan_code: "monthly", with_trial: false, promotion_token: "a1b2c3d4e5f6", pricing_quote: "signed-quote" }));
+    expect(api.getBillingPlan).not.toHaveBeenCalled();
+    expect(rememberCheckoutAttribution).toHaveBeenCalledWith(expect.objectContaining({ value: 149.95, currency: "TRY", promotion_slug: "flash50-2026-11" }));
+    expect(trackPaymentStarted).toHaveBeenCalledWith(expect.objectContaining({ value: 149.95, promotion_slug: "flash50-2026-11" }));
+  });
+  it("never sends an empty or absent token", async () => {
+    const api = fixture();
+    await startStripeCheckout(api as unknown as BackendApi, "monthly", { promotionToken: "" });
+    await startStripeCheckout(api as unknown as BackendApi, "annual", { promotionToken: null });
+    for (const [input] of api.createBillingCheckout.mock.calls as unknown as Array<[Record<string, unknown>]>) {
+      expect(input).not.toHaveProperty("promotion_token");
+      expect(input).not.toHaveProperty("with_trial");
+    }
+  });
+  it("replaces an open regular checkout with the discounted one", async () => {
+    const api = { ...fixture(), cancelBillingCheckout: vi.fn(async () => ({ cancelled: true })) };
+    api.createBillingCheckout.mockRejectedValueOnce(new ApiClientError({ status: 409, code: "CONFLICT", message: "Finish or cancel your existing checkout before starting another.", details: { reason: "checkout_pending" } }));
+    await startStripeCheckout(api as unknown as BackendApi, "monthly", { promotionToken: "a1b2c3d4e5f6" });
+    expect(api.cancelBillingCheckout).toHaveBeenCalledOnce();
+    expect(api.createBillingCheckout).toHaveBeenCalledTimes(2);
+    expect(api.createBillingCheckout).toHaveBeenLastCalledWith(expect.objectContaining({ promotion_token: "a1b2c3d4e5f6", with_trial: false }));
+  });
+  it("surfaces a refused offer instead of falling back to full price", async () => {
+    const api = fixture();
+    api.createBillingCheckout.mockRejectedValue(new ApiClientError({ status: 409, code: "CONFLICT", message: "Offer unavailable", details: { reason: "promotion_unavailable", detail: "ended" } }));
+    await expect(startStripeCheckout(api as unknown as BackendApi, "monthly", { promotionToken: "a1b2c3d4e5f6" })).rejects.toMatchObject({ details: { reason: "promotion_unavailable", detail: "ended" } });
+    expect(api.createBillingCheckout).toHaveBeenCalledOnce();
+    expect(window.location.href).toBe("");
   });
   it("requires confirmation when signup changes the displayed market or prices", async () => {
     const api = fixture();

@@ -53,6 +53,10 @@ import { BillingController } from "../modules/billing/billing.controller";
 import { createBillingRouter } from "../modules/billing/billing.routes";
 import { createMonetizationRouter } from "../modules/monetization/monetization.routes";
 import { createFunnelEventsRouter } from "../modules/funnel-events/funnel-events.routes";
+import { PromotionsController } from "../modules/promotions/promotions.controller";
+import { createPromotionOfferRateLimiter, createPromotionsRouter } from "../modules/promotions/promotions.routes";
+import { createMarketingRouter } from "../modules/marketing/marketing.routes";
+import { createMarketingRateLimiter } from "../shared/middleware/rate-limit";
 import type { AppServices } from "./build-services";
 
 export const registerV1Routes = (
@@ -91,6 +95,10 @@ export const registerV1Routes = (
   if (services.monetizationRefreshService) router.use(createMonetizationRouter(services.monetizationRefreshService, services.monetizationBackfillService));
   // Anonymous funnel counters: before the product-access/consent guards, no authentication.
   if (services.funnelEventsService) router.use(createFunnelEventsRouter(services.funnelEventsService, createFunnelEventsRateLimiter(config)));
+  // Public promotion link resolution (no authentication; never returns email or name).
+  if (services.promotionsService) router.use(createPromotionsRouter(new PromotionsController(services.promotionsService, config), createPromotionOfferRateLimiter(config)));
+  // Public unsubscribe link from promotional emails (no authentication; same answer for every token).
+  if (services.marketingService) router.use(createMarketingRouter(services.marketingService, createMarketingRateLimiter(config)));
   // Admin analytics stays outside the product-access/consent guards below and
   // authenticates the Supabase identity only, never creating a product account.
   if (services.adminAnalyticsService && services.adminIdentityProvider) {

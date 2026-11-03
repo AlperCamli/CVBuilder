@@ -14,12 +14,17 @@ const requireSession = (request: Request) => {
   return request.auth;
 };
 
+// The signed request country (frontend proxy); production and staging refuse an unsigned request.
+export const requestCountry = (request: Request, config?: AppConfig) => {
+  const trustedContextRequired = process.env.VERCEL === "1" || process.env.NODE_ENV === "production" || config?.appEnv === "production" || config?.appEnv === "staging";
+  return verifyGeoContext(request, config?.billing.geoSecret ?? null, trustedContextRequired, config?.billing.developmentCountry);
+};
+
 export class BillingController {
   constructor(private readonly billingService: BillingService, private readonly config?: AppConfig) {}
 
   private country(request: Request) {
-    const trustedContextRequired = process.env.VERCEL === "1" || process.env.NODE_ENV === "production" || this.config?.appEnv === "production" || this.config?.appEnv === "staging";
-    return verifyGeoContext(request, this.config?.billing.geoSecret ?? null, trustedContextRequired, this.config?.billing.developmentCountry);
+    return requestCountry(request, this.config);
   }
 
   getPrices = asyncHandler(async (request: Request, response: Response) => {

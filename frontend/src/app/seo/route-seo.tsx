@@ -89,6 +89,10 @@ export function getHeadMetaForPath(pathname: string): HeadMeta | null {
     return { title: "Get started | jobspecificCV", robots: "noindex, nofollow" };
   }
 
+  if (path === "/unsubscribe" || path === "/tr/unsubscribe") {
+    return { title: "Unsubscribe | jobspecificCV", robots: "noindex, nofollow" };
+  }
+
   if (path === "/privacy" || path === "/cookies") {
     return { title: `${path === "/privacy" ? "Privacy notice" : "Cookies and storage"} | jobspecificCV`, robots: "noindex, follow" };
   }

@@ -44,6 +44,8 @@ import {
   type StripeWebhookEvent
 } from "./stripe-gateway";
 import type { CheckoutOutcome, DenialReason, MonetizationRepository } from "../monetization/monetization.repository";
+import type { CheckoutPromotion, PromotionsCheckoutPort } from "../promotions/promotions.types";
+import { discountedAmount } from "../promotions/promotions.service";
 
 interface BillingServiceOptions {
   requireSubscription?: boolean;
@@ -55,6 +57,7 @@ interface BillingServiceOptions {
   stripeWebhookSecret: string | null;
   trialPeriodDays: number;
   monetization?: MonetizationRepository;
+  promotions?: PromotionsCheckoutPort;
 }
 
 // Which gate refused the request, for paywall analysis.
@@ -416,7 +419,7 @@ export class BillingService {
   ): Promise<CreateCheckoutResponseData> {
     const trialRequested = input.with_trial !== false;
     try {
-      const { response, market } = await this.openCheckoutSession(userId, input, country);
+      const { response, market, promotion } = await this.openCheckoutSession(userId, input, country);
       await this.options.monetization?.recordCheckoutAttempt({
         user_id: userId,
         plan_code: response.plan_code,
@@ -426,7 +429,8 @@ export class BillingService {
         trial_requested: trialRequested,
         trial_applied: response.trial_applied,
         checkout_session_id: response.checkout_session_id,
-        outcome: "open"
+        outcome: "open",
+        ...(promotion ? { promotion_id: promotion.id } : {})
       });
       return response;
     } catch (error) {
@@ -449,7 +453,7 @@ export class BillingService {
     userId: string,
     input: CreateCheckoutInput,
     country: string | null
-  ): Promise<{ response: CreateCheckoutResponseData; market: string | null }> {
+  ): Promise<{ response: CreateCheckoutResponseData; market: string | null; promotion: CheckoutPromotion | null }> {
     const user = await this.requireUser(userId);
     const stripeGateway = this.requireStripeGateway();
     const plan = this.requirePurchasablePlan(input.plan_code);
@@ -461,6 +465,7 @@ export class BillingService {
     if (active?.provider_subscription_id && BILLING_ISSUE_STATUSES.has(active.status)) {
       throw new ConflictError("Your last payment didn’t go through. Update your payment method in the billing portal to keep your subscription.", { reason: "subscription_active", billing_issue: true });
     }
+    const promotion = await this.resolvePromotion(userId, input.promotion_token, plan.code);
     const regional = this.options.regionalPricing ? await this.options.regionalPricing.resolveCheckout(userId, country, input.pricing_quote, plan.code as PurchasePlan) : null;
     if (!regional && !plan.stripe_price_id) {
       throw new BillingConfigurationError("Stripe price id is missing for requested plan", {
@@ -479,7 +484,8 @@ export class BillingService {
     // starts a brand-new trial once the previous one lapses.
     let trialPeriodDays: number | null = null;
 
-    if (plan.trial_supported && input.with_trial !== false) {
+    // A promotion that replaces the trial charges now, whatever with_trial says (and never reports a trial change).
+    if (plan.trial_supported && input.with_trial !== false && !promotion?.replaces_trial) {
       const eligible = await this.isUserTrialEligible(user.id);
       if (regional && !eligible) throw new ConflictError("Trial eligibility changed. Review the paid price before continuing.", { reason: "pricing_changed" });
       if (eligible) trialPeriodDays = this.options.trialPeriodDays;
@@ -490,7 +496,7 @@ export class BillingService {
       ? trialSubmitMessage(locale, trialEndLabel(locale, trialPeriodDays, input.time_zone, regional?.market))
       : undefined;
     // Every Stripe parameter is in the key: an idempotent retry with different parameters fails at Stripe.
-    const reservation = await this.options.regionalPricing?.reserveCheckout(userId, createHash("sha256").update(JSON.stringify({ price: regional?.priceId, trial: trialPeriodDays, successUrl, cancelUrl, submitMessage })).digest("hex"));
+    const reservation = await this.options.regionalPricing?.reserveCheckout(userId, createHash("sha256").update(JSON.stringify({ price: regional?.priceId, trial: trialPeriodDays, successUrl, cancelUrl, submitMessage, coupon: promotion?.coupon_id, promotion: promotion?.id })).digest("hex"));
     const checkoutSession = await stripeGateway.createCheckoutSession({
       customer_id: customerId,
       price_id: regional?.priceId ?? plan.stripe_price_id!,
@@ -504,11 +510,13 @@ export class BillingService {
       mode: "subscription",
       trial_period_days: trialPeriodDays,
       submit_message: submitMessage,
+      ...(promotion ? { discounts: [{ coupon: promotion.coupon_id }] } : {}),
       metadata: {
         app_user_id: user.id,
         ...(trialPeriodDays && await this.subscriptionsRepository.getTrialTransitionGrant(userId) ? { trial_transition: "1" } : {}),
         plan_code: plan.code,
-        ...(regional ? { billing_market: regional.market, billing_currency: regional.currency } : {})
+        ...(regional ? { billing_market: regional.market, billing_currency: regional.currency } : {}),
+        ...(promotion ? { promotion_slug: promotion.slug, promotion_cohort: promotion.cohort_key, promotion_id: promotion.id } : {})
       }
     });
 
@@ -521,6 +529,7 @@ export class BillingService {
 
     return {
       market: regional?.market ?? null,
+      promotion,
       response: {
         ...(regional ? { currency: regional.currency, amount: regional.amount } : {}),
         checkout_url: checkoutSession.url,
@@ -528,9 +537,17 @@ export class BillingService {
         plan_code: plan.code,
         plan_name: plan.name,
         trial_applied: trialPeriodDays !== null,
-        trial_period_days: trialPeriodDays
+        trial_period_days: trialPeriodDays,
+        // The quote binds the list price; the coupon is applied on top of it.
+        ...(promotion ? { promotion: { slug: promotion.slug, percent_off: promotion.percent_off, amount_due: regional ? discountedAmount(regional.amount, promotion.percent_off) : null } } : {})
       }
     };
+  }
+
+  private async resolvePromotion(userId: string, token: string | undefined, planCode: string): Promise<CheckoutPromotion | null> {
+    if (token === undefined) return null;
+    if (!this.options.promotions) throw new BillingConfigurationError("Promotions are not configured");
+    return this.options.promotions.resolveForCheckout(userId, token, planCode);
   }
 
   async createPortalSession(
@@ -607,8 +624,10 @@ export class BillingService {
 
   private async processWebhookEvent(event: StripeWebhookEvent): Promise<boolean> {
     switch (event.type) {
-      case "checkout.session.completed":
-        return this.handleCheckoutSessionCompleted(event.object, event);
+      case "checkout.session.completed": {
+        const processed = await this.handleCheckoutSessionCompleted(event.object, event);
+        return (await this.redeemPromotion(event.object)) || processed;
+      }
       case "checkout.session.expired":
         return this.handleCheckoutSessionExpired(event.object);
       case "customer.subscription.created":
@@ -626,6 +645,17 @@ export class BillingService {
       default:
         return false;
     }
+  }
+
+  // After the subscription sync, so a redemption failure (retried by Stripe) never delays access.
+  // markRedeemed only sets an unredeemed recipient, so replays keep the first session.
+  private async redeemPromotion(object: unknown): Promise<boolean> {
+    const session = parseCheckoutSessionFromWebhookObject(object);
+    const promotionId = session?.metadata.promotion_id;
+    const userId = session?.metadata.app_user_id;
+    if (!session || !promotionId || !userId || !this.options.promotions) return false;
+    await this.options.promotions.markRedeemed(promotionId, userId, session.id);
+    return true;
   }
 
   private async handleCheckoutSessionExpired(object: unknown): Promise<boolean> {

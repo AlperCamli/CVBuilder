@@ -40,6 +40,8 @@ import {
 } from "./concepts";
 import { weeklyPriceComparison } from "./weekly-pricing";
 import { trackCtaClick } from "../../integration/analytics";
+import type { PromotionOfferState } from "../../integration/promotion-offer";
+import "../../components/promotion.css";
 
 export function StartLink({
   children = (
@@ -362,6 +364,8 @@ type PricingCardsProps = {
   concept: Concept;
   teaser?: boolean;
   guided?: { onTrial?: () => void; pricingPath: string };
+  /** An emailed ?promo= offer: discounts the Pro card while its plan is selected. */
+  promotion?: PromotionOfferState;
 };
 
 export function PricingCards(props: PricingCardsProps) {
@@ -375,6 +379,7 @@ export function RegionalPricingCards({
   teaser = false,
   guided,
   regional,
+  promotion,
 }: PricingCardsProps & {
   regional: ReturnType<typeof useRegionalPricing>;
 }) {
@@ -402,6 +407,9 @@ export function RegionalPricingCards({
   const annual = regional.prices?.plans.find(plan => plan.code === "annual")?.amount ?? 0;
   const annualSavings = monthly ? Math.round((1 - annual / (monthly * 12)) * 100) : 0;
   const monthlySavings = weeklyBase ? Math.round((1 - Math.round(monthly * 12 / 52) / weeklyBase) * 100) : 0;
+  const promoCovered = Boolean(promotion?.covers(period));
+  const promoPrice = promotion?.planPrice(period, selected && regional.prices ? { amount: selected.amount, currency: regional.prices.currency } : null) ?? null;
+  const promoMoney = (amount: number) => formatMoney(amount, promoPrice!.currency);
   const selectPeriod = (next: CheckoutTarget) => {
     setTeaserPeriod(next);
     if (!teaser) {
@@ -421,6 +429,8 @@ export function RegionalPricingCards({
       plan_code: period,
       with_trial: false,
       return_path: ONBOARDING_ENTRY_PATH,
+      // Only the plan the offer covers carries the link token into checkout.
+      ...(promoCovered && promotion?.token ? { promotion_token: promotion.token } : {}),
     });
     navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: period, with_trial: false, return_path: ONBOARDING_ENTRY_PATH, auto: true }) } });
   };
@@ -447,7 +457,9 @@ export function RegionalPricingCards({
               aria-pressed={period === key}
             >
               {t(BILLING[key].label)}
-              {guided && regional.ready && monthlySavings > 0 && key === "monthly" && (
+              {promotion?.covers(key) && promotion.offer?.promotion ? (
+                <span>{t("{{percent}}% off", { percent: promotion.offer.promotion.percent_off })}</span>
+              ) : guided && regional.ready && monthlySavings > 0 && key === "monthly" && (
                 <span>{t("Save {{percent}}%", { percent: monthlySavings })}</span>
               )}
               {!guided && regional.ready && annualSavings > 0 && key === "annual" && (
@@ -501,29 +513,52 @@ export function RegionalPricingCards({
           </div>
           <h3>
             {t("Pro")}{" "}
-            <span className="cv-plan-badge">
-              {guided && period === "monthly"
-                ? t("Monthly · Recommended")
-                : t("For an active search")}
-            </span>
+            {promoCovered && promotion?.offer?.promotion ? (
+              <span className="promo-plan-badge">
+                {t("{{percent}}% off first month", { percent: promotion.offer.promotion.percent_off })}
+              </span>
+            ) : (
+              <span className="cv-plan-badge">
+                {guided && period === "monthly"
+                  ? t("Monthly · Recommended")
+                  : t("For an active search")}
+              </span>
+            )}
           </h3>
           <p>
             {guided
               ? t("One subscription. A tailored CV for every opportunity.")
               : t("Room for every role on your shortlist.")}
           </p>
-          <div className="cv-price" aria-live="polite">
-            <strong>{guided ? weekly.price : price.price}</strong>
-            <span>
-              {"/"}{guided ? t("week") : price.interval}
-              {guided && period !== "weekly" && t(" equivalent")}
-            </span>
-          </div>
-          <div className="cv-price-caption">
-            {t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
-          </div>
+          {promoPrice ? (
+            <>
+              <div className="cv-price promo-price" aria-live="polite">
+                <s className="promo-was"><span className="cv-sr-only">{t("Regular price:")}{" "}</span>{promoMoney(promoPrice.amount)}</s>
+                <strong><span className="cv-sr-only">{t("First month:")}{" "}</span>{promoMoney(promoPrice.discounted_amount)}</strong>
+                <span>{"/"}{t("first month")}</span>
+              </div>
+              <div className="cv-price-caption promo-disclosure">
+                {t("then {{price}}/month · cancel anytime", { price: promoMoney(promoPrice.amount) })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="cv-price" aria-live="polite">
+                <strong>{guided ? weekly.price : price.price}</strong>
+                <span>
+                  {"/"}{guided ? t("week") : price.interval}
+                  {guided && period !== "weekly" && t(" equivalent")}
+                </span>
+              </div>
+              <div className="cv-price-caption">
+                {t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
+              </div>
+            </>
+          )}
           <button className="cv-button" onClick={choosePro} disabled={!regional.ready}>
-            {t("Choose Pro")}{" "}{price.label.toLowerCase()} <ArrowUpRight size={17} />
+            {promoCovered && promotion?.offer?.promotion
+              ? t("Get {{percent}}% off {{plan}}", { percent: promotion.offer.promotion.percent_off, plan: price.label })
+              : <>{t("Choose Pro")}{" "}{price.label.toLowerCase()}</>}{" "}<ArrowUpRight size={17} />
           </button>
           <ul>
             {proFeatures.map((feature, index) => (

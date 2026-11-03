@@ -201,7 +201,7 @@ remove Supabase Auth and sweep outstanding-upload targets. A job is complete onl
 after the final sweep. Do not equate request acceptance with completed erasure.
 
 Private ZIP exports contain account rows and owned source/generated files, not
-guest proofs or authentication secrets. Archives expire after 24 hours; download
+guest proofs, authentication secrets, or promotion link and unsubscribe tokens. Archives expire after 24 hours; download
 URLs expire after at most five minutes. Failed exports retry in maintenance;
 inspect jobs stuck in `pending`, rather than declaring an incomplete archive ready.
 

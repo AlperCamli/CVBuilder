@@ -109,6 +109,9 @@ import {
 } from "../modules/admin-analytics/admin-identity";
 import { getAnalyticsDb } from "../shared/db/analytics-db";
 import { FunnelEventsService } from "../modules/funnel-events/funnel-events.service";
+import { MarketingService } from "../modules/marketing/marketing.service";
+import { PromotionsService } from "../modules/promotions/promotions.service";
+import { SupabasePromotionsRepository, type PromotionsRepository } from "../modules/promotions/promotions.repository";
 import {
   SupabaseTailoringRepository,
   type TailoringRepository
@@ -141,6 +144,8 @@ export interface AppServices {
   adminAnalyticsService?: AdminAnalyticsService;
   adminIdentityProvider?: AdminIdentityProvider;
   funnelEventsService?: FunnelEventsService;
+  promotionsService?: PromotionsService;
+  marketingService?: MarketingService;
 }
 
 export interface ServiceOverrides {
@@ -174,6 +179,7 @@ export interface ServiceOverrides {
   monetizationRepository?: MonetizationRepository;
   adminAnalyticsRepository?: AdminAnalyticsRepository | null;
   adminIdentityProvider?: AdminIdentityProvider;
+  promotionsRepository?: PromotionsRepository;
 }
 
 export const buildDefaultServices = (
@@ -267,6 +273,16 @@ export const buildDefaultServices = (
     modelPricing: config.ai.modelPricing ?? {}
   });
 
+  const regionalPricing = new RegionalPricingService(supabaseClients.serviceRoleClient, stripeGateway, {
+    secret: config.billing.quoteSecret ?? null, productId: config.billing.productId ?? null,
+    productIds: { weekly: config.billing.weeklyProductId ?? null, monthly: config.billing.monthlyProductId ?? null, annual: config.billing.annualProductId ?? null },
+    prices: marketPrices,
+    portals: { GLOBAL: config.billing.usdPortalConfigurationId ?? null, TR: config.billing.tryPortalConfigurationId ?? null },
+    historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
+  });
+  const promotionsService = new PromotionsService(
+    overrides?.promotionsRepository ?? new SupabasePromotionsRepository(supabaseClients.serviceRoleClient), regionalPricing, { logger }
+  );
   const billingService =
     overrides?.billingService ??
     new BillingService(
@@ -276,13 +292,7 @@ export const buildDefaultServices = (
       entitlementsService,
       stripeGateway,
       {
-        regionalPricing: new RegionalPricingService(supabaseClients.serviceRoleClient, stripeGateway, {
-          secret: config.billing.quoteSecret ?? null, productId: config.billing.productId ?? null,
-          productIds: { weekly: config.billing.weeklyProductId ?? null, monthly: config.billing.monthlyProductId ?? null, annual: config.billing.annualProductId ?? null },
-          prices: marketPrices,
-          portals: { GLOBAL: config.billing.usdPortalConfigurationId ?? null, TR: config.billing.tryPortalConfigurationId ?? null },
-          historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
-        }),
+        regionalPricing,
         provider: config.billing.provider,
         requireSubscription: config.billing.requireSubscription ?? true,
         checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
@@ -290,7 +300,8 @@ export const buildDefaultServices = (
         portalReturnUrl: config.billing.portalReturnUrl,
         stripeWebhookSecret: config.billing.stripeWebhookSecret,
         trialPeriodDays: config.billing.trialPeriodDays,
-        monetization: monetizationRepository
+        monetization: monetizationRepository,
+        promotions: promotionsService
       }
     );
 
@@ -425,6 +436,8 @@ export const buildDefaultServices = (
     monetizationBackfillService: stripeGateway
       ? new MonetizationBackfillService(supabaseClients.serviceRoleClient, stripeGateway, billingService, monetizationRefreshService, logger)
       : undefined,
-    funnelEventsService: new FunnelEventsService(supabaseClients.serviceRoleClient, logger)
+    funnelEventsService: new FunnelEventsService(supabaseClients.serviceRoleClient, logger),
+    marketingService: new MarketingService(supabaseClients.serviceRoleClient, logger),
+    promotionsService
   };
 };

@@ -1,0 +1,16 @@
+{
+  "slug": "flash50-2026-11",
+  "name": "Flash sale: 50% off the first month of monthly Pro",
+  "percent_off": 50,
+  "plan_codes": ["monthly"],
+  "duration": "once",
+  "replaces_trial": true,
+  "audience": "non_paying",
+  "site_url": "https://jobspecificcv.com",
+  "utm": { "source": "email", "medium": "promo", "campaign": "flash50-2026-11" },
+  "cohorts": [
+    { "key": "A", "label": "10:00 Istanbul", "starts_at": "2026-11-04T07:00:00Z", "ends_at": "2026-11-05T07:00:00Z" },
+    { "key": "B", "label": "18:00 Istanbul", "starts_at": "2026-11-04T15:00:00Z", "ends_at": "2026-11-05T15:00:00Z" }
+  ],
+  "assignment": { "strategy": "random_stratified", "stratify_by": ["locale"], "seed": "flash50-2026-11" }
+}

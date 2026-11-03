@@ -1,0 +1,38 @@
+{
+  "promotion_slug": "flash50-2026-11",
+  "generated_by": "promotions/_templates/render.mjs",
+  "placeholders": [
+    "{{first_name}}",
+    "{{offer_url}}",
+    "{{unsubscribe_url}}",
+    "{{ends_at_display}}"
+  ],
+  "locales": {
+    "en": {
+      "html": "email.en.html",
+      "txt": "email.en.txt",
+      "subject": "50% off your first month of Pro, 24h only",
+      "preheader": "Tailored CVs, unlimited PDF & DOCX downloads and AI tools at half price. Cancel anytime.",
+      "greeting_with_name": "Hi {{first_name}},",
+      "greeting_fallback": "Hi there,",
+      "ends_at_display": {
+        "A": "Thursday, Nov 5 at 10:00 Istanbul time (07:00 UTC)",
+        "B": "Thursday, Nov 5 at 18:00 Istanbul time (15:00 UTC)"
+      },
+      "image_url": "https://jobspecificcv.com/images/email/celebrate.png"
+    },
+    "tr": {
+      "html": "email.tr.html",
+      "txt": "email.tr.txt",
+      "subject": "Pro’da ilk aya %50 indirim, sadece 24 saat",
+      "preheader": "İlana uygun CV’ler, sınırsız PDF ve DOCX indirme, yapay zekâ araçları: hepsi yarı fiyatına. İstediğiniz zaman iptal edin.",
+      "greeting_with_name": "Merhaba {{first_name}},",
+      "greeting_fallback": "Merhaba,",
+      "ends_at_display": {
+        "A": "5 Kasım Perşembe, 10:00 (İstanbul saati)",
+        "B": "5 Kasım Perşembe, 18:00 (İstanbul saati)"
+      },
+      "image_url": "https://jobspecificcv.com/images/email/celebrate.png"
+    }
+  }
+}

@@ -18,7 +18,8 @@
     "stripe:regional-portals": "tsx scripts/configure-regional-portals.ts",
     "test:privacy-sql": "bash scripts/verify-privacy-sql.sh",
     "privacy:check": "tsx scripts/check-privacy-readiness.ts",
-    "languages:import": "tsx scripts/import-cv-languages.ts"
+    "languages:import": "tsx scripts/import-cv-languages.ts",
+    "promotion:setup": "tsx scripts/promotions/setup-campaign.ts"
   },
   "engines": {
     "node": ">=20.0.0"

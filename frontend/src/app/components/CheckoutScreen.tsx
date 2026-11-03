@@ -5,6 +5,7 @@ import type { CheckoutTarget } from "../../content/pricing";
 import type { BillingPlanResponseData } from "../integration/api-types";
 import { checkoutKey, planDate, trialEndDate, welcomeContinueLabel, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
 import { formatMoney, type useRegionalPricing } from "../integration/regional-pricing";
+import type { PromotionPlanPrice } from "../integration/promotion-offer";
 import type { CheckoutSource } from "../integration/subscription-flow";
 import { localeCode, translate as t } from "../localization/i18n";
 import { PricingAvailability } from "./PricingAvailability";
@@ -116,9 +117,13 @@ interface CheckoutScreenProps {
   plansPath: string;
   onCheckout: (choice: CheckoutChoice) => void;
   onPortal: () => void;
+  /** Signs out so the emailed account can sign in (offer linked to another account). */
+  onSwitchAccount?: () => void;
+  /** The active emailed offer's first-month price for the offered plan. */
+  promotion?: PromotionPlanPrice | null;
 }
 
-export function CheckoutScreen({ screen, outcome, regional, eligibility, opening, error, plansPath, onCheckout, onPortal }: CheckoutScreenProps) {
+export function CheckoutScreen({ screen, outcome, regional, eligibility, opening, error, plansPath, onCheckout, onPortal, onSwitchAccount, promotion = null }: CheckoutScreenProps) {
   const prices = regional.prices;
   const amount = (plan: CheckoutTarget) => prices?.plans.find(item => item.code === plan)?.amount;
   const money = (value: number | undefined) => prices && value !== undefined ? formatMoney(value, prices.currency) : "—";
@@ -127,6 +132,8 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
   const endDate = trialEndDate(trialDays && trialDays > 0 ? trialDays : 3, localeCode());
   const renewal = weekly !== undefined ? money(weekly) : null;
   const trialOffer = screen.offer === "trial";
+  const discount = screen.offer === "plan" && promotion?.code === screen.offerPlan ? promotion : null;
+  const promoMoney = (value: number) => discount ? formatMoney(value, discount.currency) : "—";
   // "₺0" / "$0" rather than "₺0,00".
   const zero = prices ? new Intl.NumberFormat(localeCode(), { style: "currency", currency: prices.currency.toUpperCase(), currencyDisplay: "narrowSymbol", maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(0) : "—";
   const label = (action: CheckoutAction) => action.kind === "checkout"
@@ -135,6 +142,7 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
   const renderAction = (action: CheckoutAction, className: string) => {
     const arrow = className.endsWith("primary") && <ArrowRight size={16} aria-hidden="true" />;
     if (action.kind === "pricing") return <Link className={className} to={plansPath}>{label(action)}{arrow}</Link>;
+    if (action.kind === "switch_account") return <button className={className} type="button" disabled={opening !== null} onClick={onSwitchAccount}>{label(action)}{arrow}</button>;
     const busy = opening === (action.kind === "portal" ? "portal" : checkoutKey(action));
     const disabled = opening !== null || (action.kind === "checkout" && (!regional.ready || eligibility === null || (action.withTrial && eligibility !== true)));
     return <button className={className} type="button" disabled={disabled}
@@ -170,17 +178,24 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
             <strong>{t("Pro {{plan}}", { plan: t(PLAN_NAME[screen.offerPlan]) })}</strong>
             <p>{t("Unlimited CVs, exports and AI tools.")}</p>
           </div>
-          <div className="checkout-screen-price">
-            <strong>{money(amount(screen.offerPlan))}</strong>
-            <span>{t(BILLED[screen.offerPlan])}</span>
-          </div>
+          {discount
+            ? <div className="checkout-screen-price checkout-screen-price-promo">
+              <span className="checkout-screen-price-was"><span className="sr-only">{t("Regular price:")}{" "}</span><s>{promoMoney(discount.amount)}</s></span>
+              <strong><span className="sr-only">{t("First month:")}{" "}</span>{promoMoney(discount.discounted_amount)}</strong>
+              <span>{t("first month")}</span>
+            </div>
+            : <div className="checkout-screen-price">
+              <strong>{money(amount(screen.offerPlan))}</strong>
+              <span>{t(BILLED[screen.offerPlan])}</span>
+            </div>}
         </div>}
       <CancelAnytime trial={trialOffer} endDate={endDate} />
       {actions}
       <p className="checkout-screen-terms">{trialOffer
         ? weekly !== undefined ? t("Card required to start. After 3 days, {{amount}} is billed weekly until you cancel.", { amount: money(weekly) })
           : t("Credit card required. Renewal terms will be shown before you activate your trial.")
-        : t("Your plan renews automatically at the price shown until you cancel.")}</p>
+        : discount ? t("{{percent}}% off your first month, charged today. Then {{price}}/month until you cancel.", { percent: discount.percent_off, price: promoMoney(discount.amount) })
+          : t("Your plan renews automatically at the price shown until you cancel.")}</p>
       <StripeTrust />
       <section className="checkout-screen-unlocks" aria-labelledby="checkout-unlocks-title">
         <h2 id="checkout-unlocks-title">{t("What you unlock")}</h2>

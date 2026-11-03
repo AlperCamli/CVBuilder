@@ -39,6 +39,8 @@ export interface CheckoutAttemptRow {
   trial_applied: boolean;
   checkout_session_id: string | null;
   outcome: CheckoutOutcome;
+  // Only set for promotional checkouts, so other inserts never name the column.
+  promotion_id?: string;
 }
 
 export interface EntitlementDenial {

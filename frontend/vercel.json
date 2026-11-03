@@ -113,6 +113,24 @@
       ]
     },
     {
+      "source": "/unsubscribe",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/tr/unsubscribe",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
       "source": "/auth/:path*",
       "headers": [
         {
@@ -136,7 +154,8 @@
     "entrypoint": "proxy.ts",
     "matcher": [
       "/api/v1/billing/prices",
-      "/api/v1/billing/checkout"
+      "/api/v1/billing/checkout",
+      "/api/v1/promotions/offer"
     ]
   }
 }

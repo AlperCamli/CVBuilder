@@ -78,6 +78,8 @@ export interface CreateStripeCheckoutInput {
   expires_at?: number;
   /** Shown next to Stripe's submit button. */
   submit_message?: string;
+  /** Coupons applied to the session (promotional checkout). */
+  discounts?: Array<{ coupon: string }>;
 }
 
 export type StripePortalFlow = { type: "subscription_cancel"; subscription_id: string } | { type: "payment_method_update" };
@@ -390,6 +392,7 @@ export class StripeBillingGateway implements StripeGateway {
         metadata: input.metadata
       };
       if (input.submit_message) baseParams.custom_text = { submit: { message: input.submit_message.slice(0, 1200) } };
+      if (input.discounts?.length) baseParams.discounts = input.discounts;
 
       if (mode === "subscription") {
         baseParams.payment_method_collection = "always";

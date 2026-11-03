@@ -1,0 +1,38 @@
+jobspecificCV
+
+SADECE 24 SAAT
+Pro’nun ilk ayı %50 indirimli
+
+İş aramanız için tüm Pro araçları, ilk ay yarı fiyatına. Hemen başlayın,
+istediğiniz zaman iptal edin.
+
+Merhaba {{first_name}},
+
+Önümüzdeki 24 saat boyunca aylık Pro’nun ilk ayı yarı fiyatına. Her
+başvurunuza, o ilana göre hazırlanmış bir CV ile gidin.
+
+%50 indirimle Pro’ya geçin:
+{{offer_url}}
+
+Kampanya bitişi: {{ends_at_display}}
+
+Pro ile neler açılıyor
+- CV’nizi her işe göre uyarlayın: İş ilanını yapıştırın, yaklaşık 2
+  dakikada ilana uygun bir CV alın.
+- Sınırsız PDF ve DOCX indirme: Oluşturduğunuz her sürümü indirin.
+- Yapay zekâ iyileştirmeleri ve ön yazılar: Herhangi bir bölümü tek
+  tıkla yeniden yazın, her başvuruya özel ön yazı hazırlayın.
+
+Aylık Pro’nun ilk ayında %50 indirim; ödeme abone olduğunuzda alınır.
+Sonraki aylarda normal aylık fiyat uygulanır, istediğiniz zaman iptal
+edebilirsiniz. Ödemeden önce net fiyatı görürsünüz. Bu kampanya 3 günlük
+ücretsiz denemenin yerine geçer; haftalık ve yıllık planlarda geçerli
+değildir. Kampanya bitişi: {{ends_at_display}}.
+
+JobSpecificCV ekibi
+
+--
+Bu e-postayı JobSpecificCV hesabınız olduğu için alıyorsunuz.
+Bu tür kampanya e-postalarını almak istemiyor musunuz? Abonelikten çıkın: {{unsubscribe_url}}
+Tuzla, İstanbul, Türkiye · contact@jobspecificcv.com
+JobSpecificCV · https://jobspecificcv.com

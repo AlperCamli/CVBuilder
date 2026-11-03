@@ -43,6 +43,8 @@ import { GUIDED_JOURNEY_FAQ_ITEMS } from "../../../content/seo-meta.mjs";
 import { TemplateShowcase } from "./TemplateShowcase";
 import { CompanyCarousel } from "./CompanyCarousel";
 import { useRegionalPricing } from "../../integration/regional-pricing";
+import { usePromotionOffer } from "../../integration/promotion-offer";
+import { PromotionBanner } from "../../components/PromotionBanner";
 import "./round-two.css";
 import "./guided-journey.css";
 
@@ -67,6 +69,8 @@ export default function GuidedJourney({
 }) {
   useTranslation();
   const regional = useRegionalPricing();
+  // Emailed ?promo= offers apply on the public pricing page (not the design review copies).
+  const promo = usePromotionOffer(pricing && !review);
   const mascotConfig = settings?.config ?? DEFAULT_MASCOT_CONFIG;
   const pinned = settings?.pinned ?? null;
   const inspect = settings?.inspect ?? false;
@@ -170,6 +174,7 @@ export default function GuidedJourney({
           </Link>
         </div>
       )}
+      {pricing && !review && <PromotionBanner promo={promo} layout="band" />}
       <header className="cv-header cv-wrap">
         <Link to={BASE || "/"} className="cv-wordmark">
           <span className="cv-brand-icon">
@@ -332,6 +337,7 @@ export default function GuidedJourney({
             guided={{
               pricingPath: `${BASE}/pricing`,
             }}
+            promotion={pricing && !review ? promo : undefined}
           />
         </section>
         {pricing && (
