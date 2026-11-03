@@ -16,6 +16,17 @@ describe("checkout screens", () => {
     }
   });
 
+  it("keeps the emailed discount first after a cancel, with the trial below it only when eligible", () => {
+    const eligible = checkoutScreen({ outcome: "cancel", plan: "monthly", trial: false, eligibility: true, promotion: true });
+    expect(eligible.title).toBe("Your discount is still waiting.");
+    expect(eligible.primary).toEqual({ kind: "checkout", plan: "monthly", withTrial: false, label: "Claim my discount" });
+    expect(eligible.secondary).toEqual({ kind: "checkout", plan: "weekly", withTrial: true, label: "Try for free" });
+
+    const used = checkoutScreen({ outcome: "cancel", plan: "monthly", trial: false, eligibility: false, promotion: true });
+    expect(used.primary).toEqual(expect.objectContaining({ plan: "monthly", withTrial: false }));
+    expect(used.secondary).toEqual(expect.objectContaining({ kind: "pricing" }));
+  });
+
   it("speaks to someone who just backed out of the trial instead of pitching it again", () => {
     const screen = checkoutScreen({ outcome: "cancel", plan: "weekly", trial: true, eligibility: true });
     expect(screen.title).toBe("Your free trial is still waiting.");

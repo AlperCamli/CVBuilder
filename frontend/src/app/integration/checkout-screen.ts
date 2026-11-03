@@ -140,6 +140,15 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
           lead: source ? TRIAL_HEADLINE[source].lead : "Your CV and selected next step are saved. We will take you back automatically after activation.",
           offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS };
   }
+  if (outcome === "cancel" && promotion) {
+    // Back from Stripe with the offer still on: the discount stays first, the trial is the way to try before paying.
+    return { mascot: "guide", eyebrow: "YOUR OFFER IS STILL ON", title: "Your discount is still waiting.",
+      lead: eligibility === true
+        ? "Your discounted first month is saved. Not ready to pay? Try Pro free for 3 days instead. Cancel before it ends and you pay nothing."
+        : "Your discounted first month is saved. You can pick it up now or explore the Pro plans.",
+      offer: "plan", offerPlan: plan, primary: paid("Claim my discount"),
+      secondary: eligibility === true ? { ...START_TRIAL, label: "Try for free" } : SEE_PLANS };
+  }
   if (outcome === "cancel") {
     return eligibility === true && !promotion
       ? { mascot: "guide", eyebrow: "GIVE PRO A TRY", title: "Why don’t you try the free trial first?",
