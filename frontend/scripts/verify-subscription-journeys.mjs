@@ -112,7 +112,7 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
       if (path === `/imports/${importId}/result`) return void await respond({ status: "parsed", parsed_content: content, review, module_type: "standard" });
       if (path === `/imports/${importId}`) return void await respond({ id: importId, target_master_cv: masterCreated ? { id: cvId } : null });
       if (path === `/imports/${importId}/create-master-cv`) { assert(active, "created CV before activation"); masterCreated = true; return void await respond({ master_cv: master }); }
-      if (path === "/master-cvs" && req.method() === "POST") { assert(active, "created blank CV before activation"); master.source_type = "scratch"; masterCreated = true; return void await respond(master); }
+      if (path === "/master-cvs" && req.method() === "POST") { master.source_type = "scratch"; masterCreated = true; return void await respond(master); }
       if ((path === `/master-cvs/${cvId}/content` || path === `/tailored-cvs/${cvId}/content`) && req.method() === "PUT") {
         assert(active || transition); master.current_content = body.current_content; master.updated_at = new Date().toISOString();
         return void await respond(savedTailored ? { ...master, master_cv_id: cvId, job: null } : master);
@@ -397,16 +397,14 @@ try {
       assert.equal(await f.page.evaluate(() => JSON.parse(localStorage.getItem("cv-builder:onboarding-template")).slug), "mosaic-columns-rose");
       await f.page.click(".ob-create-zone");
       for (let question = 1; question <= 4; question++) { await waitText(f.page, `${question} of 4 ·`); await clickText(f.page, "Skip"); }
-      await clickText(f.page, "See my CV score");
-      await waitText(f.page, "Not scored yet.");
-      assert.equal(f.requests.filter(row => row.path === "/master-cvs" && row.method === "POST").length, 0);
-      await clickText(f.page, "Continue to CV editor"); await clickText(f.page, "Start 3-day free trial"); await waitText(f.page, "Test payment details"); await clickText(f.page, "Activate subscription");
+      // A blank CV has nothing to score: the account opens it in the editor straight away.
+      await clickText(f.page, "Open CV editor");
       await f.page.waitForFunction(path => location.pathname === path, {}, `/app/cv/${f.cvId}`);
       assert.equal(f.master.template_id, f.templateId);
       assert.equal(f.requests.filter(row => row.path === "/master-cvs" && row.method === "POST").length, 1);
       await f.page.setViewport({ width: 390, height: 844 });
       await f.page.screenshot({ path: new URL("scratch-editor-mobile.png", output).pathname, fullPage: true });
-      console.log("PASS Make It Yours -> create -> four questions -> honest score -> trial -> selected template");
+      console.log("PASS Make It Yours -> create -> four questions -> editor -> selected template");
     } finally { await f.close(); }
   }
   {

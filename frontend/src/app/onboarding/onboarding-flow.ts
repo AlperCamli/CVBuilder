@@ -52,7 +52,7 @@ export function scoreTone(score: number) {
 
 /** The score page with ?action=, where checkout returns to resume a free account's next step. */
 export function scoreResumePath(options: {
-  source: "scratch" | "guest" | "upload";
+  source: "guest" | "upload";
   action: "editor" | "tailor" | "improve";
   language?: string;
   importId?: string;

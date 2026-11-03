@@ -6,13 +6,13 @@ Implemented 24 October 2026. This implements Tasks 3.1–3.4 and supersedes the 
 
 Public Start Free Trial buttons enter `/onboarding`. Users upload an existing PDF/DOCX or create a new CV, complete/skip the four questions, and create or sign into their account. Email verification and Google OAuth preserve the onboarding handoff.
 
-Uploaded CVs are claimed by the authenticated account and reviewed on `/app/cv-score?source=guest&import=…`. A new, blank CV reaches `/app/cv-score?source=scratch`; it says “Not scored yet” rather than inventing a score.
+Uploaded CVs are claimed by the authenticated account and reviewed on `/app/cv-score?source=guest&import=…`. A new, blank CV has nothing to score, so it skips the score page: the signup CTA reads “Create account & open CV editor”, and `/app/onboarding` creates the blank CV, applies any selected template and opens `/app/cv/:id`. Older `/app/cv-score?source=scratch` links redirect to that handoff.
 
 The score page retains Continue to CV editor, Customize for a job, and Improve with AI. Before executing an action it checks the backend subscription state. An inactive account enters `/app/checkout` with the selected action, source, import and language encoded in a validated internal return destination. The checkout screen explains the 3-day trial, card requirement, regional Weekly renewal price and cancellation terms, then opens hosted Stripe Checkout.
 
 Stripe returns to `/app/checkout?checkout=success&session_id=…`. The client asks the backend to confirm that session. The backend retrieves it from Stripe, verifies session/subscription ownership, completion/payment status and active/trialing state, and synchronizes the subscription. Only then does the client return to the saved score action and execute it. Refresh retains the action and import context.
 
-A blank CV is created only after activation. Editor opens the blank document; Customize opens its job form; Improve opens the editor with guidance to add experience before requesting AI improvements. Actual AI operations retain their consent checks.
+A blank CV is created at signup, without activation, because the editor is free; tailoring and AI improvements are offered from the editor. Actual AI operations retain their consent checks.
 
 ## Direct Pro purchase
 

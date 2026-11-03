@@ -4,7 +4,7 @@ import { personalizedGuidance } from "../onboarding/pre-signup-questions";
 import { isImageBasedReview, scoreResumePath } from "../onboarding/onboarding-flow";
 import { AtsImageWarning, ImageBasedActions } from "../components/AtsImageWarning";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useLocation, useSearchParams } from "react-router";
+import { Navigate, useNavigate, useLocation, useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, Loader2, FileText } from "lucide-react";
 import { CvReviewPanel } from "../components/CvReviewPanel";
 import { scrollContainerOf } from "../components/score-page/scroll-container";
@@ -21,7 +21,6 @@ import {
 } from "../integration/analytics";
 
 import { applyOnboardingTemplate, hasAppAccess, readOnboardingTemplate, clearOnboardingTemplate, onboardingTemplateName } from "../integration/subscription-flow";
-import { completeNewCvOnboarding, readNewCvOnboarding, clearNewCvOnboarding } from "../integration/new-cv-onboarding";
 
 export function CVScore() {
   useTranslation();
@@ -30,8 +29,8 @@ export function CVScore() {
   const { api, me } = useAuth();
   const [params] = useSearchParams();
   const fromGuest = params.get("source") === "guest";
+  // Blank CVs now open the editor straight after signup; older links finish that handoff.
   const scratch = params.get("source") === "scratch";
-  const [newCv] = useState(readNewCvOnboarding);
   const resumed = useRef(false);
   const [selectedTemplate, setSelectedTemplate] = useState(readOnboardingTemplate);
   const { completeStep } = useOnboarding();
@@ -49,7 +48,7 @@ export function CVScore() {
   const actionsRef = useRef<HTMLDivElement>(null);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cvLanguage, setCvLanguage] = useState<string>(params.get("language") ?? (scratch ? newCv?.language ?? "" : ""));
+  const [cvLanguage, setCvLanguage] = useState<string>(params.get("language") ?? "");
   const [parsedContent, setParsedContent] = useState<CvContent | null>(null);
   const [moduleType, setModuleType] = useState<string | undefined>(
     location.state?.moduleType as string | undefined,
@@ -61,7 +60,7 @@ export function CVScore() {
   useEffect(() => { scrollContainerOf(rootRef.current).scrollTo({ top: 0, behavior: "instant" }); }, []);
 
   useEffect(() => {
-    if (scratch) { setLoading(false); return; }
+    if (scratch) return;
     if (!importId) {
       navigate("/app/create", { replace: true });
       return;
@@ -118,6 +117,7 @@ export function CVScore() {
 
   const scoreViewTracked = useRef(false);
   useEffect(() => {
+    if (scratch) return;
     trackOnboardingStepView({
       step: "cv_score",
       source: "upload_processing",
@@ -126,7 +126,7 @@ export function CVScore() {
       scoreViewTracked.current = true;
       trackFunnelEvent("score_view");
     }
-  }, []);
+  }, [scratch]);
 
   useEffect(() => {
     let active = true;
@@ -140,7 +140,7 @@ export function CVScore() {
   const handleAction = useCallback(async (action: NextAction, resumed = false) => {
     if (converting) return;
     if (!cvLanguage) { setError(t("Choose CV language")); return; }
-    if (!scratch && (!parsedContent || !importId)) return;
+    if (!parsedContent || !importId) return;
     if (!resumed) trackFunnelEvent("score_action", action);
     setConverting(true); setError(null);
     try {
@@ -148,19 +148,10 @@ export function CVScore() {
       const fullAccess = hasAppAccess(billing);
       const freeAllowed = action === "editor"
         || (action === "tailor" && billing.free_tier?.tailoring_available === true)
-        || (action === "improve" && (scratch || billing.free_tier?.improve_available === true));
-      const resumePath = scoreResumePath({ source: scratch ? "scratch" : fromGuest ? "guest" : "upload", action, language: cvLanguage, importId });
+        || (action === "improve" && billing.free_tier?.improve_available === true);
+      const resumePath = scoreResumePath({ source: fromGuest ? "guest" : "upload", action, language: cvLanguage, importId });
       if (!fullAccess && !freeAllowed) {
         showTrialPrompt(action === "tailor" ? "tailoring" : "ai", { returnPath: resumePath });
-        return;
-      }
-      if (scratch) {
-        if (!newCv || !me?.user.id) throw new Error(t("Your new CV setup has expired. Please start again."));
-        const id = await completeNewCvOnboarding(newCv, me.user.id, api);
-        await applyOnboardingTemplate(api, id);
-        completeStep("create_cv");
-        clearNewCvOnboarding();
-        navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { masterCvId: id, onboardingAction: action } });
         return;
       }
       if (action === "improve") {
@@ -180,7 +171,7 @@ export function CVScore() {
       navigate(action === "tailor" ? `/app/tailor/${id}` : `/app/cv/${id}`, { state: { cvKind: "master", masterCvId: id, isUploaded: !(imageBased && !recoveredText) } });
     } catch (err) { setError(err instanceof Error ? err.message : t("Couldn't open your CV. Please try again.")); }
     finally { setConverting(false); }
-  }, [api, converting, cvLanguage, parsedContent, importId, scratch, fromGuest, newCv, me?.user.id, navigate, completeStep, improvements, moduleType, showTrialPrompt, imageBased, recoveredText]);
+  }, [api, converting, cvLanguage, parsedContent, importId, fromGuest, navigate, completeStep, improvements, moduleType, showTrialPrompt, imageBased, recoveredText]);
   const handleImproveWithAI = () => { void handleAction("improve"); };
   const handleCustomizeForJob = () => { void handleAction("tailor"); };
   const handleReviewInEditor = () => { void handleAction("editor"); };
@@ -191,7 +182,7 @@ export function CVScore() {
     void handleAction(resumeAction as NextAction, true);
   }, [loading, cvLanguage, resumeAction, handleAction]);
 
-  if (scratch && !newCv) return <div className="p-8"><p role="alert">{t("Your new CV setup has expired. Please start again.")}</p><Link className="underline" to="/onboarding">{t("Create a new CV")}</Link></div>;
+  if (scratch) return <Navigate to="/app/onboarding" replace />;
 
   if (loading) {
     return (
@@ -239,7 +230,7 @@ export function CVScore() {
               {t("Your CV Score")}</h1>
             <p className="sp-file-chip">
               <FileText size={14} aria-hidden="true" />
-              <span>{t("Based on")}</span>{" "}<strong>{scratch ? t("Your new CV") : fileName || t("uploaded file")}</strong>
+              <span>{t("Based on")}</span>{" "}<strong>{fileName || t("uploaded file")}</strong>
             </p>
             <p className="mt-2 text-xs" style={{ color: "var(--color-text-secondary)" }}>{t("This score is guidance and does not guarantee employment outcomes.")}</p>
           </div>
@@ -266,7 +257,7 @@ export function CVScore() {
             </div>
           )}
 
-          {!scratch && imageBased && (
+          {imageBased && (
             <AtsImageWarning
               className="mb-6"
               note={recoveredText ? t("We recovered your text with OCR, so you can start from it in the editor.") : t("We couldn't recover any text, so you'll start from a clean CV.")}
@@ -274,7 +265,7 @@ export function CVScore() {
           )}
 
           <div className="mb-6">
-            {scratch ? <p role="status">{t("Not scored yet. Your CV is new. Choose your next step, then add your experience to receive useful AI feedback.")}</p> : review ? (
+            {review ? (
               <CvReviewPanel review={review} reveal={{ key: importId, simple: imageBased, actionsRef }} />
             ) : (
               <p role="status" style={{ color: "var(--color-text-secondary)" }}>
@@ -282,7 +273,7 @@ export function CVScore() {
             )}
           </div>
 
-          {!scratch && parseNeedsManualReview ? (
+          {parseNeedsManualReview ? (
             <button
               type="button"
               onClick={() => navigate("/app/create")}
@@ -297,7 +288,7 @@ export function CVScore() {
 
           {freeAccount && <p className="mb-4 text-sm text-slate-600">{t("Your first tailored CV is free. Start a free trial to download it and unlock every AI feature.")}</p>}
           {selectedTemplate && <p className="mb-4 text-sm">{t("Selected template")}: {onboardingTemplateName(selectedTemplate)} <button className="underline" onClick={() => { clearOnboardingTemplate(); setSelectedTemplate(null); setError(null); }}>{t("Use default template")}</button></p>}
-          {!scratch && imageBased ? (
+          {imageBased ? (
             <ImageBasedActions
               recoveredText={recoveredText}
               converting={converting}
@@ -309,11 +300,11 @@ export function CVScore() {
             />
           ) : (
           <div className="space-y-3" ref={actionsRef}>
-            {(fromGuest || scratch) && (
+            {fromGuest && (
               <button
                 data-reveal-primary=""
                 onClick={handleReviewInEditor}
-                disabled={converting || (!scratch && !parsedContent)}
+                disabled={converting || !parsedContent}
                 className="w-full px-6 py-3 rounded-lg font-medium inline-flex items-center justify-center gap-2"
                 style={{
                   background: "var(--color-teal-600)",
@@ -331,7 +322,7 @@ export function CVScore() {
             <button
               data-reveal-primary={fromGuest ? undefined : ""}
               onClick={handleCustomizeForJob}
-              disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
+              disabled={converting || !parsedContent || parseNeedsManualReview}
               className="w-full px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all hover:shadow-md"
               style={{
                 background: fromGuest ? "transparent" : "var(--color-teal-600)",
@@ -340,7 +331,7 @@ export function CVScore() {
                   ? "1px solid var(--color-border-tertiary)"
                   : undefined,
                 fontSize: "14px",
-                opacity: converting || (!scratch && parseNeedsManualReview) ? 0.7 : 1,
+                opacity: converting || parseNeedsManualReview ? 0.7 : 1,
               }}
             >
               {converting ? (
@@ -353,7 +344,7 @@ export function CVScore() {
 
             <button
               onClick={handleImproveWithAI}
-              disabled={converting || (!scratch && (!parsedContent || parseNeedsManualReview))}
+              disabled={converting || !parsedContent || parseNeedsManualReview}
               className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
               style={{
                 background: "transparent",
@@ -366,10 +357,10 @@ export function CVScore() {
               <Sparkles size={16} />
               {t("Improve with AI")}</button>
 
-            {!fromGuest && !scratch && (
+            {!fromGuest && (
               <button
                 onClick={handleReviewInEditor}
-                disabled={converting || (!scratch && !parsedContent)}
+                disabled={converting || !parsedContent}
                 className="w-full px-6 py-3 rounded-lg font-medium transition-all hover:bg-[var(--color-background-secondary)] inline-flex items-center justify-center gap-2"
                 style={{
                   background: "transparent",

@@ -32,7 +32,7 @@ describe("score page resume path", () => {
   it("returns checkout to the score page with the action to resume", () => {
     expect(scoreResumePath({ source: "upload", action: "improve", language: "tr", importId: "imp-1" }))
       .toBe("/app/cv-score?source=upload&action=improve&language=tr&import=imp-1");
-    expect(scoreResumePath({ source: "scratch", action: "tailor" })).toBe("/app/cv-score?source=scratch&action=tailor");
+    expect(scoreResumePath({ source: "guest", action: "tailor" })).toBe("/app/cv-score?source=guest&action=tailor");
   });
 });
 

@@ -1,7 +1,7 @@
 import { translate as t } from "../localization/i18n";
 import { useTranslation } from "react-i18next";
 import { ApiClientError } from "../integration/api-error";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { CV_START_PATH } from "../design-tools";
 import { needsEntryOnboarding } from "../integration/entry-onboarding";
@@ -15,32 +15,47 @@ import {
 } from "../integration/guest-import";
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
-import { saveNewCvOnboarding, readNewCvOnboarding } from "../integration/new-cv-onboarding";
+import { saveNewCvOnboarding, readNewCvOnboarding, completeNewCvOnboarding, clearNewCvOnboarding } from "../integration/new-cv-onboarding";
+import { applyOnboardingTemplate, clearOnboardingTemplate } from "../integration/subscription-flow";
 import { syncBrowserChoice } from "../integration/privacy";
+import { useOnboarding } from "../contexts/OnboardingContext";
 
 export function OnboardingResume() {
   useTranslation();
   const navigate = useNavigate();
   const { refreshMe, me, api } = useAuth();
+  const { completeStep } = useOnboarding();
   const [guest] = useState(readGuestUpload);
   const [newCv] = useState(readNewCvOnboarding);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  // The draft is cleared on handoff; a later replay must not re-save it and create a second CV.
+  const handedOff = useRef(false);
   useEffect(() => {
-    if (!newCv || !me?.user.id) return;
+    if (!newCv || !me?.user.id || handedOff.current) return;
     let cancelled = false;
     setError(null);
     if (newCv.accountId && newCv.accountId !== me.user.id) { setError(t("This CV setup belongs to another account. Please start again.")); return; }
-    saveNewCvOnboarding({ ...newCv, accountId: me.user.id });
+    // Keep a masterCvId saved by an earlier replay so a retry opens the same CV.
+    saveNewCvOnboarding({ ...(readNewCvOnboarding() ?? newCv), accountId: me.user.id });
     // Sync the visitor's analytics choice first so the signup count applies their consent.
     void syncBrowserChoice().catch(() => undefined)
       .then(() => api.patchOnboardingAnswers(newCv.answers, { path: "manual_create" }))
       // The save marks onboarding complete; refresh so the entry gate lets the account through.
-      .then(() => refreshMe()).then(() => {
-      if (!cancelled) navigate("/app/cv-score?source=scratch", { replace: true });
-    }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again.")); });
+      .then(() => refreshMe())
+      // A new CV has nothing to score: create it and open the editor, which free accounts can use.
+      .then(() => completeNewCvOnboarding(newCv, me.user.id, api))
+      .then(async id => {
+        // A template that is no longer available must not block a blank CV; the editor can change it.
+        await applyOnboardingTemplate(api, id).catch(() => clearOnboardingTemplate());
+        if (cancelled) return;
+        handedOff.current = true;
+        completeStep("create_cv");
+        clearNewCvOnboarding();
+        navigate(`/app/cv/${id}`, { replace: true, state: { masterCvId: id, onboardingAction: "editor" } });
+      }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t("We couldn't save your CV. Please try again.")); });
     return () => { cancelled = true; };
-  }, [newCv, me?.user.id, api, navigate, refreshMe, retry]);
+  }, [newCv, me?.user.id, api, navigate, refreshMe, completeStep, retry]);
   useEffect(() => {
     if (!guest || newCv) return;
     let cancelled = false;

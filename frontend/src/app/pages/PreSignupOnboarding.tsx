@@ -827,7 +827,7 @@ function OnboardingFlow() {
                     disabled={busy}
                     onClick={() => void continueWithAccount()}
                   >
-                    {imageReview ? t("Build an ATS-friendly CV") : scoredReview ? t("Improve my CV") : t("See my CV score")}{" "}<ArrowRight size={17} />
+                    {newCv ? t("Open CV editor") : imageReview ? t("Build an ATS-friendly CV") : scoredReview ? t("Improve my CV") : t("See my CV score")}{" "}<ArrowRight size={17} />
                   </button>
                 ) : emailSent ? (
                   <div className="ob-email-sent">
@@ -941,7 +941,7 @@ function OnboardingFlow() {
                           <Loader2 size={17} className="animate-spin" />
                         ) : (
                           <>
-                            {imageReview ? t("Create account & build an ATS-friendly CV") : scoredReview ? t("Create account & improve my CV") : t("Create account & see my score")}{" "}
+                            {newCv ? t("Create account & open CV editor") : imageReview ? t("Create account & build an ATS-friendly CV") : scoredReview ? t("Create account & improve my CV") : t("Create account & see my score")}{" "}
                             <ArrowRight size={17} />
                           </>
                         )}
