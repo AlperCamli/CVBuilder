@@ -1,0 +1,11 @@
+{
+  "channel": "cancel_flow",
+  "audience": "weekly",
+  "slug": "weekly-cancel-save50",
+  "name": "Cancel weekly offer: Monthly from the end of the paid week, first month 50% off",
+  "coupon_name": "50% off your first month",
+  "percent_off": 50,
+  "plan_codes": ["monthly"],
+  "duration": "once",
+  "site_url": "https://jobspecificcv.com"
+}

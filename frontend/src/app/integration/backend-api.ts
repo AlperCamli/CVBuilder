@@ -21,6 +21,9 @@ import type {
   AiSuggestionDetail,
   BlockRevisionListResponse,
   BillingPlanResponseData,
+  AcceptCancelOfferResponseData,
+  CancelOfferCheckoutResponseData,
+  CancelOfferResponseData,
   CreateCheckoutResponseData,
   CvContent,
   CoverLetterDetail,
@@ -317,8 +320,10 @@ export interface BillingCheckoutInput {
 
 export interface BillingPortalInput {
   return_url?: string;
-  // Opens the portal directly on trial/subscription cancellation or on the payment method.
-  flow?: "cancel" | "payment_method";
+  // Opens the portal directly on trial/subscription cancellation, the payment method, or Stripe's confirmation of an
+  // upgrade to plan_code (with the amount due today).
+  flow?: "cancel" | "payment_method" | "change_plan";
+  plan_code?: "weekly" | "monthly" | "annual";
 }
 
 export class BackendApi {
@@ -863,6 +868,31 @@ export class BackendApi {
 
   createBillingPortal(payload: BillingPortalInput = {}): Promise<CreatePortalResponseData> {
     return this.client.post<CreatePortalResponseData, BillingPortalInput>("/billing/portal", payload);
+  }
+
+  // The offer on the "Cancel trial" screen; the server resolves and prices it.
+  getCancelOffer(): Promise<CancelOfferResponseData> {
+    return this.client.get<CancelOfferResponseData>("/billing/cancel-offer");
+  }
+
+  // A paid plan's offer, applied in place with nothing charged now.
+  acceptCancelOffer(): Promise<AcceptCancelOfferResponseData> {
+    return this.client.post<AcceptCancelOfferResponseData>("/billing/cancel-offer/accept", {});
+  }
+
+  // A downgrade, waiting for the end of the paid period; nothing is refunded.
+  schedulePlanChange(planCode: "weekly" | "monthly" | "annual"): Promise<BillingPlanResponseData> {
+    return this.client.post<BillingPlanResponseData>("/billing/plan-change", { plan_code: planCode });
+  }
+
+  // Drops a waiting plan change and keeps the current plan.
+  keepCurrentPlan(): Promise<BillingPlanResponseData> {
+    return this.client.delete<BillingPlanResponseData>("/billing/plan-change");
+  }
+
+  // "Keep Pro": a paid Stripe Checkout for the discounted plan; the trial ends once it is paid.
+  createCancelOfferCheckout(payload: { success_url: string; cancel_url: string }): Promise<CancelOfferCheckoutResponseData> {
+    return this.client.post<CancelOfferCheckoutResponseData>("/billing/cancel-offer/checkout", payload);
   }
 
   // Tailoring v2 sessions (in-editor tailoring).

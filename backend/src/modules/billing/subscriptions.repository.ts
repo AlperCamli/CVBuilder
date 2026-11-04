@@ -26,6 +26,8 @@ export interface SubscriptionTrackingFields {
   unit_amount?: number | null;
   currency?: string | null;
   billing_interval?: string | null;
+  scheduled_plan_code?: string | null;
+  scheduled_change_at?: string | null;
   // Lets the history trigger attribute changes to the Stripe event and its time.
   last_provider_event_id?: string | null;
   last_provider_event_at?: string | null;
@@ -70,6 +72,8 @@ const toSubscriptionRecord = (row: Record<string, unknown>): SubscriptionRecord 
     current_period_start: (row.current_period_start as string | null) ?? null,
     current_period_end: (row.current_period_end as string | null) ?? null,
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
+    scheduled_plan_code: (row.scheduled_plan_code as string | null) ?? null,
+    scheduled_change_at: (row.scheduled_change_at as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at)
   };

@@ -94,6 +94,8 @@ const DashboardRoute = lazyRoute(() =>
   })),
 );
 const CheckoutRoute = lazyRoute(() => import("./routes/PrivateAppRoutes").then(({ CheckoutRoute }) => ({ default: CheckoutRoute })));
+const CancelSubscriptionRoute = lazyRoute(() => import("./routes/PrivateAppRoutes").then(({ CancelSubscriptionRoute }) => ({ default: CancelSubscriptionRoute })));
+const ChangePlanRoute = lazyRoute(() => import("./routes/PrivateAppRoutes").then(({ ChangePlanRoute }) => ({ default: ChangePlanRoute })));
 const CreateOrUploadRoute = lazyRoute(() =>
   import("./routes/PrivateAppRoutes").then(({ CreateOrUploadRoute }) => ({
     default: CreateOrUploadRoute,
@@ -307,6 +309,8 @@ export function RouteElements({
         />
         <Route path="pricing" element={lazyElement(PricingRoute)} />
         <Route path="profile" element={lazyElement(ProfileRoute)} />
+        <Route path="cancel" element={lazyElement(CancelSubscriptionRoute)} />
+        <Route path="change-plan" element={lazyElement(ChangePlanRoute)} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

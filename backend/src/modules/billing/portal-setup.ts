@@ -1,6 +1,11 @@
 import Stripe from "stripe";
 import type { BillingMarket, PurchasePlan } from "./regional-pricing";
 
+// Not in the stripe-node 16 types, but accepted by the API version the app uses (checked in test mode).
+const DOWNGRADES_AT_PERIOD_END = {
+  schedule_at_period_end: { conditions: [{ type: "decreasing_item_amount" }, { type: "shortening_interval" }] },
+} as unknown as Partial<Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionUpdate>;
+
 export interface PortalPlanPrice {
   plan: PurchasePlan;
   productId: string;
@@ -44,6 +49,8 @@ export function regionalPortalParameters(
         enabled: true,
         default_allowed_updates: ["price"],
         proration_behavior: "create_prorations",
+        // Downgrades wait for the end of the paid period (nothing refunded or credited); upgrades apply at once.
+        ...DOWNGRADES_AT_PERIOD_END,
         products: [...grouped].map(([product, allowedPrices]) => ({
           product,
           prices: allowedPrices,
@@ -76,3 +83,18 @@ export function portalAllowsCancellation(
 ): boolean {
   return configuration.features.subscription_cancel?.enabled === true;
 }
+
+// Downgrades made in the portal itself (Manage billing) wait for the end of the paid period.
+export function portalSchedulesDowngrades(
+  configuration: Pick<Stripe.BillingPortal.Configuration, "features">,
+): boolean {
+  if (!configuration.features.subscription_update.enabled) return true;
+  const conditions = (configuration.features.subscription_update as unknown as { schedule_at_period_end?: { conditions?: Array<{ type: string }> } })
+    .schedule_at_period_end?.conditions ?? [];
+  const types = new Set(conditions.map((condition) => condition.type));
+  return types.has("decreasing_item_amount") && types.has("shortening_interval");
+}
+
+export const scheduleDowngradesUpdate = (): Stripe.BillingPortal.ConfigurationUpdateParams => ({
+  features: { subscription_update: DOWNGRADES_AT_PERIOD_END as Stripe.BillingPortal.ConfigurationUpdateParams.Features.SubscriptionUpdate },
+});

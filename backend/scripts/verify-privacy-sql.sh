@@ -71,4 +71,5 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/analytics-visitor-funnel.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/trial-reminder-queue.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/promotion-email-queue.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cancel-flow-offers.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cv-score-improvements.sql"

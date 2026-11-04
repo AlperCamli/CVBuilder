@@ -21,7 +21,8 @@ There is one row per account, built from its **latest trial subscription** (the 
 
 Excluded:
 - internal accounts (`users.is_internal`, which the nightly refresh sets from `ADMIN_EMAILS`);
-- accounts pending deletion (`deletion_requested_at`) or with restricted processing (`processing_restricted_at`).
+- accounts pending deletion (`deletion_requested_at`) or with restricted processing (`processing_restricted_at`);
+- accounts that now have another paid subscription that is `active` or `past_due`. This happens when someone pays the 50% offer on the "Cancel trial" screen: the backend ends their trial at Stripe, and they must get neither a reminder nor a "trial canceled" email ([promotions/cancel-flow-offer.md](promotions/cancel-flow-offer.md)). Since migration `20261111120000_cancel_flow_offers.sql`.
 
 Ordering: `in_trial` rows come first, soonest `trial_end` first, then `trial_canceled` rows, also by `trial_end`. The view has an `ORDER BY`, but REST and SQL clients should still order by `sort_order` explicitly.
 

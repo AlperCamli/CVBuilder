@@ -59,6 +59,14 @@ class InMemoryPromotionsRepository implements PromotionsRepository {
     row.redeemed_checkout_session_id = sessionId;
     return true;
   }
+  // Cancel-flow offers are covered by tests/cancel-offer.integration.test.ts.
+  async activeCancelPromotion() { return null; }
+  async findCancelOffer() { return null; }
+  async hasAcceptedCancelOffer() { return false; }
+  async recordCancelOfferShown() {}
+  async recordCancelOfferDeclined() {}
+  async recordCancelOfferCheckout() {}
+  async markCancelOfferAccepted() {}
 }
 
 const tryPrices = (): BillingPrices => ({

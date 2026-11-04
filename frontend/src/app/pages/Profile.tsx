@@ -11,6 +11,9 @@ import { useSidebar } from "../contexts/SidebarContext";
 import { useAuth } from "../integration/auth-context";
 import type { BillingPlanResponseData, MeResponseData, SettingsResponseData, UsageSummary } from "../integration/api-types";
 import { ApiClientError } from "../integration/api-error";
+import { planName } from "../integration/cancel-offer";
+
+const isPurchasePlan = (code: string): code is "weekly" | "monthly" | "annual" => code === "weekly" || code === "monthly" || code === "annual";
 
 export function Profile() {
   const { i18n } = useTranslation();
@@ -19,7 +22,7 @@ export function Profile() {
   const { api, refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [billingBusy, setBillingBusy] = useState<"checkout" | "portal" | "cancel" | "payment_method" | null>(null);
+  const [billingBusy, setBillingBusy] = useState<"checkout" | "portal" | "cancel" | "payment_method" | "keep" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -110,8 +113,8 @@ export function Profile() {
     navigate(checkoutPath({ with_trial: billingPlan?.trial_eligible !== false, return_path: ONBOARDING_ENTRY_PATH }));
   };
 
-  // "cancel" and "payment_method" open the portal directly on that step.
-  const openPortal = async (flow?: "cancel" | "payment_method") => {
+  // "payment_method" opens the portal directly on that step. Cancelling goes through /app/cancel.
+  const openPortal = async (flow?: "payment_method") => {
     setBillingBusy(flow ?? "portal");
     setError(null);
 
@@ -147,6 +150,20 @@ export function Profile() {
   const cancelScheduled = billingPlan?.cancel_at_period_end ?? meData?.current_plan.cancel_at_period_end ?? false;
   const periodEndLabel = periodEnd ? new Date(periodEnd).toLocaleDateString(localeCode(), { month: "long", day: "numeric", year: "numeric" }) : null;
   const busyLabel = (key: typeof billingBusy, label: string) => billingBusy === key ? t("Redirecting...") : label;
+  // A downgrade (or the paid-weekly offer's switch) waiting for the end of the paid period.
+  const scheduledChange = billingPlan?.scheduled_change ?? null;
+  const formatPlanDate = (iso: string) => new Date(iso).toLocaleDateString(localeCode(), { month: "long", day: "numeric", year: "numeric" });
+  const keepCurrentPlan = async () => {
+    setBillingBusy("keep");
+    setError(null);
+    try {
+      setBillingPlan(await api.keepCurrentPlan());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("We couldn’t keep your current plan. Please try again."));
+    } finally {
+      setBillingBusy(null);
+    }
+  };
 
   return (
     <div className="p-8">
@@ -282,7 +299,18 @@ export function Profile() {
                         ? t("Unlimited CVs and exports with your subscription.")
                         : t("Loading usage...")}
                 </p>
-                {planCode !== "free" && !isTrialing && periodEndLabel && (
+                {scheduledChange && (
+                  <p className="flex flex-wrap items-center gap-x-2" style={{ fontSize: "12px", color: "var(--color-teal-700)", marginTop: "4px" }}>
+                    {t("Switching to {{plan}} on {{date}}", { plan: t(planName(scheduledChange.plan_code)), date: formatPlanDate(scheduledChange.starts_at) })}
+                    {isPurchasePlan(planCode) && (
+                      <button type="button" onClick={() => void keepCurrentPlan()} disabled={billingBusy !== null}
+                        style={{ fontSize: "12px", color: "var(--color-teal-800)", textDecoration: "underline" }}>
+                        {billingBusy === "keep" ? t("Saving...") : t("Keep {{plan}}", { plan: t(planName(planCode)) })}
+                      </button>
+                    )}
+                  </p>
+                )}
+                {planCode !== "free" && !isTrialing && periodEndLabel && !scheduledChange && (
                   <p style={{ fontSize: "12px", color: cancelScheduled ? "var(--color-red-600)" : "var(--color-teal-700)", marginTop: "4px" }}>
                     {cancelScheduled ? t("Expires on ") : t("Renews on ")}
                     {periodEndLabel}
@@ -317,7 +345,8 @@ export function Profile() {
                   <>
                     {!cancelScheduled && (
                       <button
-                        onClick={() => void openPortal("cancel")}
+                        // The cancel screen (the plan's offer, or what Pro includes) opens Stripe's cancellation itself.
+                        onClick={() => navigate("/app/cancel")}
                         disabled={billingBusy !== null}
                         className="px-4 py-2 rounded-lg font-medium border"
                         style={{

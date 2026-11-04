@@ -4,6 +4,8 @@ import {
   regionalPortalParameters,
   portalMatchesPrices,
   portalAllowsCancellation,
+  portalSchedulesDowngrades,
+  scheduleDowngradesUpdate,
   type PortalPlanPrice,
 } from "../src/modules/billing/portal-setup";
 
@@ -71,5 +73,23 @@ describe("regional Stripe portal setup", () => {
     expect(portalAllowsCancellation(created as unknown as Stripe.BillingPortal.Configuration)).toBe(true);
     const features = { subscription_cancel: { enabled: false } } as Stripe.BillingPortal.Configuration.Features;
     expect(portalAllowsCancellation({ features })).toBe(false);
+  });
+});
+
+describe("downgrades at the period end", () => {
+  it("new portal configurations schedule downgrades and apply upgrades at once", () => {
+    const params = regionalPortalParameters("TR", [{ plan: "weekly", productId: "prod_w", priceId: "price_w" }], "https://app.test", "https://app.test/app/pricing");
+    expect((params.features!.subscription_update as unknown as { schedule_at_period_end: unknown }).schedule_at_period_end)
+      .toEqual({ conditions: [{ type: "decreasing_item_amount" }, { type: "shortening_interval" }] });
+  });
+
+  it("recognises a configuration that applies downgrades at once", () => {
+    const configuration = (conditions: Array<{ type: string }>, enabled = true) =>
+      ({ features: { subscription_update: { enabled, schedule_at_period_end: { conditions } } } }) as never;
+    expect(portalSchedulesDowngrades(configuration([{ type: "decreasing_item_amount" }, { type: "shortening_interval" }]))).toBe(true);
+    expect(portalSchedulesDowngrades(configuration([]))).toBe(false);
+    expect(portalSchedulesDowngrades(configuration([{ type: "shortening_interval" }]))).toBe(false);
+    expect(portalSchedulesDowngrades(configuration([], false))).toBe(true);
+    expect(scheduleDowngradesUpdate()).toEqual({ features: { subscription_update: { schedule_at_period_end: { conditions: [{ type: "decreasing_item_amount" }, { type: "shortening_interval" }] } } } });
   });
 });

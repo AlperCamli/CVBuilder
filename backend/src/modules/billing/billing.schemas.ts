@@ -14,10 +14,27 @@ export const billingCheckoutSchema = z
   })
   .strict();
 
-export const billingPortalSchema = z
+// The offer is resolved and priced on the server; the request only names where Stripe returns to.
+export const billingCancelOfferCheckoutSchema = z
   .object({
-    return_url: z.string().trim().url().max(2000).optional(),
-    flow: z.enum(["cancel", "payment_method"]).optional()
+    success_url: z.string().trim().url().max(2000).optional(),
+    cancel_url: z.string().trim().url().max(2000).optional()
   })
   .strict()
   .default({});
+
+export const billingPortalSchema = z
+  .object({
+    return_url: z.string().trim().url().max(2000).optional(),
+    flow: z.enum(["cancel", "payment_method", "change_plan"]).optional(),
+    plan_code: z.enum(["weekly", "monthly", "annual"]).optional()
+  })
+  .strict()
+  .refine(body => (body.flow === "change_plan") === (body.plan_code !== undefined), "plan_code goes with flow change_plan")
+  .default({});
+
+// A paid plan's offer is resolved and applied on the server; nothing in the request selects it.
+export const billingCancelOfferAcceptSchema = z.object({}).strict().default({});
+
+// A downgrade, scheduled for the end of the paid period.
+export const billingPlanChangeSchema = z.object({ plan_code: z.enum(["weekly", "monthly", "annual"]) }).strict();

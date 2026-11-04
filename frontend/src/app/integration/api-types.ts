@@ -1139,12 +1139,50 @@ export interface BillingPlanResponseData {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  // A plan change waiting for the end of the paid period (a downgrade, or the paid-weekly cancel offer's switch).
+  scheduled_change?: { plan_code: "weekly" | "monthly" | "annual"; starts_at: string } | null;
   trial_eligible: boolean;
   trial_transition?: { eligible: boolean } | null;
   // One-time allowances of accounts without a trial or Pro.
   free_tier?: { tailoring_available: boolean; improve_available: boolean };
   provider: BillingProviderSummary;
   entitlement_summary: EntitlementSummary;
+}
+
+// The offer on the cancel screen. Amounts are minor units of currency. kind: checkout = a trial pays the discounted
+// first month now; switch_at_period_end = paid weekly moves to plan_code at period_end, first invoice discounted;
+// renewal_discount = the current plan's next renewal (at period_end) is discounted.
+export interface CancelOffer {
+  kind: "checkout" | "switch_at_period_end" | "renewal_discount";
+  slug: string;
+  percent_off: number;
+  plan_code: "weekly" | "monthly" | "annual";
+  currency: string;
+  amount: number;
+  discounted_amount: number;
+  current_plan_code: "weekly" | "monthly" | "annual";
+  current_amount: number | null;
+  /** The end of the current trial or paid period. */
+  period_end: string;
+}
+
+export type CancelOfferResponseData =
+  | { status: "available"; offer: CancelOffer }
+  | { status: "unavailable"; offer: null };
+
+export interface AcceptCancelOfferResponseData {
+  accepted: true;
+  offer: CancelOffer;
+  plan: BillingPlanResponseData;
+}
+
+// amount_due: the discounted first month charged at Stripe now; amount: the monthly price after it.
+export interface CancelOfferCheckoutResponseData {
+  checkout_url: string;
+  checkout_session_id: string;
+  currency: string;
+  amount: number;
+  amount_due: number;
 }
 
 export interface CreateCheckoutResponseData {

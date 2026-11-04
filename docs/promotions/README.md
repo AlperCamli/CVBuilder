@@ -4,6 +4,8 @@ A promotion is a time-limited Stripe discount offered to non-paying accounts by 
 
 The contract every part follows is [spec.md](spec.md). This page explains how the parts fit together and how to run, extend and archive a campaign.
 
+A second kind of promotion has no email: the **cancel-flow offers**, shown when someone cancels a trial or a paid plan, one per audience ([cancel-flow-offer.md](cancel-flow-offer.md)). Its `campaign.json` has `"channel": "cancel_flow"`, and the same setup script creates its coupon and `promotions` row.
+
 ## How it works end to end
 1. **Config.** Each campaign is a folder `promotions/<slug>/` with `campaign.json` (discount, plans, cohorts and windows, UTM, assignment seed), email copy `copy.{en,tr}.json` and the rendered email under `email/`.
 2. **Setup.** `npm run promotion:setup` reads `campaign.json` and:

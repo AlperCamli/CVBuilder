@@ -1,0 +1,11 @@
+{
+  "channel": "cancel_flow",
+  "audience": "monthly",
+  "slug": "monthly-cancel-save50",
+  "name": "Cancel monthly offer: 50% off the next month",
+  "coupon_name": "50% off your next month",
+  "percent_off": 50,
+  "plan_codes": ["monthly"],
+  "duration": "once",
+  "site_url": "https://jobspecificcv.com"
+}

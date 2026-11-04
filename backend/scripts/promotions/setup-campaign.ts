@@ -1,4 +1,5 @@
-// Creates or updates one promotion from promotions/<slug>/campaign.json (docs/promotions/README.md):
+// Creates or updates one promotion from promotions/<slug>/campaign.json (docs/promotions/README.md). A cancel-flow
+// campaign ("channel": "cancel_flow") only gets its coupon and promotions row. An email campaign gets
 // the Stripe coupon (found by metadata promotion_slug), the promotions and promotion_cohorts rows, and the
 // recipients with their seeded cohort and marketing_email_preferences row. Safe to re-run: existing coupons,
 // assignments and unsubscribe tokens are kept; changing a cohort's ends_at and re-running extends its window.
@@ -15,15 +16,19 @@ import {
   PAYING_STATUSES,
   assignCohorts,
   assignmentOpen,
+  cancelFlowPromotionRow,
   countByCohortAndLocale,
   couponMismatches,
   couponTerms,
+  isCancelFlowConfig,
   isEligibleAccount,
   parseCampaign,
+  parseCancelFlowCampaign,
   promotionRow,
   stratumOf,
   type AccountFacts,
   type Campaign,
+  type CancelFlowCampaign,
   type CouponTerms,
   type PurchasePlanCode,
 } from "./campaign";
@@ -126,6 +131,48 @@ async function ensureCoupon(stripe: Stripe | null, terms: CouponTerms, mode: str
   return { id: created.id, action: "created" };
 }
 
+// Stripe mode and database checks shared by both campaign kinds.
+function connect(args: ReturnType<typeof parseArgs>, slug: string) {
+  const config = getConfig();
+  const key = config.billing.stripeSecretKey?.trim() ?? "";
+  if (key && !/^(sk|rk)_(test|live)_/.test(key)) throw new SetupError("STRIPE_SECRET_KEY must be an sk_ or rk_ key.");
+  const mode = key.includes("_live_") ? "live" : key ? "test" : "none";
+  if (mode === "live" && !args.live && !args.dryRun) throw new SetupError("STRIPE_SECRET_KEY is a live-mode key. Pass --live to create the live coupon and write the promotion.");
+  if (mode === "none" && !args.dryRun) throw new SetupError("Set STRIPE_SECRET_KEY in backend/.env.local or the process environment.");
+  const dbHost = new URL(config.supabase.url).hostname;
+  const remoteDb = !LOCAL_HOSTS.has(dbHost);
+  if (mode === "test" && remoteDb && !args.dryRun && !args.allowRemoteTestDb)
+    throw new SetupError(`A test-mode coupon would be written to the remote Supabase project ${dbHost}; live subscriptions there could not use it. Pass --allow-remote-test-db if that project is a staging copy.`);
+  const stripe = mode === "test" || (mode === "live" && args.live) ? new Stripe(key, { apiVersion: "2024-06-20", timeout: 20_000, maxNetworkRetries: 1 }) : null;
+  console.log(`Campaign ${slug} | Stripe mode: ${mode}${mode === "live" && !args.live ? " (not used without --live)" : ""} | database: ${dbHost} | ${args.dryRun ? "DRY RUN, nothing is written" : "writing"}`);
+  return { config, mode, stripe, dbHost };
+}
+
+// A cancel-flow promotion is the coupon and one promotions row; the cancel screen offers the newest unarchived one
+// for its audience. Archiving it (archived_at in the config) turns the offer off.
+async function setupCancelFlow(args: ReturnType<typeof parseArgs>, campaign: CancelFlowCampaign) {
+  const { config, mode, stripe } = connect(args, campaign.slug);
+  const terms = couponTerms(campaign, await productIds(config, stripe, [...campaign.plan_codes]));
+  const coupon = await ensureCoupon(stripe, terms, mode, args.dryRun);
+  console.log(`Coupon: ${coupon.action}${coupon.id ? ` ${coupon.id}` : ""} | ${terms.percent_off}% off, ${terms.duration}${terms.duration_in_months ? ` ${terms.duration_in_months} months` : ""}, products ${terms.applies_to.products.join(",")}, name "${terms.name}"`);
+
+  const db: SupabaseClient = createSupabaseClients(config).serviceRoleClient;
+  const found = await db.from("promotions").select("id,channel,archived_at").eq("slug", campaign.slug).maybeSingle();
+  if (isMissingTable(found.error) || found.error?.code === "42703")
+    throw new SetupError("The cancel-flow columns do not exist. Apply backend/supabase/migrations/20261111120000_cancel_flow_offers.sql first.");
+  check(found.error, "read of promotions");
+  const existing = found.data as { id: string; channel: string; archived_at: string | null } | null;
+  if (existing && existing.channel !== "cancel_flow") throw new SetupError(`Promotion ${campaign.slug} is an email campaign; use a new slug for the cancel-flow offer.`);
+  console.log(`Promotion: ${existing ? "update" : args.dryRun ? "would create" : "create"} (channel cancel_flow, audience ${campaign.audience}, plan ${campaign.plan_codes[0]})${campaign.archived_at !== undefined ? ` (archived_at -> ${campaign.archived_at ?? "null"})` : existing?.archived_at ? " (archived)" : ""}`);
+  if (!args.dryRun) {
+    const upserted = await db.from("promotions").upsert(cancelFlowPromotionRow(campaign, coupon.id!), { onConflict: "slug" }).select("id").single();
+    check(upserted.error, "upsert of promotions");
+  }
+  const active = await db.from("promotions").select("slug").eq("channel", "cancel_flow").eq("cancel_audience", campaign.audience).is("archived_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  check(active.error, "read of promotions");
+  console.log(`The cancel screen now offers the ${campaign.audience} audience: ${(active.data as { slug: string } | null)?.slug ?? "nothing (no unarchived cancel-flow promotion)"}.`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { printHelp(); return; }
@@ -133,22 +180,13 @@ async function main() {
   let raw: unknown;
   try { raw = JSON.parse(readFileSync(resolve(process.cwd(), args.config), "utf8")); }
   catch { throw new SetupError(`Cannot read ${args.config} as JSON.`); }
+  if (isCancelFlowConfig(raw)) {
+    await setupCancelFlow(args, parseCancelFlowCampaign(raw));
+    return;
+  }
   const campaign: Campaign = parseCampaign(raw);
   const now = new Date();
-
-  const config = getConfig();
-  const key = config.billing.stripeSecretKey?.trim() ?? "";
-  if (key && !/^(sk|rk)_(test|live)_/.test(key)) throw new SetupError("STRIPE_SECRET_KEY must be an sk_ or rk_ key.");
-  const mode = key.includes("_live_") ? "live" : key ? "test" : "none";
-  if (mode === "live" && !args.live && !args.dryRun) throw new SetupError("STRIPE_SECRET_KEY is a live-mode key. Pass --live to create the live coupon and write recipients.");
-  if (mode === "none" && !args.dryRun) throw new SetupError("Set STRIPE_SECRET_KEY in backend/.env.local or the process environment.");
-  const dbHost = new URL(config.supabase.url).hostname;
-  const remoteDb = !LOCAL_HOSTS.has(dbHost);
-  if (mode === "test" && remoteDb && !args.dryRun && !args.allowRemoteTestDb)
-    throw new SetupError(`A test-mode coupon would be written to the remote Supabase project ${dbHost}; live checkouts there could not use it. Pass --allow-remote-test-db if that project is a staging copy.`);
-  const stripe = mode === "test" || (mode === "live" && args.live) ? new Stripe(key, { apiVersion: "2024-06-20", timeout: 20_000, maxNetworkRetries: 1 }) : null;
-
-  console.log(`Campaign ${campaign.slug} | Stripe mode: ${mode}${mode === "live" && !args.live ? " (not used without --live)" : ""} | database: ${dbHost} | ${args.dryRun ? "DRY RUN, nothing is written" : "writing"}`);
+  const { config, mode, stripe, dbHost } = connect(args, campaign.slug);
 
   // 1. Stripe coupon.
   const terms = couponTerms(campaign, await productIds(config, stripe, campaign.plan_codes));

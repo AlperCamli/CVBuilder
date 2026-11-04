@@ -3,6 +3,8 @@ import { Toaster } from "sonner";
 import { EntryOnboardingGate } from "../components/EntryOnboardingGate";
 import { SubscriptionGate } from "../components/SubscriptionGate";
 import { Checkout } from "../pages/Checkout";
+import { CancelSubscription } from "../pages/CancelSubscription";
+import { ChangePlan } from "../pages/ChangePlan";
 import { Layout } from "../components/Layout";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { PostAuthRedirectResumer } from "../components/PostAuthRedirectResumer";
@@ -56,6 +58,10 @@ export function DashboardRoute() {
 }
 
 export function CheckoutRoute() { return <Checkout />; }
+
+export function CancelSubscriptionRoute() { return <CancelSubscription />; }
+
+export function ChangePlanRoute() { return <ChangePlan />; }
 
 export function CreateOrUploadRoute() {
   return <CreateOrUpload />;

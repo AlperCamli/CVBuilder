@@ -74,7 +74,7 @@ function TrialTimeline({ today, endDate, renewal }: { today: string; endDate: st
   </ol>;
 }
 
-function StripeTrust() {
+export function StripeTrust() {
   return <div className="checkout-screen-trust">
     <span className="checkout-screen-trust-icon"><LockKeyhole size={16} aria-hidden="true" /></span>
     <div>
@@ -227,6 +227,16 @@ const WELCOME_BENEFITS = [
   { Icon: Mail, title: "Cover letters", text: "Written for each application." },
 ];
 
+/** What Pro includes: the welcome after checkout, and the cancel screens. */
+export function ProBenefits() {
+  return <ul className="checkout-screen-benefits">
+    {WELCOME_BENEFITS.map(({ Icon, title, text }) => <li key={title}>
+      <span><Icon size={16} aria-hidden="true" /></span>
+      <div><strong>{t(title)}</strong><p>{t(text)}</p></div>
+    </li>)}
+  </ul>;
+}
+
 /** After Stripe confirms: one welcome for a trial or Pro (only the chip and the last line differ), then one button back to the task. */
 export function CheckoutWelcome({ billing, regional, source, destination, onContinue }: {
   billing: Pick<BillingPlanResponseData, "plan_code" | "subscription_status" | "current_period_end">;
@@ -247,12 +257,7 @@ export function CheckoutWelcome({ billing, regional, source, destination, onCont
   return <CheckoutShell mascot="celebrate" eyebrow={t(trial ? "FREE TRIAL STARTED" : "PRO IS ACTIVE")}
     title={t("Welcome to Pro. Everything is unlocked.")} lead={t("Here’s what you can do now.")}
     footer={<footer className="checkout-screen-footer checkout-screen-footer-center"><SupportHelp topic="Payment" /></footer>}>
-    <ul className="checkout-screen-benefits">
-      {WELCOME_BENEFITS.map(({ Icon, title, text }) => <li key={title}>
-        <span><Icon size={16} aria-hidden="true" /></span>
-        <div><strong>{t(title)}</strong><p>{t(text)}</p></div>
-      </li>)}
-    </ul>
+    <ProBenefits />
     <button className="checkout-screen-primary" type="button" onClick={onContinue}>
       {t(welcomeContinueLabel(source, destination))}<ArrowRight size={16} aria-hidden="true" />
     </button>

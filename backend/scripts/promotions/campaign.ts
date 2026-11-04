@@ -59,10 +59,72 @@ export const campaignSchema = z
 
 export type Campaign = z.infer<typeof campaignSchema>;
 
+// A promotion shown on the cancel screen (docs/promotions/cancel-flow-offer.md) to one audience: a trial, or a paid
+// weekly, monthly or annual plan. No cohorts or links. Its one plan is what the offer moves to: any plan for a trial
+// (paid now by checkout), another plan for paid weekly (from the end of the paid week), and the same plan for monthly
+// and annual (the next renewal is discounted).
+export const cancelFlowCampaignSchema = z
+  .object({
+    channel: z.literal("cancel_flow"),
+    audience: z.enum(["trial", ...PURCHASE_PLANS]),
+    slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+    name: z.string().trim().min(1).max(200),
+    coupon_name: z.string().trim().min(1).max(STRIPE_COUPON_NAME_MAX).optional(),
+    percent_off: z.number().int().min(1).max(100),
+    plan_codes: z.tuple([z.enum(PURCHASE_PLANS)]),
+    duration: z.enum(["once", "repeating", "forever"]),
+    duration_in_months: z.number().int().min(1).max(36).nullable().optional(),
+    site_url: z.string().url().regex(/^https?:\/\/[^/?#]+\/?$/, "site_url must be an origin without a path").transform(url => url.replace(/\/$/, "")),
+    archived_at: isoDate.nullable().optional(),
+  })
+  .strict()
+  .superRefine((campaign, context) => {
+    if ((campaign.duration === "repeating") !== (campaign.duration_in_months != null))
+      context.addIssue({ code: "custom", path: ["duration_in_months"], message: "duration_in_months is required for (and only for) duration \"repeating\"" });
+    const [plan] = campaign.plan_codes;
+    if (campaign.audience === "weekly" && plan === "weekly")
+      context.addIssue({ code: "custom", path: ["plan_codes"], message: "a paid-weekly offer moves to another plan" });
+    if ((campaign.audience === "monthly" || campaign.audience === "annual") && plan !== campaign.audience)
+      context.addIssue({ code: "custom", path: ["plan_codes"], message: "a monthly or annual offer discounts the same plan's renewal" });
+  });
+
+export type CancelFlowCampaign = z.infer<typeof cancelFlowCampaignSchema>;
+
+const invalid = (error: z.ZodError) =>
+  new Error(`Invalid campaign config: ${error.issues.map(issue => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ")}`);
+
+export const isCancelFlowConfig = (raw: unknown): boolean =>
+  typeof raw === "object" && raw !== null && (raw as { channel?: unknown }).channel === "cancel_flow";
+
 export function parseCampaign(raw: unknown): Campaign {
+  if (isCancelFlowConfig(raw)) throw new Error("Invalid campaign config: channel: a cancel_flow campaign has no audience or cohorts; it is set up by the cancel-flow path.");
   const parsed = campaignSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
-  throw new Error(`Invalid campaign config: ${parsed.error.issues.map(issue => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ")}`);
+  throw invalid(parsed.error);
+}
+
+export function parseCancelFlowCampaign(raw: unknown): CancelFlowCampaign {
+  const parsed = cancelFlowCampaignSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  throw invalid(parsed.error);
+}
+
+export function cancelFlowPromotionRow(campaign: CancelFlowCampaign, stripeCouponId: string) {
+  return {
+    slug: campaign.slug,
+    name: campaign.name,
+    channel: "cancel_flow" as const,
+    cancel_audience: campaign.audience,
+    percent_off: campaign.percent_off,
+    plan_codes: [...campaign.plan_codes],
+    duration: campaign.duration,
+    duration_in_months: campaign.duration_in_months ?? null,
+    replaces_trial: false,
+    stripe_coupon_id: stripeCouponId,
+    site_url: campaign.site_url,
+    utm: {},
+    ...(campaign.archived_at !== undefined ? { archived_at: campaign.archived_at } : {}),
+  };
 }
 
 // The promotions row written for a campaign. archived_at is only included when the config sets it.
@@ -86,8 +148,11 @@ export function promotionRow(campaign: Campaign, stripeCouponId: string) {
 export const assignmentOpen = (campaign: Campaign, now: Date): boolean =>
   now.getTime() < Math.min(...campaign.cohorts.map(cohort => Date.parse(cohort.starts_at)));
 
+// The campaign fields the Stripe coupon is built from (email and cancel-flow campaigns).
+type CouponCampaign = Pick<Campaign, "slug" | "name" | "coupon_name" | "percent_off" | "duration" | "duration_in_months">;
+
 // Stripe coupons are currency-agnostic: one coupon covers USD and TRY checkouts of the listed products.
-export function couponName(campaign: Campaign): string {
+export function couponName(campaign: CouponCampaign): string {
   if (campaign.coupon_name) return campaign.coupon_name;
   if (campaign.name.length <= STRIPE_COUPON_NAME_MAX) return campaign.name;
   if (campaign.duration === "once") return `${campaign.percent_off}% off first payment`;
@@ -104,7 +169,7 @@ export interface CouponTerms {
   metadata: { promotion_slug: string };
 }
 
-export function couponTerms(campaign: Campaign, productIds: string[]): CouponTerms {
+export function couponTerms(campaign: CouponCampaign, productIds: string[]): CouponTerms {
   return {
     percent_off: campaign.percent_off,
     duration: campaign.duration,

@@ -30,6 +30,10 @@ const formatTrialEnd = (iso: string | null): string | null => {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
+type PlanChangeTarget = "weekly" | "monthly" | "annual";
+const PLAN_RANK: Record<PlanChangeTarget, number> = { weekly: 1, monthly: 2, annual: 3 };
+const isPlanChangeTarget = (code: string): code is PlanChangeTarget => code in PLAN_RANK;
+
 export function Pricing() {
   const regional = useRegionalPricing();
   // An emailed ?promo= offer (or this tab's remembered one); checkout reads its token.
@@ -106,13 +110,14 @@ export function Pricing() {
     }
   };
 
-  const openPortal = async (flow?: "payment_method") => {
+  const openPortal = async (flow?: "payment_method" | "change_plan", planCode?: PlanChangeTarget) => {
     setBusyTarget("portal");
     setError(null);
     try {
       const response = await api.createBillingPortal({
         return_url: `${window.location.origin}${pricingPath({ return_path: nextParam ?? undefined, source })}`,
-        ...(flow ? { flow } : {})
+        ...(flow ? { flow } : {}),
+        ...(flow === "change_plan" && planCode ? { plan_code: planCode } : {})
       });
       window.location.href = response.portal_url;
     } catch (err) {
@@ -197,6 +202,12 @@ export function Pricing() {
       disabled: false,
       onClick: () => {
         if (billingIssue) void openPortal("payment_method");
+        // A paying account changes its plan: an upgrade (or any change in a trial) is confirmed at Stripe with the
+        // amount due today; a downgrade, or any choice while a change is waiting, goes to the change-plan page.
+        else if (hasPaidPlan && isPlanChangeTarget(card.code) && isPlanChangeTarget(currentPlanCode)) {
+          if (!plan?.scheduled_change && (isTrialing || PLAN_RANK[card.code] > PLAN_RANK[currentPlanCode])) void openPortal("change_plan", card.code);
+          else navigate(`/app/change-plan?plan=${card.code}`);
+        }
         else if (hasPaidPlan) void openPortal();
         else void startCheckout(card.code as CheckoutTarget);
       }

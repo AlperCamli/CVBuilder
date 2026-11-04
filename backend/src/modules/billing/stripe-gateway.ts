@@ -1,7 +1,8 @@
 import Stripe from "stripe";
 import {
   BillingProviderError,
-  BillingWebhookSignatureError
+  BillingWebhookSignatureError,
+  ConflictError
 } from "../../shared/errors/app-error";
 
 export interface StripeCustomerSummary {
@@ -22,6 +23,9 @@ export interface StripeSubscriptionDetails {
   unit_amount: number | null;
   currency: string | null;
   billing_interval: string | null;
+  // A plan change waiting for the end of the paid period (scheduleSubscriptionChange), from the metadata.
+  scheduled_plan_code: string | null;
+  scheduled_change_at: string | null;
 }
 
 export interface StripeSubscriptionSummary {
@@ -34,6 +38,8 @@ export interface StripeSubscriptionSummary {
   current_period_start: string | null;
   current_period_end: string | null;
   metadata: Record<string, string>;
+  /** Set when the subscription was ended because a paid subscription replaced it (cancelReplacedSubscription). */
+  replaced_by?: string | null;
   price_ids: string[];
 }
 
@@ -82,7 +88,11 @@ export interface CreateStripeCheckoutInput {
   discounts?: Array<{ coupon: string }>;
 }
 
-export type StripePortalFlow = { type: "subscription_cancel"; subscription_id: string } | { type: "payment_method_update" };
+export type StripePortalFlow =
+  | { type: "subscription_cancel"; subscription_id: string }
+  | { type: "payment_method_update" }
+  // Opens Stripe's confirmation of a switch to price_id, with the amount due today (upgrades).
+  | { type: "subscription_update_confirm"; subscription_id: string; price_id: string };
 
 export interface CreateStripePortalInput {
   configuration?: string;
@@ -91,6 +101,26 @@ export interface CreateStripePortalInput {
   return_url: string;
   /** Opens the portal directly on one step and returns to return_url when it is done. */
   flow?: StripePortalFlow;
+}
+
+export interface ScheduleStripeSubscriptionChangeInput {
+  subscription_id: string;
+  /** The price the subscription moves to when its current paid period ends. */
+  price_id: string;
+  /** Discounts the first invoice of the new price (the paid-weekly cancel offer). */
+  coupon_id?: string;
+  /** Merged into the subscription's metadata when the new price starts. */
+  metadata: Record<string, string>;
+  /** The app's plan code for price_id, shown as the pending change until then. */
+  plan_code: string;
+  idempotency_key: string;
+}
+
+export interface ApplyStripeRenewalDiscountInput {
+  subscription_id: string;
+  coupon_id: string;
+  metadata: Record<string, string>;
+  idempotency_key: string;
 }
 
 export interface StripePriceSummary { id: string; active: boolean; product_id: string; currency: string; amount: number; interval: string | null; interval_count: number | null }
@@ -126,6 +156,14 @@ export interface StripeGateway {
   retrievePrice?(priceId: string): Promise<StripePriceSummary | null>;
   retrievePortalConfiguration?(id: string): Promise<{ active: boolean; updates_enabled: boolean; price_ids: string[] }>;
   cancelCustomerSubscriptions?(customerId: string, deadline?: number): Promise<void>;
+  /** Ends, immediately and without a charge, a subscription replaced by the paid subscription replacedBy. */
+  cancelReplacedSubscription?(subscriptionId: string, replacedBy: string): Promise<StripeSubscriptionSummary>;
+  /** Moves an active subscription to another price when its paid period ends; nothing is charged or credited now. */
+  scheduleSubscriptionChange?(input: ScheduleStripeSubscriptionChangeInput): Promise<StripeSubscriptionSummary>;
+  /** Drops a change scheduled by scheduleSubscriptionChange; the subscription stays on its current price. */
+  releaseScheduledChange?(subscriptionId: string): Promise<StripeSubscriptionSummary>;
+  /** Discounts the next renewal of an active subscription with a "once" coupon; nothing is charged now. */
+  applyRenewalDiscount?(input: ApplyStripeRenewalDiscountInput): Promise<StripeSubscriptionSummary>;
   createCustomer(input: CreateStripeCustomerInput): Promise<StripeCustomerSummary>;
   createCheckoutSession(input: CreateStripeCheckoutInput): Promise<StripeCheckoutSessionSummary>;
   createPortalSession(input: CreateStripePortalInput): Promise<{ url: string }>;
@@ -179,10 +217,16 @@ const record = (value: unknown): Record<string, any> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, any>) : {};
 
 // Accepts both SDK objects and raw webhook payloads (same JSON shape).
+// Subscription metadata keys for a plan change scheduled at the end of the paid period. They stay after the switch
+// (schedule phase metadata is merged), so readers only treat a change as pending while its time is in the future.
+const SCHEDULED_PLAN_KEY = "cv_scheduled_plan_code";
+const SCHEDULED_AT_KEY = "cv_scheduled_change_at";
+
 export const toSubscriptionDetails = (subscription: unknown): StripeSubscriptionDetails => {
   const row = record(subscription);
   const price = record(record(record(row.items).data?.[0]).price);
   const cancellation = record(row.cancellation_details);
+  const metadata = record(row.metadata);
   return {
     trial_start: toPeriodIso(row.trial_start),
     trial_end: toPeriodIso(row.trial_end),
@@ -192,7 +236,9 @@ export const toSubscriptionDetails = (subscription: unknown): StripeSubscription
     cancellation_feedback: typeof cancellation.feedback === "string" ? cancellation.feedback : null,
     unit_amount: typeof price.unit_amount === "number" ? price.unit_amount : null,
     currency: typeof price.currency === "string" ? price.currency : null,
-    billing_interval: typeof record(price.recurring).interval === "string" ? record(price.recurring).interval : null
+    billing_interval: typeof record(price.recurring).interval === "string" ? record(price.recurring).interval : null,
+    scheduled_plan_code: typeof metadata[SCHEDULED_PLAN_KEY] === "string" && metadata[SCHEDULED_PLAN_KEY] ? metadata[SCHEDULED_PLAN_KEY] : null,
+    scheduled_change_at: toPeriodIso(Number(metadata[SCHEDULED_AT_KEY]) || null)
   };
 };
 
@@ -237,6 +283,40 @@ const normalizeCustomerId = (customer: string | Stripe.Customer | Stripe.Deleted
   }
 
   return null;
+};
+
+const REPLACED_BY_PREFIX = "replaced_by:";
+
+/** The subscription that replaced this one, from the cancellation comment cancelReplacedSubscription writes. */
+export const replacedByOf = (subscription: unknown): string | null => {
+  const comment = record(record(subscription).cancellation_details).comment;
+  return typeof comment === "string" && comment.startsWith(REPLACED_BY_PREFIX) ? comment.slice(REPLACED_BY_PREFIX.length) || null : null;
+};
+
+const toSubscriptionSummary = (subscription: Stripe.Subscription): StripeSubscriptionSummary | null => {
+  const customerId = normalizeCustomerId(
+    subscription.customer as string | Stripe.Customer | Stripe.DeletedCustomer
+  );
+
+  if (!customerId) {
+    return null;
+  }
+
+  return {
+    id: subscription.id,
+    customer_id: customerId,
+    status: subscription.status,
+    trial_start: toPeriodIso(subscription.trial_start),
+    details: toSubscriptionDetails(subscription),
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    current_period_start: toPeriodIso(subscription.current_period_start),
+    current_period_end: toPeriodIso(subscription.current_period_end),
+    metadata: toMetadataRecord(subscription.metadata),
+    replaced_by: replacedByOf(subscription),
+    price_ids: subscription.items.data
+      .map((item) => item.price?.id ?? null)
+      .filter((value): value is string => Boolean(value))
+  };
 };
 
 const normalizeSubscriptionId = (
@@ -430,15 +510,22 @@ export class StripeBillingGateway implements StripeGateway {
 
   async createPortalSession(input: CreateStripePortalInput): Promise<{ url: string }> {
     try {
+      const flow = input.flow;
+      let updateConfirm: Stripe.BillingPortal.SessionCreateParams.FlowData.SubscriptionUpdateConfirm | undefined;
+      if (flow?.type === "subscription_update_confirm") {
+        const subscription = await this.stripe.subscriptions.retrieve(flow.subscription_id);
+        updateConfirm = { subscription: subscription.id, items: [{ id: subscription.items.data[0].id, price: flow.price_id, quantity: 1 }] };
+      }
       const session = await this.stripe.billingPortal.sessions.create({
         configuration: input.configuration,
         locale: input.locale,
         customer: input.customer_id,
         return_url: input.return_url,
-        ...(input.flow ? {
+        ...(flow ? {
           flow_data: {
-            type: input.flow.type,
-            ...(input.flow.type === "subscription_cancel" ? { subscription_cancel: { subscription: input.flow.subscription_id } } : {}),
+            type: flow.type,
+            ...(flow.type === "subscription_cancel" ? { subscription_cancel: { subscription: flow.subscription_id } } : {}),
+            ...(updateConfirm ? { subscription_update_confirm: updateConfirm } : {}),
             after_completion: { type: "redirect", redirect: { return_url: input.return_url } }
           }
         } : {})
@@ -471,6 +558,129 @@ export class StripeBillingGateway implements StripeGateway {
     }
   }
 
+  // Ends a subscription that a paid one replaced (the trial left behind by the cancel-flow offer's checkout), so it
+  // never bills. The replacement is named in the cancellation comment, not in a metadata update: an update would send
+  // a "still trialing" webhook whose sync would deactivate the new paid subscription. Already-ended subscriptions are
+  // returned as they are, which makes webhook replays harmless.
+  async cancelReplacedSubscription(subscriptionId: string, replacedBy: string): Promise<StripeSubscriptionSummary> {
+    try {
+      let subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+      if (!["canceled", "incomplete_expired"].includes(subscription.status)) {
+        subscription = await this.stripe.subscriptions.cancel(subscriptionId, {
+          invoice_now: false,
+          prorate: false,
+          cancellation_details: { comment: `${REPLACED_BY_PREFIX}${replacedBy}` }
+        }, { idempotencyKey: `cv-replace-cancel-${subscriptionId}-${replacedBy}` });
+      }
+      const summary = toSubscriptionSummary(subscription);
+      if (!summary) throw new Error("Replaced subscription has no customer");
+      return summary;
+    } catch (error) {
+      throw new BillingProviderError("Failed to end the replaced Stripe subscription", {
+        reason: error instanceof Error ? error.message : "unknown_stripe_subscription_error",
+        subscription_id: subscriptionId
+      });
+    }
+  }
+
+  // A subscription schedule with two phases: the current paid period as it is, then the new price (with the coupon,
+  // if any) from the period end, released after one cycle. Verified with Stripe test clocks: nothing is charged or
+  // credited now, and the new price is billed at the period end. The pending change is also written to the
+  // subscription's metadata, so the app can show it. Only schedules the app created (metadata cv_managed) are reused.
+  async scheduleSubscriptionChange(input: ScheduleStripeSubscriptionChangeInput): Promise<StripeSubscriptionSummary> {
+    const subscription = await this.retrieveForChange(input.subscription_id);
+    try {
+      let schedule = subscription.schedule
+        ? await this.stripe.subscriptionSchedules.retrieve(typeof subscription.schedule === "string" ? subscription.schedule : subscription.schedule.id)
+        : null;
+      if (schedule && schedule.metadata?.cv_managed !== "1")
+        throw new ConflictError("This subscription already has a change waiting at Stripe.", { reason: "plan_change_unavailable" });
+      schedule ??= await this.stripe.subscriptionSchedules.create({ from_subscription: subscription.id }, { idempotencyKey: `${input.idempotency_key}-schedule` });
+      const periodStart = subscription.current_period_start;
+      const periodEnd = subscription.current_period_end;
+      const current = subscription.items.data[0];
+      const { [SCHEDULED_PLAN_KEY]: _plan, [SCHEDULED_AT_KEY]: _at, ...metadata } = toMetadataRecord(subscription.metadata);
+      await this.stripe.subscriptionSchedules.update(schedule.id, {
+        end_behavior: "release",
+        metadata: { cv_managed: "1" },
+        phases: [
+          { items: [{ price: current.price.id, quantity: current.quantity ?? 1 }], start_date: periodStart, end_date: periodEnd, metadata, proration_behavior: "none" },
+          {
+            items: [{ price: input.price_id, quantity: 1 }],
+            iterations: 1,
+            proration_behavior: "none",
+            metadata: { ...metadata, ...input.metadata },
+            ...(input.coupon_id ? { discounts: [{ coupon: input.coupon_id }] } : {})
+          }
+        ]
+      }, { idempotencyKey: `${input.idempotency_key}-phases` });
+      const updated = await this.stripe.subscriptions.update(subscription.id, {
+        metadata: { [SCHEDULED_PLAN_KEY]: input.plan_code, [SCHEDULED_AT_KEY]: String(periodEnd) }
+      }, { idempotencyKey: `${input.idempotency_key}-pending` });
+      return this.summaryOrThrow(updated);
+    } catch (error) {
+      throw this.providerError(error, "Failed to schedule the Stripe subscription change", input.subscription_id);
+    }
+  }
+
+  async releaseScheduledChange(subscriptionId: string): Promise<StripeSubscriptionSummary> {
+    try {
+      const subscription = await this.stripe.subscriptions.retrieve(subscriptionId, { expand: ["schedule"] });
+      const schedule = subscription.schedule && typeof subscription.schedule !== "string" ? subscription.schedule : null;
+      if (schedule && schedule.metadata?.cv_managed === "1" && ["active", "not_started"].includes(schedule.status))
+        await this.stripe.subscriptionSchedules.release(schedule.id);
+      // An empty value deletes the metadata key.
+      const updated = await this.stripe.subscriptions.update(subscriptionId, { metadata: { [SCHEDULED_PLAN_KEY]: "", [SCHEDULED_AT_KEY]: "" } });
+      return this.summaryOrThrow(updated);
+    } catch (error) {
+      throw this.providerError(error, "Failed to drop the scheduled Stripe subscription change", subscriptionId);
+    }
+  }
+
+  // A "once" coupon on the subscription discounts its next invoice, the renewal (verified with a Stripe test clock).
+  async applyRenewalDiscount(input: ApplyStripeRenewalDiscountInput): Promise<StripeSubscriptionSummary> {
+    const subscription = await this.retrieveForChange(input.subscription_id);
+    if (subscription.discount || (subscription.discounts?.length ?? 0) > 0)
+      throw new ConflictError("This subscription already has a discount.", { reason: "cancel_offer_unavailable" });
+    try {
+      const updated = await this.stripe.subscriptions.update(subscription.id, {
+        discounts: [{ coupon: input.coupon_id }],
+        proration_behavior: "none",
+        metadata: input.metadata
+      }, { idempotencyKey: input.idempotency_key });
+      return this.summaryOrThrow(updated);
+    } catch (error) {
+      throw this.providerError(error, "Failed to discount the Stripe subscription", input.subscription_id);
+    }
+  }
+
+  // Checked at Stripe too: the local row can lag behind a change made in the portal.
+  private async retrieveForChange(subscriptionId: string): Promise<Stripe.Subscription> {
+    let subscription: Stripe.Subscription;
+    try {
+      subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    } catch (error) {
+      throw this.providerError(error, "Failed to retrieve Stripe subscription", subscriptionId);
+    }
+    if (subscription.status !== "active" || subscription.cancel_at_period_end || subscription.items.data.length !== 1)
+      throw new ConflictError("This change is no longer available for your subscription.", { reason: "plan_change_unavailable" });
+    return subscription;
+  }
+
+  private summaryOrThrow(subscription: Stripe.Subscription): StripeSubscriptionSummary {
+    const summary = toSubscriptionSummary(subscription);
+    if (!summary) throw new Error("Subscription has no customer");
+    return summary;
+  }
+
+  private providerError(error: unknown, message: string, subscriptionId: string): Error {
+    if (error instanceof ConflictError) return error;
+    return new BillingProviderError(message, {
+      reason: error instanceof Error ? error.message : "unknown_stripe_subscription_error",
+      subscription_id: subscriptionId
+    });
+  }
+
   async retrieveSubscription(subscriptionId: string): Promise<StripeSubscriptionSummary | null> {
     try {
       const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
@@ -479,28 +689,7 @@ export class StripeBillingGateway implements StripeGateway {
         return null;
       }
 
-      const customerId = normalizeCustomerId(
-        subscription.customer as string | Stripe.Customer | Stripe.DeletedCustomer
-      );
-
-      if (!customerId) {
-        return null;
-      }
-
-      return {
-        id: subscription.id,
-        customer_id: customerId,
-        status: subscription.status,
-        trial_start: toPeriodIso(subscription.trial_start),
-        details: toSubscriptionDetails(subscription),
-        cancel_at_period_end: subscription.cancel_at_period_end,
-        current_period_start: toPeriodIso(subscription.current_period_start),
-        current_period_end: toPeriodIso(subscription.current_period_end),
-        metadata: toMetadataRecord(subscription.metadata),
-        price_ids: subscription.items.data
-          .map((item) => item.price?.id ?? null)
-          .filter((value): value is string => Boolean(value))
-      };
+      return toSubscriptionSummary(subscription);
     } catch (error) {
       throw new BillingProviderError("Failed to retrieve Stripe subscription", {
         reason: error instanceof Error ? error.message : "unknown_stripe_subscription_error",

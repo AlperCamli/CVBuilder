@@ -312,6 +312,8 @@ export class PrivacyService {
     check(marketing.error); data.marketing_email_preferences = marketing.data;
     const promotions = await this.db.from("promotion_recipients").select("promotion_id,cohort_id,assigned_at,first_opened_at,open_count,redeemed_at,redeemed_checkout_session_id").eq("user_id", job.subject_user_id);
     check(promotions.error); data.promotion_recipients = promotions.data;
+    const cancelOffers = await this.db.from("promotion_cancel_offers").select("promotion_id,provider_subscription_id,from_plan_code,first_shown_at,last_shown_at,show_count,declined_at,last_checkout_at,accepted_at").eq("user_id", job.subject_user_id);
+    check(cancelOffers.error); data.promotion_cancel_offers = cancelOffers.data;
     zip.file("data.json", JSON.stringify(data, null, 2));
     zip.file("README.txt", "Your CV Builder data and owned files. Authentication secrets and guest access tokens are excluded. This download expires after 24 hours. Contact the privacy address in the privacy notice for other rights requests.");
     for (const file of data.files as Record<string, any>[]) {

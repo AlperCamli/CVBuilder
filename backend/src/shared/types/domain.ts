@@ -45,6 +45,9 @@ export interface SubscriptionRecord {
   current_period_start: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  // A plan change waiting for the end of the paid period; pending only while scheduled_change_at is in the future.
+  scheduled_plan_code?: string | null;
+  scheduled_change_at?: string | null;
   created_at: string;
   updated_at: string;
 }

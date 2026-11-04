@@ -18,7 +18,13 @@ import type { UsageService } from "../usage/usage.service";
 import type { FreeTierUse } from "../usage/usage.repository";
 import { surfaceForAction, trialRequiredError, type AccessAction, type AppRequestPolicy, type PaywallSurface } from "../entitlements/access-policy";
 import type {
+  AcceptCancelOfferResponseData,
   BillingEntitlementsResponseData,
+  CancelOffer,
+  CancelOfferAudience,
+  CancelOfferCheckoutResponseData,
+  CancelOfferResponseData,
+  CreateCancelOfferCheckoutInput,
   BillingPlanResponseData,
   BillingSnapshot,
   BillingUsageResponseData,
@@ -35,6 +41,7 @@ import type {
   SyncSubscriptionInput
 } from "./subscriptions.repository";
 import {
+  replacedByOf,
   toSubscriptionDetails,
   trialEndLabel,
   trialSubmitMessage,
@@ -44,7 +51,7 @@ import {
   type StripeWebhookEvent
 } from "./stripe-gateway";
 import type { CheckoutOutcome, DenialReason, MonetizationRepository } from "../monetization/monetization.repository";
-import type { CheckoutPromotion, PromotionsCheckoutPort } from "../promotions/promotions.types";
+import type { CancelOffersPort, CheckoutPromotion, PromotionsCheckoutPort } from "../promotions/promotions.types";
 import { discountedAmount } from "../promotions/promotions.service";
 
 interface BillingServiceOptions {
@@ -58,6 +65,7 @@ interface BillingServiceOptions {
   trialPeriodDays: number;
   monetization?: MonetizationRepository;
   promotions?: PromotionsCheckoutPort;
+  cancelOffers?: CancelOffersPort;
 }
 
 // Which gate refused the request, for paywall analysis.
@@ -84,6 +92,21 @@ const checkoutRejection = (error: unknown): CheckoutOutcome => {
   if (reason === "pricing_changed") return "rejected_pricing_changed";
   return "failed";
 };
+
+const HALF_HOUR_MS = 30 * 60_000;
+// The trial offer's checkout can stay open up to 90 minutes, so offers need the period to outlast that.
+const OFFER_MIN_PERIOD_LEFT_MS = 2 * 60 * 60_000;
+// A downgrade has to be scheduled before the renewal invoice is drafted.
+const PLAN_CHANGE_MIN_PERIOD_LEFT_MS = 60 * 60_000;
+// Longer is an upgrade: weekly < monthly < annual.
+const PLAN_RANK: Record<PurchasePlan, number> = { weekly: 1, monthly: 2, annual: 3 };
+
+/** A plan change still waiting for the end of the paid period (the metadata keeps it after the switch). */
+export const pendingChange = (subscription: Pick<SubscriptionRecord, "plan_code" | "scheduled_plan_code" | "scheduled_change_at">): { plan_code: string; starts_at: string } | null =>
+  subscription.scheduled_plan_code && subscription.scheduled_change_at && subscription.scheduled_plan_code !== subscription.plan_code
+    && Date.parse(subscription.scheduled_change_at) > Date.now()
+    ? { plan_code: subscription.scheduled_plan_code, starts_at: subscription.scheduled_change_at }
+    : null;
 
 // Stripe keeps these subscriptions; the customer fixes them in the billing portal, not with a new checkout.
 const BILLING_ISSUE_STATUSES = new Set(["past_due", "unpaid", "paused"]);
@@ -184,6 +207,7 @@ const parseSubscriptionFromWebhookObject = (object: unknown): StripeSubscription
     current_period_start: toIsoFromUnixSeconds(row.current_period_start),
     current_period_end: toIsoFromUnixSeconds(row.current_period_end),
     metadata: normalizeMetadata(row.metadata),
+    replaced_by: replacedByOf(row),
     price_ids: priceIds
   };
 };
@@ -232,6 +256,7 @@ export class BillingService {
       current_period_start: snapshot.current_plan.current_period_start,
       current_period_end: snapshot.current_plan.current_period_end,
       cancel_at_period_end: snapshot.current_plan.cancel_at_period_end,
+      scheduled_change: snapshot.subscription ? pendingChange(snapshot.subscription) : null,
       trial_eligible: trialEligible,
       trial_transition: transition ? { eligible: trialEligible } : null,
       free_tier: {
@@ -577,7 +602,7 @@ export class BillingService {
       configuration: await this.options.regionalPricing?.portal(userId),
       locale: (await this.requireUser(userId)).locale
     };
-    const flow = await this.portalFlow(userId, input.flow);
+    const flow = await this.portalFlow(userId, input.flow, input.plan_code);
     let portalSession: { url: string };
     try {
       portalSession = await stripeGateway.createPortalSession({ ...base, flow });
@@ -592,12 +617,238 @@ export class BillingService {
     };
   }
 
-  private async portalFlow(userId: string, intent: CreatePortalInput["flow"]) {
+  private async portalFlow(userId: string, intent: CreatePortalInput["flow"], planCode?: string) {
     if (intent === "payment_method") return { type: "payment_method_update" } as const;
+    if (intent === "change_plan") return this.upgradeFlow(userId, planCode);
     if (intent !== "cancel") return undefined;
     const current = await this.subscriptionsRepository.getCurrentForUser(userId);
     if (!current?.provider_subscription_id || current.cancel_at_period_end || !["active", "trialing"].includes(current.status)) return undefined;
+    // Opening the cancellation passes over any offer the "Cancel trial" screen showed.
+    await this.options.cancelOffers?.recordCancelOfferDeclined(userId);
     return { type: "subscription_cancel", subscription_id: current.provider_subscription_id } as const;
+  }
+
+  // The offer on the cancel screen (docs/promotions/cancel-flow-offer.md): for a trial, or a paid weekly, monthly or
+  // annual plan, each with its own promotion. "unavailable" shows the screen without an offer, so every failed
+  // condition is a plain no-offer rather than an error.
+  async getCancelOffer(userId: string): Promise<CancelOfferResponseData> {
+    const candidate = await this.cancelOfferCandidate(userId);
+    if (!candidate) return { status: "unavailable", offer: null };
+    await this.options.cancelOffers!.recordCancelOfferShown(candidate.subject);
+    return { status: "available", offer: candidate.offer };
+  }
+
+  // "Keep Pro" opens a Stripe Checkout for the promoted plan with the coupon: paid now, no trial. The trial keeps
+  // running until that payment succeeds; finishCancelOffer then ends it at Stripe so it never bills.
+  async createCancelOfferCheckout(userId: string, input: CreateCancelOfferCheckoutInput): Promise<CancelOfferCheckoutResponseData> {
+    const candidate = await this.cancelOfferCandidate(userId);
+    if (!candidate || candidate.offer.kind !== "checkout") throw new ConflictError("This offer is no longer available for your subscription.", { reason: "cancel_offer_unavailable" });
+    const { promotion, subject, priceId, offer, customerId, market } = candidate;
+    const user = await this.requireUser(userId);
+    const successUrl = this.validateReturnUrl(input.success_url, this.options.checkoutSuccessUrl);
+    const cancelUrl = this.validateReturnUrl(input.cancel_url, this.options.checkoutCancelUrl);
+    const metadata = {
+      app_user_id: userId,
+      plan_code: promotion.plan_code,
+      billing_market: market,
+      billing_currency: offer.currency,
+      promotion_slug: promotion.slug,
+      promotion_id: promotion.id,
+      cancel_offer: "1",
+      replaces_subscription: subject.providerSubscriptionId,
+      replaces_plan_code: subject.fromPlanCode
+    };
+    // Repeated clicks within one half hour reuse the same session (same key, same parameters). It expires within
+    // 90 minutes, while the offer needs two hours of trial left, so it cannot be paid after the trial has billed.
+    const slot = Math.floor(Date.now() / HALF_HOUR_MS);
+    const params = { price: priceId, coupon: promotion.coupon_id, successUrl, cancelUrl, locale: user.locale, metadata };
+    let session: StripeCheckoutSessionSummary;
+    try {
+      session = await this.requireStripeGateway().createCheckoutSession({
+        customer_id: customerId,
+        price_id: priceId,
+        currency: offer.currency,
+        locale: user.locale,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: userId,
+        mode: "subscription",
+        trial_period_days: null,
+        discounts: [{ coupon: promotion.coupon_id }],
+        metadata,
+        expires_at: Math.floor(((slot + 3) * HALF_HOUR_MS) / 1000),
+        idempotency_key: `cv-cancel-offer-checkout-${slot}-${createHash("sha256").update(JSON.stringify(params)).digest("hex")}`
+      });
+      if (!session.url) throw new BillingProviderError("Stripe checkout session did not return a URL", { checkout_session_id: session.id });
+    } catch (error) {
+      await this.options.monetization?.recordCheckoutAttempt({
+        user_id: userId, plan_code: promotion.plan_code, market: null, currency: null, amount: null,
+        trial_requested: false, trial_applied: false, checkout_session_id: null, outcome: checkoutRejection(error)
+      });
+      throw error;
+    }
+    await this.options.monetization?.recordCheckoutAttempt({
+      user_id: userId, plan_code: promotion.plan_code, market, currency: offer.currency, amount: offer.amount,
+      trial_requested: false, trial_applied: false, checkout_session_id: session.id, outcome: "open", promotion_id: promotion.id
+    });
+    await this.options.cancelOffers!.recordCancelOfferCheckout(subject);
+    return { checkout_url: session.url, checkout_session_id: session.id, currency: offer.currency, amount: offer.amount, amount_due: offer.discounted_amount };
+  }
+
+  // A paid plan's offer is applied in place, with nothing charged now: paid weekly switches to the promoted plan
+  // (first invoice discounted) when its paid week ends; monthly and annual get their next renewal discounted.
+  async acceptCancelOffer(userId: string): Promise<AcceptCancelOfferResponseData> {
+    const candidate = await this.cancelOfferCandidate(userId);
+    if (!candidate || candidate.offer.kind === "checkout") throw new ConflictError("This offer is no longer available for your subscription.", { reason: "cancel_offer_unavailable" });
+    const { promotion, subject, priceId, offer } = candidate;
+    const gateway = this.requireStripeGateway();
+    const metadata = { plan_code: promotion.plan_code, promotion_slug: promotion.slug, promotion_id: promotion.id, cancel_offer: "1" };
+    // A retry after a lost response gets Stripe's first result instead of a second change.
+    const idempotencyKey = `cv-cancel-offer-${promotion.id}-${subject.providerSubscriptionId}`;
+    const updated = offer.kind === "switch_at_period_end"
+      ? await gateway.scheduleSubscriptionChange!({ subscription_id: subject.providerSubscriptionId, price_id: priceId, coupon_id: promotion.coupon_id, plan_code: promotion.plan_code, metadata, idempotency_key: idempotencyKey })
+      : await gateway.applyRenewalDiscount!({ subscription_id: subject.providerSubscriptionId, coupon_id: promotion.coupon_id, metadata, idempotency_key: idempotencyKey });
+    await this.syncStripeSubscription(userId, updated);
+    await this.options.cancelOffers!.markCancelOfferAccepted(subject);
+    return { accepted: true, offer, plan: await this.getBillingPlan(userId) };
+  }
+
+  // Downgrades (to a shorter, cheaper plan) wait for the end of the paid period: nothing is refunded or credited, the
+  // current plan runs to its end, then the new one starts and is billed. Upgrades go through Stripe's confirmation
+  // (upgradeFlow), which charges the difference at once.
+  async schedulePlanChange(userId: string, planCode: string): Promise<BillingPlanResponseData> {
+    const current = await this.changeablePlan(userId, planCode);
+    if (current.status !== "active" || PLAN_RANK[planCode as PurchasePlan] >= PLAN_RANK[current.plan_code as PurchasePlan])
+      throw new ConflictError("Only a move to a shorter plan waits for the end of your paid period.", { reason: "plan_change_not_downgrade" });
+    if (!current.current_period_end || Date.parse(current.current_period_end) <= Date.now() + PLAN_CHANGE_MIN_PERIOD_LEFT_MS)
+      throw new ConflictError("Your plan renews very soon. Try again after the renewal.", { reason: "plan_change_unavailable" });
+    const priceId = await this.marketPriceId(userId, planCode as PurchasePlan);
+    const updated = await this.requireStripeGateway().scheduleSubscriptionChange!({
+      subscription_id: current.provider_subscription_id!,
+      price_id: priceId,
+      plan_code: planCode,
+      metadata: { plan_code: planCode },
+      idempotency_key: `cv-plan-change-${current.provider_subscription_id}-${planCode}-${Date.parse(current.current_period_end)}`
+    });
+    await this.syncStripeSubscription(userId, updated);
+    return this.getBillingPlan(userId);
+  }
+
+  // Keeps the current plan: drops a downgrade (or the paid-weekly offer's switch) that is still waiting.
+  async releasePlanChange(userId: string): Promise<BillingPlanResponseData> {
+    const current = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (current?.provider_subscription_id && pendingChange(current)) {
+      const gateway = this.requireStripeGateway();
+      if (!gateway.releaseScheduledChange) throw new BillingConfigurationError("Plan changes are not configured");
+      await this.syncStripeSubscription(userId, await gateway.releaseScheduledChange(current.provider_subscription_id));
+    }
+    return this.getBillingPlan(userId);
+  }
+
+  // Stripe's own confirmation page for an upgrade (or any change during a trial, which keeps the trial): it shows the
+  // amount due today, prorated against the unused part of the current period.
+  private async upgradeFlow(userId: string, planCode: string | undefined) {
+    const current = await this.changeablePlan(userId, planCode);
+    if (current.status === "active" && PLAN_RANK[planCode as PurchasePlan] < PLAN_RANK[current.plan_code as PurchasePlan])
+      throw new ConflictError("A move to a shorter plan waits for the end of your paid period.", { reason: "plan_change_downgrade" });
+    return { type: "subscription_update_confirm", subscription_id: current.provider_subscription_id!, price_id: await this.marketPriceId(userId, planCode as PurchasePlan) } as const;
+  }
+
+  private async changeablePlan(userId: string, planCode?: string): Promise<SubscriptionRecord> {
+    if (!planCode || !(planCode in PLAN_RANK)) throw new ValidationError("Choose a weekly, monthly or annual plan");
+    const current = await this.subscriptionsRepository.getCurrentForUser(userId);
+    if (!current?.provider_subscription_id || !["active", "trialing"].includes(current.status) || !(current.plan_code in PLAN_RANK))
+      throw new ConflictError("There is no plan to change.", { reason: "plan_change_unavailable" });
+    if (current.cancel_at_period_end)
+      throw new ConflictError("Your plan is set to end. Resume it in Manage billing before changing it.", { reason: "plan_change_unavailable" });
+    if (pendingChange(current))
+      throw new ConflictError("A plan change is already waiting. Keep your current plan first to choose another.", { reason: "plan_change_pending" });
+    if (current.plan_code === planCode) throw new ConflictError("You are already on this plan.", { reason: "plan_change_unavailable" });
+    return current;
+  }
+
+  // The plan's price in the account's locked market, the currency it already pays in.
+  private async marketPriceId(userId: string, planCode: PurchasePlan): Promise<string> {
+    const regional = this.options.regionalPricing;
+    const market = regional ? await regional.savedMarket(userId) : null;
+    const priceId = market ? regional!.options.prices[market][planCode] : null;
+    if (!priceId) throw new BillingConfigurationError("This plan is not available in your billing market");
+    return priceId;
+  }
+
+  // Runs after every sync of a paid subscription from the offer's checkout (webhook or the return page): ends the
+  // trial it replaces at Stripe, which would otherwise still bill its weekly price at the trial end, then marks the
+  // offer accepted. The accepted row makes repeats a no-op.
+  private async finishCancelOffer(userId: string, subscription: StripeSubscriptionSummary): Promise<void> {
+    const { cancel_offer: cancelOffer, replaces_subscription: replaced, promotion_id: promotionId } = subscription.metadata;
+    if (cancelOffer !== "1" || !replaced || !promotionId || subscription.status !== "active") return;
+    const cancelOffers = this.options.cancelOffers;
+    const gateway = this.requireStripeGateway();
+    if (!cancelOffers || !gateway.cancelReplacedSubscription) throw new BillingConfigurationError("Cancel-flow offers are not configured");
+    const offer = await cancelOffers.findCancelOffer(promotionId, userId);
+    if (offer?.accepted_at && offer.provider_subscription_id === replaced) return;
+    // Only ever end the same customer's subscription.
+    const trial = await gateway.retrieveSubscription(replaced);
+    if (!trial || trial.customer_id !== subscription.customer_id) return;
+    const ended = await gateway.cancelReplacedSubscription(replaced, subscription.id);
+    await this.syncStripeSubscription(userId, ended);
+    await cancelOffers.markCancelOfferAccepted({ promotionId, userId, providerSubscriptionId: replaced, fromPlanCode: subscription.metadata.replaces_plan_code ?? trial.metadata.plan_code ?? "weekly" });
+  }
+
+  private async cancelOfferCandidate(userId: string) {
+    const cancelOffers = this.options.cancelOffers;
+    const regional = this.options.regionalPricing;
+    const gateway = this.stripeGateway;
+    if (!cancelOffers || !regional || !gateway) return null;
+    // A trial, or a paid plan with nothing scheduled, not already canceled and with at least two hours left (longer
+    // than the trial's checkout can stay open, and well before a renewal invoice).
+    const current = await this.subscriptionsRepository.getCurrentForUser(userId);
+    const periodEnd = current?.current_period_end ?? null;
+    if (!current?.provider_subscription_id || current.cancel_at_period_end || !periodEnd) return null;
+    if (Date.parse(periodEnd) <= Date.now() + OFFER_MIN_PERIOD_LEFT_MS) return null;
+    const audience: CancelOfferAudience | null = current.status === "trialing" ? "trial"
+      : current.status === "active" && current.plan_code in PLAN_RANK && !pendingChange(current) ? current.plan_code as PurchasePlan : null;
+    if (!audience) return null;
+    const promotion = await cancelOffers.activeCancelPromotion(audience);
+    if (!promotion) return null;
+    // A trial converts by checkout, paid weekly moves to the promoted plan at its period end, and monthly or annual
+    // keep their plan with the next renewal discounted.
+    const kind: CancelOffer["kind"] = audience === "trial" ? "checkout" : audience === "weekly" ? "switch_at_period_end" : "renewal_discount";
+    const fits = kind === "checkout" ? [promotion.plan_code, "weekly"].includes(current.plan_code)
+      : kind === "switch_at_period_end" ? promotion.plan_code !== current.plan_code
+      : promotion.plan_code === current.plan_code;
+    const supported = kind === "checkout" ? gateway.cancelReplacedSubscription : kind === "switch_at_period_end" ? gateway.scheduleSubscriptionChange : gateway.applyRenewalDiscount;
+    if (!fits || !supported) return null;
+    // One cancel-screen offer per account: having accepted any of them (e.g. the trial's) ends every offer.
+    if (await cancelOffers.hasAcceptedCancelOffer(userId)) return null;
+    // The subscription's own market (locked at checkout), so the offer is in the currency it already pays in.
+    const market = await regional.savedMarket(userId);
+    const customerId = current.provider_customer_id ?? await this.subscriptionsRepository.getCustomerIdForUser(userId, this.options.provider);
+    if (!market || !customerId) return null;
+    const prices = await regional.getPrices(null, userId);
+    const target = prices.plans.find(plan => plan.code === promotion.plan_code);
+    const priceId = regional.options.prices[prices.market][promotion.plan_code];
+    if (!prices.available || !target || !priceId) return null;
+    const currentPlan = current.plan_code as CancelOffer["current_plan_code"];
+    return {
+      promotion,
+      priceId,
+      market,
+      customerId,
+      subject: { promotionId: promotion.id, userId, providerSubscriptionId: current.provider_subscription_id, fromPlanCode: current.plan_code },
+      offer: {
+        kind,
+        slug: promotion.slug,
+        percent_off: promotion.percent_off,
+        plan_code: promotion.plan_code,
+        currency: prices.currency,
+        amount: target.amount,
+        discounted_amount: discountedAmount(target.amount, promotion.percent_off),
+        current_plan_code: currentPlan,
+        current_amount: prices.plans.find(plan => plan.code === currentPlan)?.amount ?? null,
+        period_end: periodEnd
+      } satisfies CancelOffer
+    };
   }
 
   async handleWebhook(payload: Buffer, signature: string | undefined): Promise<BillingWebhookResponseData> {
@@ -884,6 +1135,9 @@ export class BillingService {
     const owner = await this.usersRepository.getById(userId);
     if (!owner || (owner as unknown as { deletion_requested_at?: string }).deletion_requested_at) return;
     const mappedPlanCode = this.resolvePlanCodeFromPrices(subscription.price_ids);
+    // Ended because a paid subscription replaced it: kept "inactive" (superseded), like a row replaced locally,
+    // rather than a canceled trial (no "trial canceled" reminder email, no cancellation in the trial metrics).
+    const replaced = Boolean(subscription.replaced_by) && ["canceled", "incomplete_expired"].includes(subscription.status);
 
     await this.subscriptionsRepository.ensureCustomerLink({
       user_id: userId,
@@ -897,10 +1151,10 @@ export class BillingService {
       provider_customer_id: subscription.customer_id,
       provider_subscription_id: subscription.id,
       plan_code: mappedPlanCode,
-      status: subscription.status,
+      status: replaced ? "inactive" : subscription.status,
       current_period_start: subscription.current_period_start,
       current_period_end: subscription.current_period_end,
-      cancel_at_period_end: subscription.cancel_at_period_end,
+      cancel_at_period_end: replaced ? false : subscription.cancel_at_period_end,
       tracking: {
         ...subscription.details,
         ...(event ? { last_provider_event_id: event.id, last_provider_event_at: event.created ?? null } : {})
@@ -913,6 +1167,7 @@ export class BillingService {
       await this.subscriptionsRepository.redeemTrialTransitionGrant(userId, subscription.id);
     }
     await this.subscriptionsRepository.upsertProviderSubscription(payload);
+    await this.finishCancelOffer(userId, subscription);
   }
 
   private resolvePlanCodeFromPrices(priceIds: string[]): PlanCode {

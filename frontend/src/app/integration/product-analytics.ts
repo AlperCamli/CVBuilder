@@ -29,6 +29,9 @@ function actionFor(method: string, path: string): string | null {
   if (/^\/revisions\/[^/]+\/restore$/.test(route)) return "cv_revision_restored";
   if (route === "/me") return "profile_updated";
   if (route === "/billing/portal") return "billing_portal_opened";
+  if (route === "/billing/cancel-offer/checkout") return "cancel_offer_checkout_opened";
+  if (route === "/billing/cancel-offer/accept") return "cancel_offer_accepted";
+  if (route === "/billing/plan-change") return method === "DELETE" ? "plan_change_dropped" : "plan_change_scheduled";
   return null;
 }
 

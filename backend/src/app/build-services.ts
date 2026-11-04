@@ -301,7 +301,8 @@ export const buildDefaultServices = (
         stripeWebhookSecret: config.billing.stripeWebhookSecret,
         trialPeriodDays: config.billing.trialPeriodDays,
         monetization: monetizationRepository,
-        promotions: promotionsService
+        promotions: promotionsService,
+        cancelOffers: promotionsService
       }
     );
 

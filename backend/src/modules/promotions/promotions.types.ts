@@ -12,6 +12,7 @@ export interface PromotionRow {
   replaces_trial: boolean;
   stripe_coupon_id: string;
   archived_at: string | null;
+  cancel_audience?: CancelOfferAudience | null;
 }
 
 export interface PromotionCohortRow {
@@ -74,4 +75,46 @@ export interface CheckoutPromotion {
 export interface PromotionsCheckoutPort {
   resolveForCheckout(userId: string, token: string, planCode: string): Promise<CheckoutPromotion>;
   markRedeemed(promotionId: string, userId: string, checkoutSessionId: string): Promise<boolean>;
+}
+
+export type CancelOfferAudience = "trial" | "weekly" | "monthly" | "annual";
+
+// The newest unarchived promotion with channel 'cancel_flow' for one audience (docs/promotions/cancel-flow-offer.md).
+export interface CancelFlowPromotion {
+  id: string;
+  audience: CancelOfferAudience;
+  slug: string;
+  percent_off: number;
+  plan_code: PurchasePlan;
+  coupon_id: string;
+}
+
+export interface CancelOfferRow {
+  promotion_id: string;
+  user_id: string;
+  provider_subscription_id: string;
+  from_plan_code: string;
+  show_count: number;
+  declined_at: string | null;
+  last_checkout_at: string | null;
+  accepted_at: string | null;
+}
+
+export interface CancelOfferSubject {
+  promotionId: string;
+  userId: string;
+  providerSubscriptionId: string;
+  fromPlanCode: string;
+}
+
+// What BillingService needs for the offer on the "Cancel trial" screen. Shown, declined and checkout opened are
+// analysis only and never fail the request; accepted is written once the offer's checkout is paid and the trial ended.
+export interface CancelOffersPort {
+  activeCancelPromotion(audience: CancelOfferAudience): Promise<CancelFlowPromotion | null>;
+  findCancelOffer(promotionId: string, userId: string): Promise<CancelOfferRow | null>;
+  hasAcceptedCancelOffer(userId: string): Promise<boolean>;
+  recordCancelOfferShown(subject: CancelOfferSubject): Promise<void>;
+  recordCancelOfferDeclined(userId: string): Promise<void>;
+  recordCancelOfferCheckout(subject: CancelOfferSubject): Promise<void>;
+  markCancelOfferAccepted(subject: CancelOfferSubject): Promise<void>;
 }

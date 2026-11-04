@@ -69,6 +69,27 @@ export class BillingController {
     sendSuccess(response, data);
   });
 
+  getCancelOffer = asyncHandler(async (request: Request, response: Response) => {
+    response.setHeader("Cache-Control", "no-store");
+    sendSuccess(response, await this.billingService.getCancelOffer(requireSession(request).appUser.id));
+  });
+
+  postCancelOfferCheckout = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.billingService.createCancelOfferCheckout(requireSession(request).appUser.id, request.body));
+  });
+
+  postAcceptCancelOffer = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.billingService.acceptCancelOffer(requireSession(request).appUser.id));
+  });
+
+  postPlanChange = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.billingService.schedulePlanChange(requireSession(request).appUser.id, request.body.plan_code));
+  });
+
+  deletePlanChange = asyncHandler(async (request: Request, response: Response) => {
+    sendSuccess(response, await this.billingService.releasePlanChange(requireSession(request).appUser.id));
+  });
+
   postWebhooks = asyncHandler(async (request: Request, response: Response) => {
     const signature = request.header("stripe-signature");
 

@@ -1,8 +1,13 @@
 import type { Logger } from "pino";
 import { ConflictError } from "../../shared/errors/app-error";
-import type { RegionalPricingService } from "../billing/regional-pricing";
+import type { PurchasePlan, RegionalPricingService } from "../billing/regional-pricing";
 import type { PromotionsRepository } from "./promotions.repository";
 import type {
+  CancelFlowPromotion,
+  CancelOfferAudience,
+  CancelOfferRow,
+  CancelOfferSubject,
+  CancelOffersPort,
   CheckoutPromotion,
   OfferResponseData,
   OfferStatus,
@@ -11,6 +16,8 @@ import type {
   PromotionsCheckoutPort,
   ResolvedPromotionToken
 } from "./promotions.types";
+
+const PURCHASE_PLANS: readonly PurchasePlan[] = ["weekly", "monthly", "annual"];
 
 // Stripe's percent-off rounding, in minor units.
 export const discountedAmount = (amount: number, percentOff: number): number => amount - Math.round((amount * percentOff) / 100);
@@ -39,7 +46,7 @@ interface PromotionsServiceOptions {
   logger?: Pick<Logger, "warn">;
 }
 
-export class PromotionsService implements PromotionsCheckoutPort {
+export class PromotionsService implements PromotionsCheckoutPort, CancelOffersPort {
   private readonly now: () => number;
 
   constructor(
@@ -108,5 +115,44 @@ export class PromotionsService implements PromotionsCheckoutPort {
 
   markRedeemed(promotionId: string, userId: string, checkoutSessionId: string): Promise<boolean> {
     return this.repository.markRedeemed(promotionId, userId, checkoutSessionId);
+  }
+
+  async activeCancelPromotion(audience: CancelOfferAudience): Promise<CancelFlowPromotion | null> {
+    const promotion = await this.repository.activeCancelPromotion(audience);
+    const planCode = promotion?.plan_codes[0];
+    if (!promotion || promotion.plan_codes.length !== 1 || !PURCHASE_PLANS.includes(planCode as PurchasePlan)) return null;
+    return { id: promotion.id, audience, slug: promotion.slug, percent_off: promotion.percent_off, plan_code: planCode as PurchasePlan, coupon_id: promotion.stripe_coupon_id };
+  }
+
+  findCancelOffer(promotionId: string, userId: string): Promise<CancelOfferRow | null> {
+    return this.repository.findCancelOffer(promotionId, userId);
+  }
+
+  hasAcceptedCancelOffer(userId: string): Promise<boolean> {
+    return this.repository.hasAcceptedCancelOffer(userId);
+  }
+
+  async recordCancelOfferShown(subject: CancelOfferSubject): Promise<void> {
+    await this.analysisOnly("PROMOTION_CANCEL_OFFER_SHOWN_NOT_RECORDED", () => this.repository.recordCancelOfferShown(subject));
+  }
+
+  async recordCancelOfferDeclined(userId: string): Promise<void> {
+    await this.analysisOnly("PROMOTION_CANCEL_OFFER_DECLINE_NOT_RECORDED", () => this.repository.recordCancelOfferDeclined(userId));
+  }
+
+  async recordCancelOfferCheckout(subject: CancelOfferSubject): Promise<void> {
+    await this.analysisOnly("PROMOTION_CANCEL_OFFER_CHECKOUT_NOT_RECORDED", () => this.repository.recordCancelOfferCheckout(subject));
+  }
+
+  markCancelOfferAccepted(subject: CancelOfferSubject): Promise<void> {
+    return this.repository.markCancelOfferAccepted(subject);
+  }
+
+  private async analysisOnly(code: string, write: () => Promise<void>): Promise<void> {
+    try {
+      await write();
+    } catch (error) {
+      this.options.logger?.warn({ code, reason: error instanceof Error ? error.message : "unknown" }, "Cancel offer event not recorded");
+    }
   }
 }

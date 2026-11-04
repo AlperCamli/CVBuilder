@@ -269,6 +269,9 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
         current_period_start: input.current_period_start,
         current_period_end: input.current_period_end,
         cancel_at_period_end: input.cancel_at_period_end,
+        ...(input.tracking && "scheduled_plan_code" in input.tracking
+          ? { scheduled_plan_code: input.tracking.scheduled_plan_code ?? null, scheduled_change_at: input.tracking.scheduled_change_at ?? null }
+          : {}),
         updated_at: nowIso()
       };
 
@@ -288,6 +291,8 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
       current_period_start: input.current_period_start,
       current_period_end: input.current_period_end,
       cancel_at_period_end: input.cancel_at_period_end,
+      scheduled_plan_code: input.tracking?.scheduled_plan_code ?? null,
+      scheduled_change_at: input.tracking?.scheduled_change_at ?? null,
       created_at: nowIso(),
       updated_at: nowIso()
     };

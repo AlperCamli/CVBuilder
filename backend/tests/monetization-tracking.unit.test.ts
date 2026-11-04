@@ -95,6 +95,7 @@ describe("monetization tracking", () => {
       canceled_at: "2026-09-20T10:26:40.000Z", ended_at: "2026-09-28T14:13:20.000Z",
       cancellation_reason: "cancellation_requested", cancellation_feedback: "too_expensive",
       unit_amount: 6990, currency: "try", billing_interval: "week",
+      scheduled_plan_code: null, scheduled_change_at: null,
       last_provider_event_id: "evt_sub", last_provider_event_at: "2026-10-01T00:00:00.000Z"
     });
   });

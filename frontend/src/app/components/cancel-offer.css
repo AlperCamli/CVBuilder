@@ -1,0 +1,13 @@
+/* Additions to checkout-screen.css for the "Cancel trial" offer. */
+.cancel-offer-card { position:relative; padding-top:24px; border-color:#bfe3d0; background:linear-gradient(180deg,#f1faf5,#f7faf8); }
+.cancel-offer-badge { position:absolute; top:-11px; left:16px; display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:30px; background:var(--color-teal-600); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.06em; box-shadow:0 2px 6px #0f6e5626; }
+.cancel-offer-compare { display:flex; align-items:center; gap:7px; margin:-6px 0 16px; color:#0f6e51; font-size:12.5px; font-weight:600; }
+.cancel-offer-compare svg { flex-shrink:0; }
+.cancel-offer-timeline li:first-child>span { background:#fff; border-color:#cbe8d8; color:#0f7755; }
+.cancel-offer-timeline li:nth-child(2)>span { background:var(--color-teal-600); border-color:var(--color-teal-600); color:#fff; }
+/* Cancelling stays a full-size, readable button: never a faint link. */
+.cancel-offer-decline { color:#3d5247; border-color:#cfdcd4; }
+@media(max-width:760px) {
+  .cancel-offer-card { padding-top:22px; }
+  .cancel-offer-compare { font-size:12px; }
+}

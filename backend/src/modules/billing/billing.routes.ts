@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler } from "express";
 import { validate } from "../../shared/validation/validate";
 import type { BillingController } from "./billing.controller";
-import { billingCheckoutSchema, billingPortalSchema, billingCheckoutConfirmSchema } from "./billing.schemas";
+import { billingCheckoutSchema, billingPortalSchema, billingCheckoutConfirmSchema, billingCancelOfferCheckoutSchema, billingCancelOfferAcceptSchema, billingPlanChangeSchema } from "./billing.schemas";
 
 export const createBillingRouter = (
   billingController: BillingController,
@@ -33,6 +33,12 @@ export const createBillingRouter = (
     validate({ body: billingPortalSchema }),
     billingController.postPortal
   );
+
+  router.get("/billing/cancel-offer", authMiddleware, billingController.getCancelOffer);
+  router.post("/billing/cancel-offer/checkout", authMiddleware, validate({ body: billingCancelOfferCheckoutSchema }), billingController.postCancelOfferCheckout);
+  router.post("/billing/cancel-offer/accept", authMiddleware, validate({ body: billingCancelOfferAcceptSchema }), billingController.postAcceptCancelOffer);
+  router.post("/billing/plan-change", authMiddleware, validate({ body: billingPlanChangeSchema }), billingController.postPlanChange);
+  router.delete("/billing/plan-change", authMiddleware, billingController.deletePlanChange);
 
   router.post("/billing/webhooks", billingController.postWebhooks);
 

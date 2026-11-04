@@ -7,6 +7,8 @@ import {
   regionalPortalParameters,
   portalMatchesPrices,
   portalAllowsCancellation,
+  portalSchedulesDowngrades,
+  scheduleDowngradesUpdate,
   type PortalPlanPrice,
 } from "../src/modules/billing/portal-setup";
 import type {
@@ -20,7 +22,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help")) {
     console.log(
-      "Usage: npm run stripe:regional-portals [-- --create | --list | --enable-cancellation]",
+      "Usage: npm run stripe:regional-portals [-- --create | --list | --enable-cancellation | --schedule-downgrades]",
     );
     console.log(
       "Default: validate all six prices and any configured portals without writing to Stripe.",
@@ -32,11 +34,14 @@ async function main() {
       "--enable-cancellation: turn on end-of-period cancellation in the configured portals. Nothing else in them changes.",
     );
     console.log(
+      "--schedule-downgrades: make downgrades in the configured portals wait for the end of the paid period. Nothing else in them changes.",
+    );
+    console.log(
       "--list: list existing portal configuration IDs and allowed prices without making changes. Only STRIPE_SECRET_KEY is required.",
     );
     return;
   }
-  if (args.some((arg) => !["--create", "--list", "--enable-cancellation"].includes(arg)))
+  if (args.some((arg) => !["--create", "--list", "--enable-cancellation", "--schedule-downgrades"].includes(arg)))
     throw new SetupError("Unknown option. Use --help.");
   if (args.length > 1)
     throw new SetupError("Use one option at a time.");
@@ -70,7 +75,7 @@ async function main() {
         configuration.features.subscription_update.products ?? []
       ).flatMap((product) => product.prices);
       console.log(
-        `${configuration.id} | default=${configuration.is_default} | active=${configuration.active} | cancellation=${portalAllowsCancellation(configuration)} | plan_changes=${configuration.features.subscription_update.enabled} | allowed_prices=${priceIds.join(",") || "none"}`,
+        `${configuration.id} | default=${configuration.is_default} | active=${configuration.active} | cancellation=${portalAllowsCancellation(configuration)} | downgrades_at_period_end=${portalSchedulesDowngrades(configuration)} | plan_changes=${configuration.features.subscription_update.enabled} | allowed_prices=${priceIds.join(",") || "none"}`,
       );
       count++;
     }
@@ -214,6 +219,19 @@ async function main() {
         },
       );
       console.log(`${variable(market)}: end-of-period cancellation enabled.`);
+    }
+    if (configuration && !portalSchedulesDowngrades(configuration) && args.includes("--schedule-downgrades")) {
+      configuration = await stripe.billingPortal.configurations.update(configuration.id, {
+        ...scheduleDowngradesUpdate(),
+        expand: ["features.subscription_update.products"],
+      });
+      console.log(`${variable(market)}: downgrades now wait for the end of the paid period.`);
+    }
+    if (configuration && !portalSchedulesDowngrades(configuration)) {
+      console.error(
+        `${variable(market)} (${configuration.id}) applies downgrades immediately with a credit. Run again with --schedule-downgrades.`,
+      );
+      process.exitCode = 1;
     }
     if (configuration && !portalAllowsCancellation(configuration)) {
       console.error(

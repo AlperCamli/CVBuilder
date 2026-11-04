@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import {
   assignCohorts,
   assignmentOpen,
+  cancelFlowPromotionRow,
   countByCohortAndLocale,
   couponMismatches,
   couponName,
   couponTerms,
+  isCancelFlowConfig,
   isEligibleAccount,
   parseCampaign,
+  parseCancelFlowCampaign,
   promotionRow,
   stratumOf,
 } from "../scripts/promotions/campaign";
@@ -132,5 +135,51 @@ describe("assignCohorts", () => {
   it("ignores duplicate candidates and requires a cohort", () => {
     expect(assignCohorts({ ...base, candidates: [candidates[0], candidates[0]] }).size).toBe(1);
     expect(() => assignCohorts({ ...base, cohortKeys: [] })).toThrow("cohort");
+  });
+});
+
+describe("cancel-flow campaign config", () => {
+  const cancelRaw = JSON.parse(readFileSync(join(__dirname, "../../promotions/trial-cancel-save50/campaign.json"), "utf-8"));
+
+  it("parses the trial-cancel offer and builds its promotion row and coupon", () => {
+    expect(isCancelFlowConfig(cancelRaw)).toBe(true);
+    expect(isCancelFlowConfig(raw)).toBe(false);
+    const cancel = parseCancelFlowCampaign(cancelRaw);
+    // The trial is kept: accepting only discounts the first charge after it.
+    expect(cancelFlowPromotionRow(cancel, "coupon_x")).toEqual({
+      slug: "trial-cancel-save50", name: cancel.name, channel: "cancel_flow", cancel_audience: "trial", percent_off: 50, plan_codes: ["monthly"], duration: "once",
+      duration_in_months: null, replaces_trial: false, stripe_coupon_id: "coupon_x", site_url: "https://jobspecificcv.com", utm: {}
+    });
+    expect(couponTerms(cancel, ["prod_monthly"])).toEqual({
+      percent_off: 50, duration: "once", applies_to: { products: ["prod_monthly"] }, name: "50% off your first month", metadata: { promotion_slug: "trial-cancel-save50" }
+    });
+  });
+
+  it.each([
+    ["two plans", { plan_codes: ["monthly", "annual"] }],
+    ["no plan", { plan_codes: [] }],
+    ["email-only fields", { cohorts: [] }],
+    ["repeating without months", { duration: "repeating" }]
+  ])("rejects %s", (_label, change) => {
+    expect(() => parseCancelFlowCampaign({ ...cancelRaw, ...change })).toThrow(/Invalid campaign config/);
+  });
+
+  it("parses the paid-weekly and monthly offers", () => {
+    const read = (slug: string) => parseCancelFlowCampaign(JSON.parse(readFileSync(join(__dirname, `../../promotions/${slug}/campaign.json`), "utf-8")));
+    expect(cancelFlowPromotionRow(read("weekly-cancel-save50"), "c")).toMatchObject({ cancel_audience: "weekly", plan_codes: ["monthly"], percent_off: 50, duration: "once" });
+    expect(cancelFlowPromotionRow(read("monthly-cancel-save50"), "c")).toMatchObject({ cancel_audience: "monthly", plan_codes: ["monthly"], percent_off: 50, duration: "once" });
+  });
+
+  it.each([
+    ["a paid-weekly offer that stays weekly", { audience: "weekly", plan_codes: ["weekly"] }],
+    ["a monthly offer for another plan", { audience: "monthly", plan_codes: ["annual"] }],
+    ["an annual offer for another plan", { audience: "annual", plan_codes: ["monthly"] }],
+    ["no audience", { audience: undefined }]
+  ])("rejects %s", (_label, change) => {
+    expect(() => parseCancelFlowCampaign({ ...cancelRaw, ...change })).toThrow(/Invalid campaign config/);
+  });
+
+  it("is never parsed as an email campaign", () => {
+    expect(() => parseCampaign(cancelRaw)).toThrow(/cancel_flow/);
   });
 });

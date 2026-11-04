@@ -161,11 +161,14 @@ describe("account privacy jobs", () => {
     db.table("marketing_email_preferences").push({ user_id: userId, unsubscribe_token: "u".repeat(48), opted_out_at: "2026-11-04T08:00:00.000Z", created_at: "2026-11-03T00:00:00.000Z", updated_at: "2026-11-04T08:00:00.000Z" });
     db.table("promotion_recipients").push({ promotion_id: "promo", user_id: userId, cohort_id: "cohort", token: "p".repeat(36), assigned_at: "2026-11-03T00:00:00.000Z", first_opened_at: null, open_count: 0, redeemed_at: null, redeemed_checkout_session_id: null });
     db.table("promotion_recipients").push({ promotion_id: "promo", user_id: "someone-else", cohort_id: "cohort", token: "q".repeat(36) });
+    db.table("promotion_cancel_offers").push({ promotion_id: "cancel-promo", user_id: userId, provider_subscription_id: "sub_trial", from_plan_code: "weekly", first_shown_at: "2026-11-04T09:00:00.000Z", last_shown_at: "2026-11-04T09:00:00.000Z", show_count: 1, declined_at: null, last_checkout_at: "2026-11-04T09:00:30.000Z", accepted_at: "2026-11-04T09:01:00.000Z" });
+    db.table("promotion_cancel_offers").push({ promotion_id: "cancel-promo", user_id: "someone-else", provider_subscription_id: "sub_other", from_plan_code: "weekly", show_count: 1 });
     const job = await service.requestExport(userId); expect(job.status).toBe("complete");
     const path = `exports/privacy/${userId}/${job.id}.zip`; const zip = await JSZip.loadAsync(db.objects.get(path)!);
     const exported = await zip.file("data.json")!.async("string"); const parsed = JSON.parse(exported);
     expect(parsed.marketing_email_preferences).toEqual([{ opted_out_at: "2026-11-04T08:00:00.000Z", created_at: "2026-11-03T00:00:00.000Z", updated_at: "2026-11-04T08:00:00.000Z" }]);
     expect(parsed.promotion_recipients).toEqual([{ promotion_id: "promo", cohort_id: "cohort", assigned_at: "2026-11-03T00:00:00.000Z", first_opened_at: null, open_count: 0, redeemed_at: null, redeemed_checkout_session_id: null }]);
+    expect(parsed.promotion_cancel_offers).toEqual([{ promotion_id: "cancel-promo", provider_subscription_id: "sub_trial", from_plan_code: "weekly", first_shown_at: "2026-11-04T09:00:00.000Z", last_shown_at: "2026-11-04T09:00:00.000Z", show_count: 1, declined_at: null, last_checkout_at: "2026-11-04T09:00:30.000Z", accepted_at: "2026-11-04T09:01:00.000Z" }]);
     expect(exported).not.toContain("u".repeat(48)); expect(exported).not.toContain("p".repeat(36)); expect(exported).not.toContain("q".repeat(36));
     expect(await zip.file(`files/${id}/cv.pdf`)!.async("string")).toBe("CV bytes"); expect(zip.file(`files/${foreign}/cv.pdf`)).toBeNull(); expect(JSON.parse(await zip.file("data.json")!.async("string")).users[0].id).toBe(userId);
     db.table("users").push({ id: "other", ai_processing: false }); await expect(service.exportDownload("other", job.id)).rejects.toThrow("expired");
