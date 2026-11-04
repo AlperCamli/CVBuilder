@@ -135,6 +135,20 @@ export function FilterBar() {
         />
         Include admin accounts
       </label>
+      {support?.filters.has("ai_segment") && (
+        <label
+          className="flex h-8 items-center gap-1.5 text-sm text-muted-foreground"
+          title="AI spend, AI cost, anomalies and tokens: also count admin accounts, guests, accounts pending deletion or restricted, scripts and tests, so totals approach the provider bill. Unit economics and reliability always count external accounts."
+        >
+          <input
+            type="checkbox"
+            className="size-4 accent-[var(--primary)]"
+            checked={filters.all_ai_costs}
+            onChange={(e) => setFilters({ all_ai_costs: e.target.checked })}
+          />
+          Include all AI costs
+        </label>
+      )}
       {dims.map((dim) => (
         <Chip
           key={dim}

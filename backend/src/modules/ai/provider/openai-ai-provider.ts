@@ -4,6 +4,13 @@ import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import { reportAiUsage, type AiProvider, type AiProviderRequest, type AiProviderResult } from "./ai-provider";
 import {
+  AiAttemptLedger,
+  outcomeOfRequestError,
+  outcomeOfResponseError,
+  requestIdOf,
+  type AiUsageSink
+} from "./ai-usage-ledger";
+import {
   HEAVY_MODEL_FLOW_TYPES,
   LARGE_OUTPUT_FLOW_TYPES,
   asRecord,
@@ -192,6 +199,7 @@ export class OpenAiAiProvider implements AiProvider {
   private readonly reasoningEffort: OpenAiReasoningEffort;
   private readonly randomFn: () => number;
   private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly usageSink: AiUsageSink | null;
 
   constructor(
     private readonly defaultModelName: string,
@@ -209,6 +217,7 @@ export class OpenAiAiProvider implements AiProvider {
       reasoningEffort?: OpenAiReasoningEffort;
       randomFn?: () => number;
       sleepFn?: (ms: number) => Promise<void>;
+      usageSink?: AiUsageSink | null;
     }
   ) {
     this.client = new OpenAI({
@@ -231,6 +240,7 @@ export class OpenAiAiProvider implements AiProvider {
     this.reasoningEffort = options?.reasoningEffort ?? "low";
     this.randomFn = options?.randomFn ?? Math.random;
     this.sleepFn = options?.sleepFn ?? sleep;
+    this.usageSink = options?.usageSink ?? null;
   }
 
   private resolveMaxOutputTokens(flowType: AiFlowType): number {
@@ -297,12 +307,14 @@ export class OpenAiAiProvider implements AiProvider {
     const attemptedModels: string[] = [];
     const modelCandidates = request.single_attempt ? [request.model_name] : this.resolveModelCandidates(request.model_name);
     const maxAttempts = request.single_attempt ? 1 : this.maxAttempts;
+    const ledger = new AiAttemptLedger(this.usageSink, this.providerName, request);
 
     for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
       const candidateModel = modelCandidates[modelIndex] ?? request.model_name;
       attemptedModels.push(candidateModel);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const ledgerAttempt = ledger.begin(candidateModel, modelIndex > 0);
         try {
           const response = await this.client.chat.completions.create({
             model: candidateModel,
@@ -322,81 +334,94 @@ export class OpenAiAiProvider implements AiProvider {
             }
           });
 
+          const cacheWriteTokens = response.usage?.prompt_tokens_details?.cache_write_tokens;
           const usage = response.usage
               ? {
                   input_tokens: response.usage.prompt_tokens ?? 0,
                   output_tokens: response.usage.completion_tokens ?? 0,
                   total_tokens: response.usage.total_tokens ?? 0,
                   cached_input_tokens: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                  // GPT-5.6 and later bill prompt-cache writes above the input rate.
+                  ...(cacheWriteTokens ? { cache_write_input_tokens: cacheWriteTokens } : {}),
                   reasoning_tokens: response.usage.completion_tokens_details?.reasoning_tokens ?? 0
                 }
               : undefined;
           const actualModel = response.model || candidateModel;
-          await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
+          ledgerAttempt.received({ model_reported: actualModel, usage, provider_request_id: requestIdOf(response) });
+          try {
+            await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
 
-          const choice = response.choices[0];
-          const refusal = choice?.message?.refusal;
-          if (typeof refusal === "string" && refusal.trim()) {
-            throw new AiProviderError("OpenAI refused the request", {
-              reason: "provider_refusal",
-              raw_output_excerpt: toDebugExcerpt(refusal),
-              attempted_models: attemptedModels
-            });
+            const choice = response.choices[0];
+            const refusal = choice?.message?.refusal;
+            if (typeof refusal === "string" && refusal.trim()) {
+              throw new AiProviderError("OpenAI refused the request", {
+                reason: "provider_refusal",
+                raw_output_excerpt: toDebugExcerpt(refusal),
+                attempted_models: attemptedModels
+              });
+            }
+
+            const responseText =
+              typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
+
+            // A truncated response can still contain recoverable-looking partial JSON;
+            // failing here beats surfacing it as a schema-validation error downstream.
+            if (choice?.finish_reason === "length") {
+              throw new AiProviderError("OpenAI output was truncated by the output token limit", {
+                reason: "output_truncated_by_token_limit",
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            if (!responseText) {
+              throw new AiProviderError("OpenAI returned an empty response", {
+                reason: "empty_response",
+                raw_output_excerpt: "",
+                attempted_models: attemptedModels
+              });
+            }
+
+            await request.onStage?.("parsing_output");
+
+            const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
+            if (parsedResult.parsed === null) {
+              throw new AiProviderError("OpenAI returned non-JSON output", {
+                reason: "output_json_unparseable",
+                parse_error: parsedResult.parse_error,
+                recovery_attempted: true,
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            const outputPayload = asRecord(parsedResult.parsed);
+            if (!outputPayload) {
+              throw new AiProviderError("OpenAI returned unsupported output shape", {
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            await ledgerAttempt.settle("success");
+            return {
+              provider: this.providerName,
+              model_name: actualModel,
+              output_payload: outputPayload,
+              usage
+            };
+          } catch (error) {
+            await ledgerAttempt.settle(outcomeOfResponseError(error));
+            throw error;
           }
-
-          const responseText =
-            typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
-
-          // A truncated response can still contain recoverable-looking partial JSON;
-          // failing here beats surfacing it as a schema-validation error downstream.
-          if (choice?.finish_reason === "length") {
-            throw new AiProviderError("OpenAI output was truncated by the output token limit", {
-              reason: "output_truncated_by_token_limit",
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          if (!responseText) {
-            throw new AiProviderError("OpenAI returned an empty response", {
-              reason: "empty_response",
-              raw_output_excerpt: "",
-              attempted_models: attemptedModels
-            });
-          }
-
-          await request.onStage?.("parsing_output");
-
-          const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
-          if (parsedResult.parsed === null) {
-            throw new AiProviderError("OpenAI returned non-JSON output", {
-              reason: "output_json_unparseable",
-              parse_error: parsedResult.parse_error,
-              recovery_attempted: true,
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          const outputPayload = asRecord(parsedResult.parsed);
-          if (!outputPayload) {
-            throw new AiProviderError("OpenAI returned unsupported output shape", {
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          return {
-            provider: this.providerName,
-            model_name: actualModel,
-            output_payload: outputPayload,
-            usage
-          };
         } catch (error) {
           if (error instanceof AiProviderError) {
             throw error;
           }
 
+          // A failed request. A response rejected above (e.g. by onStage) was already recorded; this is then a no-op.
+          const failed = outcomeOfRequestError(error);
+          await ledgerAttempt.settle(failed.outcome, { http_status: failed.http_status, provider_request_id: requestIdOf(error) });
           const context = toOpenAiProviderErrorContext(error);
           lastErrorContext = context;
           lastAttemptedModel = candidateModel;

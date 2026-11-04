@@ -50,13 +50,22 @@ Operational tasks for `admin.jobspecificcv.com`. Design: [architecture.md](archi
 - **Before the analytics jobs:** the 03:30 Vercel cron `/api/v1/billing/analytics/refresh` refreshes FX rates, the price and plan catalogs, `ai_model_prices` and internal-account flags first.
 
 ## AI model prices
-AI cost is exact from 2026-10-27, when `ai_runs.cost_usd` starts being filled. Older runs are re-priced from tokens using `public.ai_model_prices`, which the 03:30 refresh fills from the backend env `AI_MODEL_PRICING_JSON`:
+AI cost is exact from 2026-10-27, when `ai_runs.cost_usd` starts being filled. Older runs are re-priced from tokens using `public.ai_model_prices`, which the 03:30 refresh fills from the backend env `AI_MODEL_PRICING_JSON` (the current value is in `backend/.env.example`):
 ```json
-{"gpt-6-luna":{"input":0.10,"cached_input":0.01,"output":0.50},"gpt-5.6-luna":{"input":…,"output":…}}
+{"gpt-6-luna":{"input":0.10,"cached_input":0.01,"cache_write":0.125,"output":0.50},"gpt-5.6-luna":{"input":0.20,"cached_input":0.02,"cache_write":0.25,"output":1.20}}
 ```
-- Prices are USD per 1M tokens. Keys are model-name prefixes; the longest match wins.
-- Models without a price count as **unpriced runs**, so AI cost is a lower bound. Data health lists unpriced runs per model.
+- Prices are USD per 1M tokens. Keys are model-name prefixes; the longest match wins. `cached_input` is the cache-read rate and `cache_write` the prompt-cache write rate (OpenAI GPT-5.6 and later, Anthropic); both default to `input`.
+- Models without a price count as **unpriced runs**, so AI cost is a lower bound. Data health lists unpriced runs per model, and the backend logs `AI_MODEL_PRICE_MISSING` at startup when the active provider's light or heavy model has no price.
+- After syncing the prices the refresh calls `public.backfill_ai_run_cost_estimates()`: runs with tokens but no `cost_usd` whose model is now priced get the re-priced cost stored, flagged `ai_runs.cost_usd_estimated` (never counted as exact). Runs of accounts pending deletion or restricted are skipped and stay re-priced at read time. Run it by hand after a price change with `select public.backfill_ai_run_cost_estimates();` (service role).
 - An empty `AI_MODEL_PRICING_JSON` never wipes stored prices; the refresh reports a failure instead.
+- There is no price history: a changed price re-prices every run without a stored cost. Runs with a stored `cost_usd` keep the price of when they ran.
+
+## AI usage ledger (`public.ai_usage_events`)
+- **What it is:** one append-only row per provider HTTP attempt (retries, timeouts, errors, refusals, model fallbacks), written by the backend's providers (`source = app`), scripts (`script`, e.g. `scripts/compare-cv-review.ts`) and test runs (`test`), with `environment = APP_ENV`. No prompts or payloads. `ai_run_id` / `user_id` are set null when the run or account is deleted, so the cost survives guest cleanup and erasure.
+- **Where it shows:** AI cost page → "AI spend (all provider attempts)" (`analytics.ai_spend`); Data health → "AI usage ledger health". Compare `ai_spend` with all segments to the provider bill.
+- **Scripts write to whatever `SUPABASE_URL` points at.** `backend/.env.local` points at production, so a local script run lands in the production ledger as segment `script` (environment `development`); the local backend's own app attempts are tagged `environment = development`.
+- **A sink failure never breaks an AI call:** each attempt waits at most 2 s for its insert and logs `AI_USAGE_EVENT_NOT_RECORDED` on failure. Data health's `ai_runs_without_attempts` shows runs whose attempts went missing.
+- **Before the ledger** (the first production app attempt), `ai_spend` falls back to the surviving `ai_runs`; deleted guest runs, retries and script calls before then are not recoverable.
 
 ## Rotate the `analytics_api` password
 1. Generate a new password: `openssl rand -hex 32`.

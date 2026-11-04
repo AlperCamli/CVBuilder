@@ -90,6 +90,7 @@ export interface ModelPriceRow {
   model_prefix: string;
   input_usd: number;
   cached_input_usd: number | null;
+  cache_write_usd: number | null;
   output_usd: number;
 }
 
@@ -107,6 +108,9 @@ export interface MonetizationRepository {
   // Makes ai_model_prices equal to the configured prices: upserts them and deletes every other prefix.
   // An empty list changes nothing.
   replaceModelPrices(rows: ModelPriceRow[]): Promise<void>;
+  // Stores an estimated cost_usd on runs that reported tokens but no cost once their model is priced; returns
+  // the number of runs updated.
+  backfillRunCostEstimates(): Promise<number>;
 }
 
 const utcDay = () => new Date().toISOString().slice(0, 10);
@@ -195,6 +199,12 @@ export class SupabaseMonetizationRepository implements MonetizationRepository {
     if (!stale.length) return;
     const { error: deleteError } = await this.db.from("ai_model_prices").delete().in("model_prefix", stale);
     if (deleteError) throw new InternalServerError("Failed to refresh model prices", { reason: deleteError.message });
+  }
+
+  async backfillRunCostEstimates(): Promise<number> {
+    const { data, error } = await this.db.rpc("backfill_ai_run_cost_estimates");
+    if (error) throw new InternalServerError("Failed to backfill AI run costs", { reason: error.message });
+    return typeof data === "number" ? data : 0;
   }
 
   private async quietly(code: string, write: () => PromiseLike<{ error: { message: string } | null }>): Promise<void> {

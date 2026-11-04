@@ -15,6 +15,7 @@ import type { Row } from "@/lib/shapes";
 import { cn } from "@/lib/utils";
 
 const FRESHNESS = "data_freshness";
+const AI_LEDGER = "ai_ledger_health";
 
 /** Status colour from the fixed status palette, always with an icon and a word. */
 const STATUS: Record<FreshnessStatus, { label: string; icon: LucideIcon; className: string }> = {
@@ -37,13 +38,13 @@ export function StatusLabel({ status }: { status: FreshnessStatus }) {
 const th = "px-2 py-1.5 text-left font-medium";
 const td = "px-2 py-1.5 align-top";
 
-function FreshnessTable({ rows }: { rows: Row[] }) {
+function FreshnessTable({ rows, label = "Data freshness checks" }: { rows: Row[]; label?: string }) {
   const summary = freshnessSummary(rows);
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">{summary ? `${summary} need attention.` : "Every check is OK."}</p>
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-xs" aria-label="Data freshness checks">
+        <table className="w-full text-xs" aria-label={label}>
           <thead className="bg-card text-muted-foreground">
             <tr>
               <th scope="col" className={th}>
@@ -94,14 +95,15 @@ function FreshnessTable({ rows }: { rows: Row[] }) {
 /** Data health ignores the page filters: internal accounts are always excluded here. */
 const healthFilters = (filters: GlobalFilters): GlobalFilters => ({ ...filters, include_internal: false, breakdown: undefined, filters: {} });
 
-function FreshnessCard() {
+/** A table of status checks (`data_freshness`, `ai_ledger_health`): item, label, status, value, at, detail. */
+function FreshnessCard({ name = FRESHNESS, title = "Data freshness" }: { name?: string; title?: string }) {
   const [filters] = useFilters();
-  const metric = useMetric(FRESHNESS, healthFilters(filters));
-  if (metric.missing) return <NotAvailableCard name={FRESHNESS} title="Data freshness" />;
+  const metric = useMetric(name, healthFilters(filters));
+  if (metric.missing) return <NotAvailableCard name={name} title={title} />;
   const rows = metric.data?.rows;
   return (
     <ChartCard
-      title={metric.meta?.title ?? "Data freshness"}
+      title={metric.meta?.title ?? title}
       meta={metric.meta}
       generatedAt={metric.data?.generated_at}
       loading={metric.isPending}
@@ -111,7 +113,7 @@ function FreshnessCard() {
       empty={rows?.length === 0}
       onRetry={() => void metric.refetch()}
     >
-      {rows && <FreshnessTable rows={rows} />}
+      {rows && <FreshnessTable rows={rows} label={`${title} checks`} />}
     </ChartCard>
   );
 }
@@ -276,12 +278,13 @@ function AuditCard() {
   );
 }
 
-/** Freshness checks, the pre-computed metrics' build and recompute, and recent admin activity. */
+/** Freshness checks, the AI usage ledger, the pre-computed metrics' build and recompute, and recent admin activity. */
 export function DataHealthPage() {
   return (
     <div className="flex flex-col gap-4">
       <RecomputeCard />
       <FreshnessCard />
+      <FreshnessCard name={AI_LEDGER} title="AI usage ledger health" />
       <AuditCard />
     </div>
   );

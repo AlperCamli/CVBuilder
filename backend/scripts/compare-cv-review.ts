@@ -1,5 +1,7 @@
 // Offline comparison of CV review prompts and inputs on stored imports. Calls the AI provider
-// directly (no ai_runs rows) and reads imports read-only.
+// directly (no ai_runs rows) and reads imports read-only. Every provider attempt is still written to
+// ai_usage_events with source 'script' in the database SUPABASE_URL points at, so its cost shows on the
+// admin dashboard as test cost.
 //
 // Usage: tsx scripts/compare-cv-review.ts --out <dir> --reps 3 <import_id> [<import_id> ...]
 // Versions:
@@ -12,7 +14,9 @@ import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getConfig } from "../src/shared/config/env";
+import { createLogger } from "../src/shared/logging/logger";
 import { createAiProvider } from "../src/modules/ai/provider/create-ai-provider";
+import { createAiUsageSink } from "../src/modules/ai/provider/ai-usage-ledger";
 import { AI_FLOW_REGISTRY } from "../src/modules/ai/flows/flow-registry";
 import { clampToSchemaLimits } from "../src/modules/ai/flows/clamp-to-schema";
 import { cvParseOutputSchema, cvReviewCriterionOutputSchema, cvReviewOutputSchema, type CvReviewAiOutput } from "../src/modules/ai/flows/flow-contracts";
@@ -63,9 +67,13 @@ const importIds = args;
 if (!importIds.length) throw new Error("Pass at least one import id");
 
 const config = getConfig();
-// Production runs the review at medium reasoning effort.
-const provider = createAiProvider({ ...config, ai: { ...config.ai, openaiReasoningEffort: "medium" } });
 const db = createClient(config.supabase.url, config.supabase.serviceRoleKey, { auth: { persistSession: false } });
+const logger = createLogger(config);
+// Production runs the review at medium reasoning effort.
+const provider = createAiProvider(
+  { ...config, ai: { ...config.ai, openaiReasoningEffort: "medium" } },
+  { logger, usageSink: createAiUsageSink(config, db, logger, "script") }
+);
 const model = provider.resolveModelName("cv_review");
 
 const sentCorpus = (input: CvReviewAiInput) => looseText("text" in input ? input.text : input.sections.flatMap(s => [s.title, ...s.blocks.flatMap(b => [b.heading, ...b.lines])]).join("\n"));

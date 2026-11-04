@@ -46,14 +46,17 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
     label: string;
     unit: Unit;                     // overrides `unit` for this column
     description?: string;
+    color?: "pending" | "attention"; // timeseries `plot`: semantic series colour (pending = receding grey-blue, attention = amber); other series skip the slot it reuses
     ignores_filters?: Dimension[];  // filters the metric accepts but this column cannot apply
   }>;
 }
 ```
 
-`Dimension = "market" | "plan" | "locale" | "ai_flow" | "ai_model" | "ai_provider" | "template" | "onboarding_path" | "currency" | "device" | "utm_source"`
+`Dimension = "market" | "plan" | "locale" | "ai_flow" | "ai_model" | "ai_provider" | "template" | "onboarding_path" | "currency" | "device" | "utm_source" | "ai_segment"`
 
 `device` (`mobile` / `desktop`) and `utm_source` (`(none)` without one) exist only on the anonymous visitor-funnel metrics (`public.funnel_daily_stats`).
+
+`ai_segment` (`20261112130000_ai_cost_observability.sql`) says whose AI cost a run or provider attempt is: `external`, `internal` (admin accounts), `guest`, `restricted` (pending deletion or restricted processing), `script` (scripts and tests) or `unattributed` (an app attempt without a subject; ledger only). It is accepted by `ai_spend`, `ai_cost` (filter and breakdown), `ai_cost_anomalies`, `ai_tokens_by_model` and, since `20261112140000_kpi_overview_ai_segment.sql`, `kpi_overview` (filter; AI cost columns only). **Without the key a metric keeps its earlier population** (external, plus internal with `include_internal`), so alerts, `kpi_overview` without the key, `kpi_health` and other callers are unchanged; with it, `include_internal` is ignored. The admin app sends it to every metric that accepts it: all six values by default ("Include all AI costs", URL param `ai_costs`, omitted when on and `ai_costs=external` when off), else `["external"]` (plus `"internal"` with `include_internal`). An explicit page filter on `ai_segment` (a clicked segment) wins.
 
 ## Metric query parameters (`GET /admin/metrics/:name`)
 
@@ -104,7 +107,8 @@ language sql | plpgsql stable security definer set search_path = ''
 | `analytics.signups` | timeseries | `bucket, dimension, signups` |
 | `analytics.kpi_overview` | kpi (1 row) | `signups bigint, activated_users bigint, activation_eligible bigint, activated_eligible bigint, activation_rate numeric, new_paying_customers bigint, revenue numeric, revenue_usd_native numeric, revenue_try_native numeric, mrr numeric, mrr_usd_native numeric, mrr_try_native numeric, active_subscriptions bigint, trial_starts bigint, trial_resolved bigint, trial_conversions bigint, trial_to_paid_rate numeric, ai_cost numeric, ai_runs bigint, unpriced_ai_runs bigint, revenue_fx_provisional boolean, mrr_fx_provisional boolean, ai_cost_fx_provisional boolean` |
 | `analytics.revenue` | timeseries | `bucket, dimension, revenue numeric, refunded numeric, invoices bigint, fx_provisional boolean` |
-| `analytics.ai_cost` | timeseries | `bucket, dimension, cost numeric, runs bigint, unpriced_runs bigint, exact_share numeric, fx_provisional boolean` |
+| `analytics.ai_cost` | timeseries | `bucket, dimension, cost numeric, runs bigint, unpriced_runs bigint, exact_share numeric, fx_provisional boolean`. `exact_share` (label "Stored-cost share") is the share of the shown cost stored when the run ran; it is not coverage of the provider bill |
+| `analytics.ai_spend` | timeseries | `bucket, dimension, cost numeric, attempts bigint, failed_attempts bigint, no_usage_attempts bigint, unpriced_attempts bigint, pre_ledger_cost numeric, fx_provisional boolean`. Every provider attempt from `public.ai_usage_events`; before the first production attempt, `ai_runs` rows of every segment (`pre_ledger_cost`) |
 
 Rules for these outputs:
 - **`kpi_overview` currency fields:**
@@ -119,11 +123,12 @@ Rules for these outputs:
 - **`kpi_overview` filters:**
   - `market` applies to every measure. Signups, activation and AI cost use the user's locked market; revenue, MRR, subscriptions and trials use the invoice or subscription market.
   - `plan` applies to revenue, MRR, active subscriptions, new paying customers and trials. Signups, activation and AI cost list it in `ignores_filters`.
+  - `ai_segment` (`20261112140000_kpi_overview_ai_segment.sql`) applies to `ai_cost`, `ai_runs` and `unpriced_ai_runs` only, with the population of `ai_cost`; every other measure lists it in `ignores_filters`. The Overview sends it like the AI pages, so the AI cost tile follows "Include all AI costs" and matches the AI cost chart.
 - **Activation:**
   - `activated_users` counts every activated signup in the range.
   - `activation_eligible` counts signups whose 7-day window has closed, and `activated_eligible` counts activated users among them; `activation_rate = activated_eligible / activation_eligible`.
   - Period comparisons use the rate, not `activated_users`.
-- **Trial→paid:** `trial_to_paid_rate = trial_conversions / trial_resolved`. `trial_starts` is shown for context.
+- **Trial→paid:** `trial_to_paid_rate = trial_conversions / trial_resolved`. `trial_starts` is shown for context. The trial numbers come from `analytics_private.trial_outcomes` (since `20261112120000_trial_outcomes_charge_pending.sql`), so they always equal the `trial_to_paid` totals for the same range and filters: conversions include plan-change and replacement-subscription conversions, and charge-pending, superseded, in-trial and needs-check trials are not resolved.
 - **Active subscriptions:** subscriptions with MRR > 0 in the snapshot at `p_to`.
 - **FX provisional:** a conversion is provisional when the rate's month isn't final **or** the rate comes from an earlier month (fallback). Missing rates also count as provisional.
   - `kpi_overview` reports the revenue, MRR and AI-cost flags separately, each only when that measure needed a conversion.
@@ -238,14 +243,14 @@ All four exclude accounts pending deletion (erased accounts no longer exist), sh
 
 ## Phase 3 AI metric outputs (AI cost & reliability)
 
-Every AI metric reads the `analytics.ai_cost` population through `analytics_private.ai_run_scope` (`run_cost`: exact `cost_usd` from 2026-10-27, otherwise tokens re-priced with `ai_model_prices`; non-mock, non-guest runs; accounts pending deletion or restricted excluded; internal accounts only with `include_internal`). Cost is USD for `native` and `usd`; `try` converts each run at its month's rate from `analytics_private.fx_months`, and `fx_provisional` follows the Phase 1 rule (a needed missing rate makes the value null). `market` is the account's locked market (`unknown` without one).
+Every AI metric reads the `analytics.ai_cost` population through `analytics_private.ai_run_scope` (`run_cost`: exact `cost_usd` from 2026-10-27, otherwise tokens re-priced with `ai_model_prices`; non-mock, non-guest runs; accounts pending deletion or restricted excluded; internal accounts only with `include_internal`). `ai_run_scope` selects `run_cost.segment = any(analytics_private.ai_segments(p_filters, p_include_internal))`, so a metric that accepts `ai_segment` passes it through; the others cannot receive the key. Cost is USD for `native` and `usd`; `try` converts each run at its month's rate from `analytics_private.fx_months`, and `fx_provisional` follows the Phase 1 rule (a needed missing rate makes the value null). `market` is the account's locked market (`unknown` without one).
 
 | Function | Shape (unit) | Columns | Breakdowns / filters | Display keys |
 |---|---|---|---|---|
 | `ai_reliability` | timeseries (ratio) | `bucket, dimension, failure_rate, runs, completed_runs, failed_runs, pending_runs, model_failure_rate, model_failed_runs, p50_duration_seconds, p95_duration_seconds, avg_tokens_per_run` | ai_flow, ai_model, ai_provider / + market | `plot ["failure_rate"]`, `drill` (key `ai_failures_by_flow`) |
 | `ai_wasted_spend` | timeseries (ratio) | `bucket, dimension, wasted_share, wasted_cost, total_cost, failed_runs_cost, expired_cards_cost, rejected_cards_cost, unfinished_sessions_cost, failed_import_improve_cost, skills_pool_escalation_cost, wasted_tokens_share, runs, failed_runs, unpriced_runs, fx_provisional` | ai_flow, ai_model, ai_provider / + market | `plot ["wasted_share","wasted_tokens_share"]`, `drill` (key `ai_wasted_spend`) |
-| `ai_cost_anomalies` | timeseries (currency) | `bucket, dimension, cost, runs, tokens, unpriced_runs, terminal_runs, model_failed_runs, model_failure_rate, cost_baseline, cost_upper_band, cost_z, tokens_baseline, tokens_upper_band, tokens_z, baseline_buckets, cost_spike, token_spike, jump_from_flat_baseline, failure_spike, is_anomaly, fx_provisional` | ai_flow, ai_model, ai_provider / + market | `flag_column "is_anomaly"` |
-| `ai_tokens_by_model` | timeseries (tokens) | `bucket, dimension, total_tokens, input_tokens, cached_input_tokens, output_tokens, runs, runs_without_tokens, completed_runs, failed_runs, cost, unpriced_runs, fx_provisional` | ai_model, ai_provider, ai_flow / + market | `plot ["input_tokens","output_tokens"]`, `stacked` |
+| `ai_cost_anomalies` | timeseries (currency) | `bucket, dimension, cost, runs, tokens, unpriced_runs, terminal_runs, model_failed_runs, model_failure_rate, cost_baseline, cost_upper_band, cost_z, tokens_baseline, tokens_upper_band, tokens_z, baseline_buckets, cost_spike, token_spike, jump_from_flat_baseline, failure_spike, is_anomaly, fx_provisional` | ai_flow, ai_model, ai_provider / + market, ai_segment | `flag_column "is_anomaly"` |
+| `ai_tokens_by_model` | timeseries (tokens) | `bucket, dimension, total_tokens, input_tokens, cached_input_tokens, output_tokens, runs, runs_without_tokens, completed_runs, failed_runs, cost, unpriced_runs, fx_provisional` | ai_model, ai_provider, ai_flow / + market, ai_segment | `plot ["input_tokens","output_tokens"]`, `stacked` |
 | `ai_cost_concentration` | breakdown (ratio) | `dimension` (`top 10%` … `90-100%`), `cost_share, cumulative_cost_share, cost, users, runs, tokens, token_share, unpriced_runs, gini_cost, gini_tokens, fx_provisional` | none / ai_flow, ai_model, ai_provider, market | `min_group 2` |
 | `ai_cost_per_outcome` | breakdown (currency) | `dimension` (outcome), `cost_per_outcome, outcomes, users, attributed_cost, attributed_cost_exact, attributed_cost_estimated, attributed_runs, unpriced_runs, tokens_per_outcome, fully_loaded_cost_per_outcome, fx_provisional` | none / ai_model, ai_provider, market | `min_group 5`; `outcomes`, `users` ignore ai_model / ai_provider |
 | `ai_cost_by_plan` | breakdown (currency) | `dimension` (plan segment), `ai_cost, users, paying_users, ai_active_users, runs, unpriced_runs, cost_per_user, cost_per_paying_user, revenue, revenue_usd_native, revenue_try_native, ai_cost_share_of_revenue, gross_margin, exact_share, fx_provisional` | none / plan (matches the segment), market | `min_group 5`; no `breakdown_dimension` (segments are not plan codes) |
@@ -270,7 +275,7 @@ All functions use the standard metric signature (`20261102120000_analytics_monet
 | Function | Shape (unit) | Columns | Breakdowns / filters | Display keys |
 |---|---|---|---|---|
 | `mrr_movement` | timeseries (currency) | `bucket, dimension, new, expansion, contraction, churn, reactivation, fx_effect, starting_mrr, ending_mrr, starting_customers, new_customers, reactivated_customers, churned_customers, ending_customers, fx_provisional` | market, plan / market, plan, currency | `plot ["new","expansion","contraction","churn","reactivation"]`, `stacked` (contraction and churn are negative; `starting_mrr + movements + fx_effect = ending_mrr`). Day grain is limited to 366 days (22023). |
-| `trial_to_paid` | timeseries by trial-start cohort (ratio) | `bucket, dimension, trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, unresolved, resolved, failed_charge_rate` | market, plan / market, plan | `plot` = the six outcome counts, `stacked`, `drill` (key `trial_conversions`) |
+| `trial_to_paid` | timeseries by trial-start cohort (ratio) | `bucket, dimension, trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved, resolved, failed_charge_rate` | market, plan / market, plan | `plot` = the seven outcome counts (`charge_pending` colour `pending`, `unresolved` labelled "Needs check", colour `attention`), `stacked`, `drill` (key `trial_conversions`). Outcomes: see **Trial outcomes** below. |
 | `checkout_funnel` | funnel (count) | `step_order, step, dimension, users, conversion_from_prev, conversion_from_start, dropped, pending`; steps `attempts`, `session_created`, `completed`, `paid_within_7d` (`users` counts checkout attempts) | market, plan / market, plan | `drill` (key `checkout_funnel`, filter `step`) |
 | `subscriber_ltv` | breakdown (currency) | `dimension, ltv, customers, ltv_usd_native, ltv_try_native, median_ltv, revenue, revenue_usd_native, revenue_try_native, still_paying, censored_share, avg_paid_invoices, avg_observed_months, erased_customers, fx_provisional` | plan (default), market, currency / plan, market, currency | `breakdown_dimension "plan"` (p_breakdown switches it) |
 | `plan_mix` | breakdown (count) | `dimension, subscriptions, share, mrr, mrr_usd_native, mrr_try_native, switched_in, switched_out, fx_provisional` (snapshot at the end of `p_to`) | plan / market, plan, currency | `breakdown_dimension "plan"` |
@@ -281,11 +286,27 @@ All functions use the standard metric signature (`20261102120000_analytics_monet
 
 Grain does not apply to `checkout_funnel`, `subscriber_ltv`, `plan_mix` and `cancellation_reasons`; currency does not apply to `trial_to_paid`, `checkout_funnel`, `cancellation_reasons` and `paywall_denials`.
 
+**Trial outcomes** (`analytics_private.trial_outcomes`, read by `trial_to_paid`, `kpi_overview` and the `trial_conversions` drill). One row per trial; columns `subscription_id, user_id, is_internal, plan_code, market, status, trial_source, trial_type, t_start, t_end, canceled_at, first_paid_at, outcome, outcome_group, replacement_subscription_id`. `outcome`, first match wins → `outcome_group`:
+
+| outcome | Rule | outcome_group |
+|---|---|---|
+| `converted` | a paid `subscription_cycle` invoice (amount_paid > 0) whose service starts at trial end (−1 h) | `converted` |
+| `converted_plan_change` | a paid `subscription_update` invoice during the trial (portal plan switch) | `converted` |
+| `converted_switch` | the trial is superseded (`inactive`, or a live `superseded` event) and another real subscription of the same account, created between trial start and trial end + 1 day, has a paid `subscription_create` / `subscription_cycle` invoice (amount_paid > 0): the cancel-flow offer, or buying monthly / annual during the trial. `replacement_subscription_id` names it; `first_paid_at` is its first payment | `converted` |
+| `in_trial` | trialing, trial end in the future | `in_trial` |
+| `failed_first_charge` | past_due / unpaid, an open / uncollectible / void first cycle invoice, or a trialing → past_due event | `failed_first_charge` |
+| `trial_canceled` | canceled / incomplete_expired / paused | `trial_canceled` |
+| `superseded` | `inactive` without a paid replacement (e.g. a 100% coupon, or a replacement started later) | `superseded` |
+| `awaiting_first_charge` | active or trialing, trial ended less than a day ago (Stripe charges the first renewal about an hour after the trial end) | `charge_pending` |
+| `active_no_paid_invoice` | everything else, mostly active more than a day after trial end with no synced paid invoice: check Stripe | `unresolved` ("Needs check") |
+
+resolved = converted + failed_first_charge + trial_canceled; `charge_pending`, `superseded`, `in_trial` and `unresolved` are not resolved.
+
 **Drill keys** (convention under Phase 2 "Drill-down"; one row per user, privacy and `include_internal` applied by `drill_users`):
 
 | Key | Drills | Key filters | `value` (order) |
 |---|---|---|---|
-| `trial_conversions` | `trial_to_paid` | `market`, `plan`, `outcome` (converted, failed_first_charge, trial_canceled, superseded, in_trial, unresolved) | trials started in range (newest trial first) |
+| `trial_conversions` | `trial_to_paid` | `market`, `plan`, `outcome` (converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved) | trials started in range (newest trial first) |
 | `checkout_funnel` | `checkout_funnel` | `market`, `plan`, `step` (attempts by default, session_created, completed, paid_within_7d, abandoned, rejected) | matching attempts (latest attempt first) |
 | `checkout_abandoned` | — (generic: `checkout_funnel` with `step = abandoned`) | `market`, `plan` | abandoned attempts (latest first) |
 | `churned_subscribers` | `subscription_churn` | `market`, `plan`, `reason_group` | churned paid subscriptions (latest end first) |

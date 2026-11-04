@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import type { MetricChartCard } from "@/components/MetricChartCard";
-import { aiCostBadges, aiCostFootnote, fxBadges, revenueFootnote } from "@/components/metricExtras";
+import { aiCostBadges, aiCostFootnote, aiSpendFootnote, fxBadges, revenueFootnote } from "@/components/metricExtras";
 import type { Shape } from "@/lib/shapes";
 
 type CardOptions = Pick<
@@ -72,6 +72,12 @@ export const AI_COST: PageSection[] = [
   {
     title: "Spend",
     metrics: [
+      // Every provider attempt (the figure to compare with the provider bill); AI cost below counts ai_runs.
+      ai("ai_spend", "AI spend (all provider attempts)", "timeseries", {
+        measure: "cost",
+        sampleMeasure: "attempts",
+        footnote: aiSpendFootnote,
+      }),
       ai("ai_cost", "AI cost", "timeseries", {
         measure: "cost",
         sampleMeasure: "runs",

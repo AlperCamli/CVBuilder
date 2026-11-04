@@ -7,6 +7,7 @@ import { addDays } from "@/lib/filters";
 const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>());
 vi.mock("@/lib/supabase", () => ({ getAccessToken: async () => "token" }));
 
+import { FilterBar } from "@/app/FilterBar";
 import { OverviewPage } from "./Overview";
 
 const measure = (label: string, unit: string, description?: string) => ({ label, unit, ...(description ? { description } : {}) });
@@ -21,7 +22,7 @@ const CATALOG = [
       unit: "count",
       shape: "kpi",
       breakdowns: [],
-      filters: ["market", "plan"],
+      filters: ["market", "plan", "ai_segment"],
       kb: "new_analysis/README.md",
       min_group: 5,
       measures: {
@@ -326,6 +327,36 @@ describe("Overview", () => {
     await card("Signups");
     await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/alerts/summary"))).toBe(true));
     expect(screen.queryByText(/open alert/)).toBeNull();
+  });
+
+  // kpi_overview accepts ai_segment (20261112140000_kpi_overview_ai_segment.sql), so the AI cost tile follows
+  // "Include all AI costs" like the AI pages; the other KPI columns ignore the segment.
+  it("sends the AI segments of the Include all AI costs choice to the KPIs, and shows the choice on the Overview", async () => {
+    const all = ["external", "internal", "guest", "restricted", "script", "unattributed"];
+    const segments = (name: string) => requests(name).map((u) => JSON.parse(u.searchParams.get("filters") ?? "{}").ai_segment);
+    const view = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={[`/?from=${FROM}&to=${TO}&currency=usd`]}>
+          <FilterBar />
+          <OverviewPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("$42")).toBeTruthy();
+    const box = screen.getByRole("checkbox", { name: "Include all AI costs" }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(new Set(segments("kpi_overview").map((s) => JSON.stringify(s)))).toEqual(new Set([JSON.stringify(all)]));
+    expect(segments("signups").every((s) => s === undefined)).toBe(true);
+
+    fetchMock.mockClear();
+    fireEvent.click(box);
+    await waitFor(() => expect(segments("kpi_overview")).toContainEqual(["external"]));
+    expect(segments("kpi_overview")).not.toContainEqual(all);
+    view.unmount();
+
+    fetchMock.mockClear();
+    renderOverview("currency=usd&ai_costs=external&include_internal=true");
+    await waitFor(() => expect(segments("kpi_overview")).toContainEqual(["external", "internal"]));
   });
 
   it("marks anomaly days from ai_cost_anomalies on the AI cost chart", async () => {

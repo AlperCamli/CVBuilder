@@ -96,7 +96,8 @@ begin
   -- L: no Stripe detail at all: the weekly heuristic makes it a (canceled) trial.
   insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,ended_at,created_at)
     values(ul,'stripe','sub_mo_l','weekly','canceled','2026-02-05','2026-02-07','2026-02-07','2026-02-05');
-  -- T: a canceled trial, a superseded trial, then a monthly subscription replacing it (new checkout).
+  -- T: a canceled trial, a superseded trial, then a monthly subscription replacing it (new checkout). The replacement
+  -- starts more than a day after the trial end and has no paid invoice, so the trial stays superseded.
   insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
       currency,billing_interval,trial_start,trial_end,canceled_at,ended_at,cancellation_reason,created_at)
     values(ut,'stripe','sub_mo_t1','weekly','canceled','2026-02-20','2026-02-23','usd','week','2026-02-20','2026-02-23','2026-02-21','2026-02-23',
@@ -283,9 +284,9 @@ begin
   -- trial_to_paid
   -- ---------------------------------------------------------------------------
   select string_agg(concat_ws('/', trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial,
-                              unresolved, resolved, failed_charge_rate), ' ') into got
+                              charge_pending, unresolved, resolved, failed_charge_rate), ' ') into got
   from analytics.trial_to_paid('2026-02-01', '2026-02-28', 'month');
-  if got <> '0.4000/7/2/1/2/1/0/1/5/0.2000' then raise exception 'trial_to_paid wrong: %', got; end if;
+  if got <> '0.4000/7/2/1/2/1/0/0/1/5/0.2000' then raise exception 'trial_to_paid wrong: %', got; end if;
   -- Same numbers as the Overview trial KPIs.
   select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28');
   if (k.trial_starts, k.trial_resolved, k.trial_conversions) <> (7::bigint, 5::bigint, 2::bigint) then
@@ -581,5 +582,211 @@ begin
   select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
   if violations is not null then raise exception 'contract violations: %', violations; end if;
 end $$;
-select 'Analytics monetization metrics, currency variants, drill keys and privileges passed' as verification;
+-- Trial outcomes from 20261112120000_trial_outcomes_charge_pending.sql: the first charge pending after the trial end,
+-- and conversions through a replacement subscription (cancel-flow offer, direct purchase during the trial). Runs after
+-- the checks above, in the same transaction, on May 2026 cohorts that no other check reads.
+do $$
+declare
+  today date := (now() at time zone 'UTC')::date;
+  ucp uuid; ucv uuid; usw uuid; usw0 uuid; ulate uuid;
+  scp uuid; scv uuid; ssw uuid; ssw_r uuid; ssw0 uuid; ssw0_r uuid; slate uuid;
+  k record;
+  got text;
+  violations text;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-cp@example.invalid','2026-04-01') returning id into ucp;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-cv@example.invalid','2026-04-01') returning id into ucv;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-sw@example.invalid','2026-04-01') returning id into usw;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-sw0@example.invalid','2026-04-01') returning id into usw0;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-late@example.invalid','2026-04-01') returning id into ulate;
+  insert into public.billing_markets(user_id,market) values (ucp,'TR'),(ucv,'GLOBAL'),(usw,'GLOBAL'),(usw0,'GLOBAL'),(ulate,'GLOBAL');
+
+  -- (a) CP: the trial ended 30 minutes ago and Stripe moved it to active; the renewal invoice is still a draft.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(ucp,'stripe','sub_mo_cp','weekly','active',now() - interval '30 minutes',now() + interval '7 days' - interval '30 minutes','try','week',14990,
+           now() - interval '2 days',now() - interval '30 minutes',now() - interval '2 days') returning id into scp;
+  -- (d) CV: a weekly trial May 4-7 converted the normal way (paid first renewal).
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(ucv,'stripe','sub_mo_cv','weekly','active','2026-05-07','2026-05-14','usd','week',500,'2026-05-04','2026-05-07','2026-05-04') returning id into scv;
+  -- (b) SW: a weekly trial May 4-7 ended by the cancel-flow offer: a new monthly subscription (no trial) paid at 50% off,
+  -- the trial kept as inactive (superseded).
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(usw,'stripe','sub_mo_sw','weekly','inactive','2026-05-04','2026-05-07','usd','week',500,'2026-05-04','2026-05-07','2026-05-04') returning id into ssw;
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,created_at)
+    values(usw,'stripe','sub_mo_sw_r','monthly','active','2026-05-05T10:00Z','2026-06-05T10:00Z','usd','month',1000,'2026-05-05T10:00Z') returning id into ssw_r;
+  -- (c) SW0: the same switch paid with a 100% coupon (nothing collected): stays superseded.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(usw0,'stripe','sub_mo_sw0','weekly','inactive','2026-05-04','2026-05-07','usd','week',500,'2026-05-04','2026-05-07','2026-05-04') returning id into ssw0;
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,created_at)
+    values(usw0,'stripe','sub_mo_sw0_r','monthly','active','2026-05-06','2026-06-06','usd','month',1000,'2026-05-06') returning id into ssw0_r;
+  -- LATE: a paid monthly subscription started more than a day after the trial end: not a replacement of the trial.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(ulate,'stripe','sub_mo_late','weekly','inactive','2026-05-04','2026-05-07','usd','week',500,'2026-05-04','2026-05-07','2026-05-04') returning id into slate;
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,created_at)
+    values(ulate,'stripe','sub_mo_late_r','monthly','active','2026-05-10','2026-06-10','usd','month',1000,'2026-05-10');
+
+  insert into public.billing_invoices(user_id,subscription_id,provider_invoice_id,status,currency,amount_subtotal,amount_discount,amount_total,amount_paid,
+      amount_refunded,billing_reason,plan_code,market,period_start,period_end,paid_at,created_at) values
+    (ucp,scp,'in_mo_cp0','paid','try',0,0,0,0,0,'subscription_create','weekly','TR',now() - interval '2 days',now() - interval '30 minutes',now() - interval '2 days',now() - interval '2 days'),
+    (ucp,scp,'in_mo_cp1','draft','try',14990,0,14990,0,0,'subscription_cycle','weekly','TR',now() - interval '30 minutes',now() + interval '7 days' - interval '30 minutes',null,now() - interval '29 minutes'),
+    (ucv,scv,'in_mo_cv0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-05-04','2026-05-07','2026-05-04T00:00Z','2026-05-04'),
+    (ucv,scv,'in_mo_cv1','paid','usd',500,0,500,500,0,'subscription_cycle','weekly','GLOBAL','2026-05-07','2026-05-14','2026-05-07T01:00Z','2026-05-07'),
+    (usw,ssw,'in_mo_sw0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-05-04','2026-05-07','2026-05-04T00:00Z','2026-05-04'),
+    (usw,ssw_r,'in_mo_sw1','paid','usd',1000,500,500,500,0,'subscription_create','monthly','GLOBAL','2026-05-05T10:00Z','2026-06-05T10:00Z','2026-05-05T10:01Z','2026-05-05T10:00Z'),
+    (usw0,ssw0_r,'in_mo_sw01','paid','usd',1000,1000,0,0,0,'subscription_create','monthly','GLOBAL','2026-05-06','2026-06-06','2026-05-06T00:01Z','2026-05-06'),
+    (ulate,(select id from public.subscriptions where provider_subscription_id = 'sub_mo_late_r'),'in_mo_late1','paid','usd',1000,0,1000,1000,0,
+     'subscription_create','monthly','GLOBAL','2026-05-10','2026-06-10','2026-05-10T00:01Z','2026-05-10');
+
+  -- Per-trial outcome, group, first payment and replacement.
+  select string_agg(split_part(u.email, '@', 1) || ':' || o.outcome || ':' || o.outcome_group || ':' || coalesce(o.first_paid_at::text, '-')
+                    || ':' || (o.replacement_subscription_id is not null), ',' order by u.email) into got
+  from analytics_private.trial_outcomes o join public.users u on u.id = o.user_id
+  where o.user_id in (ucp, ucv, usw, usw0, ulate);
+  if got <> 'mo-cp:awaiting_first_charge:charge_pending:-:false,mo-cv:converted:converted:2026-05-07 01:00:00+00:false,'
+         || 'mo-late:superseded:superseded:-:false,mo-sw0:superseded:superseded:-:false,'
+         || 'mo-sw:converted_switch:converted:2026-05-05 10:01:00+00:true' then
+    raise exception 'replacement / charge pending outcomes wrong: %', got;
+  end if;
+  if (select replacement_subscription_id from analytics_private.trial_outcomes where subscription_id = ssw) is distinct from ssw_r then
+    raise exception 'replacement_subscription_id wrong';
+  end if;
+  -- The replacement subscriptions themselves are not trials.
+  if exists (select 1 from analytics_private.trial_outcomes where subscription_id in (ssw_r, ssw0_r)) then
+    raise exception 'a replacement subscription was classified as a trial';
+  end if;
+  -- The same trial, a day after its end with nothing collected: needs a check (unresolved).
+  if (select outcome || ':' || outcome_group from analytics_private.trial_outcomes where user_id = (select id from public.users where email = 'mo-j@example.invalid'))
+     <> 'active_no_paid_invoice:unresolved' then
+    raise exception 'needs-check outcome wrong';
+  end if;
+
+  -- trial_to_paid May: converted = CV + SW; superseded = SW0 + LATE (not resolved).
+  select string_agg(concat_ws('/', trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial,
+                              charge_pending, unresolved, resolved, failed_charge_rate), ' ') into got
+  from analytics.trial_to_paid('2026-05-01', '2026-05-31', 'month');
+  if got <> '1.0000/4/2/0/0/2/0/0/0/2/0.0000' then raise exception 'trial_to_paid replacement wrong: %', got; end if;
+  select * into k from analytics.kpi_overview('2026-05-01', '2026-05-31');
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate) <> (4::bigint, 2::bigint, 2::bigint, 1.0000) then
+    raise exception 'kpi replacement trials wrong: % % % %', k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate;
+  end if;
+  -- Now: H in trial and CP charge pending; neither is resolved, so there is no rate yet.
+  select concat_ws('/', sum(trial_starts), sum(in_trial), sum(charge_pending), sum(unresolved), sum(resolved), coalesce(max(trial_to_paid)::text, 'null')) into got
+  from analytics.trial_to_paid(today - 3, today, 'month');
+  if got <> '2/1/1/0/0/null' then raise exception 'charge_pending wrong: %', got; end if;
+  select * into k from analytics.kpi_overview(today - 3, today);
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions) <> (2::bigint, 0::bigint, 0::bigint) or k.trial_to_paid_rate is not null then
+    raise exception 'kpi charge pending wrong: % % % %', k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate;
+  end if;
+  -- Once the first renewal is collected, the trial converts.
+  update public.billing_invoices set status = 'paid', amount_paid = 14990, paid_at = now() where provider_invoice_id = 'in_mo_cp1';
+  if (select outcome from analytics_private.trial_outcomes where subscription_id = scp) <> 'converted' then
+    raise exception 'collected charge did not convert';
+  end if;
+  update public.billing_invoices set status = 'draft', amount_paid = 0, paid_at = null where provider_invoice_id = 'in_mo_cp1';
+  -- The market and plan filters apply to the replacement conversions as to any trial.
+  if (select converted from analytics.trial_to_paid('2026-05-01', '2026-05-31', 'month', p_filters => '{"market":"TR"}')) <> 0 then
+    raise exception 'trial_to_paid replacement market filter wrong';
+  end if;
+
+  -- Drill: the outcome group per account, and the charge_pending filter.
+  perform admin_app.log_access('admin@example.invalid', 'people.drill_users', null, '{}', null);
+  select string_agg(email || '=' || value || ':' || (detail ->> 'outcome') || ':' || coalesce(detail ->> 'first_paid_at', '-'), ',' order by email) into got
+  from analytics_people.drill_users(p_from => '2026-05-01', p_to => '2026-05-31', p_filters => '{"metric":"trial_conversions"}');
+  if got <> 'mo-cv@example.invalid=1:converted:2026-05-07T01:00:00+00:00,mo-late@example.invalid=1:superseded:-,'
+         || 'mo-sw0@example.invalid=1:superseded:-,mo-sw@example.invalid=1:converted:2026-05-05T10:01:00+00:00' then
+    raise exception 'replacement drill wrong: %', got;
+  end if;
+  select string_agg(email, ',') into got
+  from analytics_people.drill_users(p_from => today - 3, p_to => today, p_filters => '{"metric":"trial_conversions","outcome":"charge_pending"}');
+  if got is distinct from 'mo-cp@example.invalid' then raise exception 'charge_pending drill wrong: %', got; end if;
+
+  -- Catalog: the new state is plotted before Needs check, with its own labels and colours.
+  select meta into k from admin_app.metric_catalog() where name = 'trial_to_paid';
+  if k.meta -> 'plot' <> '["converted","failed_first_charge","trial_canceled","superseded","in_trial","charge_pending","unresolved"]'::jsonb
+     or k.meta #>> '{measures,charge_pending,label}' <> 'Charge pending'
+     or k.meta #>> '{measures,unresolved,label}' <> 'Needs check'
+     or k.meta #>> '{measures,charge_pending,color}' <> 'pending'
+     or k.meta #>> '{measures,unresolved,color}' <> 'attention'
+     or (k.meta ->> 'drill')::boolean is not true then
+    raise exception 'trial_to_paid catalog wrong: %', k.meta;
+  end if;
+  if (select meta -> 'drill_metrics' -> 'trial_conversions' ->> 'description' from admin_app.metric_catalog() where name = 'drill_users') not like '%charge_pending%' then
+    raise exception 'trial_conversions drill description not republished';
+  end if;
+
+  select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
+  if violations is not null then raise exception 'contract violations: %', violations; end if;
+end $$;
+-- Trial outcomes for the plan changes of 20261111120000_cancel_flow_offers.sql, which happen in place on the same
+-- subscription: a plan change during a trial (Stripe's confirmation keeps the trial; at most a $0 subscription_update
+-- invoice) converts only through the paid first renewal at the trial end, and the paid-weekly offer's later switch to
+-- Monthly (subscription schedule) leaves a trial that already converted as converted. June 2026 cohorts, which no
+-- other check reads.
+do $$
+declare
+  uip uuid; uipc uuid; uipf uuid; uwk uuid;
+  sip uuid; sipc uuid; sipf uuid; swk uuid;
+  got text;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-ip@example.invalid','2026-05-01') returning id into uip;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-ipc@example.invalid','2026-05-01') returning id into uipc;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-ipf@example.invalid','2026-05-01') returning id into uipf;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-wk@example.invalid','2026-05-01') returning id into uwk;
+  insert into public.billing_markets(user_id,market) values (uip,'GLOBAL'),(uipc,'GLOBAL'),(uipf,'GLOBAL'),(uwk,'GLOBAL');
+
+  -- IP: a weekly trial Jun 1-4 moved to Monthly on Jun 2 (same subscription, trial kept); first monthly renewal paid.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(uip,'stripe','sub_mo_ip','monthly','active','2026-06-04','2026-07-04','usd','month',1000,'2026-06-01','2026-06-04','2026-06-01') returning id into sip;
+  -- IPC: the same move to Annual, then canceled during the trial: nothing paid.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,canceled_at,ended_at,cancellation_reason,created_at)
+    values(uipc,'stripe','sub_mo_ipc','annual','canceled','2026-06-01','2026-06-04','usd','year',6000,'2026-06-01','2026-06-04','2026-06-03','2026-06-04',
+           'cancellation_requested','2026-06-01') returning id into sipc;
+  -- IPF: the same move to Monthly, then the first monthly charge failed.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(uipf,'stripe','sub_mo_ipf','monthly','past_due','2026-06-04','2026-07-04','usd','month',1000,'2026-06-01','2026-06-04','2026-06-01') returning id into sipf;
+  -- WK: a weekly trial Jun 1-4 that converted, then accepted the paid-weekly offer: Monthly from Jun 11 at 50% off.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,scheduled_plan_code,scheduled_change_at,created_at)
+    values(uwk,'stripe','sub_mo_wk','monthly','active','2026-06-11','2026-07-11','usd','month',1000,'2026-06-01','2026-06-04','monthly','2026-06-11','2026-06-01')
+    returning id into swk;
+
+  insert into public.billing_invoices(user_id,subscription_id,provider_invoice_id,status,currency,amount_subtotal,amount_discount,amount_total,amount_paid,
+      amount_refunded,billing_reason,plan_code,market,period_start,period_end,paid_at,created_at) values
+    (uip,sip,'in_mo_ip0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-06-01','2026-06-04','2026-06-01T00:00Z','2026-06-01'),
+    (uip,sip,'in_mo_ip1','paid','usd',0,0,0,0,0,'subscription_update','monthly','GLOBAL','2026-06-02','2026-06-04','2026-06-02T00:00Z','2026-06-02'),
+    (uip,sip,'in_mo_ip2','paid','usd',1000,0,1000,1000,0,'subscription_cycle','monthly','GLOBAL','2026-06-04','2026-07-04','2026-06-04T01:00Z','2026-06-04'),
+    (uipc,sipc,'in_mo_ipc0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-06-01','2026-06-04','2026-06-01T00:00Z','2026-06-01'),
+    (uipc,sipc,'in_mo_ipc1','paid','usd',0,0,0,0,0,'subscription_update','annual','GLOBAL','2026-06-02','2026-06-04','2026-06-02T00:00Z','2026-06-02'),
+    (uipf,sipf,'in_mo_ipf0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-06-01','2026-06-04','2026-06-01T00:00Z','2026-06-01'),
+    (uipf,sipf,'in_mo_ipf1','paid','usd',0,0,0,0,0,'subscription_update','monthly','GLOBAL','2026-06-02','2026-06-04','2026-06-02T00:00Z','2026-06-02'),
+    (uipf,sipf,'in_mo_ipf2','open','usd',1000,0,1000,0,0,'subscription_cycle','monthly','GLOBAL','2026-06-04','2026-07-04',null,'2026-06-04'),
+    (uwk,swk,'in_mo_wk0','paid','usd',0,0,0,0,0,'subscription_create','weekly','GLOBAL','2026-06-01','2026-06-04','2026-06-01T00:00Z','2026-06-01'),
+    (uwk,swk,'in_mo_wk1','paid','usd',500,0,500,500,0,'subscription_cycle','weekly','GLOBAL','2026-06-04','2026-06-11','2026-06-04T01:00Z','2026-06-04'),
+    (uwk,swk,'in_mo_wk2','paid','usd',1000,500,500,500,0,'subscription_cycle','monthly','GLOBAL','2026-06-11','2026-07-11','2026-06-11T01:00Z','2026-06-11');
+
+  select string_agg(split_part(u.email, '@', 1) || ':' || o.outcome || ':' || o.outcome_group || ':' || coalesce(o.first_paid_at::text, '-')
+                    || ':' || (o.replacement_subscription_id is not null), ',' order by u.email) into got
+  from analytics_private.trial_outcomes o join public.users u on u.id = o.user_id
+  where o.user_id in (uip, uipc, uipf, uwk);
+  if got <> 'mo-ip:converted:converted:2026-06-04 01:00:00+00:false,mo-ipc:trial_canceled:trial_canceled:-:false,'
+         || 'mo-ipf:failed_first_charge:failed_first_charge:-:false,mo-wk:converted:converted:2026-06-04 01:00:00+00:false' then
+    raise exception 'in-place plan change outcomes wrong: %', got;
+  end if;
+  select string_agg(concat_ws('/', trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial,
+                              charge_pending, unresolved, resolved, failed_charge_rate), ' ') into got
+  from analytics.trial_to_paid('2026-06-01', '2026-06-30', 'month');
+  if got <> '0.5000/4/2/1/1/0/0/0/0/4/0.2500' then raise exception 'trial_to_paid in-place plan changes wrong: %', got; end if;
+end $$;
+select 'Analytics monetization metrics, currency variants, drill keys, trial outcomes and privileges passed' as verification;
 rollback;

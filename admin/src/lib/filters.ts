@@ -14,7 +14,14 @@ export const DIMENSIONS = [
   "currency",
   "device",
   "utm_source",
+  "ai_segment",
 ] as const;
+/**
+ * Whose AI cost a run or provider attempt is (`ai_segment`): external accounts, admin accounts, pre-signup guests,
+ * accounts pending deletion or with restricted processing, scripts and tests, and app attempts without a subject.
+ */
+export const AI_SEGMENTS = ["external", "internal", "guest", "restricted", "script", "unattributed"] as const;
+export type AiSegment = (typeof AI_SEGMENTS)[number];
 export const GRAINS = ["day", "week", "month"] as const;
 export const CURRENCIES = ["native", "usd", "try"] as const;
 export const MAX_SPAN_DAYS = 1096;
@@ -45,6 +52,11 @@ export interface GlobalFilters {
   grain: Grain;
   currency: Currency;
   include_internal: boolean;
+  /**
+   * AI cost metrics (those accepting `ai_segment`): every segment, so totals approach the provider bill (default), or
+   * only external accounts (plus admin accounts with `include_internal`). An explicit `ai_segment` filter wins.
+   */
+  all_ai_costs: boolean;
   breakdown?: Dimension;
   filters: DimensionFilters;
 }
@@ -93,6 +105,7 @@ const searchSchema = z.object({
     .optional()
     .transform((v) => v === "true" || v === "1")
     .catch(false),
+  ai_costs: z.enum(["all", "external"]).catch("all"),
   breakdown: z.enum(DIMENSIONS).optional().catch(undefined),
   filters: z.string().optional().transform(parseDimensionFilters).catch({}),
 });
@@ -120,6 +133,7 @@ export function parseFilters(params: URLSearchParams, now = new Date()): GlobalF
     grain: raw.grain,
     currency: raw.currency,
     include_internal: raw.include_internal,
+    all_ai_costs: raw.ai_costs === "all",
     ...(raw.breakdown ? { breakdown: raw.breakdown } : {}),
     filters: raw.filters,
   };
@@ -128,7 +142,7 @@ export function parseFilters(params: URLSearchParams, now = new Date()): GlobalF
 /** A patch that pins an explicit range (used by the custom picker and drill-down). */
 export const customRange = (from: string, to: string) => ({ range: "custom" as const, from, to });
 
-const FILTER_KEYS = ["range", "from", "to", "grain", "currency", "include_internal", "breakdown", "filters"] as const;
+const FILTER_KEYS = ["range", "from", "to", "grain", "currency", "include_internal", "ai_costs", "breakdown", "filters"] as const;
 
 /** Writes only non-default values; presets stay rolling (`range=7d`), custom ranges are explicit. */
 export function writeFilters(filters: GlobalFilters, base = new URLSearchParams()) {
@@ -143,6 +157,7 @@ export function writeFilters(filters: GlobalFilters, base = new URLSearchParams(
   if (filters.grain !== "day") params.set("grain", filters.grain);
   if (filters.currency !== "usd") params.set("currency", filters.currency);
   if (filters.include_internal) params.set("include_internal", "true");
+  if (!filters.all_ai_costs) params.set("ai_costs", "external");
   if (filters.breakdown) params.set("breakdown", filters.breakdown);
   const keys = Object.keys(filters.filters).sort() as Dimension[];
   if (keys.length) params.set("filters", JSON.stringify(Object.fromEntries(keys.map((k) => [k, filters.filters[k]]))));
@@ -161,6 +176,10 @@ export function useFilters() {
   return [filters, setFilters] as const;
 }
 
+
+/** The `ai_segment` values an AI cost metric is asked for when the page has no explicit segment filter. */
+export const aiSegmentsFor = (filters: Pick<GlobalFilters, "all_ai_costs" | "include_internal">): AiSegment[] =>
+  filters.all_ai_costs ? [...AI_SEGMENTS] : filters.include_internal ? ["external", "internal"] : ["external"];
 
 export function presetRange(preset: DatePreset, now = new Date()): { from: string; to: string } {
   const to = todayUtc(now);

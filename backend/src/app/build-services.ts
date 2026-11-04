@@ -49,6 +49,7 @@ import type { AuthProvider } from "../modules/auth/auth.types";
 import { AiService } from "../modules/ai/ai.service";
 import { SupabaseAiRepository, type AiRepository } from "../modules/ai/ai.repository";
 import { createAiProvider } from "../modules/ai/provider/create-ai-provider";
+import { createAiUsageSink } from "../modules/ai/provider/ai-usage-ledger";
 import type { AiProvider } from "../modules/ai/provider/ai-provider";
 import {
   SupabaseAiPromptConfigRepository,
@@ -221,7 +222,7 @@ export const buildDefaultServices = (
   const aiPromptConfigRepository =
     overrides?.aiPromptConfigRepository ??
     new SupabaseAiPromptConfigRepository(supabaseClients.serviceRoleClient);
-  const aiProvider = overrides?.aiProvider ?? createAiProvider(config);
+  const aiProvider = overrides?.aiProvider ?? createAiProvider(config, { logger, usageSink: createAiUsageSink(config, supabaseClients.serviceRoleClient, logger) });
   const aiPromptResolver = new AiPromptResolver(
     aiPromptConfigRepository,
     config.ai.promptProfile,

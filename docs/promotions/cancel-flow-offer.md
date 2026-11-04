@@ -68,7 +68,7 @@ Internal accounts see it too, so the screen can be tested with a real trial.
 
 Funnel for the slug, excluding internal accounts: shown `count(*)`, then checkout opened `count(last_checkout_at)`, then paid `count(accepted_at)`.
 
-Analytics note: the "Trial to paid" metric counts an ended trial as `superseded` (not resolved), not as converted. The paid monthly subscription counts as new MRR.
+Analytics note: since `20261112120000_trial_outcomes_charge_pending.sql`, the "Trial to paid" metric counts a trial ended by the paid offer as converted (outcome `converted_switch`, `replacement_subscription_id` = the monthly subscription): the replacement was created between the trial start and the trial end + 1 day and has a collected `subscription_create` or `subscription_cycle` invoice. If nothing was collected (e.g. a 100% coupon), the ended trial stays `superseded` (not resolved). A plan change made during a trial is on the same subscription, so it converts through its paid first renewal (`converted`) or a paid plan-change invoice (`converted_plan_change`), and the paid-weekly and renewal offers never change how the original trial counted. The paid monthly subscription counts as new MRR.
 
 ## API (base `/api/v1`, signed in)
 - `GET /billing/cancel-offer` returns `{ status: "available", offer: { kind, slug, percent_off, plan_code, currency, amount, discounted_amount, current_plan_code, current_amount, period_end } }`, or `{ status: "unavailable", offer: null }`. `kind` is `checkout` (trial), `switch_at_period_end` (paid Weekly) or `renewal_discount` (Monthly/Annual). The call records the show. Amounts are in minor units, and the response never includes the coupon or any Stripe id.

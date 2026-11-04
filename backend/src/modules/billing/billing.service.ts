@@ -151,6 +151,15 @@ const resolveObjectId = (value: unknown): string | null => {
   return null;
 };
 
+// Webhooks arrive in the endpoint's API version (2026-03-25.dahlia), where the billing period is on each subscription
+// item instead of the subscription (moved in 2025-03-31.basil); the SDK still reads 2024-06-20. Items only differ under
+// flexible billing: the earliest start and latest end span every item, so access lasts until the last paid item ends.
+const itemPeriod = (itemRows: unknown[], key: "current_period_start" | "current_period_end"): number | null => {
+  const values = itemRows.map((item) => asRecord(item)[key]).filter((value): value is number => typeof value === "number" && value > 0);
+  if (!values.length) return null;
+  return key === "current_period_start" ? Math.min(...values) : Math.max(...values);
+};
+
 interface ParsedWebhookCheckoutSession extends StripeCheckoutSessionSummary {
   mode: string | null;
 }
@@ -204,8 +213,8 @@ const parseSubscriptionFromWebhookObject = (object: unknown): StripeSubscription
     trial_start: toIsoFromUnixSeconds(row.trial_start),
     details: toSubscriptionDetails(row),
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
-    current_period_start: toIsoFromUnixSeconds(row.current_period_start),
-    current_period_end: toIsoFromUnixSeconds(row.current_period_end),
+    current_period_start: toIsoFromUnixSeconds(row.current_period_start ?? itemPeriod(itemRows, "current_period_start")),
+    current_period_end: toIsoFromUnixSeconds(row.current_period_end ?? itemPeriod(itemRows, "current_period_end")),
     metadata: normalizeMetadata(row.metadata),
     replaced_by: replacedByOf(row),
     price_ids: priceIds
@@ -399,9 +408,10 @@ export class BillingService {
 
   private subscriptionAllowsAccess(subscription: SubscriptionRecord | null): boolean {
     if (!subscription || this.entitlementsService.resolveEffectivePlanCode(subscription) === "free") return false;
-    // A delayed webhook must not extend a three-day trial indefinitely.
+    // A delayed webhook must not extend a three-day trial indefinitely. Stripe's fixed trial end bounds a row
+    // that has no period end, rather than denying a trial still running.
     if (subscription.status === "trialing") {
-      const end = Date.parse(subscription.current_period_end ?? "");
+      const end = Date.parse(subscription.current_period_end ?? subscription.trial_end ?? "");
       if (!Number.isFinite(end) || end <= Date.now()) return false;
     }
     return true;
@@ -803,7 +813,8 @@ export class BillingService {
     // A trial, or a paid plan with nothing scheduled, not already canceled and with at least two hours left (longer
     // than the trial's checkout can stay open, and well before a renewal invoice).
     const current = await this.subscriptionsRepository.getCurrentForUser(userId);
-    const periodEnd = current?.current_period_end ?? null;
+    // A trialing row synced without a period end (API 2026-03-25.dahlia webhooks) falls back to Stripe's trial end.
+    const periodEnd = current?.current_period_end ?? (current?.status === "trialing" ? current.trial_end ?? null : null);
     if (!current?.provider_subscription_id || current.cancel_at_period_end || !periodEnd) return null;
     if (Date.parse(periodEnd) <= Date.now() + OFFER_MIN_PERIOD_LEFT_MS) return null;
     const audience: CancelOfferAudience | null = current.status === "trialing" ? "trial"

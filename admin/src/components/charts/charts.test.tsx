@@ -237,6 +237,27 @@ describe("TimeSeriesChart with plotted measures", () => {
     expect(flagY(data[0], ["m0", "m1", "m2", "m3"], false)).toBe(100);
   });
 
+  it("gives semantic colours to measures that declare one; the others skip the slot they reuse", () => {
+    const trialMeasures = [
+      { key: "converted", label: "Converted" },
+      { key: "failed_first_charge", label: "Failed first charge" },
+      { key: "trial_canceled", label: "Canceled in trial" },
+      { key: "superseded", label: "Superseded" },
+      { key: "in_trial", label: "In trial" },
+      { key: "charge_pending", label: "Charge pending", color: "pending" as const },
+      { key: "unresolved", label: "Needs check", color: "attention" as const },
+    ];
+    expect(pivotMeasures([], trialMeasures).series.map((s) => s.color)).toEqual([
+      "var(--series-1)",
+      "var(--series-2)",
+      "var(--series-3)",
+      "var(--series-5)",
+      "var(--series-6)",
+      "var(--series-pending)",
+      "var(--series-4)",
+    ]);
+  });
+
   it("stacks signed bars around a zero line and marks flagged points", () => {
     const { container } = render(
       <TimeSeriesChart

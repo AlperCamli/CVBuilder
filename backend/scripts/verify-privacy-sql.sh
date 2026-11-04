@@ -73,3 +73,4 @@ done
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/promotion-email-queue.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cancel-flow-offers.sql"
 "${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/cv-score-improvements.sql"
+"${privacy_psql[@]}" -f "$privacy_repo_dir/tests/sql/ai-cost-observability.sql"

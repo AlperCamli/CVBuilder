@@ -12,6 +12,7 @@ const openaiReasoningEffortSchema = z.enum(["none", "minimal", "low", "medium", 
 const modelPriceSchema = z.object({
   input: z.number().nonnegative(),
   cached_input: z.number().nonnegative().optional(),
+  cache_write: z.number().nonnegative().optional(),
   output: z.number().nonnegative()
 });
 
@@ -29,7 +30,7 @@ const parseModelPricing = (raw: string | undefined): ModelPriceTable => {
 
   const parsed = z.record(modelPriceSchema).safeParse(json);
   if (!parsed.success) {
-    throw new Error("Invalid environment configuration: AI_MODEL_PRICING_JSON must map model names to {input, cached_input?, output}");
+    throw new Error("Invalid environment configuration: AI_MODEL_PRICING_JSON must map model names to {input, cached_input?, cache_write?, output}");
   }
 
   return parsed.data;
@@ -72,7 +73,8 @@ const envSchema = z
     AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(180_000).default(60_000),
     AI_MAX_OUTPUT_TOKENS_LIGHT: z.coerce.number().int().min(512).max(65_536).default(4_096),
     AI_MAX_OUTPUT_TOKENS_HEAVY: z.coerce.number().int().min(1_024).max(65_536).default(16_384),
-    // JSON map of model name -> USD per 1M tokens, e.g. {"gpt-6-luna":{"input":0.4,"cached_input":0.1,"output":1.6}}.
+    // JSON map of model name (prefix) -> USD per 1M tokens, e.g. {"gpt-6-luna":{"input":0.1,"cached_input":0.01,"cache_write":0.125,"output":0.5}}.
+    // cache_write is the prompt-cache write rate (OpenAI GPT-5.6+, Anthropic); omit it when writes cost the input rate.
     AI_MODEL_PRICING_JSON: z.string().optional(),
     // raw: the upload's CV review reads the extracted text and runs alongside the AI parse.
     // structured: it reads the parsed sections after the parse (the previous, slower order).

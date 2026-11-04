@@ -289,8 +289,8 @@ begin
   -- Catalog metadata.
   if (select (meta ->> 'alertable')::boolean and meta -> 'measures' ? 'unpriced_ai_runs'
             and meta -> 'measures' -> 'activation_rate' -> 'ignores_filters' ? 'plan'
-            and not (meta -> 'measures' -> 'revenue' ? 'ignores_filters')
-            and meta -> 'filters' = '["market","plan"]'::jsonb
+            and not coalesce(meta -> 'measures' -> 'revenue' -> 'ignores_filters' ? 'plan', false)
+            and meta -> 'filters' = '["market","plan","ai_segment"]'::jsonb
      from admin_app.metric_catalog() where name = 'kpi_overview') is not true
      or (select meta -> 'measures' ? 'signups' from admin_app.metric_catalog() where name = 'signups') is not true
      or (select meta -> 'measures' ?& array['revenue','refunded','invoices'] from admin_app.metric_catalog() where name = 'revenue') is not true
@@ -315,5 +315,125 @@ begin
   select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
   if violations is not null then raise exception 'contract violations: %', violations; end if;
 end $$;
-select 'Analytics overview metrics, currency variants, AI cost and privileges passed' as verification;
+-- The Overview trial KPIs read analytics_private.trial_outcomes (20261112120000_trial_outcomes_charge_pending.sql), so
+-- they count a paid replacement subscription as a conversion and keep a pending first charge out of the rate, exactly
+-- like analytics.trial_to_paid. September 2026 cohorts, which the checks above never read. Fixture times are UTC.
+set local timezone = 'UTC';
+do $$
+declare
+  usw uuid; ucp uuid; uin uuid;
+  k record;
+  t record;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-switch@example.invalid','2026-08-01') returning id into usw;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-pending@example.invalid','2026-08-01') returning id into ucp;
+  insert into public.users(auth_user_id,email,created_at,is_internal) values(gen_random_uuid(),'ov-admin-switch@example.invalid','2026-08-01',true) returning id into uin;
+  -- A weekly trial Sep 1-4 replaced on Sep 2 by a monthly subscription paid at 50% off (the cancel-flow offer).
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,trial_start,trial_end,created_at)
+    values(usw,'stripe','sub_ov_sw','weekly','inactive','2026-09-01','2026-09-04','usd','week','2026-09-01','2026-09-04','2026-09-01');
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,created_at)
+    values(usw,'stripe','sub_ov_sw_r','monthly','active','2026-09-02','2026-10-02','usd','month','2026-09-02');
+  -- A trial whose first renewal Stripe has not charged yet.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,trial_start,trial_end,created_at)
+    values(ucp,'stripe','sub_ov_cp','weekly','active','2026-09-04','2026-09-11','usd','week','2026-09-01','2026-09-04','2026-09-01');
+  -- An internal account's switch: excluded unless include_internal.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,trial_start,trial_end,created_at)
+    values(uin,'stripe','sub_ov_in','weekly','inactive','2026-09-01','2026-09-04','usd','week','2026-09-01','2026-09-04','2026-09-01');
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,created_at)
+    values(uin,'stripe','sub_ov_in_r','annual','active','2026-09-03','2027-09-03','usd','year','2026-09-03');
+  insert into public.billing_invoices(user_id,subscription_id,provider_invoice_id,status,currency,amount_paid,amount_refunded,billing_reason,plan_code,market,period_start,period_end,paid_at,created_at) values
+    (usw,(select id from public.subscriptions where provider_subscription_id = 'sub_ov_sw_r'),'in_ov_sw','paid','usd',500,0,'subscription_create','monthly','GLOBAL',
+     '2026-09-02','2026-10-02','2026-09-02T00:01:00Z','2026-09-02'),
+    (uin,(select id from public.subscriptions where provider_subscription_id = 'sub_ov_in_r'),'in_ov_in','paid','usd',6000,0,'subscription_create','annual','GLOBAL',
+     '2026-09-03','2027-09-03','2026-09-03T00:01:00Z','2026-09-03');
+
+  -- Fixed in the past, CP is a day past its end with nothing collected (Needs check); either way it is not resolved.
+  select * into k from analytics.kpi_overview('2026-09-01', '2026-09-30');
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate) <> (2::bigint, 1::bigint, 1::bigint, 1.0000) then
+    raise exception 'kpi replacement trials wrong: % % % %', k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate;
+  end if;
+  select sum(trial_starts) as starts, sum(resolved) as resolved, sum(converted) as converted into t
+  from analytics.trial_to_paid('2026-09-01', '2026-09-30', 'month');
+  if (t.starts, t.resolved, t.converted) <> (k.trial_starts::numeric, k.trial_resolved::numeric, k.trial_conversions::numeric) then
+    raise exception 'kpi and trial_to_paid disagree: % % %', t.starts, t.resolved, t.converted;
+  end if;
+  select * into k from analytics.kpi_overview('2026-09-01', '2026-09-30', p_include_internal => true);
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions) <> (3::bigint, 2::bigint, 2::bigint) then
+    raise exception 'kpi replacement include_internal wrong: % % %', k.trial_starts, k.trial_resolved, k.trial_conversions;
+  end if;
+  select * into k from analytics.kpi_overview('2026-09-01', '2026-09-30', p_filters => '{"plan":["monthly"]}');
+  if k.trial_starts <> 0 then raise exception 'kpi trial plan is the trial''s plan, not the replacement''s: %', k.trial_starts; end if;
+end $$;
+-- The Overview AI cost follows the ai_segment filter of the AI pages (20261112140000_kpi_overview_ai_segment.sql).
+-- February 2026 runs from the first block: external 1.805 (4 runs, 1 unpriced), internal 1, guest 5, plus a run of an
+-- account restricted afterwards (2). Without ai_segment the tile keeps the external-only population.
+do $$
+declare
+  all_segments text := '["external","internal","guest","restricted","script","unattributed"]';
+  rst uuid;
+  k record;
+  k0 record;
+  t record;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-ai-restricted@example.invalid','2026-01-15T10:00:00Z') returning id into rst;
+  insert into public.ai_runs(user_id,flow_type,provider,model_name,status,input_payload,started_at,completed_at,input_tokens,output_tokens,total_tokens,cost_usd)
+    values(rst,'block_suggest','openai','gpt-6-luna','completed','{}','2026-02-10T10:00:00Z','2026-02-10T10:01:00Z',10,10,20,2);
+  update public.users set processing_restricted_at = now() where id = rst;
+
+  -- No ai_segment: unchanged (external only; internal added only with include_internal).
+  select * into k0 from analytics.kpi_overview('2026-02-01', '2026-02-28');
+  if (k0.ai_cost, k0.ai_runs, k0.unpriced_ai_runs) <> (1.805000, 4::bigint, 1::bigint) then
+    raise exception 'kpi ai cost without ai_segment changed: % % %', k0.ai_cost, k0.ai_runs, k0.unpriced_ai_runs;
+  end if;
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => '{"ai_segment":["external"]}');
+  if (k.ai_cost, k.ai_runs) <> (k0.ai_cost, k0.ai_runs) then raise exception 'kpi external segment wrong: % %', k.ai_cost, k.ai_runs; end if;
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_include_internal => true);
+  if (k.ai_cost, k.ai_runs) <> (2.805000, 5::bigint) then raise exception 'kpi ai include_internal wrong: % %', k.ai_cost, k.ai_runs; end if;
+
+  -- Every segment ("Include all AI costs"): the sum of the segments, equal to the AI cost page.
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => jsonb_build_object('ai_segment', all_segments::jsonb));
+  if (k.ai_cost, k.ai_runs, k.unpriced_ai_runs) <> (9.805000, 7::bigint, 1::bigint) then
+    raise exception 'kpi all segments wrong: % % %', k.ai_cost, k.ai_runs, k.unpriced_ai_runs;
+  end if;
+  select sum(c.cost) as cost, sum(c.runs) as runs, sum(c.unpriced_runs) as unpriced into t
+  from analytics.ai_cost('2026-02-01', '2026-02-28', 'month', p_breakdown => 'ai_segment', p_filters => jsonb_build_object('ai_segment', all_segments::jsonb)) c;
+  if (t.cost, t.runs, t.unpriced) <> (k.ai_cost, k.ai_runs::numeric, k.unpriced_ai_runs::numeric) then
+    raise exception 'kpi all segments differ from ai_cost: % % % vs % % %', k.ai_cost, k.ai_runs, k.unpriced_ai_runs, t.cost, t.runs, t.unpriced;
+  end if;
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_currency => 'try', p_filters => jsonb_build_object('ai_segment', all_segments::jsonb));
+  if k.ai_cost <> 313.760000 then raise exception 'kpi all segments try wrong: %', k.ai_cost; end if;
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => '{"ai_segment":["guest","restricted"]}');
+  if (k.ai_cost, k.ai_runs) <> (7.000000, 2::bigint) then raise exception 'kpi guest + restricted wrong: % %', k.ai_cost, k.ai_runs; end if;
+  -- The market filter still applies (the account's locked market; guests are unknown).
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => jsonb_build_object('market', 'TR', 'ai_segment', all_segments::jsonb));
+  if (k.ai_cost, k.ai_runs, k.unpriced_ai_runs) <> (1.000000, 2::bigint, 1::bigint) then
+    raise exception 'kpi all segments market TR wrong: % % %', k.ai_cost, k.ai_runs, k.unpriced_ai_runs;
+  end if;
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => jsonb_build_object('market', 'unknown', 'ai_segment', all_segments::jsonb));
+  if (k.ai_cost, k.ai_runs) <> (8.000000, 3::bigint) then raise exception 'kpi all segments market unknown wrong: % %', k.ai_cost, k.ai_runs; end if;
+
+  -- ai_segment never changes the other measures.
+  select * into k from analytics.kpi_overview('2026-02-01', '2026-02-28', p_filters => jsonb_build_object('ai_segment', all_segments::jsonb));
+  if (k.signups, k.activated_users, k.activation_eligible, k.activated_eligible, k.new_paying_customers, k.revenue, k.mrr, k.active_subscriptions,
+      k.trial_starts, k.trial_resolved, k.trial_conversions, k.revenue_fx_provisional, k.mrr_fx_provisional)
+     is distinct from (k0.signups, k0.activated_users, k0.activation_eligible, k0.activated_eligible, k0.new_paying_customers, k0.revenue, k0.mrr,
+      k0.active_subscriptions, k0.trial_starts, k0.trial_resolved, k0.trial_conversions, k0.revenue_fx_provisional, k0.mrr_fx_provisional) then
+    raise exception 'ai_segment changed a non-AI measure: % vs %', row_to_json(k), row_to_json(k0);
+  end if;
+  begin perform analytics.kpi_overview(p_filters => '{"ai_flow":"cv_parse","ai_segment":["external"]}'); raise exception 'kpi accepted ai_flow with ai_segment';
+  exception when invalid_parameter_value then null; end;
+
+  -- Catalog: ai_segment is accepted, and every non-AI measure says it ignores it.
+  select meta into t from admin_app.metric_catalog() where name = 'kpi_overview';
+  if t.meta -> 'filters' <> '["market","plan","ai_segment"]'::jsonb
+     or t.meta -> 'measures' -> 'ai_cost' -> 'ignores_filters' <> '["plan"]'::jsonb
+     or t.meta -> 'measures' -> 'signups' -> 'ignores_filters' <> '["plan","ai_segment"]'::jsonb
+     or t.meta -> 'measures' -> 'revenue' -> 'ignores_filters' <> '["ai_segment"]'::jsonb
+     or exists (select 1 from jsonb_each(t.meta -> 'measures') m
+                where m.key not in ('ai_cost', 'ai_runs', 'unpriced_ai_runs') and not (m.value -> 'ignores_filters' ? 'ai_segment'))
+     or t.meta ->> 'definition' not like '%ai_segment selects whose runs count%' then
+    raise exception 'kpi_overview catalog wrong: %', t.meta;
+  end if;
+end $$;
+select 'Analytics overview metrics, currency variants, AI cost, trial outcomes and privileges passed' as verification;
 rollback;

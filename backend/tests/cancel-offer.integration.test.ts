@@ -138,7 +138,7 @@ class OfferGateway implements StripeGateway {
   async retrieveCustomer(id: string) { return { id, email: null, name: null, metadata: {} }; }
 }
 
-const fixture = async (options: { market?: BillingMarket | null; status?: string; plan?: string; cancelScheduled?: boolean; trialEndsIn?: number; pricesAvailable?: boolean; noOfferSupport?: boolean } = {}) => {
+const fixture = async (options: { market?: BillingMarket | null; status?: string; plan?: string; cancelScheduled?: boolean; trialEndsIn?: number; pricesAvailable?: boolean; noOfferSupport?: boolean; periodEndMissing?: boolean } = {}) => {
   const config = createTestConfig();
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
@@ -149,7 +149,8 @@ const fixture = async (options: { market?: BillingMarket | null; status?: string
   const trialStart = new Date(Date.now() - 24 * HOUR).toISOString();
   const subscription: SubscriptionRecord = {
     id: "local-sub", user_id: owner.id, provider: "stripe", provider_customer_id: "cus_owner", provider_subscription_id: "sub_trial",
-    plan_code: options.plan ?? "weekly", status: options.status ?? "trialing", current_period_start: trialStart, current_period_end: trialEnd,
+    plan_code: options.plan ?? "weekly", status: options.status ?? "trialing", current_period_start: options.periodEndMissing ? null : trialStart,
+    current_period_end: options.periodEndMissing ? null : trialEnd, trial_end: trialEnd,
     cancel_at_period_end: options.cancelScheduled ?? false, created_at: trialStart, updated_at: trialStart
   };
   subscriptionsRepository.seed(subscription);
@@ -252,6 +253,16 @@ describe("cancel-flow offer", () => {
     expect(checkout.status).toBe(409);
     expect(checkout.body.error.details).toEqual({ reason: "cancel_offer_unavailable" });
     expect(f.gateway.checkouts).toHaveLength(0);
+  });
+
+  // Rows synced from API 2026-03-25.dahlia webhooks before the period fix have no period; a trial still has its trial end.
+  it("offers a trial synced without a period end until its trial end, but not a paid plan without one", async () => {
+    const trial = await fixture({ periodEndMissing: true });
+    expect((await trial.getOffer()).body.data).toMatchObject({ status: "available", offer: { kind: "checkout", period_end: trial.trialEnd } });
+    const paid = await fixture({ periodEndMissing: true, status: "active", plan: "monthly" });
+    expect((await paid.getOffer()).body.data).toEqual({ status: "unavailable", offer: null });
+    const ended = await fixture({ periodEndMissing: true, trialEndsIn: -1 });
+    expect((await ended.getOffer()).body.data).toEqual({ status: "unavailable", offer: null });
   });
 
   it("is unavailable without an active cancel-flow promotion", async () => {

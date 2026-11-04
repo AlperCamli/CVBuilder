@@ -530,6 +530,17 @@ describe("admin analytics endpoints", () => {
     });
   });
 
+  it("passes the AI segment filter and breakdown through", async () => {
+    const repository = new FakeAnalyticsRepository();
+    const app = buildTestApp(repository);
+    const filters = encodeURIComponent(JSON.stringify({ ai_segment: ["external", "guest", "script"] }));
+
+    const response = await asAdmin(app, `/admin/metrics/signups?breakdown=ai_segment&filters=${filters}`);
+
+    expect(response.status).toBe(200);
+    expect(repository.calls[0]?.params).toMatchObject({ breakdown: "ai_segment", filters: { ai_segment: ["external", "guest", "script"] } });
+  });
+
   it.each([
     ["from after to", "/admin/metrics/signups?from=2026-02-01&to=2026-01-01"],
     ["span over 1096 days", "/admin/metrics/signups?from=2022-12-31&to=2026-01-01"],

@@ -24,6 +24,9 @@ Read this before changing the admin analytics dashboard. It covers where the cod
 | `20261103130000_analytics_tailoring_acquisition.sql` | `user_onboarding_paths`, `tailoring_v2_sessions*`, `signup_activation`, `try_timestamptz`; Tailoring and Acquisition metrics and drills |
 | `20261104120000_analytics_alerts.sql` | `kpi_health`; `admin_app.alert_rules` / `alert_events` and their definer functions; `evaluate_alerts`, `schedule_alert_job`; `data_freshness` (current version); `audit_recent` with `people_function` (now refuses with 42501 unless the transaction holds an `audit.read` row) |
 | `20261107120000_funnel_daily_stats.sql` | `public.funnel_daily_stats` (anonymous daily event counters, RLS on, no policies) and `public.bump_funnel_event` (service_role only), written by `POST /api/v1/funnel-events` (`backend/src/modules/funnel-events/`); `analytics_private.funnel_rows`; Acquisition metrics `visitor_trend`, `visitor_funnel`, `visitor_event_details`, plus `pre_signup_onboarding` and `onboarding_referrals` over `public.onboarding_monthly_stats` |
+| `20261112120000_trial_outcomes_charge_pending.sql` | `trial_outcomes` v2 (`converted_switch`, `charge_pending` group, `replacement_subscription_id`); `trial_to_paid` recreated with `charge_pending`; `kpi_overview` trial block reads `trial_outcomes` (body otherwise unchanged) |
+| `20261112130000_ai_cost_observability.sql` | `public.ai_usage_events` (append-only per-attempt AI usage ledger, RLS on, service_role select/insert only; segment derived on insert; links set null on run/account deletion), `public.backfill_ai_run_cost_estimates()`, `ai_model_prices.cache_write_usd`, `ai_runs.cost_usd_estimated`; `run_cost.segment`, `ai_segments`, `ai_usage_ledger`, `ai_ledger_start`; `ai_run_scope` / `ai_cost` / `ai_cost_anomalies` / `ai_tokens_by_model` / `ai_runs_by_user` on the `ai_segment` filter; metrics `ai_spend`, `ai_ledger_health` |
+| `20261112140000_kpi_overview_ai_segment.sql` | `kpi_overview` accepts `ai_segment` for its AI cost columns (`analytics_private.ai_segments`, same population as `ai_cost`); every other measure `ignores_filters` it; body otherwise the 20261112120000 one |
 
 **Tests:** `backend/tests/sql/analytics-*.sql`, run by `backend/scripts/verify-privacy-sql.sh`. That script creates a temporary local Postgres, stubs the Supabase roles and schemas, applies **all** migrations, then runs the test files it lists explicitly (a new file must be added to the list). Every test runs after the latest migration, so a later migration that changes a function can break an earlier phase's test.
 
@@ -54,7 +57,7 @@ Read this before changing the admin analytics dashboard. It covers where the cod
 | `app/App.tsx`, `app/Layout.tsx`, `app/FilterBar.tsx`, `app/AuthGate.tsx` | Routes, shell (sidebar, filter bar, alert badge), sign-in / no-access gate (PKCE, local sign-out) |
 | `app/nav.ts`, `app/pages.ts` | Sidebar entries. **`pages.ts` declares every metrics page as sections of metric names.** |
 | `lib/api.ts` | Fetch + envelope parsing, catalog schema (`MetricMeta`), `useMetric`, metric CSV download |
-| `lib/filters.ts` | URL ↔ filter state (range presets, grain, currency, include_internal, breakdown, filters); the `DIMENSIONS` list |
+| `lib/filters.ts` | URL ↔ filter state (range presets, grain, currency, include_internal, all_ai_costs (`ai_costs`), breakdown, filters); the `DIMENSIONS` and `AI_SEGMENTS` lists |
 | `lib/shapes.ts` | Primary measure (row column order), measure keys, shape helpers |
 | `lib/kpi.ts` | Current vs previous window (complete days only when the range ends today) |
 | `lib/drill.ts` | Click → filter or drill drawer; resolves drill keys from `drill_metrics` |
@@ -91,7 +94,7 @@ cd admin && npm test && npm run build                  # build = tsc + vite
 
 ## 5. Invariants: never break these
 1. **Function contract.** Every `analytics.*` function has the standard signature `(p_from date, p_to date, p_grain text, p_currency text, p_include_internal boolean, p_breakdown text, p_filters jsonb)`. Every `analytics_people.*` function has `(p_user_id uuid, p_query text, p_from date, p_to date, p_filters jsonb, p_limit integer, p_cursor text)`. Both are `stable security definer set search_path = ''`, fully schema-qualified, with no overloads.
-2. **Metric meta.** Each metric carries a `comment on function` with MetricMeta JSON: `title`, `definition`, `unit`, `shape`, `breakdowns`, `filters`, `kb`, and **`measures` for every numeric column**. Display keys (`plot`, `stacked`, `flag_column`, `breakdown_dimension`, `drill`, `precomputed`, `alertable`, `min_group`, `ignores_filters`) are listed in api-contract.md.
+2. **Metric meta.** Each metric carries a `comment on function` with MetricMeta JSON: `title`, `definition`, `unit`, `shape`, `breakdowns`, `filters`, `kb`, and **`measures` for every numeric column**. Display keys (`plot`, `stacked`, `flag_column`, `breakdown_dimension`, `drill`, `precomputed`, `alertable`, `min_group`, `ignores_filters`, measure `color`) are listed in api-contract.md.
 3. **Revoke at the end.** Every analytics migration ends with `revoke execute on all functions in schema analytics, analytics_people, analytics_private, admin_app from public;`. Per-schema default privileges cannot remove PUBLIC; the contract check catches it if you forget.
 4. **`analytics_api` stays execute-only.** No table grants, no role memberships, no BYPASSRLS. Helpers and materialized views live in `analytics_private`, which it cannot use.
 5. **Argument validation.** Validate with `analytics_private.assert_args` (or equivalent) and raise SQLSTATE `22023` for bad arguments, which the API returns as 400. Use `resolve_range` for the default and maximum range.
@@ -203,7 +206,8 @@ Deploy order is always **migration → backend → admin**. A push to `main` aut
 **Status:** v1 (Phases 0–5) is live since 2026-10-28.
 
 **Open items:**
-- Prices for `gpt-5.6-luna` and the Gemini models are missing from `AI_MODEL_PRICING_JSON`, so their AI cost is a lower bound.
+- Set the researched `AI_MODEL_PRICING_JSON` (see `backend/.env.example`) in Vercel; until then `gpt-5.6-luna` and the Gemini models are unpriced and their AI cost is a lower bound. Historical Gemini runs stored output tokens without thinking tokens, so their re-priced cost stays a lower bound.
+- AI cost follow-ups: price history (`effective_from` on `ai_model_prices`, e.g. for Gemini 3.6 Flash's 2027-01-01 price change); daily reconciliation with the OpenAI Usage API; `ai_reliability` / unit-economics metrics on the segment filter; `kpi_overview` AI cost from `ai_spend` (it follows the segment filter since 20261112140000, but still reads `ai_runs`).
 - Bumping the privacy `NOTICE_VERSION` for the "Staff access" section is the owner's decision.
 - GitHub Actions use Node 20-based action versions (deprecation warning); bump `actions/checkout` and `dorny/paths-filter` when convenient.
 

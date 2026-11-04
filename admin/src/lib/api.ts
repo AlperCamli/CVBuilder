@@ -2,7 +2,7 @@ import { keepPreviousData, QueryClient, useQuery, useQueryClient } from "@tansta
 import { useCallback } from "react";
 import { z, type ZodTypeAny } from "zod";
 import { config } from "./config";
-import { DIMENSIONS, type Dimension, type DimensionFilters, type GlobalFilters } from "./filters";
+import { aiSegmentsFor, DIMENSIONS, type Dimension, type DimensionFilters, type GlobalFilters } from "./filters";
 import { getAccessToken } from "./supabase";
 
 export class ApiError extends Error {
@@ -107,6 +107,9 @@ async function parseWith<S extends ZodTypeAny>(schema: S, res: Response): Promis
 
 const UNITS = ["count", "currency", "percent", "ratio", "seconds", "tokens"] as const;
 const SHAPES = ["timeseries", "breakdown", "kpi", "table", "funnel", "cohort"] as const;
+/** Semantic series colours a plotted measure may ask for (`measures.<key>.color`); others take the categorical slots. */
+export const SERIES_COLORS = ["pending", "attention"] as const;
+export type SeriesColor = (typeof SERIES_COLORS)[number];
 const dimensionList = z
   .array(z.string())
   .catch([])
@@ -116,6 +119,8 @@ const measureSchema = z.object({
   label: z.string().min(1),
   unit: z.enum(UNITS).optional().catch(undefined),
   description: z.string().optional().catch(undefined),
+  /** timeseries `plot`: a semantic colour for this series (pending = receding grey-blue, attention = amber). */
+  color: z.enum(SERIES_COLORS).optional().catch(undefined),
   /** Filters the metric accepts but this column can't apply (e.g. `plan` for signups in kpi_overview). */
   ignores_filters: dimensionList.optional(),
 });
@@ -205,11 +210,12 @@ export interface Measure {
   label: string;
   unit: Unit;
   description?: string;
+  color?: SeriesColor;
   ignores_filters?: Dimension[];
 }
 export type CatalogEntry = { name: string; kind: "metric" | "people"; meta: MetricMeta };
 export type MetricResult = z.infer<typeof metricResultSchema>;
-export type MetricParams = Omit<GlobalFilters, "breakdown" | "range"> & { breakdown?: Dimension };
+export type MetricParams = Omit<GlobalFilters, "breakdown" | "range" | "all_ai_costs"> & { breakdown?: Dimension };
 
 export const DEFAULT_MIN_GROUP = 5;
 
@@ -222,6 +228,7 @@ export function measureOf(meta: MetricMeta | undefined, key: string, fallbackLab
     label: measure?.label ?? fallbackLabel ?? humanize(key),
     unit: measure?.unit ?? meta?.unit ?? "count",
     ...(measure?.description ? { description: measure.description } : {}),
+    ...(measure?.color ? { color: measure.color } : {}),
     ...(measure?.ignores_filters?.length ? { ignores_filters: measure.ignores_filters } : {}),
   };
 }
@@ -240,13 +247,17 @@ export function ignoredFilters(meta: MetricMeta | undefined, filters: GlobalFilt
 
 export const METRIC_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** Narrows the global filters to what a metric accepts, so a page-wide breakdown never 400s another chart. */
+/**
+ * Narrows the global filters to what a metric accepts, so a page-wide breakdown never 400s another chart. A metric
+ * that accepts `ai_segment` always gets one: the page's explicit segment filter, else the "Include all AI costs" choice.
+ */
 export function toMetricParams(filters: GlobalFilters, meta?: MetricMeta): MetricParams {
-  const { breakdown, filters: dims, range: _range, ...rest } = filters;
+  const { breakdown, filters: dims, range: _range, all_ai_costs: _all, ...rest } = filters;
   const allowed = meta ? new Set(meta.filters) : undefined;
   const kept: DimensionFilters = Object.fromEntries(
     Object.entries(dims).filter(([key]) => !allowed || allowed.has(key as Dimension)),
   );
+  if (allowed?.has("ai_segment") && kept.ai_segment === undefined) kept.ai_segment = aiSegmentsFor(filters);
   return {
     ...rest,
     ...(breakdown && (!meta || meta.breakdowns.includes(breakdown)) ? { breakdown } : {}),

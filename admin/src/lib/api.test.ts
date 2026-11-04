@@ -92,6 +92,19 @@ describe("metric params", () => {
     });
     expect(metricQuery(toMetricParams({ ...filters, filters: {} })).filters).toBeUndefined();
   });
+
+  it("sends AI cost metrics every segment by default, external (and admin) accounts when turned off", () => {
+    const aiMeta: MetricMeta = { ...meta, title: "AI cost", breakdowns: ["ai_segment"], filters: ["ai_flow", "ai_segment"] };
+    const all = ["external", "internal", "guest", "restricted", "script", "unattributed"];
+    const base = parseFilters(new URLSearchParams(""), new Date("2026-10-28T00:00:00Z"));
+    expect(toMetricParams(base, aiMeta).filters).toEqual({ ai_segment: all });
+    expect(toMetricParams({ ...base, all_ai_costs: false }, aiMeta).filters).toEqual({ ai_segment: ["external"] });
+    expect(toMetricParams({ ...base, all_ai_costs: false, include_internal: true }, aiMeta).filters).toEqual({ ai_segment: ["external", "internal"] });
+    // A clicked segment wins over the checkbox; metrics without the filter never get it, nor the checkbox state.
+    expect(toMetricParams({ ...base, filters: { ai_segment: "guest" } }, aiMeta).filters).toEqual({ ai_segment: "guest" });
+    expect(toMetricParams(base, meta).filters).toEqual({});
+    expect(toMetricParams(base, meta)).not.toHaveProperty("all_ai_costs");
+  });
 });
 
 describe("catalog parsing", () => {
@@ -138,6 +151,15 @@ describe("measures meta", () => {
     });
     expect(measureOf(meta, "exact_share")).toEqual({ label: "Exact share", unit: "currency" });
     expect(measureOf(meta, "unpriced_runs")).toEqual({ label: "Unpriced runs", unit: "currency" });
+  });
+
+  it("keeps a known series colour and drops an unknown one", () => {
+    const meta = parse({
+      title: "Trial to paid",
+      measures: { charge_pending: { label: "Charge pending", color: "pending" }, unresolved: { label: "Needs check", color: "neon" } },
+    });
+    expect(measureOf(meta, "charge_pending")).toEqual({ label: "Charge pending", unit: "count", color: "pending" });
+    expect(measureOf(meta, "unresolved")).toEqual({ label: "Needs check", unit: "count" });
   });
 
   it("survives a non-object measures value", () => {

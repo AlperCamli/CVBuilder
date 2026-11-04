@@ -784,7 +784,7 @@ describe("GeminiAiProvider", () => {
     generateContentMock.mockResolvedValue({modelVersion: "actual-model", text: "invalid", usageMetadata: {promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 120}});
     const onUsage = vi.fn(async () => {});
     await expect(provider.generate({...{flow_type: "follow_up_questions" as const, model_name: "model", prompt: {prompt_key: "questions", prompt_version: "v1", system_prompt: "Questions", user_prompt: "Questions"}, output_schema: followUpQuestionsOutputSchema, input_payload: {}}, onUsage})).rejects.toBeInstanceOf(AiProviderError);
-    expect(onUsage).toHaveBeenCalledWith({provider: "gemini", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120}});
+    expect(onUsage).toHaveBeenCalledWith({provider: "gemini", model_name: "actual-model", usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120, cached_input_tokens: 0, reasoning_tokens: 0}});
     expect(generateContentMock).toHaveBeenCalledTimes(1);
   });
 

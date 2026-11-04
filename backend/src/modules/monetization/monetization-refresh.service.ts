@@ -25,6 +25,7 @@ export interface MonetizationRefreshResult {
   fx_months: string[];
   internal_accounts: number;
   model_prices: number;
+  run_cost_estimates: number;
   failures: string[];
 }
 
@@ -44,7 +45,7 @@ export class MonetizationRefreshService {
 
   // Each step runs even if another fails; failures are reported, not thrown.
   async refresh(now = new Date()): Promise<MonetizationRefreshResult> {
-    const result: MonetizationRefreshResult = { prices: 0, plans: 0, fx_months: [], internal_accounts: 0, model_prices: 0, failures: [] };
+    const result: MonetizationRefreshResult = { prices: 0, plans: 0, fx_months: [], internal_accounts: 0, model_prices: 0, run_cost_estimates: 0, failures: [] };
     const step = async (name: string, run: () => Promise<void>) => {
       try { await run(); } catch (error) { result.failures.push(`${name}: ${error instanceof Error ? error.message : "unknown"}`); }
     };
@@ -58,6 +59,8 @@ export class MonetizationRefreshService {
       result.internal_accounts = await this.repository.markInternalUsers(this.options.adminEmails);
     });
     await step("model_prices", async () => { result.model_prices = await this.refreshModelPrices(); });
+    // After the prices: runs of a newly priced model get their estimated cost stored.
+    await step("run_cost_estimates", async () => { result.run_cost_estimates = await this.repository.backfillRunCostEstimates(); });
     return result;
   }
 
@@ -71,6 +74,7 @@ export class MonetizationRefreshService {
       model_prefix: model,
       input_usd: price.input,
       cached_input_usd: price.cached_input ?? null,
+      cache_write_usd: price.cache_write ?? null,
       output_usd: price.output
     }));
     await this.repository.replaceModelPrices(rows);

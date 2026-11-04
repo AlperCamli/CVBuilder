@@ -13,8 +13,15 @@ describe("parseFilters", () => {
       grain: "day",
       currency: "usd",
       include_internal: false,
+      all_ai_costs: true,
       filters: {},
     });
+  });
+
+  it("includes every AI cost unless the URL turns it off", () => {
+    expect(parse("ai_costs=external").all_ai_costs).toBe(false);
+    expect(parse("ai_costs=bogus").all_ai_costs).toBe(true);
+    expect(writeFilters({ ...parse(""), all_ai_costs: false }).toString()).toBe("ai_costs=external");
   });
 
   it("resolves rolling presets against today and lets them win over from/to", () => {
@@ -75,6 +82,7 @@ describe("writeFilters", () => {
       grain: "week",
       currency: "native",
       include_internal: true,
+      all_ai_costs: false,
       breakdown: "locale",
       filters: { market: ["TR", "US"], plan: "pro" },
     };

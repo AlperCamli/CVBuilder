@@ -4,6 +4,13 @@ import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import { reportAiUsage, type AiProvider, type AiProviderRequest, type AiProviderResult } from "./ai-provider";
 import {
+  AiAttemptLedger,
+  outcomeOfRequestError,
+  outcomeOfResponseError,
+  requestIdOf,
+  type AiUsageSink
+} from "./ai-usage-ledger";
+import {
   HEAVY_MODEL_FLOW_TYPES,
   LARGE_OUTPUT_FLOW_TYPES,
   asRecord,
@@ -276,6 +283,7 @@ export class GeminiAiProvider implements AiProvider {
   private readonly maxOutputTokensHeavy: number;
   private readonly randomFn: () => number;
   private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly usageSink: AiUsageSink | null;
 
   constructor(
     private readonly defaultModelName: string,
@@ -292,6 +300,7 @@ export class GeminiAiProvider implements AiProvider {
       maxOutputTokensHeavy?: number;
       randomFn?: () => number;
       sleepFn?: (ms: number) => Promise<void>;
+      usageSink?: AiUsageSink | null;
     }
   ) {
     this.client = new GoogleGenAI({ apiKey });
@@ -308,6 +317,7 @@ export class GeminiAiProvider implements AiProvider {
     this.maxOutputTokensHeavy = clampNonNegativeInteger(options?.maxOutputTokensHeavy ?? 16_384, 16_384);
     this.randomFn = options?.randomFn ?? Math.random;
     this.sleepFn = options?.sleepFn ?? sleep;
+    this.usageSink = options?.usageSink ?? null;
   }
 
   private resolveMaxOutputTokens(flowType: AiFlowType): number {
@@ -392,12 +402,14 @@ export class GeminiAiProvider implements AiProvider {
     const attemptedModels: string[] = [];
     const modelCandidates = request.single_attempt ? [request.model_name] : this.resolveModelCandidates(request.model_name);
     const maxAttempts = request.single_attempt ? 1 : this.maxAttempts;
+    const ledger = new AiAttemptLedger(this.usageSink, this.providerName, request);
 
     for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
       const candidateModel = modelCandidates[modelIndex] ?? request.model_name;
       attemptedModels.push(candidateModel);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const ledgerAttempt = ledger.begin(candidateModel, modelIndex > 0);
         try {
           const response = await this.callWithTimeout(
             this.client.models.generateContent({
@@ -412,59 +424,75 @@ export class GeminiAiProvider implements AiProvider {
             })
           );
 
+          // Thinking tokens are billed as output but reported apart from candidatesTokenCount; cached
+          // content is part of promptTokenCount.
+          const thoughtsTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
           const usage = response.usageMetadata
               ? {
                   input_tokens: response.usageMetadata.promptTokenCount ?? 0,
-                  output_tokens: response.usageMetadata.candidatesTokenCount ?? 0,
-                  total_tokens: response.usageMetadata.totalTokenCount ?? 0
+                  output_tokens: (response.usageMetadata.candidatesTokenCount ?? 0) + thoughtsTokens,
+                  total_tokens: response.usageMetadata.totalTokenCount ?? 0,
+                  cached_input_tokens: response.usageMetadata.cachedContentTokenCount ?? 0,
+                  reasoning_tokens: thoughtsTokens
                 }
               : undefined;
           const actualModel = response.modelVersion || candidateModel;
-          await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
+          ledgerAttempt.received({ model_reported: actualModel, usage, provider_request_id: requestIdOf(response) });
+          try {
+            await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
 
-          const responseText =
-            typeof response.text === "string" ? response.text.trim() : "";
+            const responseText =
+              typeof response.text === "string" ? response.text.trim() : "";
 
-          if (!responseText) {
-            throw new AiProviderError("Gemini returned an empty response", {
-              raw_output_excerpt: "",
-              attempted_models: attemptedModels
-            });
+            if (!responseText) {
+              throw new AiProviderError("Gemini returned an empty response", {
+                reason: "empty_response",
+                raw_output_excerpt: "",
+                attempted_models: attemptedModels
+              });
+            }
+
+            await request.onStage?.("parsing_output");
+
+            const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
+            if (parsedResult.parsed === null) {
+              throw new AiProviderError("Gemini returned non-JSON output", {
+                reason: "output_json_unparseable",
+                parse_error: parsedResult.parse_error,
+                recovery_attempted: true,
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+            const parsed = parsedResult.parsed;
+
+            const outputPayload = asRecord(parsed);
+            if (!outputPayload) {
+              throw new AiProviderError("Gemini returned unsupported output shape", {
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            await ledgerAttempt.settle("success");
+            return {
+              provider: this.providerName,
+              model_name: actualModel,
+              output_payload: outputPayload,
+              usage
+            };
+          } catch (error) {
+            await ledgerAttempt.settle(outcomeOfResponseError(error));
+            throw error;
           }
-
-          await request.onStage?.("parsing_output");
-
-          const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
-          if (parsedResult.parsed === null) {
-            throw new AiProviderError("Gemini returned non-JSON output", {
-              reason: "output_json_unparseable",
-              parse_error: parsedResult.parse_error,
-              recovery_attempted: true,
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-          const parsed = parsedResult.parsed;
-
-          const outputPayload = asRecord(parsed);
-          if (!outputPayload) {
-            throw new AiProviderError("Gemini returned unsupported output shape", {
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          return {
-            provider: this.providerName,
-            model_name: actualModel,
-            output_payload: outputPayload,
-            usage
-          };
         } catch (error) {
           if (error instanceof AiProviderError) {
             throw error;
           }
 
+          // A failed request. A response rejected above (e.g. by onStage) was already recorded; this is then a no-op.
+          const failed = outcomeOfRequestError(error);
+          await ledgerAttempt.settle(failed.outcome, { http_status: failed.http_status, provider_request_id: requestIdOf(error) });
           const context = toGeminiProviderErrorContext(error);
           lastErrorContext = context;
           lastAttemptedModel = candidateModel;

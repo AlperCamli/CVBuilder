@@ -27,18 +27,19 @@ export function freshnessValue(row: Row): string {
 }
 
 /**
- * A short, non-personal note from `detail`: a run's error, the models with unpriced runs, the scheduled jobs. Other
- * detail keys are not shown.
+ * A short, non-personal note from `detail`: a run's error, the models with unpriced runs, other per-key counts (AI
+ * ledger checks: by flow, segment or outcome), the scheduled jobs. Other detail keys are not shown.
  */
 export function freshnessNote(row: Row): string | null {
   const detail = row.detail && typeof row.detail === "object" && !Array.isArray(row.detail) ? (row.detail as Record<string, unknown>) : null;
   if (!detail) return null;
   if (typeof detail.error === "string" && detail.error) return detail.error;
-  if (detail.models && typeof detail.models === "object") {
-    const models = Object.entries(detail.models as Record<string, unknown>)
-      .map(([model, n]) => [model, num(n) ?? 0] as const)
+  const counts = [detail.models, detail.counts].find((value) => value && typeof value === "object");
+  if (counts) {
+    const entries = Object.entries(counts as Record<string, unknown>)
+      .map(([key, n]) => [key, num(n) ?? 0] as const)
       .sort((a, b) => b[1] - a[1]);
-    return models.length ? models.map(([model, n]) => `${model}: ${n}`).join(", ") : null;
+    return entries.length ? entries.map(([key, n]) => `${key}: ${n}`).join(", ") : null;
   }
   return null;
 }

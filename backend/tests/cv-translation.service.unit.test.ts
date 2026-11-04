@@ -8,7 +8,7 @@ import type { SessionContext } from "../src/modules/ai/ai.types";
 import type { AiProviderResult } from "../src/modules/ai/provider/ai-provider";
 import type { CvContent } from "../src/shared/cv-content/cv-content.types";
 
-function fixture() {
+function fixture(options: ConstructorParameters<typeof AiService>[11] = {}) {
   const userId = randomUUID();
   const session = { appUser: { id: userId, locale: "tr" }, authUser: {} } as SessionContext;
   const master: MasterCvRecord = { id: randomUUID(), user_id: userId, title: "Main", language: "en", module_type: "standard", template_id: null, source_type: "scratch", is_deleted: false, summary_text: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), current_content: { version: "v1", language: "en", metadata: { full_name: "Çağrı Işık", email: "cagri@example.com" }, sections: [{ id: "experience", type: "experience", title: "Work Experience", order: 0, meta: {}, blocks: [{ id: "job", type: "experience", order: 0, visibility: "visible", fields: { role: "Analyst", company: "Company Ltd", description: "Delivered 20 reports." }, meta: {} }] }] } };
@@ -41,7 +41,7 @@ function fixture() {
   };
   const billing = { assertActionAllowed: vi.fn(async () => {}), recordAiActionUsage: vi.fn(async () => {}) };
   const resolver = { resolve: vi.fn(async input => ({ ...input.fallback, user_prompt_template: null })) };
-  const service = new AiService(repository as any, provider as any, masterRepository as any, {} as any, {} as any, {} as any, {} as any, resolver as any, billing as any);
+  const service = new AiService(repository as any, provider as any, masterRepository as any, {} as any, {} as any, {} as any, {} as any, resolver as any, billing as any, undefined, undefined, options);
   return { service, session, master, masters, repository, masterRepository, provider, billing };
 }
 
@@ -141,11 +141,28 @@ describe("block translation orchestration", () => {
     expect(peak).toBe(4);
     expect(result.output_payload).toMatchObject({ translated_blocks: 9, current_content: { language: "de", sections: [{ title: "Berufserfahrung" }] } });
     expect(f.repository.recordRunUsage).toHaveBeenCalledTimes(1);
-    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 90, output_tokens: 45, total_tokens: 135 } }));
+    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 90, output_tokens: 45, total_tokens: 135, cached_input_tokens: 0, reasoning_tokens: 0, cost_usd: null } }));
     expect(f.billing.recordAiActionUsage).toHaveBeenCalledTimes(1);
     const created = await f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id);
     expect(created.title).toBe("Main (Deutsch)");
     expect(created.current_content.metadata).toEqual(f.master.current_content.metadata);
+  });
+  it("stores cached and reasoning tokens and the summed cost of every block attempt", async () => {
+    const f = fixture({ modelPricing: { "fixture-model": { input: 1, cached_input: 0.5, output: 2 } } });
+    f.master.current_content.sections[0].blocks = Array.from({ length: 3 }, (_, i) => ({ ...structuredClone(f.master.current_content.sections[0].blocks[0]), id: `job-${i}` }));
+    f.provider.generate.mockImplementation(async request => {
+      // (600 * 1 + 400 * 0.5 + 100 * 2) / 1M = 0.001 per call
+      const usage = { input_tokens: 1000, cached_input_tokens: 400, output_tokens: 100, reasoning_tokens: 30, total_tokens: 1100 };
+      await request.onUsage({ provider: "fixture", model_name: "fixture-model-2026", usage });
+      return { provider: "fixture", model_name: "fixture-model-2026", usage, output_payload: { translations: request.input_payload.texts.map((item: any) => ({ ...item, text: item.text === "Analyst" ? "Analist" : "20 rapor hazırladı." })) } };
+    });
+    const start = await f.service.startTranslation(f.session, f.master.id, "tr");
+    await f.service.executeTranslation(f.session, f.master.id, start.ai_run_id);
+    expect(f.provider.generate).toHaveBeenCalledTimes(3);
+    expect(f.provider.generate).toHaveBeenCalledWith(expect.objectContaining({ usage_context: { ai_run_id: start.ai_run_id, user_id: f.session.appUser.id, subject: "user" } }));
+    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({
+      usage: { input_tokens: 3000, output_tokens: 300, total_tokens: 3300, cached_input_tokens: 1200, reasoning_tokens: 90, cost_usd: 0.003 }
+    }));
   });
   it("fails the whole run if one block fails, records received usage and never charges", async () => {
     const f = fixture();
@@ -159,7 +176,7 @@ describe("block translation orchestration", () => {
     });
     const start = await f.service.startTranslation(f.session, f.master.id, "tr");
     await expect(f.service.executeTranslation(f.session, f.master.id, start.ai_run_id)).rejects.toThrow("Provider unavailable");
-    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 40, output_tokens: 20, total_tokens: 60 } }));
+    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 40, output_tokens: 20, total_tokens: 60, cached_input_tokens: 0, reasoning_tokens: 0, cost_usd: null } }));
     expect(f.billing.recordAiActionUsage).not.toHaveBeenCalled();
     expect(f.masterRepository.create).not.toHaveBeenCalled();
     await expect(f.service.applyTranslationRun(f.session, f.master.id, start.ai_run_id)).rejects.toThrow("Translation is not ready");
@@ -358,7 +375,7 @@ describe("automatic translation block retries", () => {
     expect(f.provider.generate).toHaveBeenCalledTimes(9);
     expect(result.status).toBe("completed");
     expect((result.output_payload?.current_content as CvContent).sections[0].blocks).toHaveLength(6);
-    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 90, output_tokens: 45, total_tokens: 135 } }));
+    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 90, output_tokens: 45, total_tokens: 135, cached_input_tokens: 0, reasoning_tokens: 0, cost_usd: null } }));
     expect(f.billing.recordAiActionUsage).toHaveBeenCalledTimes(1);
     expect(f.masterRepository.create).not.toHaveBeenCalled();
     await f.service.executeTranslation(f.session, f.master.id, start.ai_run_id);
@@ -385,7 +402,7 @@ describe("automatic translation block retries", () => {
     await vi.runAllTimersAsync();
     expect((await execution).status).toBe("completed");
     expect(f.provider.generate).toHaveBeenCalledTimes(2);
-    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 } }));
+    expect(f.repository.recordRunUsage).toHaveBeenCalledWith(f.session.appUser.id, start.ai_run_id, expect.objectContaining({ usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30, cached_input_tokens: 0, reasoning_tokens: 0, cost_usd: null } }));
     expect(f.billing.recordAiActionUsage).toHaveBeenCalledTimes(1);
   });
 

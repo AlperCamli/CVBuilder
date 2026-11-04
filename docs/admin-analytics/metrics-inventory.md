@@ -33,10 +33,10 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 ### Overview
 | Function | Shape | Breakdowns / filters | Flags | Columns |
 |---|---|---|---|---|
-| `kpi_overview` | kpi | – / market, plan | A | signups, activated_users, activation_eligible, activated_eligible, activation_rate, new_paying_customers, revenue, revenue_usd_native, revenue_try_native, mrr, mrr_usd_native, mrr_try_native, active_subscriptions, trial_starts, trial_resolved, trial_conversions, trial_to_paid_rate, ai_cost, ai_runs, unpriced_ai_runs, revenue_fx_provisional, mrr_fx_provisional, ai_cost_fx_provisional |
+| `kpi_overview` | kpi | – / market, plan, ai_segment (AI cost columns only) | A | signups, activated_users, activation_eligible, activated_eligible, activation_rate, new_paying_customers, revenue, revenue_usd_native, revenue_try_native, mrr, mrr_usd_native, mrr_try_native, active_subscriptions, trial_starts, trial_resolved, trial_conversions, trial_to_paid_rate, ai_cost, ai_runs, unpriced_ai_runs, revenue_fx_provisional, mrr_fx_provisional, ai_cost_fx_provisional |
 | `signups` | timeseries | locale, market / same | D | **signups** |
 | `revenue` | timeseries | market, plan / market, plan, currency | – | **revenue**, refunded, invoices, fx_provisional |
-| `ai_cost` | timeseries | ai_flow, ai_model, ai_provider / same | D | **cost**, runs, unpriced_runs, exact_share, fx_provisional |
+| `ai_cost` | timeseries | ai_flow, ai_model, ai_provider, ai_segment / same | D | **cost**, runs, unpriced_runs, exact_share (label "Stored-cost share"), fx_provisional |
 
 ### Monetization
 | Function | Shape | Breakdowns / filters | Flags | Columns |
@@ -45,7 +45,7 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `mrr_movement` | timeseries (stacked) | market, plan / market, plan, currency | – | new, expansion, contraction (−), churn (−), reactivation, fx_effect, starting_mrr, ending_mrr, starting_customers, new_customers, reactivated_customers, churned_customers, ending_customers, fx_provisional. Day grain ≤ 366 days. |
 | `plan_mix` | breakdown | plan / market, plan, currency | – | subscriptions, share, mrr, mrr_usd_native, mrr_try_native, switched_in, switched_out, fx_provisional |
 | `subscriber_ltv` | breakdown | plan, market, currency | – | **ltv**, customers, ltv_usd_native, ltv_try_native, median_ltv, revenue(+natives), still_paying, censored_share, avg_paid_invoices, avg_observed_months, erased_customers, fx_provisional |
-| `trial_to_paid` | timeseries | market, plan | D | **trial_to_paid**, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, unresolved, resolved, failed_charge_rate |
+| `trial_to_paid` | timeseries | market, plan | D | **trial_to_paid**, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved ("Needs check"), resolved, failed_charge_rate. Outcomes from `analytics_private.trial_outcomes` (converted includes plan-change and paid replacement subscriptions; charge_pending = trial ended < 1 day ago, first charge not collected yet; see api-contract.md **Trial outcomes**) |
 | `paywall_denials` | timeseries | market, plan | D C | user_days, users, hits, hits_consenting, hits_anonymous, anonymous_share |
 | `checkout_funnel` | funnel | market, plan | D | step_order, step (`attempts`, `session_created`, `completed`, `paid_within_7d`), users, conversion_from_prev, conversion_from_start, dropped, pending |
 | `subscription_churn` | timeseries (stacked) | market, plan | D | paid_churn, paid_voluntary, paid_involuntary, paid_other_or_unknown, ended_never_paid, replaced_excluded, cancel_scheduled_open, lost_to_erasure, lost_mrr(+natives), involuntary_share, fx_provisional |
@@ -53,11 +53,14 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `cancellation_reasons` | breakdown | – / market, plan | – | cancellations, share, reason_group_share, paid_cancellations, trial_or_unpaid_cancellations, reason_group, cancellation_reason, cancellation_feedback |
 
 ### AI cost
+**AI segments** (`20261112130000_ai_cost_observability.sql`): `ai_segment` is external, internal (admin accounts), guest, restricted (pending deletion or restricted processing), script (scripts and tests) or unattributed (an app attempt without a subject; ledger only). Without the filter a metric keeps its earlier population (external accounts, plus internal ones with `include_internal`). The dashboard's "Include all AI costs" checkbox (on by default, URL `ai_costs=external` when off) sends every segment to the metrics that accept `ai_segment`: `ai_spend`, `ai_cost`, `ai_cost_anomalies`, `ai_tokens_by_model` and the Overview's `kpi_overview` (AI cost columns only, `20261112140000_kpi_overview_ai_segment.sql`). The unit-economics and reliability metrics keep the external population.
+
 | Function | Shape | Breakdowns / filters | Flags | Columns |
 |---|---|---|---|---|
+| `ai_spend` | timeseries | ai_segment, ai_flow, ai_model, ai_provider / same | – | **cost**, attempts, failed_attempts, no_usage_attempts, unpriced_attempts, pre_ledger_cost, fx_provisional. From the `ai_usage_events` ledger (every provider attempt); `ai_runs` before the ledger's first production attempt |
 | `ai_cost` | timeseries | see Overview | D | – |
-| `ai_cost_anomalies` | timeseries (`flag_column: is_anomaly`) | ai_flow, ai_model, ai_provider / + market | – | cost, runs, tokens, unpriced_runs, terminal_runs, model_failed_runs, model_failure_rate, cost_baseline, cost_upper_band, cost_z, tokens_baseline, tokens_upper_band, tokens_z, baseline_buckets, cost_spike, token_spike, jump_from_flat_baseline, failure_spike, is_anomaly, fx_provisional |
-| `ai_tokens_by_model` | timeseries (stacked) | ai_model, ai_provider, ai_flow / + market | – | total_tokens, input_tokens, cached_input_tokens, output_tokens, runs, runs_without_tokens, completed_runs, failed_runs, cost, unpriced_runs, fx_provisional |
+| `ai_cost_anomalies` | timeseries (`flag_column: is_anomaly`) | ai_flow, ai_model, ai_provider / + market, ai_segment | – | cost, runs, tokens, unpriced_runs, terminal_runs, model_failed_runs, model_failure_rate, cost_baseline, cost_upper_band, cost_z, tokens_baseline, tokens_upper_band, tokens_z, baseline_buckets, cost_spike, token_spike, jump_from_flat_baseline, failure_spike, is_anomaly, fx_provisional |
+| `ai_tokens_by_model` | timeseries (stacked) | ai_model, ai_provider, ai_flow / + market, ai_segment | – | total_tokens, input_tokens, cached_input_tokens, output_tokens, runs, runs_without_tokens, completed_runs, failed_runs, cost, unpriced_runs, fx_provisional |
 | `ai_wasted_spend` | timeseries | ai_flow, ai_model, ai_provider / + market | D | wasted_share, wasted_cost, total_cost, failed_runs_cost, expired_cards_cost, rejected_cards_cost, unfinished_sessions_cost, failed_import_improve_cost, skills_pool_escalation_cost, wasted_tokens_share, runs, failed_runs, unpriced_runs, fx_provisional |
 | `ai_cost_per_outcome` | breakdown | – / ai_model, ai_provider, market | – | **cost_per_outcome**, outcomes, users, attributed_cost(+exact/estimated), attributed_runs, unpriced_runs, tokens_per_outcome, fully_loaded_cost_per_outcome, fx_provisional |
 | `ai_cost_by_plan` | breakdown (segments) | – / plan, market | – | **ai_cost**, users, paying_users, ai_active_users, runs, unpriced_runs, cost_per_user, cost_per_paying_user, revenue(+natives), ai_cost_share_of_revenue, gross_margin, exact_share, fx_provisional |
@@ -96,12 +99,13 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `language_adoption` | breakdown | – / market, locale | – | language_name, cv_users, user_share, master_cvs, tailored_cvs, translation_runs, translations_completed/failed, translation_success_rate, translations_applied, translation_apply_rate, translating_users, translation_tokens |
 
 ### Alerts and Data health
-`kpi_health` is not drawn as a card; it is offered only as an alert-rule target on Alerts. `data_freshness` is the checks list on Data health.
+`kpi_health` is not drawn as a card; it is offered only as an alert-rule target on Alerts. `data_freshness` and `ai_ledger_health` are the checks lists on Data health.
 
 | Function | Shape | Breakdowns / filters | Flags | Columns |
 |---|---|---|---|---|
 | `kpi_health` | kpi | – / market, plan (plan applies to payments and checkout only) | A | ai_runs, ai_failed_runs, ai_failure_rate, failed_payments, payment_failure_rate, checkout_attempts, checkout_abandon_rate, export_failures, export_failure_rate, import_failures, import_failure_rate, tailoring_task_failures, tailoring_task_failure_rate, unpriced_ai_runs |
 | `data_freshness` | table | none | – | item, label, status (`ok`/`warn`/`error`/`info`), value, value_text, at, detail. Items: nightly_refresh, last_recompute, pending_recompute, precomputed_as_of, scheduler, alerts_evaluated, fx_latest_month, billing_price_catalog, billing_plan_catalog, ai_model_prices, unpriced_ai_runs_30d, contract_violations |
+| `ai_ledger_health` | table | none | – | Same columns as `data_freshness`. Items (last 7 days, or since the ledger started): ai_ledger_last_attempt, ai_runs_without_attempts, ai_ledger_vs_runs_cost, ai_attempts_without_run, ai_failed_attempts, ai_unpriced_attempts |
 
 ## People functions (`analytics_people`, audited, `POST /admin/people/:name`)
 | Function | Columns |
@@ -115,11 +119,11 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | Key | Drills metric | Filters |
 |---|---|---|
 | `signups` | signups | locale, market |
-| `ai_cost_users` | ai_cost | ai_flow, ai_model, ai_provider |
+| `ai_cost_users` | ai_cost | ai_flow, ai_model, ai_provider, ai_segment |
 | `ai_failures` | – (generic) | ai_flow, ai_model, ai_provider |
 | `ai_failures_by_flow` | ai_reliability | ai_flow, ai_model, ai_provider, market |
 | `ai_wasted_spend` | ai_wasted_spend | ai_flow, ai_model, ai_provider, market |
-| `trial_conversions` | trial_to_paid | market, plan, outcome |
+| `trial_conversions` | trial_to_paid | market, plan, outcome (converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved) |
 | `checkout_funnel` | checkout_funnel | market, plan, step |
 | `checkout_abandoned` | – (generic) | market, plan |
 | `churned_subscribers` | subscription_churn | market, plan, reason_group |

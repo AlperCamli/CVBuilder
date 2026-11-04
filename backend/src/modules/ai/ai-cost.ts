@@ -1,9 +1,11 @@
 import type { AiProviderUsage } from "./provider/ai-provider";
 
-// USD per 1M tokens. cached_input defaults to input when a model has no cache discount.
+// USD per 1M tokens. cached_input defaults to input when a model has no cache discount; cache_write is the
+// prompt-cache write rate (OpenAI GPT-5.6 and later, Anthropic) and defaults to input when writes cost nothing extra.
 export interface ModelPrice {
   input: number;
   cached_input?: number;
+  cache_write?: number;
   output: number;
 }
 
@@ -28,6 +30,7 @@ export const resolveModelPrice = (
 
 // Returns null when the model has no configured price, so unknown costs are never shown as $0.
 // Reasoning tokens are already included in output_tokens and are billed at the output rate.
+// Cache reads and cache writes are both parts of input_tokens; the rest is billed at the input rate.
 export const computeRunCostUsd = (
   prices: ModelPriceTable,
   modelName: string,
@@ -39,12 +42,19 @@ export const computeRunCostUsd = (
   }
 
   const cached = Math.min(usage.cached_input_tokens ?? 0, usage.input_tokens);
-  const uncachedInput = usage.input_tokens - cached;
+  const written = Math.min(usage.cache_write_input_tokens ?? 0, usage.input_tokens - cached);
+  const uncachedInput = usage.input_tokens - cached - written;
   const cost =
     (uncachedInput * price.input +
       cached * (price.cached_input ?? price.input) +
+      written * (price.cache_write ?? price.input) +
       usage.output_tokens * price.output) /
     1_000_000;
 
   return Math.round(cost * 1_000_000) / 1_000_000;
 };
+
+// Configured model names that no price matches. Their runs store cost_usd = null, so the dashboard's AI cost is
+// a lower bound until AI_MODEL_PRICING_JSON prices them.
+export const unpricedModels = (prices: ModelPriceTable, modelNames: string[]): string[] =>
+  [...new Set(modelNames.filter((name) => name && !resolveModelPrice(prices, name)))];

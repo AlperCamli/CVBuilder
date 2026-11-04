@@ -22,15 +22,24 @@ export interface AiProviderRequest {
   // accounting metadata only; CV/provider payloads are never sent to logs.
   onUsage?: (result: Pick<AiProviderResult, "provider" | "model_name" | "usage">) => Promise<void>;
   onStage?: (stage: "parsing_output") => Promise<void> | void;
+  // Who the call is for, copied onto every usage-ledger attempt (ids only, never content).
+  usage_context?: AiUsageContext;
 }
 
-// cached_input_tokens / reasoning_tokens are subsets of input_tokens / output_tokens,
-// reported only by providers that expose them (currently OpenAI).
+export interface AiUsageContext {
+  ai_run_id?: string | null;
+  user_id?: string | null;
+  subject?: "user" | "guest";
+}
+
+// cached_input_tokens / cache_write_input_tokens are parts of input_tokens and reasoning_tokens is part of
+// output_tokens, reported only by providers that expose them.
 export interface AiProviderUsage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
   cached_input_tokens?: number;
+  cache_write_input_tokens?: number;
   reasoning_tokens?: number;
 }
 

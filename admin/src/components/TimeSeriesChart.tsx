@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { SmallSampleBadge } from "@/components/Badge";
 import { Button } from "@/components/ui/button";
+import type { SeriesColor } from "@/lib/api";
 import { bucketEnd } from "@/lib/drill";
 import { eraMarkers, type Era } from "@/lib/eras";
 import type { Grain } from "@/lib/filters";
@@ -91,12 +92,27 @@ export function pivotRows(rows: Row[], measure: string, topN = 5, label = measur
   return { data, series, breakdown };
 }
 
+/** Semantic colours; `slot` is the categorical slot (0-based) the colour reuses, which other series then skip. */
+const SEMANTIC_COLORS: Record<SeriesColor, { css: string; slot?: number }> = {
+  pending: { css: "var(--series-pending)" },
+  attention: { css: "var(--series-4)", slot: 3 },
+};
+
 /**
  * One series per measure (`meta.plot`), summed over any `dimension` rows in a bucket. A bucket whose rows are all
- * null for a measure stays null (a gap, not a zero). Colors follow the measure's position in `plot`.
+ * null for a measure stays null (a gap, not a zero). Colors follow the measure's position in `plot`, except for
+ * measures that declare a semantic `color`; the categorical slot such a colour reuses is skipped by the others.
  */
-export function pivotMeasures(rows: Row[], measures: Array<{ key: string; label: string }>): PivotResult {
-  const series: Series[] = measures.map((m, i) => ({ key: `m${i}`, label: m.label, color: color(i), dimension: null }));
+export function pivotMeasures(rows: Row[], measures: Array<{ key: string; label: string; color?: SeriesColor }>): PivotResult {
+  const claimed = new Set(measures.flatMap((m) => (m.color ? [SEMANTIC_COLORS[m.color].slot] : [])));
+  const free = Array.from({ length: SLOTS }, (_, i) => i).filter((i) => !claimed.has(i));
+  let next = 0;
+  const series: Series[] = measures.map((m, i) => ({
+    key: `m${i}`,
+    label: m.label,
+    color: m.color ? SEMANTIC_COLORS[m.color].css : color(free[next++ % free.length]),
+    dimension: null,
+  }));
   const byBucket = new Map<string, Record<string, number | string | null>>();
   for (const r of rows) {
     const bucket = String(r.bucket);
@@ -142,7 +158,7 @@ interface TimeSeriesChartProps {
   /** Set on all but one of several stacked charts so the era list isn't repeated. */
   hideEraList?: boolean;
   /** Plot these measures as separate series (`meta.plot`) instead of `measure` by dimension. */
-  measures?: Array<{ key: string; label: string }>;
+  measures?: Array<{ key: string; label: string; color?: SeriesColor }>;
   /** Stack the bars; negative values stack below zero (e.g. MRR contraction and churn). */
   stacked?: boolean;
   /** Buckets to highlight (rows whose `meta.flag_column` is true). */

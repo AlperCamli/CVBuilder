@@ -4,6 +4,13 @@ import { AiProviderError } from "../../../shared/errors/app-error";
 import type { AiFlowType } from "../../../shared/types/domain";
 import { reportAiUsage, type AiProvider, type AiProviderRequest, type AiProviderResult } from "./ai-provider";
 import {
+  AiAttemptLedger,
+  outcomeOfRequestError,
+  outcomeOfResponseError,
+  requestIdOf,
+  type AiUsageSink
+} from "./ai-usage-ledger";
+import {
   HEAVY_MODEL_FLOW_TYPES,
   LARGE_OUTPUT_FLOW_TYPES,
   asRecord,
@@ -165,6 +172,7 @@ export class AnthropicAiProvider implements AiProvider {
   private readonly maxOutputTokensHeavy: number;
   private readonly randomFn: () => number;
   private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly usageSink: AiUsageSink | null;
 
   constructor(
     private readonly defaultModelName: string,
@@ -181,6 +189,7 @@ export class AnthropicAiProvider implements AiProvider {
       maxOutputTokensHeavy?: number;
       randomFn?: () => number;
       sleepFn?: (ms: number) => Promise<void>;
+      usageSink?: AiUsageSink | null;
     }
   ) {
     this.client = new Anthropic({
@@ -200,6 +209,7 @@ export class AnthropicAiProvider implements AiProvider {
     this.maxOutputTokensHeavy = clampNonNegativeInteger(options?.maxOutputTokensHeavy ?? 16_384, 16_384);
     this.randomFn = options?.randomFn ?? Math.random;
     this.sleepFn = options?.sleepFn ?? sleep;
+    this.usageSink = options?.usageSink ?? null;
   }
 
   private resolveMaxOutputTokens(flowType: AiFlowType): number {
@@ -265,12 +275,14 @@ export class AnthropicAiProvider implements AiProvider {
     const attemptedModels: string[] = [];
     const modelCandidates = request.single_attempt ? [request.model_name] : this.resolveModelCandidates(request.model_name);
     const maxAttempts = request.single_attempt ? 1 : this.maxAttempts;
+    const ledger = new AiAttemptLedger(this.usageSink, this.providerName, request);
 
     for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
       const candidateModel = modelCandidates[modelIndex] ?? request.model_name;
       attemptedModels.push(candidateModel);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const ledgerAttempt = ledger.begin(candidateModel, modelIndex > 0);
         try {
           const response = await this.client.messages.create({
             model: candidateModel,
@@ -289,75 +301,91 @@ export class AnthropicAiProvider implements AiProvider {
               : {})
           });
 
+          // Anthropic reports prompt-cache reads and writes apart from input_tokens; they are added back so
+          // cached and written tokens stay parts of input_tokens as for the other providers.
+          const cacheRead = response.usage?.cache_read_input_tokens ?? 0;
+          const cacheWrite = response.usage?.cache_creation_input_tokens ?? 0;
+          const inputTokens = (response.usage?.input_tokens ?? 0) + cacheRead + cacheWrite;
           const usage = response.usage
               ? {
-                  input_tokens: response.usage.input_tokens ?? 0,
+                  input_tokens: inputTokens,
                   output_tokens: response.usage.output_tokens ?? 0,
-                  total_tokens:
-                    (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0)
+                  total_tokens: inputTokens + (response.usage.output_tokens ?? 0),
+                  ...(cacheRead ? { cached_input_tokens: cacheRead } : {}),
+                  ...(cacheWrite ? { cache_write_input_tokens: cacheWrite } : {})
                 }
               : undefined;
           const actualModel = response.model || candidateModel;
-          await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
+          ledgerAttempt.received({ model_reported: actualModel, usage, provider_request_id: requestIdOf(response) });
+          try {
+            await reportAiUsage(request, { provider: this.providerName, model_name: actualModel, usage });
 
-          if (response.stop_reason === "refusal") {
-            throw new AiProviderError("Anthropic refused the request", {
-              reason: "provider_refusal",
-              attempted_models: attemptedModels
-            });
+            if (response.stop_reason === "refusal") {
+              throw new AiProviderError("Anthropic refused the request", {
+                reason: "provider_refusal",
+                attempted_models: attemptedModels
+              });
+            }
+
+            const responseText = response.content
+              .filter(
+                (block): block is Extract<typeof block, { type: "text" }> => block.type === "text"
+              )
+              .map((block) => block.text)
+              .join("")
+              .trim();
+
+            if (!responseText) {
+              throw new AiProviderError("Anthropic returned an empty response", {
+                reason:
+                  response.stop_reason === "max_tokens"
+                    ? "output_truncated_by_token_limit"
+                    : "empty_response",
+                raw_output_excerpt: "",
+                attempted_models: attemptedModels
+              });
+            }
+
+            await request.onStage?.("parsing_output");
+
+            const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
+            if (parsedResult.parsed === null) {
+              throw new AiProviderError("Anthropic returned non-JSON output", {
+                reason: "output_json_unparseable",
+                parse_error: parsedResult.parse_error,
+                recovery_attempted: true,
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            const outputPayload = asRecord(parsedResult.parsed);
+            if (!outputPayload) {
+              throw new AiProviderError("Anthropic returned unsupported output shape", {
+                raw_output_excerpt: toDebugExcerpt(responseText),
+                attempted_models: attemptedModels
+              });
+            }
+
+            await ledgerAttempt.settle("success");
+            return {
+              provider: this.providerName,
+              model_name: actualModel,
+              output_payload: outputPayload,
+              usage
+            };
+          } catch (error) {
+            await ledgerAttempt.settle(outcomeOfResponseError(error));
+            throw error;
           }
-
-          const responseText = response.content
-            .filter(
-              (block): block is Extract<typeof block, { type: "text" }> => block.type === "text"
-            )
-            .map((block) => block.text)
-            .join("")
-            .trim();
-
-          if (!responseText) {
-            throw new AiProviderError("Anthropic returned an empty response", {
-              reason:
-                response.stop_reason === "max_tokens"
-                  ? "output_truncated_by_token_limit"
-                  : "empty_response",
-              raw_output_excerpt: "",
-              attempted_models: attemptedModels
-            });
-          }
-
-          await request.onStage?.("parsing_output");
-
-          const parsedResult = parseOutputWithSchemaPreference(responseText, request.output_schema);
-          if (parsedResult.parsed === null) {
-            throw new AiProviderError("Anthropic returned non-JSON output", {
-              reason: "output_json_unparseable",
-              parse_error: parsedResult.parse_error,
-              recovery_attempted: true,
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          const outputPayload = asRecord(parsedResult.parsed);
-          if (!outputPayload) {
-            throw new AiProviderError("Anthropic returned unsupported output shape", {
-              raw_output_excerpt: toDebugExcerpt(responseText),
-              attempted_models: attemptedModels
-            });
-          }
-
-          return {
-            provider: this.providerName,
-            model_name: actualModel,
-            output_payload: outputPayload,
-            usage
-          };
         } catch (error) {
           if (error instanceof AiProviderError) {
             throw error;
           }
 
+          // A failed request. A response rejected above (e.g. by onStage) was already recorded; this is then a no-op.
+          const failed = outcomeOfRequestError(error);
+          await ledgerAttempt.settle(failed.outcome, { http_status: failed.http_status, provider_request_id: requestIdOf(error) });
           const context = toAnthropicProviderErrorContext(error);
           lastErrorContext = context;
           lastAttemptedModel = candidateModel;

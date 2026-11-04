@@ -71,6 +71,7 @@ const toSubscriptionRecord = (row: Record<string, unknown>): SubscriptionRecord 
     status: String(row.status),
     current_period_start: (row.current_period_start as string | null) ?? null,
     current_period_end: (row.current_period_end as string | null) ?? null,
+    trial_end: (row.trial_end as string | null) ?? null,
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
     scheduled_plan_code: (row.scheduled_plan_code as string | null) ?? null,
     scheduled_change_at: (row.scheduled_change_at as string | null) ?? null,

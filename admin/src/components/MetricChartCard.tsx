@@ -9,7 +9,7 @@ import { ChartCard } from "@/components/ChartCard";
 import { DrillDrawer } from "@/components/DrillDrawer";
 import { TimeSeriesChart } from "@/components/TimeSeriesChart";
 import { controlClass } from "@/components/ui/control";
-import { DEFAULT_MIN_GROUP, downloadCsv, ignoredFilters, measureOf, useCatalog, useCatalogEntry, useMetric, type MetricMeta } from "@/lib/api";
+import { DEFAULT_MIN_GROUP, downloadCsv, ignoredFilters, measureOf, useCatalog, useCatalogEntry, useMetric, type MetricMeta, type MetricParams } from "@/lib/api";
 import { useAnomalyBuckets } from "@/lib/anomalies";
 import { pointHandler, withDrillKey, type DrillFilters, type DrillTarget } from "@/lib/drill";
 import { erasFor } from "@/lib/eras";
@@ -31,8 +31,8 @@ interface MetricChartCardProps {
   native?: "usd" | "split";
   /** Count column behind each series/bar for the small-sample badge; defaults to the measure when it is a count. */
   sampleMeasure?: string;
-  /** Secondary figures under the chart, computed from the loaded rows. */
-  footnote?: (rows: Row[], meta: MetricMeta | undefined, currency: Currency) => ReactNode;
+  /** Secondary figures under the chart, computed from the loaded rows (or fetched with the card's filters). */
+  footnote?: (rows: Row[], meta: MetricMeta | undefined, currency: Currency, card: FootnoteContext) => ReactNode;
   /** Markers next to the title, computed from the loaded rows (e.g. FX provisional). */
   badges?: (rows: Row[], meta: MetricMeta | undefined, currency: Currency) => ReactNode;
   variant?: "line" | "bar";
@@ -47,6 +47,13 @@ interface MetricChartCardProps {
   /** Title until the catalog provides one (and for the "Not available yet" card). */
   title?: string;
   headingLevel?: 2 | 3;
+}
+
+/** What a footnote may need beyond the rows: the metric, the page filters and the params the card was fetched with. */
+export interface FootnoteContext {
+  name: string;
+  filters: GlobalFilters;
+  params: MetricParams;
 }
 
 const FACET_CURRENCY: Record<string, Currency> = { USD: "usd", TRY: "try" };
@@ -160,7 +167,7 @@ export function MetricChartCard(props: MetricChartCardProps) {
           eras={erasFor(name)}
           range={{ from: params.from, to: params.to }}
           hideEraList={i < panels.length - 1}
-          measures={plot ? group.keys.map((key) => ({ key, label: measureOf(meta, key).label })) : undefined}
+          measures={plot ? group.keys.map((key) => ({ key, label: measureOf(meta, key).label, color: measureOf(meta, key).color })) : undefined}
           stacked={Boolean(meta?.stacked)}
           flags={flagColumn ? flaggedBuckets(panelRows, flagColumn) : anomalyBuckets}
           flagLabel={flagColumn ? flagLabelOf(meta, flagColumn) : anomalyBuckets ? anomalyLabel : undefined}
@@ -266,7 +273,7 @@ export function MetricChartCard(props: MetricChartCardProps) {
         {rows && (
           <div className="flex flex-col gap-4">
             {body(rows)}
-            {footnote && <div className="text-xs text-muted-foreground">{footnote(rows, meta, currency)}</div>}
+            {footnote && <div className="text-xs text-muted-foreground">{footnote(rows, meta, currency, { name, filters, params })}</div>}
           </div>
         )}
       </ChartCard>

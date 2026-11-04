@@ -33,6 +33,8 @@
   --series-7: #6250d6;
   --series-8: #e34948;
   --series-other: #898781;
+  /* A state that is expected to resolve on its own (e.g. a first charge Stripe has not taken yet): recedes. */
+  --series-pending: #8fa6be;
   /* Status palette (fixed in both modes; always paired with an icon and a label, never colour alone). */
   --status-good: #0ca30c;
   --status-warning: #fab219;
@@ -87,6 +89,7 @@
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
+    --series-pending: #5d7189;
 
     /* Low values recede toward the dark surface; high values are the brightest steps. */
     --seq-1: #0d366b;

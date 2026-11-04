@@ -15,7 +15,9 @@ export const DIMENSIONS = [
   "onboarding_path",
   "currency",
   "device",
-  "utm_source"
+  "utm_source",
+  // Whose AI cost a run or provider attempt is: external, internal, guest, restricted, script, unattributed.
+  "ai_segment"
 ] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];

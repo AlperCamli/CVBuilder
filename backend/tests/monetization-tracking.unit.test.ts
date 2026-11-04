@@ -32,7 +32,8 @@ const recordingRepository = () => ({
   upsertPlanCatalog: vi.fn(async () => {}),
   upsertFxRates: vi.fn(async () => {}),
   markInternalUsers: vi.fn(async () => 1),
-  replaceModelPrices: vi.fn(async () => {})
+  replaceModelPrices: vi.fn(async () => {}),
+  backfillRunCostEstimates: vi.fn(async () => 3)
 }) satisfies MonetizationRepository;
 
 const invoice = (overrides: Partial<StripeInvoiceSummary> = {}): StripeInvoiceSummary => ({
@@ -190,7 +191,7 @@ describe("monetization reference refresh", () => {
   const refreshService = (
     fetchImpl: typeof fetch,
     gateway: Partial<StripeGateway> | null = null,
-    modelPricing: Record<string, { input: number; cached_input?: number; output: number }> = { "gpt-6-luna": { input: 0.1, output: 0.5 } }
+    modelPricing: Record<string, { input: number; cached_input?: number; cache_write?: number; output: number }> = { "gpt-6-luna": { input: 0.1, output: 0.5 } }
   ) => {
     const repository = recordingRepository();
     const service = new MonetizationRefreshService(repository, gateway as StripeGateway | null, new EntitlementsService(createPlanCatalog()), {
@@ -238,19 +239,22 @@ describe("monetization reference refresh", () => {
     ]));
   });
 
-  it("syncs configured AI model prices as prefixes, with cached input left null when not discounted", async () => {
+  it("syncs configured AI model prices as prefixes, with cached input and cache write left null when not set", async () => {
     const { repository, service } = refreshService(
       (async () => new Response(JSON.stringify({ rates: {} }))) as unknown as typeof fetch,
       null,
-      { "gpt-6-luna": { input: 0.1, cached_input: 0.01, output: 0.5 }, "gemini-3-flash": { input: 0.3, output: 2.5 } }
+      { "gpt-6-luna": { input: 0.1, cached_input: 0.01, cache_write: 0.125, output: 0.5 }, "gemini-3-flash": { input: 0.3, output: 2.5 } }
     );
     const result = await service.refresh(new Date("2026-10-27T10:00:00Z"));
     expect(result.failures).toEqual([]);
     expect(result.model_prices).toBe(2);
     expect(repository.replaceModelPrices).toHaveBeenCalledWith([
-      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5 },
-      { model_prefix: "gemini-3-flash", input_usd: 0.3, cached_input_usd: null, output_usd: 2.5 }
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, cache_write_usd: 0.125, output_usd: 0.5 },
+      { model_prefix: "gemini-3-flash", input_usd: 0.3, cached_input_usd: null, cache_write_usd: null, output_usd: 2.5 }
     ]);
+    // Runs of newly priced models get their estimated cost stored after the prices are synced.
+    expect(repository.backfillRunCostEstimates).toHaveBeenCalledTimes(1);
+    expect(result.run_cost_estimates).toBe(3);
   });
 
   it("keeps existing model prices and reports a failure when no pricing is configured", async () => {
@@ -289,7 +293,7 @@ describe("model price table sync", () => {
   it("upserts configured prefixes and deletes the ones no longer configured", async () => {
     const { db, calls } = fakeDb(["gpt-6-luna", "old-model"]);
     await new SupabaseMonetizationRepository(db, { warn: vi.fn() }).replaceModelPrices([
-      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5 }
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, cache_write_usd: null, output_usd: 0.5 }
     ]);
     expect(calls.upsert).toHaveBeenCalledWith(
       [expect.objectContaining({ model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: 0.01, output_usd: 0.5, refreshed_at: expect.any(String) })],
@@ -305,7 +309,7 @@ describe("model price table sync", () => {
 
     const current = fakeDb(["gpt-6-luna"]);
     await new SupabaseMonetizationRepository(current.db, { warn: vi.fn() }).replaceModelPrices([
-      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: null, output_usd: 0.5 }
+      { model_prefix: "gpt-6-luna", input_usd: 0.1, cached_input_usd: null, cache_write_usd: null, output_usd: 0.5 }
     ]);
     expect(current.calls.deleted).not.toHaveBeenCalled();
   });
