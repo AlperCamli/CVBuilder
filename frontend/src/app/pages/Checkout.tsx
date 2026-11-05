@@ -20,6 +20,7 @@ import {
   readCheckoutAttribution, clearCheckoutAttribution, paymentCompletedTrackingKey,
   hasTrackedPaymentCompleted, markPaymentCompletedTracked, trackPaymentCompleted, trackEvent,
 } from "../integration/analytics";
+import { trackTrialStarted } from "../integration/advertising";
 
 // A confirmed Stripe session is counted once per page load, whatever re-renders the return.
 const countedSessions = new Set<string>();
@@ -106,6 +107,9 @@ export function Checkout() {
               }
               clearCheckoutAttribution();
             } catch { /* Analytics cannot prevent activation or restore. */ }
+            // Google Ads conversion: a verified free-trial start only, once per Checkout Session.
+            try { if (billing.subscription_status === "trialing") trackTrialStarted(sessionId); }
+            catch { /* Ad measurement cannot prevent activation or restore. */ }
           }
           if (outcome === "success" && sessionId && !countedSessions.has(sessionId)) {
             countedSessions.add(sessionId);

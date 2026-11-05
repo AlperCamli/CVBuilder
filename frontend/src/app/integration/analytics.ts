@@ -1,6 +1,7 @@
 import { analyticsAllowed, PRIVACY_EVENT, CONSENT_KEY, getPrivacyConfig } from "./privacy";
 import { analyticsPage, type AnalyticsPage } from "./analytics-pages";
 import { trackFunnelEvent } from "./funnel-events";
+import { adConsentState, advertisingTagLoaded } from "./advertising";
 type AnalyticsValue = string | number | boolean | null | undefined;
 
 export type AnalyticsParams = Record<string, AnalyticsValue>;
@@ -174,7 +175,8 @@ export function initializeAnalytics(): void {
     document.head.appendChild(script);
   }
 
-  window.gtag("consent", "default", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+  // The Google Ads tag shares this consent state: when it loaded first it set the default.
+  window.gtag("consent", advertisingTagLoaded() ? "update" : "default", { analytics_storage: "granted", ...adConsentState() });
   window.gtag("js", new Date());
   window.gtag("config", GA_MEASUREMENT_ID, {
     send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false,
@@ -340,9 +342,10 @@ export function removeAnalyticsData() {
   if (!hasWindow()) return;
   generation++; initializing = null; analyticsReady = false; pendingEvents = []; nextScreenEvents = []; lastQueuedPage = -1;
   (window as unknown as Record<string, unknown>)[`ga-disable-${GA_MEASUREMENT_ID}`] = true;
-  window.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+  window.gtag?.("consent", "update", { analytics_storage: "denied", ...adConsentState() });
   document.getElementById(GA_SCRIPT_ID)?.remove();
-  window.dataLayer = [];
+  // The Google Ads tag keeps reading the data layer it started with.
+  if (!advertisingTagLoaded()) window.dataLayer = [];
   const hostname = window.location.hostname.split(".");
   const domains = ["", ...hostname.map((_, index) => "." + hostname.slice(index).join("."))];
   const paths = ["/", ...window.location.pathname.split("/").filter(Boolean).map((_, index, parts) => "/" + parts.slice(0, index + 1).join("/"))];

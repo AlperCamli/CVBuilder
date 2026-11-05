@@ -11,6 +11,8 @@ export interface PrivacyConfig {
   brand?: string; country?: string; hosting_region?: string; ai_required?: boolean;
   processors: { id: string; name: string; purpose: string; countries: string; retention: string; safeguards: string }[];
   analytics_enabled: boolean;
+  /** Google Ads measurement is offered only when the operator lists Google Ads as a processor. */
+  advertising_enabled?: boolean;
   collection_enabled: boolean; ai_enabled: boolean; ai_provider: string;
 }
 export interface PrivacyChoices { analytics: boolean; ai_processing: boolean; notice_version: string }

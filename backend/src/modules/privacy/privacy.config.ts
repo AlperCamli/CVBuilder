@@ -25,6 +25,7 @@ export function privacyConfig() {
     collection_enabled: ready && (!aiRequired || aiReady),
     processors,
     analytics_enabled: ready && processors.some(row => row.id === "google-analytics"),
+    advertising_enabled: ready && processors.some(row => row.id === "google-ads"),
     ai_enabled: aiReady,
     ai_provider: providers[provider as keyof typeof providers] ?? "Unconfigured provider",
     ai_provider_key: provider,

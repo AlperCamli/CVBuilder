@@ -4,6 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Google tag (GTM-PGVDXFTR) for Google Ads measurement. It loads once per page, and
+         only after the visitor allows ad measurement in Cookie settings. The key, version
+         and script id must match src/app/integration/advertising.ts. -->
+    <script>
+      (function () {
+        var KEY = "cv-builder:ad-choices", VERSION = "2026-11-05.1", ID = "gtm-google-tag";
+        function allowed() {
+          try {
+            if (navigator.globalPrivacyControl === true) return false;
+            var choice = JSON.parse(localStorage.getItem(KEY) || "null");
+            return !!choice && choice.version === VERSION && choice.advertising === true && Date.parse(choice.expires_at) > Date.now();
+          } catch (e) { return false; }
+        }
+        function load() {
+          if (document.getElementById(ID) || !allowed()) return;
+          // Google Analytics may already share the data layer; it then owns the consent default.
+          var first = !window.gtag;
+          window.dataLayer = window.dataLayer || [];
+          window.gtag = window.gtag || function gtag() { dataLayer.push(arguments); };
+          var ads = { ad_storage: "granted", ad_user_data: "granted", ad_personalization: "denied" };
+          if (first) { ads.analytics_storage = "denied"; gtag("consent", "default", ads); }
+          else gtag("consent", "update", ads);
+          gtag("js", new Date());
+          var script = document.createElement("script");
+          script.id = ID;
+          script.async = true;
+          script.src = "https://www.googletagmanager.com/gtm.js?id=GTM-PGVDXFTR";
+          document.head.appendChild(script);
+        }
+        load();
+        window.addEventListener("cv-builder:ad-privacy-change", load);
+      })();
+    </script>
+
     <title>Tailor Your CV to Any Job Description in Minutes | jobspecificCV</title>
     <meta
       name="description"

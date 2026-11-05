@@ -4,6 +4,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./app/App.tsx";
 import "./styles/index.css";
 import { installAnalyticsConsentListener } from "./app/integration/analytics";
+import { installAdvertisingConsentListener } from "./app/integration/advertising";
 import { DESIGN_TOOLS_ENABLED } from "./app/design-tools";
 
 const container = document.getElementById("root")!;
@@ -38,6 +39,7 @@ async function mount() {
     }
     installGuestExpiryCheck();
     installAnalyticsConsentListener();
+    installAdvertisingConsentListener();
   }
   // Finish loading the public boundary before preference effects can update it.
   // The first browser render still uses the URL language of the prerendered HTML.

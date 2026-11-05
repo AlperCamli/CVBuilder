@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ACCOUNT_READY_EVENT, consentSyncPending, PRIVACY_EVENT, hasGlobalPrivacyControl, getPrivacyConfig, markBrowserChoicePending, openPrivacyChoices, readAnalyticsChoice, saveAnalyticsChoice, syncBrowserChoice } from "../integration/privacy";
 import { removeAnalyticsData } from "../integration/analytics";
+import { advertisingAllowed, advertisingTagLoaded, forgetAdvertisingChoice, readAdvertisingChoice, saveAdvertisingChoice } from "../integration/advertising";
 import "./privacy.css";
 
 // Pages that render the CV editor fill the viewport and scroll inside their panes, so they show no links.
@@ -20,6 +21,11 @@ export function PrivacyLinks() {
 export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = {}) {
   useTranslation();
   const [analyticsAvailable, setAnalyticsAvailable] = useState(false);
+  // Google Ads measurement is a separate choice, offered only while the operator enables it.
+  const [advertisingAvailable, setAdvertisingAvailable] = useState(false);
+  const advertisingOffered = useRef(false);
+  const [analyticsChecked, setAnalyticsChecked] = useState(false);
+  const [advertisingChecked, setAdvertisingChecked] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
   const [configFailed, setConfigFailed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -35,22 +41,38 @@ export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = 
       window.dispatchEvent(new Event(ACCOUNT_READY_EVENT));
     }
   };
+  const needsChoice = () => readAnalyticsChoice() === null || (advertisingOffered.current && readAdvertisingChoice() === null);
   useEffect(() => {
-    setOpen(readAnalyticsChoice() === null);
+    if (!open) return;
+    setAnalyticsChecked(readAnalyticsChoice() === true);
+    setAdvertisingChecked(advertisingAllowed());
+  }, [open]);
+  useEffect(() => {
+    setOpen(needsChoice());
     let active = true;
     let request = 0;
     const refresh = () => {
       const current = ++request;
       setConfigLoading(true);
       void getPrivacyConfig().then(config => {
-        if (active && current === request) { setAnalyticsAvailable(config.analytics_enabled); setConfigFailed(false); }
+        if (active && current === request) {
+          setAnalyticsAvailable(config.analytics_enabled); setConfigFailed(false);
+          advertisingOffered.current = config.advertising_enabled === true;
+          setAdvertisingAvailable(advertisingOffered.current);
+          if (!advertisingOffered.current && advertisingAllowed()) {
+            const loaded = advertisingTagLoaded();
+            forgetAdvertisingChoice();
+            if (loaded) window.location.reload();
+          }
+          if (needsChoice()) setOpen(true);
+        }
       }).catch(() => {
-        if (active && current === request) { setAnalyticsAvailable(false); setConfigFailed(true); }
+        if (active && current === request) { setAnalyticsAvailable(false); advertisingOffered.current = false; setAdvertisingAvailable(false); setConfigFailed(true); }
       }).finally(() => { if (active && current === request) setConfigLoading(false); });
     };
     refresh();
     const show = () => { setOpen(true); setDetails(true); refresh(); };
-    const changed = () => { if (readAnalyticsChoice() === null) setOpen(true); };
+    const changed = () => { if (needsChoice()) setOpen(true); };
     window.addEventListener("cv-builder:open-privacy", show);
     window.addEventListener(PRIVACY_EVENT, changed);
     window.addEventListener("storage", changed);
@@ -58,9 +80,12 @@ export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = 
     window.addEventListener("online", refresh);
     return () => { active = false; window.removeEventListener("cv-builder:open-privacy", show); window.removeEventListener(PRIVACY_EVENT, changed); window.removeEventListener("storage", changed); window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); };
   }, []);
-  async function choose(accepted: boolean) {
+  // `advertising` is undefined while ad measurement isn't offered, which leaves that choice untouched.
+  async function choose(accepted: boolean, advertising?: boolean) {
     setError("");
     try {
+      const reloadAfterAdWithdrawal = advertising === false && advertisingTagLoaded();
+      if (advertising !== undefined) saveAdvertisingChoice(advertising);
       // Persist denial immediately, before any network operation. Defer the reload
       // event until the backend receipt has been attempted.
       const analytics = accepted && !hasGlobalPrivacyControl();
@@ -77,7 +102,7 @@ export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = 
         window.dispatchEvent(new Event(PRIVACY_EVENT));
       }
       setOpen(false);
-      if (reloadAfterWithdrawal) window.location.reload();
+      if (reloadAfterWithdrawal || reloadAfterAdWithdrawal) window.location.reload();
     } catch { setError(t("Your browser couldn’t save this choice. Optional cookies stay off.")); }
     finally { finishSync(); setSyncPending(false); }
   }
@@ -112,15 +137,31 @@ export function PrivacyControls({ showLinks = true }: { showLinks?: boolean } = 
     {showLinks && <PrivacyLinks />}
     {open && <aside className="privacy-banner" aria-label={t("Cookie preferences")}>
       <p><strong>{t("Help us improve jobspecificCV")}</strong></p>
-      <p>{t("Essential cookies keep sign-in and uploads working. With your OK, we also use Google Analytics to see which pages and features help people most, so we can make the app better for you.")}</p>
-      <p>{t("Your CV content is never included, and nothing is used for ads. It's completely optional: the app works the same either way, and you can change your choice anytime in Cookie settings.")}</p>
-      {details && <p id="cookie-usage-details">{t("Analytics loads only after you agree and may use Google's _ga cookies to measure visits.")}{" "}<Link to="/cookies">{t("Read about cookies and storage")}</Link>{"."}</p>}
+      {advertisingAvailable ? <>
+        <p>{t("Essential cookies keep you signed in and your uploads working. With your OK, we'd also like to use two small, optional tools that help us make jobspecificCV better.")}</p>
+        <div className="privacy-choices">
+          <label><input type="checkbox" checked={analyticsChecked} disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onChange={event => setAnalyticsChecked(event.target.checked)} />
+            <span>{t("Usage statistics")}<small>{t("Shows which pages and features help people most, so we know what to improve.")}{" · Google Analytics"}</small></span></label>
+          <label><input type="checkbox" checked={advertisingChecked} disabled={syncPending || hasGlobalPrivacyControl()} onChange={event => setAdvertisingChecked(event.target.checked)} />
+            <span>{t("Ad measurement")}<small>{t("Tells us whether our ads bring in people who start a free trial, so we stop paying for ads that don't work.")}{" · Google Ads"}</small></span></label>
+        </div>
+        <p>{t("Your CV, answers and account details are never sent to these tools, and we never show you personalized ads. Saying no changes nothing in the app, and you can change your mind anytime in Cookie settings.")}</p>
+      </> : <>
+        <p>{t("Essential cookies keep sign-in and uploads working. With your OK, we also use Google Analytics to see which pages and features help people most, so we can make the app better for you.")}</p>
+        <p>{t("Your CV content is never included, and nothing is used for ads. It's completely optional: the app works the same either way, and you can change your choice anytime in Cookie settings.")}</p>
+      </>}
+      {details && <p id="cookie-usage-details">{advertisingAvailable
+        ? t("Neither tool loads before you agree. Usage statistics may use Google's _ga cookies, and ad measurement may use Google's _gcl cookies.")
+        : t("Analytics loads only after you agree and may use Google's _ga cookies to measure visits.")}{" "}<Link to="/cookies">{t("Read about cookies and storage")}</Link>{"."}</p>}
       {configLoading ? <p role="status">{t("Loading cookie settings…")}</p> : configFailed ? <p role="status">{t("Cookie settings couldn’t load. Optional cookies stay off. Reopen Cookie settings to try again.")}</p> : !analyticsAvailable && <p>{t("Optional cookies are currently unavailable. Essential cookies still work.")}</p>}
       {hasGlobalPrivacyControl() && <p>{t("Your browser asks us not to track usage (Global Privacy Control). Optional cookies stay off.")}</p>}
       {error && <p role="alert">{t(error)}</p>}
       <div className="privacy-actions">
-        <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Allow analytics")}</button>
-        <button type="button" disabled={syncPending} onClick={() => void choose(false)}>{t("Essential cookies only")}</button>
+        {advertisingAvailable ? <>
+          <button type="button" disabled={syncPending || configLoading || hasGlobalPrivacyControl()} onClick={() => void choose(analyticsAvailable, true)}>{t("Allow all")}</button>
+          <button type="button" disabled={syncPending || configLoading} onClick={() => void choose(analyticsChecked && analyticsAvailable, advertisingChecked)}>{t("Save my choices")}</button>
+        </> : <button type="button" disabled={syncPending || configLoading || !analyticsAvailable || hasGlobalPrivacyControl()} onClick={() => void choose(true)}>{t("Allow analytics")}</button>}
+        <button type="button" disabled={syncPending} onClick={() => void choose(false, advertisingAvailable ? false : undefined)}>{t("Essential cookies only")}</button>
         <button type="button" className="privacy-details-toggle" onClick={() => setDetails(!details)} aria-expanded={details} aria-controls={details ? "cookie-usage-details" : undefined}>{details ? t("Less detail") : t("Learn more")}</button>
       </div>
     </aside>}
