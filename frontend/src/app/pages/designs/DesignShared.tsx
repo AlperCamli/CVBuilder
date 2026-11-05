@@ -362,15 +362,12 @@ export function Transformation({ compact = false }: { compact?: boolean }) {
 }
 
 /**
- * The checkout behind the public Pro button. On the catalog's trial plan (Monthly since 2026-11-05) it starts the free
- * trial, so nobody pays today for what the trial card next to it offers free; checkout asks to confirm the paid price
- * when the account is not eligible. A promotion covering that plan replaces the trial. Weekly and Annual (and every
- * plan when the catalog offers no trial) stay explicit paid choices.
+ * The checkout behind the public Pro button: an explicit paid purchase of the selected period, never a trial. The
+ * trial card next to it is the only entry to the free trial, so "Choose Pro monthly" charges the monthly price at
+ * checkout even for an account that could still start the trial (the user's decision, 2026-11-05).
  */
-export function proCheckoutIntent(period: CheckoutTarget, prices: BillingPrices | null | undefined, promotionCovers = false) {
-  const trialOffered = !prices || prices.plans.some(plan => plan.trial_days > 0);
-  const withTrial = trialOffered && !promotionCovers && period === trialPlanCode(prices);
-  return { plan_code: period, with_trial: withTrial, return_path: ONBOARDING_ENTRY_PATH };
+export function proCheckoutIntent(period: CheckoutTarget) {
+  return { plan_code: period, with_trial: false as const, return_path: ONBOARDING_ENTRY_PATH };
 }
 
 type PricingCardsProps = {
@@ -430,8 +427,7 @@ export function RegionalPricingCards({
   const promoCovered = Boolean(promotion?.covers(period));
   const promoPrice = promotion?.planPrice(period, selected && regional.prices ? { amount: selected.amount, currency: regional.prices.currency } : null) ?? null;
   const promoMoney = (amount: number) => formatMoney(amount, promoPrice!.currency);
-  const proIntent = proCheckoutIntent(period, regional.prices, promoCovered);
-  const startsTrial = proIntent.with_trial;
+  const proIntent = proCheckoutIntent(period);
   const selectPeriod = (next: CheckoutTarget) => {
     setTeaserPeriod(next);
     if (!teaser) {
@@ -446,8 +442,8 @@ export function RegionalPricingCards({
   const choosePro = () => {
     if (!regional.ready) return;
     trackCtaClick("pricing_pro", "/signup");
-    // The trial plan starts the trial ({ plan_code: "monthly", with_trial: true }); other periods are explicit paid
-    // choices (with_trial: false). See proCheckoutIntent.
+    // Every period is an explicit paid choice (with_trial: false); the trial card is the trial's entry. See
+    // proCheckoutIntent.
     setPendingCheckout({
       ...proIntent,
       // Only the plan the offer covers carries the link token into checkout.
@@ -571,18 +567,14 @@ export function RegionalPricingCards({
                 </span>
               </div>
               <div className="cv-price-caption">
-                {startsTrial
-                  ? t("Free for 3 days, then {{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })
-                  : t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
+                {t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
               </div>
             </>
           )}
           <button className="cv-button" onClick={choosePro} disabled={!regional.ready}>
             {promoCovered && promotion?.offer?.promotion
               ? t("Get {{percent}}% off {{plan}}", { percent: promotion.offer.promotion.percent_off, plan: price.label })
-              : startsTrial
-                ? t("Start 3-day free trial")
-                : <>{t("Choose Pro")}{" "}{price.label.toLowerCase()}</>}{" "}<ArrowUpRight size={17} />
+              : <>{t("Choose Pro")}{" "}{price.label.toLowerCase()}</>}{" "}<ArrowUpRight size={17} />
           </button>
           <ul>
             {proFeatures.map((feature, index) => (
@@ -617,9 +609,7 @@ export function RegionalPricingCards({
             ))}
           </ul>
           <p className="cv-plan-footnote">
-            {startsTrial
-              ? t("Create your account, then start your free trial at secure checkout. Nothing to pay today. If you’ve already had a trial, you’ll confirm the price before paying.")
-              : t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}
+            {t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}
           </p>
         </article>
       </div>

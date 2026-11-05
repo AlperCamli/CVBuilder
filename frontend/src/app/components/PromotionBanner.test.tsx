@@ -120,9 +120,7 @@ describe("pricing card with an emailed offer", () => {
     for (const status of ["ended", "upcoming", "redeemed", "ineligible"] as const) {
       const html = cards(promo(offer(status)));
       expect(html).not.toContain("promo-plan-badge");
-      // Without a usable offer the default Monthly period is the free trial, not a paid "Choose Pro".
-      expect(html).toContain("Start 3-day free trial");
-      expect(html).not.toContain("Choose Pro Monthly");
+      expect(html).toContain("Choose Pro");
     }
     expect(cards(promo(offer(), ENDS))).not.toContain("promo-plan-badge");
     expect(cards(undefined)).not.toContain("promo-");

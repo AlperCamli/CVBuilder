@@ -61,7 +61,7 @@ try {
           if (path === "/billing/checkout") {
             requests.push(JSON.parse(req.postData()));
             assert.equal(req.headers().authorization, `Bearer ${token}`);
-            return void await respond({ checkout_url: "https://checkout.stripe.test/trial", checkout_session_id: "cs_test_trial", plan_code: "monthly", plan_name: "Monthly", trial_applied: true, trial_period_days: 3, amount, currency });
+            return void await respond({ checkout_url: "https://checkout.stripe.test/trial", checkout_session_id: "cs_test_trial", plan_code: "monthly", plan_name: "Monthly", trial_applied: false, trial_period_days: null, amount, currency });
           }
           unexpected.push(`${req.method()} ${path}`);
           await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: "NOT_FOUND", message: "Unconfigured test fixture" } }) });
@@ -72,30 +72,32 @@ try {
       });
       await page.evaluateOnNewDocument(() => localStorage.setItem("cv-interface-locale", "en"));
       await page.goto(`${base}/pricing`, { waitUntil: "networkidle0" });
-      // The public Pro card on its default Monthly period is the trial button (DesignShared RegionalPricingCards).
+      // The public Pro card on its default Monthly period is a direct paid purchase; only the trial card starts the
+      // trial (DesignShared RegionalPricingCards, decided 2026-11-05).
       const proButton = ".cv-plan-pro button.cv-button";
       await page.waitForSelector(`${proButton}:not([disabled])`);
-      assert.match(await page.$eval(proButton, el => el.innerText), /Start 3-day free trial/);
-      assert.match(await page.$eval(".cv-plan-pro .cv-price-caption", el => el.innerText), /^Free for 3 days, then /);
+      assert.match(await page.$eval(proButton, el => el.innerText), /Choose Pro monthly/);
+      assert.doesNotMatch(await page.$eval(proButton, el => el.innerText), /trial/i);
+      assert.match(await page.$eval(".cv-plan-pro .cv-price-caption", el => el.innerText), /billed monthly\.$/);
       // The trial card's terms name the plan the trial continues as, at the live monthly price, never a weekly one.
       const trialTerms = await page.$eval(".cv-plan-free .cv-plan-footnote", el => el.innerText);
       assert.match(trialTerms, /continues as Monthly Pro at .+ a month/);
       assert.doesNotMatch(trialTerms, /week/i);
       await page.locator(proButton).click();
       await page.waitForFunction(() => location.pathname === "/signup" && new URLSearchParams(location.search).get("purchase") === "1");
-      assert.deepEqual(await page.evaluate(() => { const { plan_code, with_trial } = JSON.parse(localStorage.getItem("cv-builder:pending-checkout")); return { plan_code, with_trial }; }), { plan_code: "monthly", with_trial: true });
-      assert.equal(requests.length, 0, "public trial click must wait for authentication");
+      assert.deepEqual(await page.evaluate(() => { const { plan_code, with_trial } = JSON.parse(localStorage.getItem("cv-builder:pending-checkout")); return { plan_code, with_trial }; }), { plan_code: "monthly", with_trial: false });
+      assert.equal(requests.length, 0, "public Pro click must wait for authentication");
       // Simulate completed signup on this browser; real signup/upload providers
       // are outside this isolated billing test. Exercise the actual auth resumer: an authenticated
-      // /signup?purchase=1 resumes the pending checkout at /app/checkout?plan=monthly&trial=1&auto=1.
+      // /signup?purchase=1 resumes the pending checkout at /app/checkout?plan=monthly&trial=0&auto=1.
       await page.evaluate(({ token, user }) => localStorage.setItem("sb-trial-fixture-auth-token", JSON.stringify({ access_token: token, refresh_token: "fixture-refresh", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user })), { token, user });
       await page.goto(`${base}/signup?purchase=1`, { waitUntil: "networkidle0" });
       await page.waitForFunction(() => location.hostname === "checkout.stripe.test");
       assert.equal(requests.length, 1);
-      // The trial is requested explicitly, on Monthly.
+      // A paid Monthly purchase, explicitly without the trial.
       assert.equal(requests[0].pricing_quote, prices.quote);
       assert.equal(requests[0].plan_code, "monthly");
-      assert.equal(requests[0].with_trial, true);
+      assert.equal(requests[0].with_trial, false);
       assert.deepEqual(unexpected, [], "no unconfigured API requests");
       assert.deepEqual(errors, [], "no browser runtime errors");
       console.log(`PASS ${market}/${currency.toUpperCase()}: Pro card trial button → stored Monthly trial → authenticated resumer → correct regional checkout request → Stripe redirect`);

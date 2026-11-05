@@ -25,7 +25,7 @@ Release preparation and later promotion to the primary URLs are documented in [M
 ## Checkout behavior
 
 - Free clears pending checkout intent and opens the existing signup flow toward `/app/create`.
-- Paid plan buttons preserve their selected period. Paid Weekly explicitly uses `with_trial: false`. Since 2026-11-05 the Pro button on the trial plan (Monthly, read from the catalog with `trialPlanCode`) reads "Start 3-day free trial" and stores `{ plan_code: "monthly", with_trial: true }` (`proCheckoutIntent` in `DesignShared.tsx`); Weekly and Annual keep `with_trial: false`, and a promotion covering Monthly replaces the trial.
+- Paid plan buttons preserve their selected period and are always explicit paid purchases: every period, Monthly included, stores `with_trial: false` (`proCheckoutIntent` in `DesignShared.tsx`). The trial card is the only entry to the free trial, so "Choose Pro monthly" never routes through the trial (decided 2026-11-05).
 - The trial choice explicitly records `{ plan_code: "weekly", with_trial: true }`. Trial eligibility and final terms are confirmed by the existing checkout flow. *Historic:* since 2026-11-05 the trial continues as Monthly Pro; trial CTAs enter `/onboarding` without a plan and the checkout opens `/app/checkout?plan=monthly&trial=1`. A saved `{ plan_code: "weekly", with_trial: true }` intent is treated as a Monthly trial ("trial wins"), never as an immediate Weekly charge.
 - The interactive sample runs locally; it does not upload documents, call AI services, create accounts, or generate document downloads.
 

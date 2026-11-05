@@ -61,33 +61,20 @@ describe("public trial card terms", () => {
 });
 
 describe("public Pro button", () => {
-  it("starts the free trial on the trial plan and keeps Weekly and Annual as paid choices", () => {
-    const prices = catalog("monthly");
-    expect(proCheckoutIntent("monthly", prices)).toMatchObject({ plan_code: "monthly", with_trial: true });
-    expect(proCheckoutIntent("weekly", prices)).toMatchObject({ plan_code: "weekly", with_trial: false });
-    expect(proCheckoutIntent("annual", prices)).toMatchObject({ plan_code: "annual", with_trial: false });
-    // After signup the checkout grants the trial when eligible, otherwise it asks to confirm the paid monthly price.
-    const url = new URL(checkoutPath({ ...proCheckoutIntent("monthly", prices), auto: true }), "https://app.example");
-    expect([url.searchParams.get("plan"), url.searchParams.get("trial")]).toEqual(["monthly", "1"]);
-    const paid = new URL(checkoutPath({ ...proCheckoutIntent("weekly", prices), auto: true }), "https://app.example");
-    expect([paid.searchParams.get("plan"), paid.searchParams.get("trial")]).toEqual(["weekly", "0"]);
-  });
-
-  it("lets a promotion on the trial plan replace the trial, and never offers a trial the catalog does not have", () => {
-    expect(proCheckoutIntent("monthly", catalog("monthly"), true).with_trial).toBe(false);
-    const noTrial = { ...catalog("monthly"), plans: catalog("monthly").plans.map(plan => ({ ...plan, trial_days: 0 })) };
-    expect(proCheckoutIntent("monthly", noTrial).with_trial).toBe(false);
-    // A catalog that still attaches the trial to Weekly is followed.
-    expect(proCheckoutIntent("monthly", catalog("weekly")).with_trial).toBe(false);
-    expect(proCheckoutIntent("weekly", catalog("weekly")).with_trial).toBe(true);
-  });
-
-  it("labels the default Monthly selection as starting the free trial, including the prerendered page", () => {
-    for (const html of [render(catalog("monthly")), render(null)]) {
-      expect(html).toContain("Start 3-day free trial");
-      expect(html).not.toContain("Choose Pro");
-      expect(html).toContain("start your free trial at secure checkout");
+  it("is a direct paid purchase for every period, Monthly included; the trial card alone starts the trial", () => {
+    for (const period of ["weekly", "monthly", "annual"] as const) {
+      expect(proCheckoutIntent(period)).toEqual({ plan_code: period, with_trial: false, return_path: "/onboarding?step=upload" });
+      const url = new URL(checkoutPath({ ...proCheckoutIntent(period), auto: true }), "https://app.example");
+      expect([url.searchParams.get("plan"), url.searchParams.get("trial")]).toEqual([period, "0"]);
     }
-    expect(render(catalog("monthly"))).toContain(`Free for 3 days, then ${formatMoney(1499, "usd")} billed monthly.`);
+  });
+
+  it("labels the default Monthly selection as a paid purchase, including the prerendered page", () => {
+    for (const html of [render(catalog("monthly")), render(null)]) {
+      expect(html).toContain("Choose Pro");
+      expect(html).not.toContain("Start 3-day free trial");
+      expect(html).toContain("straight to secure checkout");
+    }
+    expect(render(catalog("monthly"))).toContain(`${formatMoney(1499, "usd")} billed monthly.`);
   });
 });

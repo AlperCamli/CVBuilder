@@ -54,15 +54,9 @@ const POST_EXPORT_CHECKLIST = [
   "Use AI rewrites and track applications"
 ];
 
-// The trial plan's card (Monthly) carries the trial; Weekly is a plain paid option without one.
-const postExportPlanBadge = (
-  card: (typeof PAID_PLAN_CARDS)[number],
-  trialPlan: CheckoutTarget,
-  trialEligible: boolean
-): string | null => {
-  if (card.code === trialPlan && trialEligible) return "3-day free trial";
-  return card.savings ?? card.badge ?? null;
-};
+// Plan cards are direct paid purchases; the primary button above them is the trial's entry (the user's decision,
+// 2026-11-05), so no card carries a trial badge.
+const postExportPlanBadge = (card: (typeof PAID_PLAN_CARDS)[number]): string | null => card.savings ?? card.badge ?? null;
 
 const getCopy = (
   variant: UpgradePromptVariant,
@@ -216,7 +210,8 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     }
   };
 
-  const startCheckout = async (target: CheckoutTarget) => {
+  // withTrial only from the primary button (the trial's entry); a plan card is always a direct paid purchase.
+  const startCheckout = async (target: CheckoutTarget, withTrial = false) => {
     if (!isAuthenticated) {
       onClose();
       navigate("/signin");
@@ -235,7 +230,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     setBusy(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}`, withTrial: target === trialPlan && trialEligible, returnPath: options.returnPath ?? `${window.location.pathname}${window.location.search}` });
+      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}`, withTrial, returnPath: options.returnPath ?? `${window.location.pathname}${window.location.search}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusy(null);
@@ -321,9 +316,8 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                   <PricingAvailability {...regional} />
                   {regional.cards.filter((card): card is PlanCard & { code: CheckoutTarget } => card.code !== "trial").map((card) => {
                     const isBusy = busy === card.code;
-                    const badge = postExportPlanBadge(card, trialPlan, trialEligible);
-                    const isTrialPlan = card.code === trialPlan;
-                    const isEmphasized = isTrialPlan || card.highlighted;
+                    const badge = postExportPlanBadge(card);
+                    const isEmphasized = Boolean(card.highlighted);
 
                     return (
                       <button
@@ -335,7 +329,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                         style={{
                           borderColor: isEmphasized ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
                           background:
-                            isTrialPlan
+                            isEmphasized
                               ? "var(--color-teal-50)"
                               : card.highlighted
                                 ? "var(--color-background-secondary)"
@@ -365,9 +359,9 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                               style={{
                                 fontSize: "11px",
                                 background:
-                                  isTrialPlan ? "var(--color-teal-600)" : "var(--color-teal-100)",
+                                  isEmphasized ? "var(--color-teal-600)" : "var(--color-teal-100)",
                                 color:
-                                  isTrialPlan ? "var(--color-teal-50)" : "var(--color-teal-800)"
+                                  isEmphasized ? "var(--color-teal-50)" : "var(--color-teal-800)"
                               }}
                             >
                               {t(badge)}
@@ -390,11 +384,11 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                             className="font-medium"
                             style={{
                               fontSize: "11px",
-                              color: isTrialPlan ? "var(--color-teal-700)" : "var(--color-text-secondary)",
+                              color: isEmphasized ? "var(--color-teal-700)" : "var(--color-text-secondary)",
                               marginTop: "5px"
                             }}
                           >
-                            {isTrialPlan && trialEligible ? t("Start trial") : t("Choose {{plan}}", { plan: card.name })}
+                            {t("Choose {{plan}}", { plan: card.name })}
                           </p>
                         </div>
                       </button>
@@ -466,7 +460,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
 
               <button
                 type="button"
-                onClick={() => (isTrialPrompt ? goToTrialCheckout() : void startCheckout(trialPlan))}
+                onClick={() => (isTrialPrompt ? goToTrialCheckout() : void startCheckout(trialPlan, trialEligible))}
                 disabled={busy !== null || (!isTrialPrompt && !regional.ready)}
                 className="w-full px-5 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                 style={{

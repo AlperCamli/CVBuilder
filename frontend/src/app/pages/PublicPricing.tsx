@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { PublicHeader } from "../components/PublicHeader";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { setPendingCheckout } from "../integration/pending-checkout";
-import { PLAN_CARDS, TRIAL_PLAN, type CheckoutTarget, type PlanCard } from "../../content/pricing";
+import { PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 import { checkoutPath, ONBOARDING_ENTRY_PATH } from "../integration/subscription-flow";
 
@@ -20,7 +20,8 @@ export function PublicPricing() {
     navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: target, with_trial: false, auto: true }) } });
   };
   // The trial card and the trial plan's card (Monthly) both start the trial; the other plans are paid.
-  const startsTrial = (card: PlanCard) => card.code === "trial" || (card.code === TRIAL_PLAN && trialEligible);
+  // Only the trial card starts the trial; every paid card, Monthly included, is a direct purchase (decided 2026-11-05).
+  const startsTrial = (card: PlanCard) => card.code === "trial";
   const resolveCta = (card: PlanCard): { label: string; onClick: () => void } => startsTrial(card)
     ? { label: "Start Free Trial", onClick: () => navigate("/onboarding") }
     : { label: `Choose ${card.name}`, onClick: () => choosePlan(card.code as CheckoutTarget) };
@@ -49,7 +50,7 @@ export function PublicPricing() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-5 items-stretch">
           {PLAN_CARDS.map((card) => {
             const cta = resolveCta(card);
-            const badge = card.code === TRIAL_PLAN && trialEligible ? "3-day free trial" : card.badge;
+            const badge = card.badge;
             return (
               <div
                 key={card.code}

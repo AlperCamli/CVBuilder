@@ -21,7 +21,7 @@ import {
   readCheckoutAttribution,
   trackPaymentCompleted
 } from "../integration/analytics";
-import { isLegacyPaidPlanCode, isPaidPlanCode, trialPlanCode, type CheckoutTarget, type PlanCard } from "../../content/pricing";
+import { isLegacyPaidPlanCode, isPaidPlanCode, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 const formatTrialEnd = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -145,10 +145,6 @@ export function Pricing() {
   // Default to eligible only until the plan loads, to avoid flashing the wrong
   // trial CTA; once loaded this reflects the backend's authoritative decision.
   const trialEligible = plan?.trial_eligible ?? true;
-  // The plan card that carries the free trial (Monthly), for an account that can still start one.
-  const trialPlan = trialPlanCode(regional.prices);
-  const offersTrialOn = (code: PlanCard["code"]) =>
-    code === trialPlan && trialEligible && !hasPaidPlan && !billingIssue && !promo.covers(code);
   const trialEnd = useMemo(() => formatTrialEnd(plan?.current_period_end ?? null), [plan]);
   const checkoutState = new URLSearchParams(location.search).get("checkout");
 
@@ -199,11 +195,6 @@ export function Pricing() {
 
     if (isLegacyPaidPlan) {
       return { label: "Included in your legacy plan", disabled: true };
-    }
-
-    // The trial plan's card starts the trial, as the trial card does: never a charge under a trial badge.
-    if (offersTrialOn(card.code)) {
-      return { label: "Start Free Trial", disabled: false, onClick: () => navigate(checkoutPath({ with_trial: true, return_path: returnPath, source })) };
     }
 
     return {
@@ -336,10 +327,10 @@ export function Pricing() {
                 ? promo.planPrice(card.code, list && regional.prices ? { amount: list.amount, currency: regional.prices.currency } : null)
                 : null;
               const percentOff = promo.offer?.promotion?.percent_off;
-              // The trial badge sits on the trial plan's card only while this account can start the trial.
+              // Paid cards are direct purchases; the trial card alone carries the trial (the user's decision, 2026-11-05).
               const badge = promoCovered && percentOff
                 ? t("{{percent}}% off first month", { percent: percentOff })
-                : offersTrialOn(card.code) ? t("3-day free trial") : card.badge;
+                : card.badge;
               return (
                 <div
                   key={card.code}

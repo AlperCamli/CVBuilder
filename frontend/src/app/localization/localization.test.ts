@@ -103,8 +103,6 @@ describe("free trial converting to Monthly", () => {
       "Start by uploading your CV or creating a new one, answer a few onboarding questions and see your CV Score. Then pick your next step and start the trial with a card to use the app — you won’t pay anything today. After 3 days, the trial continues as Monthly Pro and renews monthly at the price shown at checkout, unless you cancel before the trial ends.",
       "After 3 days, it continues as Monthly Pro at {{amount}} a month unless you cancel before the trial ends. Finish onboarding first, then start your trial with a card.",
       "The trial and Pro include the same features. You start the trial with a card, and it continues as Monthly Pro unless you cancel before the trial ends.",
-      "Free for 3 days, then {{amount}} billed {{period}}.",
-      "Create your account, then start your free trial at secure checkout. Nothing to pay today. If you’ve already had a trial, you’ll confirm the price before paying.",
       "Try Pro for 3 days. Make room for every opportunity.",
       "A tailored CV for every role. One subscription to keep you moving.",
     ];
