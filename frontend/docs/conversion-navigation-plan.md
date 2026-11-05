@@ -2,6 +2,8 @@
 
 Prepared 22 October 2026. Status: proposal for implementation and experiments.
 
+> Note (2026-11-05): since 2026-11-05 the trial continues as Monthly Pro. The card-required 3-day trial is attached to Monthly (the recommended billing period below); Weekly remains a paid choice without a trial, and Annual is unchanged. Trial starts stay separate from positive payments in every measurement below: a trial checkout is worth 0 whatever its plan.
+
 The recommended approach is to let Free visitors reach a useful CV quickly and let explicit Pro buyers reach checkout directly. Preserve the task behind each CTA through authentication, payment, cancellation, and return visits. Sell Pro primarily around creating applications for more jobs and using more assistance, while delivering the Free experience promised before the user starts.
 
 The current workspace already supports both uploading and creating a new CV in onboarding. Build on that work. The shared public pricing handler still sends Pro buyers into onboarding; checkout resumes when they reach an eligible authenticated route; success and cancellation currently return to account pricing. The current four-question sequence remains ahead of signup. These observations describe local source, not verified production deployment state.
@@ -134,7 +136,7 @@ Start with existing Free allowances as the control: the current plan advertises 
 | Free outcome | Keep the advertised included export; sell additional applications and assistance | Some single-use visitors will finish without paying; they may still recommend or return. An export paywall can increase purchase pressure but risks losing activation and trust. |
 | Free limits | Keep current allowances while fixing journeys | Higher activation and variable cost; potentially weak upgrade pressure. Later compare one unique job-tailored CV/month against three, with clear terms, protection for existing promises, and contribution/refund guardrails. Avoid charging users quota for harmless re-downloads of the same file. |
 | Pro checkout timing | Immediate after explicit purchase choice and authentication | More early buyers but some may purchase before understanding the product. Keep a visible “Try Free first” option and measure post-purchase activation/refunds. |
-| Trial | Keep the existing explicit card-required offer as a control, separate from Free | Fewer trial starts but payment readiness is stronger. Later test a longer trial or a no-card trial separately; measure positive charges and cost per converted customer, not trial volume alone. |
+| Trial | Keep the existing explicit card-required offer as a control, separate from Free (continues as Monthly Pro since 2026-11-05) | Fewer trial starts but payment readiness is stronger. Later test a longer trial or a no-card trial separately; measure positive charges and cost per converted customer, not trial volume alone. |
 | Recommended billing | Monthly, with Weekly and Annual available | Less upfront revenue than Annual; clearer fit for a time-bounded job search. Test Annual emphasis only with actual purchase/refund data. |
 | One-time access | Consider a nonrenewing job-search pass after the core flow is working | May attract subscription-averse customers; can cannibalize recurring subscriptions and requires additional billing/product work. |
 

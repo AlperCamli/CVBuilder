@@ -3,11 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ApiClientError } from "../integration/api-error";
 import { trackFunnelEvent } from "../integration/funnel-events";
-import { isCheckoutTarget } from "../../content/pricing";
 import { useAuth } from "../integration/auth-context";
 import { startStripeCheckout } from "../integration/checkout-redirect";
 import { clearPendingCheckout, setPendingCheckout } from "../integration/pending-checkout";
-import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, resolveReturnPath, safeReturnPath } from "../integration/subscription-flow";
+import { checkoutChoice, checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, resolveReturnPath, safeReturnPath } from "../integration/subscription-flow";
 import { useRegionalPricing } from "../integration/regional-pricing";
 import type { BillingPlanResponseData } from "../integration/api-types";
 import { checkoutKey, checkoutScreen, type CheckoutChoice } from "../integration/checkout-screen";
@@ -39,9 +38,8 @@ export function Checkout() {
   const { api, me, refreshMe, signOut } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const planParam = params.get("plan");
-  const plan = isCheckoutTarget(planParam) ? planParam : "weekly";
-  const trial = plan === "weekly" && params.get("trial") !== "0";
+  // An old plan=weekly&trial=1 link, bookmark or Stripe return opens the Monthly trial ("trial wins").
+  const { plan, withTrial: trial } = checkoutChoice(params);
   const destination = resolveReturnPath(safeReturnPath(params.get("next")), me);
   const source = checkoutSource(params.get("source"));
   const outcome = params.get("checkout");

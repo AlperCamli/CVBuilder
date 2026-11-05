@@ -21,7 +21,8 @@ try {
       const page = await context.newPage();
       await page.setViewport({ width: 1280, height: 900 });
       const currency = market === "TR" ? "try" : "usd";
-      const amount = market === "TR" ? 6990 : 499;
+      // The trial renews at the Monthly price since 2026-11-05.
+      const amount = market === "TR" ? 34990 : 1499;
       const userId = randomUUID();
       const now = new Date().toISOString();
       const user = { id: userId, aud: "authenticated", role: "authenticated", email: "trial@example.invalid", app_metadata: { provider: "email", providers: ["email"] }, user_metadata: { full_name: "Trial Fixture" }, identities: [], created_at: now };
@@ -30,8 +31,8 @@ try {
       const usage = { plan_code: "free", limits, remaining: limits, period_month: now.slice(0, 7), exports_count: 0, ai_actions_count: 0, tailored_cv_generations_count: 0, storage_bytes_used: 0 };
       const plan = { plan_code: "free", subscription_status: "inactive", current_period_start: null, current_period_end: null, cancel_at_period_end: false, trial_eligible: true, provider: { provider: "stripe", provider_customer_id: null, provider_subscription_id: null }, entitlement_summary: { plan_code: "free", limits, remaining: limits } };
       const prices = { market, currency, available: true, quote: `isolated-${market}-quote`, plans: [
-        { code: "weekly", amount, interval: "week", interval_count: 1, trial_days: 3 },
-        { code: "monthly", amount: market === "TR" ? 24900 : 1499, interval: "month", interval_count: 1, trial_days: 0 },
+        { code: "weekly", amount: market === "TR" ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 0 },
+        { code: "monthly", amount, interval: "month", interval_count: 1, trial_days: 3 },
         { code: "annual", amount: market === "TR" ? 149990 : 9999, interval: "year", interval_count: 1, trial_days: 0 }
       ] };
       const requests = [], errors = [], unexpected = [];
@@ -60,7 +61,7 @@ try {
           if (path === "/billing/checkout") {
             requests.push(JSON.parse(req.postData()));
             assert.equal(req.headers().authorization, `Bearer ${token}`);
-            return void await respond({ checkout_url: "https://checkout.stripe.test/trial", checkout_session_id: "cs_test_trial", plan_code: "weekly", plan_name: "Weekly", trial_applied: true, trial_period_days: 3, amount, currency });
+            return void await respond({ checkout_url: "https://checkout.stripe.test/trial", checkout_session_id: "cs_test_trial", plan_code: "monthly", plan_name: "Monthly", trial_applied: true, trial_period_days: 3, amount, currency });
           }
           unexpected.push(`${req.method()} ${path}`);
           await req.respond({ status: 404, headers, body: JSON.stringify({ success: false, error: { code: "NOT_FOUND", message: "Unconfigured test fixture" } }) });
@@ -71,24 +72,33 @@ try {
       });
       await page.evaluateOnNewDocument(() => localStorage.setItem("cv-interface-locale", "en"));
       await page.goto(`${base}/pricing`, { waitUntil: "networkidle0" });
-      await page.waitForSelector("button.gj-trial-link:not([disabled])");
-      await page.locator("button.gj-trial-link").click();
-      await page.waitForSelector("button.pd-primary:not([disabled])");
-      assert.match(await page.$eval(".gj-trial-terms", el => el.innerText), /First 3 days/);
-      await page.locator("button.pd-primary").click();
-      await page.waitForFunction(() => location.pathname === "/onboarding");
-      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("cv-builder:pending-checkout"))), { plan_code: "weekly", with_trial: true });
+      // The public Pro card on its default Monthly period is the trial button (DesignShared RegionalPricingCards).
+      const proButton = ".cv-plan-pro button.cv-button";
+      await page.waitForSelector(`${proButton}:not([disabled])`);
+      assert.match(await page.$eval(proButton, el => el.innerText), /Start 3-day free trial/);
+      assert.match(await page.$eval(".cv-plan-pro .cv-price-caption", el => el.innerText), /^Free for 3 days, then /);
+      // The trial card's terms name the plan the trial continues as, at the live monthly price, never a weekly one.
+      const trialTerms = await page.$eval(".cv-plan-free .cv-plan-footnote", el => el.innerText);
+      assert.match(trialTerms, /continues as Monthly Pro at .+ a month/);
+      assert.doesNotMatch(trialTerms, /week/i);
+      await page.locator(proButton).click();
+      await page.waitForFunction(() => location.pathname === "/signup" && new URLSearchParams(location.search).get("purchase") === "1");
+      assert.deepEqual(await page.evaluate(() => { const { plan_code, with_trial } = JSON.parse(localStorage.getItem("cv-builder:pending-checkout")); return { plan_code, with_trial }; }), { plan_code: "monthly", with_trial: true });
       assert.equal(requests.length, 0, "public trial click must wait for authentication");
       // Simulate completed signup on this browser; real signup/upload providers
-      // are outside this isolated billing test. Exercise the actual auth resumer.
+      // are outside this isolated billing test. Exercise the actual auth resumer: an authenticated
+      // /signup?purchase=1 resumes the pending checkout at /app/checkout?plan=monthly&trial=1&auto=1.
       await page.evaluate(({ token, user }) => localStorage.setItem("sb-trial-fixture-auth-token", JSON.stringify({ access_token: token, refresh_token: "fixture-refresh", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user })), { token, user });
-      await page.goto(`${base}/app/pricing`, { waitUntil: "networkidle0" });
+      await page.goto(`${base}/signup?purchase=1`, { waitUntil: "networkidle0" });
       await page.waitForFunction(() => location.hostname === "checkout.stripe.test");
       assert.equal(requests.length, 1);
-      assert.deepEqual(requests[0], { pricing_quote: prices.quote, plan_code: "weekly", success_url: `${base}/app/pricing?checkout=success`, cancel_url: `${base}/app/pricing?checkout=cancel` });
+      // The trial is requested explicitly, on Monthly.
+      assert.equal(requests[0].pricing_quote, prices.quote);
+      assert.equal(requests[0].plan_code, "monthly");
+      assert.equal(requests[0].with_trial, true);
       assert.deepEqual(unexpected, [], "no unconfigured API requests");
       assert.deepEqual(errors, [], "no browser runtime errors");
-      console.log(`PASS ${market}/${currency.toUpperCase()}: trial button → stored Weekly trial → authenticated resumer → correct regional checkout request → Stripe redirect`);
+      console.log(`PASS ${market}/${currency.toUpperCase()}: Pro card trial button → stored Monthly trial → authenticated resumer → correct regional checkout request → Stripe redirect`);
     } finally { await context.close(); }
   }
 } finally {

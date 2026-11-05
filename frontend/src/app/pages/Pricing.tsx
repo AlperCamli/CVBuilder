@@ -1,4 +1,4 @@
-import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, safeReturnPath } from "../integration/subscription-flow";
+import { checkoutPath, checkoutSource, hasAppAccess, hasBillingIssue, pricingPath, restartCheckoutPath, safeReturnPath } from "../integration/subscription-flow";
 import { SupportHelp } from "../components/SupportHelp";
 import { formatMoney, useRegionalPricing } from "../integration/regional-pricing";
 import { PricingAvailability } from "../components/PricingAvailability";
@@ -21,7 +21,7 @@ import {
   readCheckoutAttribution,
   trackPaymentCompleted
 } from "../integration/analytics";
-import { isLegacyPaidPlanCode, isPaidPlanCode, PLAN_CARDS, type CheckoutTarget, type PlanCard } from "../../content/pricing";
+import { isLegacyPaidPlanCode, isPaidPlanCode, trialPlanCode, type CheckoutTarget, type PlanCard } from "../../content/pricing";
 
 const formatTrialEnd = (iso: string | null): string | null => {
   if (!iso) return null;
@@ -126,7 +126,8 @@ export function Pricing() {
         err.code === "VALIDATION_ERROR" &&
         err.details?.reason === "provider_customer_not_found"
       ) {
-        await startCheckout("weekly");
+        // The Stripe customer is gone: start again at checkout, with the trial while this account can start one.
+        navigate(restartCheckoutPath({ trial_eligible: trialEligible, plan_code: planCode ?? (isPlanChangeTarget(currentPlanCode) ? currentPlanCode : null), return_path: returnPath, source }));
         return;
       }
 
@@ -142,8 +143,12 @@ export function Pricing() {
   const hasPaidPlan = isPaidPlanCode(currentPlanCode);
   const billingIssue = hasBillingIssue(plan);
   // Default to eligible only until the plan loads, to avoid flashing the wrong
-  // Weekly CTA; once loaded this reflects the backend's authoritative decision.
+  // trial CTA; once loaded this reflects the backend's authoritative decision.
   const trialEligible = plan?.trial_eligible ?? true;
+  // The plan card that carries the free trial (Monthly), for an account that can still start one.
+  const trialPlan = trialPlanCode(regional.prices);
+  const offersTrialOn = (code: PlanCard["code"]) =>
+    code === trialPlan && trialEligible && !hasPaidPlan && !billingIssue && !promo.covers(code);
   const trialEnd = useMemo(() => formatTrialEnd(plan?.current_period_end ?? null), [plan]);
   const checkoutState = new URLSearchParams(location.search).get("checkout");
 
@@ -196,6 +201,11 @@ export function Pricing() {
       return { label: "Included in your legacy plan", disabled: true };
     }
 
+    // The trial plan's card starts the trial, as the trial card does: never a charge under a trial badge.
+    if (offersTrialOn(card.code)) {
+      return { label: "Start Free Trial", disabled: false, onClick: () => navigate(checkoutPath({ with_trial: true, return_path: returnPath, source })) };
+    }
+
     return {
       label:
         t("Choose {{plan}}", { plan: card.name }),
@@ -229,7 +239,7 @@ export function Pricing() {
         <p style={{ fontSize: "14px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
           {hasPaidPlan
             ? t("You have unlimited access to job-specific CVs, exports, AI rewrites, cover letters, and job tracking.")
-            : t("Pick a plan by weekly price. Weekly starts with a 3-day trial; monthly and annual unlock the same workflow at a lower weekly equivalent.")}
+            : t("Pick a plan by weekly price. Monthly starts with a 3-day free trial; weekly is billed weekly with no trial, and annual has the lowest weekly equivalent.")}
         </p>
       </div>
 
@@ -326,10 +336,10 @@ export function Pricing() {
                 ? promo.planPrice(card.code, list && regional.prices ? { amount: list.amount, currency: regional.prices.currency } : null)
                 : null;
               const percentOff = promo.offer?.promotion?.percent_off;
-              // The trial badge is misleading once the weekly trial is used.
+              // The trial badge sits on the trial plan's card only while this account can start the trial.
               const badge = promoCovered && percentOff
                 ? t("{{percent}}% off first month", { percent: percentOff })
-                : card.code === "weekly" && !trialEligible ? null : card.badge;
+                : offersTrialOn(card.code) ? t("3-day free trial") : card.badge;
               return (
                 <div
                   key={card.code}

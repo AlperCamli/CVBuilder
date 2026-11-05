@@ -8,31 +8,54 @@ import {
   PAID_PLAN_CARDS,
   PLAN_CARDS,
   PLAN_VALUE_USD,
+  TRIAL_PLAN,
   WEEKLY_PRICE,
   isCheckoutTarget,
   isLegacyPaidPlanCode,
-  isPaidPlanCode
+  isPaidPlanCode,
+  trialPlanCode
 } from "./pricing";
 
 describe("pricing content", () => {
-  it("shows weekly-emphasized pricing for the visible plans", () => {
+  it("compares the visible plans by weekly price", () => {
     expect(PLAN_CARDS.map((card) => card.code)).toEqual(["trial", "weekly", "monthly", "annual"]);
 
     expect(PLAN_CARDS.find((card) => card.code === "weekly")).toMatchObject({
       weeklyPrice: WEEKLY_PRICE,
       totalPrice: `${WEEKLY_PRICE} billed weekly`,
-      trialEligible: false
+      description: "The lowest commitment, billed weekly. No free trial."
     });
+    expect(PLAN_CARDS.find((card) => card.code === "weekly")?.trialEligible).toBeFalsy();
     expect(PLAN_CARDS.find((card) => card.code === "monthly")).toMatchObject({
       weeklyPrice: MONTHLY_WEEKLY_EQUIVALENT,
       totalPrice: `${MONTHLY_TOTAL_PRICE} billed monthly`,
-      savings: "Save 31% vs weekly"
+      savings: "Save 31% vs weekly",
+      trialEligible: true
     });
     expect(PLAN_CARDS.find((card) => card.code === "annual")).toMatchObject({
       weeklyPrice: ANNUAL_WEEKLY_EQUIVALENT,
       totalPrice: `${ANNUAL_TOTAL_PRICE} billed annually`,
       savings: "Save 62% vs weekly"
     });
+  });
+
+  it("attaches the free trial to Monthly, and only to Monthly", () => {
+    expect(TRIAL_PLAN).toBe("monthly");
+    expect(PLAN_CARDS.filter((card) => card.trialEligible).map((card) => card.code)).toEqual([TRIAL_PLAN]);
+    expect(PLAN_CARDS.find((card) => card.code === "trial")?.totalPrice).toContain("Monthly Pro price");
+    expect(PLAN_CARDS.some((card) => /Weekly Pro|renews weekly/i.test(`${card.totalPrice} ${card.description}`))).toBe(false);
+  });
+
+  it("reads the trial plan from the server catalog and falls back to Monthly", () => {
+    const catalog = (trial: Record<string, number>) => ({
+      plans: (["weekly", "monthly", "annual"] as const).map((code) => ({ code, trial_days: trial[code] ?? 0 }))
+    });
+    expect(trialPlanCode(catalog({ monthly: 3 }))).toBe("monthly");
+    // A server that still attaches the trial elsewhere is followed, never contradicted.
+    expect(trialPlanCode(catalog({ weekly: 3 }))).toBe("weekly");
+    expect(trialPlanCode(catalog({}))).toBe(TRIAL_PLAN);
+    expect(trialPlanCode(null)).toBe(TRIAL_PLAN);
+    expect(trialPlanCode(undefined)).toBe(TRIAL_PLAN);
   });
 
   it("limits checkout targets to Weekly, Monthly, and Annual", () => {

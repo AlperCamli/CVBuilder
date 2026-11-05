@@ -435,5 +435,52 @@ begin
     raise exception 'kpi_overview catalog wrong: %', t.meta;
   end if;
 end $$;
+-- The free trial moved from Weekly to Monthly on 2026-11-05. The Overview counts a monthly trial like a weekly one, and
+-- its MRR after conversion is the monthly price (x1), while a legacy weekly trial's first renewal is normalised from 7
+-- days (x 30.4375 / 7). A trial in progress adds no MRR. October 2026 cohorts, USD, which the checks above never read.
+do $$
+declare
+  umc uuid; umx uuid; uwl uuid; smc uuid; smx uuid; swl uuid;
+  k record;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-monthly-trial@example.invalid','2026-09-20') returning id into umc;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-monthly-cancel@example.invalid','2026-09-20') returning id into umx;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'ov-weekly-legacy@example.invalid','2026-09-20') returning id into uwl;
+  insert into public.billing_markets(user_id,market) values (umc,'GLOBAL'),(umx,'GLOBAL'),(uwl,'GLOBAL');
+  -- A monthly trial Oct 1-4, first monthly charge ($14.99) at the trial end.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(umc,'stripe','sub_ov_mc','monthly','active','2026-10-04','2026-11-04','usd','month',1499,'2026-10-01','2026-10-04','2026-10-01') returning id into smc;
+  -- A monthly trial Oct 6-9 canceled during the trial.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,unit_amount,trial_start,trial_end,canceled_at,ended_at,created_at)
+    values(umx,'stripe','sub_ov_mx','monthly','canceled','2026-10-06','2026-10-09','usd','month',1499,'2026-10-06','2026-10-09','2026-10-07','2026-10-09','2026-10-06') returning id into smx;
+  -- A legacy weekly trial Oct 25-28 (checked out before the switch), first weekly charge ($4.99) at the trial end.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(uwl,'stripe','sub_ov_wl','weekly','active','2026-10-28','2026-11-04','usd','week',499,'2026-10-25','2026-10-28','2026-10-25') returning id into swl;
+  insert into public.billing_invoices(user_id,subscription_id,provider_invoice_id,status,currency,amount_paid,amount_refunded,billing_reason,plan_code,market,period_start,period_end,paid_at,created_at) values
+    (umc,smc,'in_ov_mc0','paid','usd',0,0,'subscription_create','monthly','GLOBAL','2026-10-01','2026-10-04','2026-10-01T00:00:00Z','2026-10-01'),
+    (umc,smc,'in_ov_mc1','paid','usd',1499,0,'subscription_cycle','monthly','GLOBAL','2026-10-04','2026-11-04','2026-10-04T01:00:00Z','2026-10-04'),
+    (umx,smx,'in_ov_mx0','paid','usd',0,0,'subscription_create','monthly','GLOBAL','2026-10-06','2026-10-09','2026-10-06T00:00:00Z','2026-10-06'),
+    (uwl,swl,'in_ov_wl0','paid','usd',0,0,'subscription_create','weekly','GLOBAL','2026-10-25','2026-10-28','2026-10-25T00:00:00Z','2026-10-25'),
+    (uwl,swl,'in_ov_wl1','paid','usd',499,0,'subscription_cycle','weekly','GLOBAL','2026-10-28','2026-11-04','2026-10-28T01:00:00Z','2026-10-28');
+
+  select * into k from analytics.kpi_overview('2026-10-01', '2026-10-31');
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate) is distinct from (3::bigint, 3::bigint, 2::bigint, 0.6667) then
+    raise exception 'kpi monthly + weekly trials wrong: %', row_to_json(k);
+  end if;
+  select * into k from analytics.kpi_overview('2026-10-01', '2026-10-31', p_filters => '{"plan":["monthly"]}');
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions, k.mrr, k.active_subscriptions, k.revenue, k.new_paying_customers)
+     is distinct from (2::bigint, 2::bigint, 1::bigint, 14.99, 1::bigint, 14.99, 1::bigint) then
+    raise exception 'kpi monthly trial wrong: %', row_to_json(k);
+  end if;
+  select * into k from analytics.kpi_overview('2026-10-01', '2026-10-31', p_filters => '{"plan":["weekly"]}');
+  if (k.trial_starts, k.trial_conversions, k.mrr, k.active_subscriptions, k.revenue) is distinct from (1::bigint, 1::bigint, 21.70, 1::bigint, 4.99) then
+    raise exception 'kpi legacy weekly trial wrong: %', row_to_json(k);
+  end if;
+  -- While the monthly trial runs (snapshot Oct 2), it is a trial start but no MRR and no active subscription.
+  select * into k from analytics.kpi_overview('2026-10-01', '2026-10-02', p_filters => '{"plan":["monthly"]}');
+  if (k.trial_starts, k.mrr, k.active_subscriptions, k.revenue) is distinct from (1::bigint, 0.00, 0::bigint, 0.00) then
+    raise exception 'kpi monthly trial in progress wrong: %', row_to_json(k);
+  end if;
+end $$;
 select 'Analytics overview metrics, currency variants, AI cost, trial outcomes and privileges passed' as verification;
 rollback;

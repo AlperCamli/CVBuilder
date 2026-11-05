@@ -32,8 +32,8 @@ function promo(value: PromotionOffer | null, now = ENDS - 3_723_000, extra: Part
 
 const regional = {
   prices: { market: "TR", currency: "try", available: true, quote: "fixture", plans: [
-    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 29990, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: 29990, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: 149900, interval: "year", interval_count: 1, trial_days: 0 },
   ] },
   cards: [], loading: false, ready: true, error: null, retry: () => undefined, locale: "en",
@@ -120,7 +120,9 @@ describe("pricing card with an emailed offer", () => {
     for (const status of ["ended", "upcoming", "redeemed", "ineligible"] as const) {
       const html = cards(promo(offer(status)));
       expect(html).not.toContain("promo-plan-badge");
-      expect(html).toContain("Choose Pro");
+      // Without a usable offer the default Monthly period is the free trial, not a paid "Choose Pro".
+      expect(html).toContain("Start 3-day free trial");
+      expect(html).not.toContain("Choose Pro Monthly");
     }
     expect(cards(promo(offer(), ENDS))).not.toContain("promo-plan-badge");
     expect(cards(undefined)).not.toContain("promo-");

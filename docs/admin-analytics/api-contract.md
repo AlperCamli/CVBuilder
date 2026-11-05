@@ -286,7 +286,7 @@ All functions use the standard metric signature (`20261102120000_analytics_monet
 
 Grain does not apply to `checkout_funnel`, `subscriber_ltv`, `plan_mix` and `cancellation_reasons`; currency does not apply to `trial_to_paid`, `checkout_funnel`, `cancellation_reasons` and `paywall_denials`.
 
-**Trial outcomes** (`analytics_private.trial_outcomes`, read by `trial_to_paid`, `kpi_overview` and the `trial_conversions` drill). One row per trial; columns `subscription_id, user_id, is_internal, plan_code, market, status, trial_source, trial_type, t_start, t_end, canceled_at, first_paid_at, outcome, outcome_group, replacement_subscription_id`. `outcome`, first match wins → `outcome_group`:
+**Trial outcomes** (`analytics_private.trial_outcomes`, read by `trial_to_paid`, `kpi_overview` and the `trial_conversions` drill). One row per trial; columns `subscription_id, user_id, is_internal, plan_code, market, status, trial_source, trial_type, t_start, t_end, canceled_at, first_paid_at, outcome, outcome_group, replacement_subscription_id`. A trial is a real subscription with `trial_start` on any plan (`trial_source = stripe`; the free trial is on `monthly` from 2026-11-05 and was on `weekly` before), the redeemed transition grant (`grant_link`), or, only for rows without Stripe detail, the legacy weekly/pro `heuristic`; `plan_code` is the trial subscription's own plan. `outcome`, first match wins → `outcome_group`:
 
 | outcome | Rule | outcome_group |
 |---|---|---|

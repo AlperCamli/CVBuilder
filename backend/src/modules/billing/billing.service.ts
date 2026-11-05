@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Logger } from "pino";
 import type { RegionalPricingService, PurchasePlan } from "./regional-pricing";
 import {
   ConflictError,
@@ -17,6 +18,7 @@ import type { PlanCode, PlanDefinition, ResolvedEntitlements } from "../entitlem
 import type { UsageService } from "../usage/usage.service";
 import type { FreeTierUse } from "../usage/usage.repository";
 import { surfaceForAction, trialRequiredError, type AccessAction, type AppRequestPolicy, type PaywallSurface } from "../entitlements/access-policy";
+import { TRIAL_CAPABLE_PLAN_CODES, trialPlanCodes } from "../entitlements/plan-definitions";
 import type {
   AcceptCancelOfferResponseData,
   BillingEntitlementsResponseData,
@@ -66,6 +68,7 @@ interface BillingServiceOptions {
   monetization?: MonetizationRepository;
   promotions?: PromotionsCheckoutPort;
   cancelOffers?: CancelOffersPort;
+  logger?: Pick<Logger, "warn">;
 }
 
 // Which gate refused the request, for paywall analysis.
@@ -92,6 +95,17 @@ const checkoutRejection = (error: unknown): CheckoutOutcome => {
   if (reason === "pricing_changed") return "rejected_pricing_changed";
   return "failed";
 };
+
+// TRANSITIONAL (stale bundles): the current frontend always sends with_trial as an explicit boolean. A tab still
+// running the pre-2026-11-05 bundle omits it and means what that bundle meant: its "Start my 3-day free trial" posted
+// { plan_code: "weekly" } (a trial request), while its paid buttons, including "Continue with Monthly", posted
+// Monthly and Annual without it (paid). So an omitted with_trial asks for the trial only on these plans. Once no old
+// bundle can be open (e.g. after 2026-12-31), an omitted with_trial can become a 400 (required) instead.
+const LEGACY_TRIAL_PLAN_CODES: readonly string[] = ["weekly"];
+
+/** Whether a checkout request asks for the free trial: its explicit with_trial, else the pre-switch bundle's meaning. */
+export const wantsTrial = (withTrial: boolean | undefined, planCode: string): boolean =>
+  withTrial ?? LEGACY_TRIAL_PLAN_CODES.includes(planCode.trim().toLowerCase());
 
 const HALF_HOUR_MS = 30 * 60_000;
 // The trial offer's checkout can stay open up to 90 minutes, so offers need the period to outlast that.
@@ -452,7 +466,8 @@ export class BillingService {
     input: CreateCheckoutInput,
     country: string | null = null
   ): Promise<CreateCheckoutResponseData> {
-    const trialRequested = input.with_trial !== false;
+    // One reading of with_trial for the attempt record, the trial_unavailable guard and the trial grant.
+    const trialRequested = wantsTrial(input.with_trial, input.plan_code);
     try {
       const { response, market, promotion } = await this.openCheckoutSession(userId, input, country);
       await this.options.monetization?.recordCheckoutAttempt({
@@ -501,6 +516,16 @@ export class BillingService {
       throw new ConflictError("Your last payment didn’t go through. Update your payment method in the billing portal to keep your subscription.", { reason: "subscription_active", billing_issue: true });
     }
     const promotion = await this.resolvePromotion(userId, input.promotion_token, plan.code);
+    // A promotion that replaces the trial charges now, whatever with_trial says (never refused, never a trial change).
+    const trialWanted = wantsTrial(input.with_trial, plan.code) && !promotion?.replaces_trial;
+    // A trial request on a plan without the trial (an old Weekly-trial link, saved checkout or stale tab) is refused
+    // rather than charged now; the client moves it to the trial plan, an old tab is asked to refresh.
+    if (trialWanted && !plan.trial_supported) {
+      throw new ConflictError(
+        input.with_trial === undefined ? "The free trial now continues as Monthly Pro. Refresh the page and start it from there." : "The free trial is not available on this plan.",
+        { reason: "trial_unavailable", plan_code: plan.code, trial_plan_code: trialPlanCodes(this.entitlementsService.getPlanCatalog())[0] ?? null }
+      );
+    }
     const regional = this.options.regionalPricing ? await this.options.regionalPricing.resolveCheckout(userId, country, input.pricing_quote, plan.code as PurchasePlan) : null;
     if (!regional && !plan.stripe_price_id) {
       throw new BillingConfigurationError("Stripe price id is missing for requested plan", {
@@ -512,15 +537,14 @@ export class BillingService {
     // Also consult Stripe: webhook delivery may lag behind a completed Checkout.
     if (await stripeGateway.hasBillableSubscription?.(customerId)) throw new ConflictError("You already have a subscription. Manage it in the billing portal.", { reason: "subscription_active" });
 
-    // Only grant a free trial when: the plan supports one, trials are enabled,
-    // the caller did not explicitly opt out (`with_trial: false`), and the user
-    // has an unused release grant or has never consumed a trial. This closes the abuse vector
-    // where a user starts a trial, cancels before the first charge, and then
-    // starts a brand-new trial once the previous one lapses.
+    // Only grant a free trial when: the request asks for it (wantsTrial), the plan supports one (the catalog's trial
+    // plan, Monthly since 2026-11-05), trials are enabled, and the user has an unused release grant or has never
+    // consumed a trial. This closes the abuse vector where a user starts a trial, cancels before the first charge,
+    // and then starts a brand-new trial once the previous one lapses. A trial request the account can no longer get
+    // is refused (pricing_changed) rather than charged; the client confirms the paid price and retries with false.
     let trialPeriodDays: number | null = null;
 
-    // A promotion that replaces the trial charges now, whatever with_trial says (and never reports a trial change).
-    if (plan.trial_supported && input.with_trial !== false && !promotion?.replaces_trial) {
+    if (trialWanted && plan.trial_supported) {
       const eligible = await this.isUserTrialEligible(user.id);
       if (regional && !eligible) throw new ConflictError("Trial eligibility changed. Review the paid price before continuing.", { reason: "pricing_changed" });
       if (eligible) trialPeriodDays = this.options.trialPeriodDays;
@@ -787,8 +811,8 @@ export class BillingService {
   }
 
   // Runs after every sync of a paid subscription from the offer's checkout (webhook or the return page): ends the
-  // trial it replaces at Stripe, which would otherwise still bill its weekly price at the trial end, then marks the
-  // offer accepted. The accepted row makes repeats a no-op.
+  // trial it replaces at Stripe, which would otherwise still bill its own plan's price at the trial end (Monthly, or
+  // Weekly for a trial started before 2026-11-05), then marks the offer accepted. The accepted row makes repeats a no-op.
   private async finishCancelOffer(userId: string, subscription: StripeSubscriptionSummary): Promise<void> {
     const { cancel_offer: cancelOffer, replaces_subscription: replaced, promotion_id: promotionId } = subscription.metadata;
     if (cancelOffer !== "1" || !replaced || !promotionId || subscription.status !== "active") return;
@@ -802,7 +826,18 @@ export class BillingService {
     if (!trial || trial.customer_id !== subscription.customer_id) return;
     const ended = await gateway.cancelReplacedSubscription(replaced, subscription.id);
     await this.syncStripeSubscription(userId, ended);
-    await cancelOffers.markCancelOfferAccepted({ promotionId, userId, providerSubscriptionId: replaced, fromPlanCode: subscription.metadata.replaces_plan_code ?? trial.metadata.plan_code ?? "weekly" });
+    await cancelOffers.markCancelOfferAccepted({ promotionId, userId, providerSubscriptionId: replaced, fromPlanCode: subscription.metadata.replaces_plan_code ?? trial.metadata.plan_code ?? this.replacedTrialPlan(trial) });
+  }
+
+  // The replaced trial's own plan when no metadata names it: from its Stripe price, else its billing interval. Never
+  // "free" (the price lookup's default for an unknown price); the last resort is the trial plan, logged.
+  private replacedTrialPlan(trial: StripeSubscriptionSummary): string {
+    const fromPrice = this.resolvePlanCodeFromPrices(trial.price_ids);
+    if (fromPrice !== "free") return fromPrice;
+    const fromInterval = ({ week: "weekly", month: "monthly", year: "annual" } as Record<string, string>)[trial.details?.billing_interval ?? ""];
+    if (fromInterval) return fromInterval;
+    this.options.logger?.warn({ code: "CANCEL_OFFER_FROM_PLAN_UNKNOWN", provider_subscription_id: trial.id }, "Replaced trial plan unknown; recorded as monthly");
+    return "monthly";
   }
 
   private async cancelOfferCandidate(userId: string) {
@@ -825,7 +860,11 @@ export class BillingService {
     // A trial converts by checkout, paid weekly moves to the promoted plan at its period end, and monthly or annual
     // keep their plan with the next renewal discounted.
     const kind: CancelOffer["kind"] = audience === "trial" ? "checkout" : audience === "weekly" ? "switch_at_period_end" : "renewal_discount";
-    const fits = kind === "checkout" ? [promotion.plan_code, "weekly"].includes(current.plan_code)
+    // The checkout offer fits a trial on a plan that has carried the trial (a Monthly trial, or a Weekly trial started
+    // before 2026-11-05) or one already on the promoted plan; its plan and price come from the subscription itself.
+    const trialFits = current.plan_code === promotion.plan_code
+      || (current.plan_code in PLAN_RANK && (TRIAL_CAPABLE_PLAN_CODES as readonly string[]).includes(current.plan_code));
+    const fits = kind === "checkout" ? trialFits
       : kind === "switch_at_period_end" ? promotion.plan_code !== current.plan_code
       : promotion.plan_code === current.plan_code;
     const supported = kind === "checkout" ? gateway.cancelReplacedSubscription : kind === "switch_at_period_end" ? gateway.scheduleSubscriptionChange : gateway.applyRenewalDiscount;

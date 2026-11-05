@@ -72,11 +72,12 @@ Response `200`:
 
 ```json
 {
-  "plan_code": "free|pro",
+  "plan_code": "free|weekly|monthly|annual|pro|lifetime",
   "subscription_status": "inactive|active|trialing|...",
   "current_period_start": "iso|null",
   "current_period_end": "iso|null",
   "cancel_at_period_end": false,
+  "trial_eligible": true,
   "provider": {
     "provider": "stripe",
     "provider_customer_id": "string|null",
@@ -178,7 +179,10 @@ Body:
 
 ```json
 {
-  "plan_code": "pro",
+  "plan_code": "weekly|monthly|annual",
+  "pricing_quote": "signed quote from GET /billing/prices",
+  "with_trial": true,
+  "time_zone": "Europe/Istanbul",
   "success_url": "https://optional-success-url",
   "cancel_url": "https://optional-cancel-url"
 }
@@ -188,6 +192,16 @@ Behavior:
 - validates requested plan
 - ensures Stripe customer linkage
 - creates Stripe Checkout session for subscription mode
+
+Free trial (since 2026-11-05 on `monthly`, the plan catalog's `trial_supported` plan; on `weekly` before):
+- `GET /billing/prices` reports the trial as `trial_days: 3` on `monthly` and `0` on `weekly` and `annual` (same response shape as before)
+- `monthly` with `with_trial: true`: 3-day trial when `GET /billing/plan` says `trial_eligible`; an ineligible account gets `409 CONFLICT` with `details: { "reason": "pricing_changed" }` and retries with `with_trial: false`
+- `with_trial: false`: charged now, no trial
+- `monthly` or `annual` with `with_trial` omitted: charged now, no trial (what a pre-2026-11-05 tab's paid buttons meant)
+- `weekly` with `with_trial` omitted: `409 CONFLICT` `trial_unavailable` ("The free trial now continues as Monthly Pro. Refresh the page and start it from there."), for tabs still running the pre-2026-11-05 bundle whose trial button posted `{ "plan_code": "weekly" }`
+- the omitted cases are transitional; after the old bundles are gone (e.g. 2026-12-31) an omitted `with_trial` can become a `400`
+- `weekly` or `annual` with `with_trial: true`: `409 CONFLICT` with `details: { "reason": "trial_unavailable", "plan_code": "weekly", "trial_plan_code": "monthly" }`, before anything is locked, reserved or sent to Stripe; the client moves the request to the trial plan
+- send `with_trial` explicitly as a boolean
 
 Optional `promotion_token` (a `?promo=` link token): the token must belong to the signed-in user, its cohort window must be open, `plan_code` must be in the promotion's `plan_codes`, and the offer must be unredeemed and unarchived. Otherwise `409 CONFLICT` with `details: { "reason": "promotion_unavailable", "detail": "ended" | "upcoming" | "wrong_account" | "plan_not_eligible" | "redeemed" | "invalid" }` (no fallback to the full price). On success the coupon is applied, the trial is skipped when the promotion replaces it, and the response adds:
 
@@ -201,10 +215,14 @@ Response `200`:
 
 ```json
 {
+  "currency": "usd",
+  "amount": 1499,
   "checkout_url": "https://checkout.stripe.com/...",
   "checkout_session_id": "cs_...",
-  "plan_code": "pro",
-  "plan_name": "Pro"
+  "plan_code": "monthly",
+  "plan_name": "Monthly",
+  "trial_applied": true,
+  "trial_period_days": 3
 }
 ```
 

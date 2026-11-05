@@ -79,11 +79,11 @@ export const WEB_APPLICATION_JSON_LD = {
 export const GUIDED_JOURNEY_FAQ_ITEMS = [
   {
     question: "Can I look around before adding a card?",
-    answer: "Yes. You can answer a few quick questions and see your CV take shape without entering any card details. When you’re ready to create, tailor and download, start your 3-day free trial: you add a card at secure Stripe checkout, pay nothing today and can cancel anytime. If you don’t cancel before the trial ends, Weekly Pro renews weekly at the price shown. Already have an account? You can always view and edit your saved CVs for free.",
+    answer: "Yes. You can answer a few quick questions and see your CV take shape without entering any card details. When you’re ready to create, tailor and download, start your 3-day free trial: you add a card at secure Stripe checkout, pay nothing today and can cancel anytime. If you don’t cancel before the trial ends, it continues as Monthly Pro and renews monthly at the price shown. Already have an account? You can always view and edit your saved CVs for free.",
   },
   {
     question: "Why do you ask for a card for the free trial?",
-    answer: "It keeps the trial fair for everyone and lets you carry on with Pro without interruption if you love it. You won’t be charged during the 3 days, and payments are handled securely by Stripe — we never see or store your card number. Cancel from your account before the trial ends and you won’t pay anything. The trial is for Weekly Pro and eligible users; checkout confirms your eligibility and terms.",
+    answer: "It keeps the trial fair for everyone and lets you carry on with Pro without interruption if you love it. You won’t be charged during the 3 days, and payments are handled securely by Stripe — we never see or store your card number. Cancel from your account before the trial ends and you won’t pay anything. The trial is for Monthly Pro and eligible users; checkout confirms your eligibility and terms.",
   },
   {
     question: "Can I review the changes?",
@@ -92,8 +92,8 @@ export const GUIDED_JOURNEY_FAQ_ITEMS = [
 ];
 
 export const GUIDED_JOURNEY_FAQ_ITEMS_TR = [
-  { question: "Kart eklemeden önce uygulamayı tanıyabilir miyim?", answer: "Elbette. Birkaç kısa soruyu yanıtlayıp kart bilgisi girmeden CV’nin şekillendiğini görebilirsin. CV oluşturmaya, uyarlamaya ve indirmeye hazır olduğunda 3 günlük ücretsiz denemeni başlat: kartını güvenli Stripe ödeme sayfasında eklersin, bugün hiçbir ödeme yapmazsın ve istediğin zaman iptal edebilirsin. Deneme bitmeden iptal etmezsen Haftalık Pro, gösterilen fiyatla haftalık olarak yenilenir. Zaten hesabın var mı? Kayıtlı CV’lerini her zaman ücretsiz görüntüleyip düzenleyebilirsin." },
-  { question: "Ücretsiz deneme için neden kart istiyorsunuz?", answer: "Böylece deneme herkes için adil kalıyor ve Pro’yu sevdiysen hiç ara vermeden devam edebiliyorsun. 3 gün boyunca senden ücret alınmaz. Ödemeler Stripe tarafından güvenle işlenir; kart numaranı biz hiçbir zaman görmeyiz ve saklamayız. Deneme bitmeden hesabından iptal edersen hiçbir ödeme yapmazsın. Deneme, Haftalık Pro’da ve uygun kullanıcılar için geçerlidir; uygunluk ve koşullar ödeme sayfasında netleşir." },
+  { question: "Kart eklemeden önce uygulamayı tanıyabilir miyim?", answer: "Elbette. Birkaç kısa soruyu yanıtlayıp kart bilgisi girmeden CV’nin şekillendiğini görebilirsin. CV oluşturmaya, uyarlamaya ve indirmeye hazır olduğunda 3 günlük ücretsiz denemeni başlat: kartını güvenli Stripe ödeme sayfasında eklersin, bugün hiçbir ödeme yapmazsın ve istediğin zaman iptal edebilirsin. Deneme bitmeden iptal etmezsen aboneliğin Aylık Pro olarak devam eder ve gösterilen fiyatla her ay yenilenir. Zaten hesabın var mı? Kayıtlı CV’lerini her zaman ücretsiz görüntüleyip düzenleyebilirsin." },
+  { question: "Ücretsiz deneme için neden kart istiyorsunuz?", answer: "Böylece deneme herkes için adil kalıyor ve Pro’yu sevdiysen hiç ara vermeden devam edebiliyorsun. 3 gün boyunca senden ücret alınmaz. Ödemeler Stripe tarafından güvenle işlenir; kart numaranı biz hiçbir zaman görmeyiz ve saklamayız. Deneme bitmeden hesabından iptal edersen hiçbir ödeme yapmazsın. Deneme, Aylık Pro’da ve uygun kullanıcılar için geçerlidir; uygunluk ve koşullar ödeme sayfasında netleşir." },
   { question: "Değişiklikleri inceleyebilir miyim?", answer: "Her zaman. Sana uyan anahtar kelimeleri sen seçersin, her öneriyi incelersin ve indirmeden önce CV’ni düzenlersin. Gerçek deneyimin her zaman önce gelir." }
 ];
 
@@ -102,8 +102,8 @@ function guidedJourneyRoute(pricing, locale = "en", primary = false) {
   const title = locale === "tr" ? (pricing ? "Fiyatlandırma | jobspecificCV" : "İşe Özel CV’ni Dakikalar İçinde Hazırla | jobspecificCV") : pricing
     ? "Guided Journey Pricing | jobspecificCV"
     : "Tailor Your CV in Minutes — Guided Journey | jobspecificCV";
-  const description = locale === "tr" ? (pricing ? "3 günlük ücretsiz denemeyle başlayın veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "CV’ni yükle, iş ilanına göre uyarla ve her değişikliği kendin incele. Türkçe veya İngilizce CV’ni dakikalar içinde hazırla.") : pricing
-    ? "Compare Weekly, Monthly and Annual Pro with prices for your region. Try Weekly Pro free for 3 days, or choose a plan that fits your job search."
+  const description = locale === "tr" ? (pricing ? "Aylık Pro’yu 3 gün ücretsiz deneyin veya Haftalık, Aylık ve Yıllık Pro planlarını karşılaştırın. Bölgenize uygun fiyatları görün." : "CV’ni yükle, iş ilanına göre uyarla ve her değişikliği kendin incele. Türkçe veya İngilizce CV’ni dakikalar içinde hazırla.") : pricing
+    ? "Compare Weekly, Monthly and Annual Pro with prices for your region. Try Monthly Pro free for 3 days, or choose a plan that fits your job search."
     : "Try the interactive CV demo with a friendly guide. Tailor your CV to any job, review every change, and try it free for 3 days.";
   return {
     path,
@@ -125,7 +125,7 @@ function guidedJourneyRoute(pricing, locale = "en", primary = false) {
     twitterDescription: description,
     twitterImage: OG_IMAGE,
     twitterImageAlt: DEFAULT_IMAGE_ALT,
-    lastmod: "2026-10-12",
+    lastmod: "2026-11-05",
     includeInSitemap: primary,
     changefreq: "monthly",
     priority: "0.7",
@@ -332,7 +332,7 @@ export function buildSeoRoutes(content) {
         description: tr ? "CV yükleme, dışa aktarma, ücretsiz deneme ve abonelik hakkında yardım alın. JobSpecificCV destek ekibine e-posta ile ulaşın." : "Get help with CV uploads, exports, your free trial, and subscriptions. Contact JobSpecificCV support by email.",
         canonical: absoluteUrl(path), robots: "index, follow", ogType: "website",
         ogImage: OG_IMAGE, includeInSitemap: true,
-        lastmod: "2026-10-24", changefreq: "monthly", priority: "0.5",
+        lastmod: "2026-11-05", changefreq: "monthly", priority: "0.5",
         alternates: { en: absoluteUrl("/support"), tr: absoluteUrl("/tr/support"), "x-default": absoluteUrl("/support") }
       };
     }),

@@ -6,7 +6,7 @@ Each audience has its own one-time offer:
 
 | Cancelling | Offer | How it is accepted | Charged |
 |---|---|---|---|
-| Free trial | 50% off the first month of Monthly (`trial-cancel-save50`) | Stripe Checkout; the trial is ended at Stripe once it is paid | ₺174,95 now, then ₺349,90 monthly |
+| Free trial (on Monthly; a few trials started before 2026-11-05 are on Weekly) | 50% off the first month of Monthly (`trial-cancel-save50`) | Stripe Checkout; the trial is ended at Stripe once it is paid | ₺174,95 now, then ₺349,90 monthly |
 | Paid Weekly | Monthly from the end of the paid week, first month 50% off (`weekly-cancel-save50`) | In place: a subscription schedule switches the plan at the period end | Nothing now; ₺174,95 when the week ends, then ₺349,90 monthly |
 | Monthly | 50% off the next renewal (`monthly-cancel-save50`) | In place: a `once` coupon on the subscription | Nothing now; ₺174,95 at the next renewal, then ₺349,90 |
 | Annual | No offer: a "here's what you'd lose" screen with **Keep Pro** | n/a | n/a |
@@ -16,17 +16,19 @@ An account can accept one cancel-screen offer in total. For example, someone who
 Each offer is a promotion like the email campaigns ([README.md](README.md)): a `campaign.json`, a Stripe coupon and a `promotions` row. It has `channel: "cancel_flow"` and a `cancel_audience` (`trial`, `weekly`, `monthly` or `annual`), and no cohorts, links or emails. An Annual offer can be added later with a campaign whose audience is `annual` and whose plan is `annual` (its next renewal is discounted).
 
 ## The trial offer: what "Keep Pro" does
+Since 2026-11-05 the free trial is on the Monthly plan (it was on Weekly before). The offer and its mechanism are the same for both: the trial being cancelled can be a monthly trial or a legacy weekly one, and the screen reads its plan and price from the subscription.
+
 1. **Stripe Checkout, paid now.** The button opens a Stripe Checkout for the monthly price in the trial's own market (TRY or USD), with the 50% `once` coupon and no trial. The amounts come from the Stripe price IDs, so the screen always shows the live price. With today's TRY price, the user pays ₺174,95 instead of ₺349,90.
-2. **On payment, the trial is ended at Stripe.** Once the new monthly subscription is `active`, the backend cancels the weekly trial subscription immediately, with no invoice and no proration. Its weekly price is therefore never charged. This runs from every sync of the new subscription, so it happens through the `checkout.session.completed` webhook and through the return page's confirmation, whichever arrives first. The accepted offer row makes repeats a no-op.
+2. **On payment, the trial is ended at Stripe.** Once the new monthly subscription is `active`, the backend cancels the trial subscription immediately, with no invoice and no proration. The trial therefore ends and is never charged: no first monthly charge at day 3 (or, for a legacy weekly trial, no weekly charge). This runs from every sync of the new subscription, so it happens through the `checkout.session.completed` webhook and through the return page's confirmation, whichever arrives first. The accepted offer row makes repeats a no-op.
 3. **Pro starts.** Stripe returns to `/app/checkout?…&checkout=success`, which confirms the payment and shows the usual "Welcome to Pro" screen with the Pro benefits. Backing out of Stripe returns to the offer screen with "Payment wasn't completed. Your free trial hasn't changed."
 
 | When | Charge (TR market) |
 |---|---|
 | Paying at checkout | ₺174,95, the first month at 50% off; the trial ends |
-| The trial's original end | nothing; the weekly trial no longer exists |
+| The trial's original end | nothing; the trial no longer exists |
 | A month after paying | ₺349,90, then monthly until cancelled |
 
-This was verified in Stripe test mode with a test clock (payment 17495 kuruş, no weekly invoice after day 3, then 34990).
+This was verified in Stripe test mode with a test clock on a weekly trial (payment 17495 kuruş, no trial invoice after day 3, then 34990). A monthly trial goes through the same steps; only the plan of the subscription that is ended differs.
 
 Safeguards:
 - The offer only appears while the trial has more than two hours left. The checkout session expires within 60 to 90 minutes, so it can never be paid after the trial has already billed.
@@ -41,7 +43,7 @@ Both are applied in place, with nothing charged at the time. Stripe uses the car
 
 ## Who sees an offer
 The offer appears only when all of these are true. Otherwise the no-offer screen shows:
-- the subscription is `trialing`, or `active` on Weekly, Monthly or Annual with no plan change waiting;
+- the subscription is `trialing` (on any plan: Monthly, or a legacy Weekly trial), or `active` on Weekly, Monthly or Annual with no plan change waiting;
 - no cancellation is scheduled, and the trial or paid period has more than two hours left;
 - the account has never accepted a cancel-screen offer;
 - the account has a locked billing market and regional prices are available;
@@ -68,7 +70,7 @@ Internal accounts see it too, so the screen can be tested with a real trial.
 
 Funnel for the slug, excluding internal accounts: shown `count(*)`, then checkout opened `count(last_checkout_at)`, then paid `count(accepted_at)`.
 
-Analytics note: since `20261112120000_trial_outcomes_charge_pending.sql`, the "Trial to paid" metric counts a trial ended by the paid offer as converted (outcome `converted_switch`, `replacement_subscription_id` = the monthly subscription): the replacement was created between the trial start and the trial end + 1 day and has a collected `subscription_create` or `subscription_cycle` invoice. If nothing was collected (e.g. a 100% coupon), the ended trial stays `superseded` (not resolved). A plan change made during a trial is on the same subscription, so it converts through its paid first renewal (`converted`) or a paid plan-change invoice (`converted_plan_change`), and the paid-weekly and renewal offers never change how the original trial counted. The paid monthly subscription counts as new MRR.
+Analytics note: since `20261112120000_trial_outcomes_charge_pending.sql`, the "Trial to paid" metric counts a trial ended by the paid offer as converted (outcome `converted_switch`, `replacement_subscription_id` = the monthly subscription): the replacement was created between the trial start and the trial end + 1 day and has a collected `subscription_create` or `subscription_cycle` invoice. If nothing was collected (e.g. a 100% coupon), the ended trial stays `superseded` (not resolved). A plan change made during a trial is on the same subscription, so it converts through its paid first renewal (`converted`) or a paid plan-change invoice (`converted_plan_change`), and the paid-weekly and renewal offers never change how the original trial counted. The paid monthly subscription counts as new MRR. In Plan mix, replacing a legacy weekly trial counts as a weekly → monthly switch; replacing a monthly trial is no plan switch (monthly → monthly). The `analytics-monetization.sql` test covers both.
 
 ## API (base `/api/v1`, signed in)
 - `GET /billing/cancel-offer` returns `{ status: "available", offer: { kind, slug, percent_off, plan_code, currency, amount, discounted_amount, current_plan_code, current_amount, period_end } }`, or `{ status: "unavailable", offer: null }`. `kind` is `checkout` (trial), `switch_at_period_end` (paid Weekly) or `renewal_discount` (Monthly/Annual). The call records the show. Amounts are in minor units, and the response never includes the coupon or any Stripe id.

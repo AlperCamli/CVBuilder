@@ -311,8 +311,9 @@ export interface BillingCheckoutInput {
   plan_code: "free" | "weekly" | "monthly" | "annual" | "pro" | "lifetime";
   success_url?: string;
   cancel_url?: string;
-  // When false, the Weekly checkout skips the free trial and bills immediately.
-  with_trial?: boolean;
+  // true: start the free trial (only the trial plan, Monthly, has one; another plan answers 409 trial_unavailable).
+  // false: no trial, the plan is billed immediately. Always explicit, so the server never infers a trial request.
+  with_trial: boolean;
   time_zone?: string;
   // A ?promo= link token; the server applies the discount or answers 409 promotion_unavailable.
   promotion_token?: string;

@@ -8,6 +8,18 @@ export const MONTHLY_WEEKLY_EQUIVALENT = "$3.46";
 export const ANNUAL_TOTAL_PRICE = "$99.90";
 export const ANNUAL_WEEKLY_EQUIVALENT = "$1.92";
 
+/**
+ * The plan the 3-day free trial converts to (Stripe charges its price when the trial ends). The server catalog is the
+ * authority (`trial_days > 0` in GET /billing/prices); this is the fallback before it loads and the plan of every
+ * trial link (`/app/checkout?plan=monthly&trial=1`). Until 2026-11-05 the trial converted to Weekly.
+ */
+export const TRIAL_PLAN: CheckoutTarget = "monthly";
+
+/** The catalog's trial plan: the plan with trial days, else TRIAL_PLAN (catalog not loaded or no trial offered). */
+export function trialPlanCode(catalog?: { plans: ReadonlyArray<{ code: CheckoutTarget; trial_days: number }> } | null): CheckoutTarget {
+  return catalog?.plans.find((plan) => plan.trial_days > 0)?.code ?? TRIAL_PLAN;
+}
+
 export interface PlanCard {
   code: VisiblePlanCode;
   name: string;
@@ -19,6 +31,7 @@ export interface PlanCard {
   highlighted?: boolean;
   badge?: string;
   savings?: string;
+  /** This plan is the one the free trial converts to (only the trial plan's card). */
   trialEligible?: boolean;
 }
 
@@ -27,7 +40,7 @@ export const PLAN_CARDS: PlanCard[] = [
     code: "trial",
     name: "3-day free trial",
     weeklyPrice: "$0",
-    totalPrice: "Card required. Renews at the displayed Weekly Pro price after 3 days unless cancelled.",
+    totalPrice: "Card required. Renews at the displayed Monthly Pro price after 3 days unless cancelled.",
     billingPeriod: "3 days",
     description: "Complete onboarding, choose your next step, then activate the trial.",
     features: ["Unlimited customized CVs", "Unlimited PDF & DOCX exports", "Unlimited AI actions"]
@@ -38,9 +51,8 @@ export const PLAN_CARDS: PlanCard[] = [
     weeklyPrice: WEEKLY_PRICE,
     totalPrice: `${WEEKLY_PRICE} billed weekly`,
     billingPeriod: "per week",
-    description: "Start with the lowest commitment.",
+    description: "The lowest commitment, billed weekly. No free trial.",
     badge: "Flexible weekly access",
-    trialEligible: false,
     features: [
       "Unlimited customized CVs",
       "Unlimited exports (PDF + DOCX)",
@@ -59,6 +71,7 @@ export const PLAN_CARDS: PlanCard[] = [
     highlighted: true,
     badge: "Most popular",
     savings: "Save 31% vs weekly",
+    trialEligible: true,
     features: [
       "Unlimited customized CVs",
       "Unlimited exports (PDF + DOCX)",

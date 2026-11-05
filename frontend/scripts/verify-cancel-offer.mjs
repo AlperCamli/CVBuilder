@@ -45,8 +45,9 @@ async function fixture({ locale = "en", market = "TR", offer = true, checkoutFai
   const usage = { plan_code: "weekly", limits, remaining: limits, period_month: now.slice(0, 7), tailored_cv_generations_count: 0, exports_count: 0, ai_actions_count: 0, storage_bytes_used: 0 };
   const tr = market === "TR";
   const prices = { market, currency: tr ? "try" : "usd", available: true, quote: "isolated-pricing", plans: [
-    { code: "weekly", amount: tr ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: tr ? 34990 : 1499, interval: "month", interval_count: 1, trial_days: 0 },
+    // The trial is on Monthly since 2026-11-05; the default fixture is a weekly trial started before the switch.
+    { code: "weekly", amount: tr ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: tr ? 34990 : 1499, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: tr ? 149900 : 9990, interval: "year", interval_count: 1, trial_days: 0 }] };
   const state = { paid: false, accepted: false, checkoutInput: null, plan, status, scheduled: null };
   const renewal = new Date(Date.now() + 30 * 86400000).toISOString();
@@ -188,6 +189,21 @@ try {
       assert.equal(f.requests.filter(r => r.path === "/billing/checkout/confirm").length, 1);
       await new Promise(resolve => setTimeout(resolve, 400));
       await shot(f.page, `welcome-${locale}-desktop`);
+      assert.deepEqual(f.errors, []);
+      await f.context.close();
+    });
+  }
+
+  for (const plan of ["weekly", "monthly"]) {
+    await run(`a ${plan} trial's offer says the trial ends and is never charged`, async () => {
+      const f = await fixture({ plan });
+      await cancelFromProfile(f, "Cancel trial");
+      await waitText(f.page, "ONE-TIME OFFER");
+      const text = await f.page.evaluate(() => document.body.innerText);
+      assert.match(text, /Your free trial ends and is never charged\./);
+      assert.doesNotMatch(text, /weekly price/i);
+      // The "about one week" comparison only speaks to a weekly trial.
+      if (plan === "monthly") assert.doesNotMatch(text, /price of one week/);
       assert.deepEqual(f.errors, []);
       await f.context.close();
     });

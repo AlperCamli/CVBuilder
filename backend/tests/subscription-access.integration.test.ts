@@ -25,9 +25,9 @@ async function fixture() {
   const authService = new AuthService(authProvider, users);
   const session = await authService.authenticate("token");
   const userId = session.appUser.id;
-  const entitlements = new EntitlementsService(createPlanCatalog({ freeUsageLimitsEnabled: false, weeklyStripePriceId: "price_weekly" }));
+  const entitlements = new EntitlementsService(createPlanCatalog({ freeUsageLimitsEnabled: false, weeklyStripePriceId: "price_weekly", monthlyStripePriceId: "price_monthly" }));
   let checkout: StripeCheckoutSessionSummary = { id: "cs_test_owned", url: null, customer_id: "cus_owned", subscription_id: "sub_owned", metadata: { app_user_id: userId }, status: "complete", payment_status: "no_payment_required" };
-  let subscription: StripeSubscriptionSummary = { id: "sub_owned", customer_id: "cus_owned", status: "trialing", cancel_at_period_end: false, current_period_start: new Date().toISOString(), current_period_end: new Date(Date.now() + 3 * 86400000).toISOString(), price_ids: ["price_weekly"], metadata: { app_user_id: userId, plan_code: "weekly" } };
+  let subscription: StripeSubscriptionSummary = { id: "sub_owned", customer_id: "cus_owned", status: "trialing", cancel_at_period_end: false, current_period_start: new Date().toISOString(), current_period_end: new Date(Date.now() + 3 * 86400000).toISOString(), price_ids: ["price_monthly"], metadata: { app_user_id: userId, plan_code: "monthly" } };
   const gateway = {
     retrieveCheckoutSession: vi.fn(async () => checkout),
     retrieveSubscription: vi.fn(async () => subscription),
@@ -172,12 +172,12 @@ describe("subscription-required application access", () => {
       expect(paywall(await f.send(method, path)), `${method} ${path}`).toBeNull();
     }
   });
-  it.each(["trialing", "active"])("unlocks verified %s subscriptions before a webhook arrives", async status => {
+  it.each([["trialing", "monthly"], ["active", "monthly"], ["trialing", "weekly"], ["active", "weekly"]])("unlocks verified %s %s subscriptions before a webhook arrives", async (status, plan) => {
     const f = await fixture();
-    f.setSubscription({ status });
+    f.setSubscription({ status, price_ids: [`price_${plan}`], metadata: { app_user_id: f.userId, plan_code: plan } });
     const response = await f.confirm();
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchObject({ app_access: true, subscription_status: status, plan_code: "weekly" });
+    expect(response.body.data).toMatchObject({ app_access: true, subscription_status: status, plan_code: plan });
     expect((await f.get("/master-cvs")).status).toBe(200);
     expect(f.listMasterCvs).toHaveBeenCalledTimes(1);
     // Refresh/repeated success returns synchronize the same subscription.

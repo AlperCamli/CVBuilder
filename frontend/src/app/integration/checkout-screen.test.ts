@@ -10,7 +10,9 @@ describe("checkout screens", () => {
     for (const plan of ["weekly", "monthly", "annual"] as CheckoutTarget[]) {
       const screen = checkoutScreen({ outcome: "cancel", plan, trial: false, eligibility: true });
       expect(screen.title).toBe("Why don’t you try the free trial first?");
-      expect(screen.primary).toEqual(expect.objectContaining({ kind: "checkout", plan: "weekly", withTrial: true }));
+      // The trial is Monthly's whichever plan they backed out of.
+      expect(screen.primary).toEqual(expect.objectContaining({ kind: "checkout", plan: "monthly", withTrial: true }));
+      expect(screen.offerPlan).toBe("monthly");
       // The plan they backed out of stays one click away, with its price in the label.
       expect(screen.secondary).toEqual({ kind: "checkout", plan, withTrial: false, label: "Continue with {{plan}} · {{price}}" });
     }
@@ -20,7 +22,7 @@ describe("checkout screens", () => {
     const eligible = checkoutScreen({ outcome: "cancel", plan: "monthly", trial: false, eligibility: true, promotion: true });
     expect(eligible.title).toBe("Your discount is still waiting.");
     expect(eligible.primary).toEqual({ kind: "checkout", plan: "monthly", withTrial: false, label: "Claim my discount" });
-    expect(eligible.secondary).toEqual({ kind: "checkout", plan: "weekly", withTrial: true, label: "Try for free" });
+    expect(eligible.secondary).toEqual({ kind: "checkout", plan: "monthly", withTrial: true, label: "Try for free" });
 
     const used = checkoutScreen({ outcome: "cancel", plan: "monthly", trial: false, eligibility: false, promotion: true });
     expect(used.primary).toEqual(expect.objectContaining({ plan: "monthly", withTrial: false }));
@@ -28,20 +30,22 @@ describe("checkout screens", () => {
   });
 
   it("speaks to someone who just backed out of the trial instead of pitching it again", () => {
-    const screen = checkoutScreen({ outcome: "cancel", plan: "weekly", trial: true, eligibility: true });
+    const screen = checkoutScreen({ outcome: "cancel", plan: "monthly", trial: true, eligibility: true });
     expect(screen.title).toBe("Your free trial is still waiting.");
     expect(screen.offer).toBe("trial");
+    expect(screen.offerPlan).toBe("monthly");
     expect(trialStart(screen.primary)).toBe(true);
+    expect(screen.primary).toEqual(expect.objectContaining({ plan: "monthly" }));
     expect(screen.secondary?.kind).toBe("pricing");
   });
 
-  it("offers one plans link and the paid weekly plan once the trial is used", () => {
+  it("offers one plans link and the paid Monthly plan at its price once the trial is used", () => {
     for (const outcome of ["cancel", "start"] as const) {
-      const screen = checkoutScreen({ outcome, plan: "weekly", trial: true, eligibility: false });
+      const screen = checkoutScreen({ outcome, plan: "monthly", trial: true, eligibility: false });
       expect(screen.mascot).toBe("thinking");
-      expect(screen.offerPlan).toBe("weekly");
+      expect(screen).toEqual(expect.objectContaining({ offer: "plan", offerPlan: "monthly" }));
       expect(actions(screen).filter(action => action.kind === "pricing")).toHaveLength(1);
-      expect(screen.secondary).toEqual(expect.objectContaining({ kind: "checkout", plan: "weekly", withTrial: false }));
+      expect(screen.secondary).toEqual({ kind: "checkout", plan: "monthly", withTrial: false, label: "Continue with {{plan}} · {{price}}" });
       expect(actions(screen).some(trialStart)).toBe(false);
     }
   });
@@ -53,20 +57,28 @@ describe("checkout screens", () => {
   });
 
   it("confirms a deliberate trial start with the mascot and opens Stripe from it", () => {
-    const screen = checkoutScreen({ outcome: "start", plan: "weekly", trial: true, eligibility: true });
-    expect(screen).toEqual(expect.objectContaining({ mascot: "celebrate", offer: "trial", title: "Activate your 3-day free trial" }));
-    expect(trialStart(screen.primary)).toBe(true);
+    const screen = checkoutScreen({ outcome: "start", plan: "monthly", trial: true, eligibility: true });
+    expect(screen).toEqual(expect.objectContaining({ mascot: "celebrate", offer: "trial", offerPlan: "monthly", title: "Activate your 3-day free trial" }));
+    expect(screen.primary).toEqual({ kind: "checkout", plan: "monthly", withTrial: true, label: "Start my 3-day free trial" });
+  });
+
+  it("never offers a trial on Weekly: a paid weekly checkout stays paid", () => {
+    for (const outcome of ["start", "cancel"] as const) for (const eligibility of [true, false]) for (const error of [true, false]) {
+      const screen = checkoutScreen({ outcome, plan: "weekly", trial: false, eligibility, error });
+      for (const action of actions(screen)) if (action.kind === "checkout" && action.withTrial) expect(action.plan).toBe("monthly");
+      if (screen.offer === "plan") expect(screen.offerPlan).toBe("weekly");
+    }
   });
 
   it("falls back to the trial only when a paid checkout failed for an eligible account", () => {
-    const base = { outcome: "start", plan: "monthly", trial: false } as const;
+    const base = { outcome: "start", plan: "annual", trial: false } as const;
     expect(checkoutScreen({ ...base, eligibility: true }).secondary?.kind).toBe("pricing");
     expect(checkoutScreen({ ...base, eligibility: false, error: true }).secondary?.kind).toBe("pricing");
-    expect(trialStart(checkoutScreen({ ...base, eligibility: true, error: true }).secondary)).toBe(true);
+    expect(checkoutScreen({ ...base, eligibility: true, error: true }).secondary).toEqual({ kind: "checkout", plan: "monthly", withTrial: true, label: "Try 3 days free instead" });
   });
 
   it("speaks to the paywall that opened the trial and keeps the default headline otherwise", () => {
-    const start = { outcome: "start", plan: "weekly", trial: true, eligibility: true } as const;
+    const start = { outcome: "start", plan: "monthly", trial: true, eligibility: true } as const;
     expect(checkoutScreen({ ...start, source: "export" }).title).toBe("Your tailored CV is ready to download");
     expect(checkoutScreen({ ...start, source: "ai" }).title).toBe("Unlock every AI feature");
     expect(checkoutScreen({ ...start, source: "tailoring" }).title).toBe("Tailor your CV for every job");
@@ -79,7 +91,7 @@ describe("checkout screens", () => {
 
   it("sends an existing subscriber to the billing portal instead of another checkout", () => {
     for (const trial of [true, false]) {
-      const payment = checkoutScreen({ outcome: "start", plan: "weekly", trial, eligibility: false, portal: "payment" });
+      const payment = checkoutScreen({ outcome: "start", plan: "monthly", trial, eligibility: false, portal: "payment" });
       expect(payment).toEqual(expect.objectContaining({ offer: "none", title: "Your last payment didn’t go through", secondary: null }));
       expect(payment.primary).toEqual({ kind: "portal", label: "Update payment method" });
       const manage = checkoutScreen({ outcome: "cancel", plan: "monthly", trial, eligibility: true, portal: "manage" });

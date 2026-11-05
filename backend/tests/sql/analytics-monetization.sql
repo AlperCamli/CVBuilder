@@ -788,5 +788,151 @@ begin
   from analytics.trial_to_paid('2026-06-01', '2026-06-30', 'month');
   if got <> '0.5000/4/2/1/1/0/0/0/0/4/0.2500' then raise exception 'trial_to_paid in-place plan changes wrong: %', got; end if;
 end $$;
+-- The free trial on the Monthly plan (from 2026-11-05; it was on Weekly before). Nothing in the SQL names the trial
+-- plan: a monthly trial is found by its trial_start, converts on its first paid monthly invoice, and a trialing
+-- subscription is never MRR at its list price (its only invoice is the $0 trial invoice). July 2026 TR cohorts in TRY
+-- at the production monthly price (349,90 TL), which no other check reads.
+do $$
+declare
+  umc uuid; ums uuid; umf uuid; umx uuid; umt uuid;
+  smc uuid; sms uuid; sms_r uuid; smf uuid; smx uuid; smt uuid;
+  k record;
+  got text;
+  violations text;
+begin
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-mc@example.invalid','2026-06-15') returning id into umc;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-ms@example.invalid','2026-06-15') returning id into ums;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-mf@example.invalid','2026-06-15') returning id into umf;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-mx@example.invalid','2026-06-15') returning id into umx;
+  insert into public.users(auth_user_id,email,created_at) values(gen_random_uuid(),'mo-mt@example.invalid','2026-06-15') returning id into umt;
+  insert into public.billing_markets(user_id,market) values (umc,'TR'),(ums,'TR'),(umf,'TR'),(umx,'TR'),(umt,'TR');
+
+  -- MC: a monthly trial Jul 1-4 that converted the normal way (first monthly charge at the trial end).
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(umc,'stripe','sub_mo_mc','monthly','active','2026-07-04','2026-08-04','try','month',34990,'2026-07-01','2026-07-04','2026-07-01') returning id into smc;
+  -- MS: a monthly trial Jul 1-4 ended by the cancel-flow offer: a new monthly subscription paid at 50% off on Jul 2, the
+  -- trial kept as inactive (superseded).
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(ums,'stripe','sub_mo_ms','monthly','inactive','2026-07-01','2026-07-04','try','month',34990,'2026-07-01','2026-07-04','2026-07-01') returning id into sms;
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,created_at)
+    values(ums,'stripe','sub_mo_ms_r','monthly','active','2026-07-02T10:00Z','2026-08-02T10:00Z','try','month',34990,'2026-07-02T10:00Z') returning id into sms_r;
+  -- MF: a monthly trial Jul 8-11 whose first monthly charge failed.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(umf,'stripe','sub_mo_mf','monthly','past_due','2026-07-11','2026-08-11','try','month',34990,'2026-07-08','2026-07-11','2026-07-08') returning id into smf;
+  -- MX: a monthly trial Jul 8-11 canceled during the trial.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,cancel_at_period_end,canceled_at,ended_at,cancellation_reason,created_at)
+    values(umx,'stripe','sub_mo_mx','monthly','canceled','2026-07-08','2026-07-11','try','month',34990,'2026-07-08','2026-07-11',true,'2026-07-09',
+           '2026-07-11','cancellation_requested','2026-07-08') returning id into smx;
+  -- MT: a monthly trial Jul 30 - Aug 2, still in its trial at the end of July, converted on Aug 2.
+  insert into public.subscriptions(user_id,provider,provider_subscription_id,plan_code,status,current_period_start,current_period_end,
+      currency,billing_interval,unit_amount,trial_start,trial_end,created_at)
+    values(umt,'stripe','sub_mo_mt','monthly','active','2026-08-02','2026-09-02','try','month',34990,'2026-07-30','2026-08-02','2026-07-30') returning id into smt;
+
+  insert into public.billing_invoices(user_id,subscription_id,provider_invoice_id,status,currency,amount_subtotal,amount_discount,amount_total,amount_paid,
+      amount_refunded,billing_reason,plan_code,market,period_start,period_end,paid_at,created_at) values
+    (umc,smc,'in_mo_mc0','paid','try',0,0,0,0,0,'subscription_create','monthly','TR','2026-07-01','2026-07-04','2026-07-01T00:00Z','2026-07-01'),
+    (umc,smc,'in_mo_mc1','paid','try',34990,0,34990,34990,0,'subscription_cycle','monthly','TR','2026-07-04','2026-08-04','2026-07-04T01:00Z','2026-07-04'),
+    (ums,sms,'in_mo_ms0','paid','try',0,0,0,0,0,'subscription_create','monthly','TR','2026-07-01','2026-07-04','2026-07-01T00:00Z','2026-07-01'),
+    (ums,sms_r,'in_mo_ms1','paid','try',34990,17495,17495,17495,0,'subscription_create','monthly','TR','2026-07-02T10:00Z','2026-08-02T10:00Z','2026-07-02T10:01Z','2026-07-02T10:00Z'),
+    (umf,smf,'in_mo_mf0','paid','try',0,0,0,0,0,'subscription_create','monthly','TR','2026-07-08','2026-07-11','2026-07-08T00:00Z','2026-07-08'),
+    (umf,smf,'in_mo_mf1','open','try',34990,0,34990,0,0,'subscription_cycle','monthly','TR','2026-07-11','2026-08-11',null,'2026-07-11'),
+    (umx,smx,'in_mo_mx0','paid','try',0,0,0,0,0,'subscription_create','monthly','TR','2026-07-08','2026-07-11','2026-07-08T00:00Z','2026-07-08'),
+    (umt,smt,'in_mo_mt0','paid','try',0,0,0,0,0,'subscription_create','monthly','TR','2026-07-30','2026-08-02','2026-07-30T00:00Z','2026-07-30'),
+    (umt,smt,'in_mo_mt1','paid','try',34990,0,34990,34990,0,'subscription_cycle','monthly','TR','2026-08-02','2026-09-02','2026-08-02T01:00Z','2026-08-02');
+  -- Each trial started from a monthly trial checkout (Stripe Checkout with trial_period_days on the monthly price).
+  insert into public.checkout_attempts(user_id,plan_code,market,currency,amount,trial_requested,trial_applied,outcome,created_at,resolved_at) values
+    (umc,'monthly','TR','try',34990,true,true,'completed','2026-07-01T00:00Z','2026-07-01T00:02Z'),
+    (ums,'monthly','TR','try',34990,true,true,'completed','2026-07-01T00:00Z','2026-07-01T00:02Z'),
+    (umf,'monthly','TR','try',34990,true,true,'completed','2026-07-08T00:00Z','2026-07-08T00:02Z'),
+    (umx,'monthly','TR','try',34990,true,true,'completed','2026-07-08T00:00Z','2026-07-08T00:02Z'),
+    (umt,'monthly','TR','try',34990,true,true,'completed','2026-07-30T00:00Z','2026-07-30T00:02Z');
+
+  -- Trial outcomes: detected from trial_start, with the monthly plan.
+  select string_agg(split_part(u.email, '@', 1) || ':' || o.plan_code || ':' || o.trial_source || ':' || o.outcome || ':' || o.outcome_group
+                    || ':' || coalesce(o.first_paid_at::text, '-') || ':' || (o.replacement_subscription_id is not null), ',' order by u.email) into got
+  from analytics_private.trial_outcomes o join public.users u on u.id = o.user_id
+  where o.user_id in (umc, ums, umf, umx, umt);
+  if got is distinct from 'mo-mc:monthly:stripe:converted:converted:2026-07-04 01:00:00+00:false,'
+         || 'mo-mf:monthly:stripe:failed_first_charge:failed_first_charge:-:false,'
+         || 'mo-ms:monthly:stripe:converted_switch:converted:2026-07-02 10:01:00+00:true,'
+         || 'mo-mt:monthly:stripe:converted:converted:2026-08-02 01:00:00+00:false,'
+         || 'mo-mx:monthly:stripe:trial_canceled:trial_canceled:-:false' then
+    raise exception 'monthly trial outcomes wrong: %', got;
+  end if;
+  if (select replacement_subscription_id from analytics_private.trial_outcomes where subscription_id = sms) is distinct from sms_r
+     or exists (select 1 from analytics_private.trial_outcomes where subscription_id = sms_r) then
+    raise exception 'monthly trial replacement wrong';
+  end if;
+
+  -- trial_to_paid and the Overview agree; the plan filter and breakdown see the monthly trials.
+  select string_agg(concat_ws('/', trial_to_paid, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial,
+                              charge_pending, unresolved, resolved, failed_charge_rate), ' ') into got
+  from analytics.trial_to_paid('2026-07-01', '2026-07-31', 'month');
+  if got is distinct from '0.6000/5/3/1/1/0/0/0/0/5/0.2000' then raise exception 'monthly trial_to_paid wrong: %', got; end if;
+  if (select string_agg(dimension || '/' || trial_starts || '/' || converted, ' ') from analytics.trial_to_paid('2026-07-01', '2026-07-31', 'month', p_breakdown => 'plan'))
+       is distinct from 'monthly/5/3'
+     or (select trial_starts from analytics.trial_to_paid('2026-07-01', '2026-07-31', 'month', p_filters => '{"plan":"monthly"}')) is distinct from 5::bigint
+     or (select trial_starts from analytics.trial_to_paid('2026-07-01', '2026-07-31', 'month', p_filters => '{"plan":"weekly"}')) is distinct from 0::bigint then
+    raise exception 'monthly trial_to_paid plan filter or breakdown wrong';
+  end if;
+
+  -- Overview at the end of July: MC (349,90) and the 50% offer (174,95) are MRR; MT is still in its trial, so it adds no
+  -- MRR (counting trialing rows at the monthly list price would make this 874,75 and 3 subscriptions).
+  select * into k from analytics.kpi_overview('2026-07-01', '2026-07-31', p_filters => '{"market":"TR"}');
+  if (k.trial_starts, k.trial_resolved, k.trial_conversions, k.trial_to_paid_rate) is distinct from (5::bigint, 5::bigint, 3::bigint, 0.6000)
+     or (k.mrr_try_native, k.active_subscriptions, k.revenue_try_native, k.new_paying_customers) is distinct from (524.85, 2::bigint, 524.85, 2::bigint) then
+    raise exception 'kpi monthly trials wrong: %', row_to_json(k);
+  end if;
+  select * into k from analytics.kpi_overview('2026-07-01', '2026-07-31', p_filters => '{"market":"TR","plan":"weekly"}');
+  if (k.trial_starts, k.mrr_try_native, k.active_subscriptions) is distinct from (0::bigint, 0.00, 0::bigint) then
+    raise exception 'kpi weekly filter saw monthly trials: %', row_to_json(k);
+  end if;
+
+  -- Plan mix: both paid subscriptions on Monthly at the monthly MRR; a monthly trial replaced by the monthly offer is
+  -- not a plan switch (a legacy weekly trial replaced by it is: weekly -> monthly).
+  select concat_ws('/', subscriptions, mrr_try_native, switched_in, switched_out) into got
+  from analytics.plan_mix('2026-07-01', '2026-07-31', p_currency => 'native', p_filters => '{"market":"TR"}') where dimension = 'monthly';
+  if got is distinct from '2/524.85/0/0' then raise exception 'monthly plan_mix wrong: %', got; end if;
+  -- Contrast: the May legacy weekly trials replaced by a monthly subscription (SW, SW0, LATE above) are switches.
+  select string_agg(dimension || ':' || switched_in || '/' || switched_out, ' ' order by dimension) into got
+  from analytics.plan_mix('2026-05-01', '2026-05-31', p_currency => 'native') where dimension in ('monthly', 'weekly');
+  if got is distinct from 'monthly:3/0 weekly:0/3' then raise exception 'weekly trial replacement switches wrong: %', got; end if;
+
+  -- MRR movement: both start as new monthly MRR in July (TRY series).
+  select concat_ws('/', new, churn, starting_mrr, ending_mrr, new_customers) into got
+  from analytics.mrr_movement('2026-07-01', '2026-07-31', 'month', 'native', p_filters => '{"market":"TR"}') where dimension = 'TRY';
+  if got is distinct from '524.85/0.00/0.00/524.85/2' then raise exception 'monthly mrr_movement wrong: %', got; end if;
+
+  -- Churn: the canceled monthly trial ended before paying; no lost MRR.
+  select concat_ws('/', paid_churn, ended_never_paid, replaced_excluded, lost_mrr_try_native) into got
+  from analytics.subscription_churn('2026-07-01', '2026-07-31', 'month', p_filters => '{"market":"TR"}');
+  if got is distinct from '0/1/0/0.00' then raise exception 'monthly trial churn wrong: %', got; end if;
+
+  -- Checkout funnel: paid_within_7d is the first monthly charge at the trial end (or the paid offer).
+  select string_agg(step || '=' || users, ' ' order by step_order) into got
+  from analytics.checkout_funnel('2026-07-01', '2026-07-31', p_filters => '{"plan":"monthly","market":"TR"}');
+  if got is distinct from 'attempts=5 session_created=5 completed=5 paid_within_7d=3' then raise exception 'monthly trial checkout funnel wrong: %', got; end if;
+
+  -- LTV: the July cohort's first paid plan is Monthly (MT's first payment is in August).
+  select concat_ws('/', dimension, customers, ltv_try_native) into got
+  from analytics.subscriber_ltv('2026-07-01', '2026-07-31', p_currency => 'native', p_filters => '{"market":"TR"}');
+  if got is distinct from 'monthly/2/262.43' then raise exception 'monthly trial subscriber_ltv wrong: %', got; end if;
+
+  -- Drill: the converted monthly trials, with their plan.
+  perform admin_app.log_access('admin@example.invalid', 'people.drill_users', null, '{}', null);
+  select string_agg(email || ':' || (detail ->> 'plan') || ':' || (detail ->> 'outcome'), ',' order by email) into got
+  from analytics_people.drill_users(p_from => '2026-07-01', p_to => '2026-07-31', p_filters => '{"metric":"trial_conversions","outcome":"converted"}');
+  if got is distinct from 'mo-mc@example.invalid:monthly:converted,mo-ms@example.invalid:monthly:converted,mo-mt@example.invalid:monthly:converted' then
+    raise exception 'monthly trial drill wrong: %', got;
+  end if;
+
+  select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
+  if violations is not null then raise exception 'contract violations: %', violations; end if;
+end $$;
 select 'Analytics monetization metrics, currency variants, drill keys, trial outcomes and privileges passed' as verification;
 rollback;

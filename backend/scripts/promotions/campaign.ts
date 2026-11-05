@@ -61,8 +61,8 @@ export type Campaign = z.infer<typeof campaignSchema>;
 
 // A promotion shown on the cancel screen (docs/promotions/cancel-flow-offer.md) to one audience: a trial, or a paid
 // weekly, monthly or annual plan. No cohorts or links. Its one plan is what the offer moves to: any plan for a trial
-// (paid now by checkout), another plan for paid weekly (from the end of the paid week), and the same plan for monthly
-// and annual (the next renewal is discounted).
+// (paid now by checkout; it fits a Monthly trial and a Weekly trial started before 2026-11-05 alike), another plan for
+// paid weekly (from the end of the paid week), and the same plan for monthly and annual (the next renewal is discounted).
 export const cancelFlowCampaignSchema = z
   .object({
     channel: z.literal("cancel_flow"),

@@ -47,6 +47,16 @@ New columns:
   transitions cannot be reconstructed; invoices can (see backfill).
 - A trial whose first charge fails goes `trialing → past_due`, not `trial_converted`. The exact
   conversion signal is the first `paid` invoice with `billing_reason = 'subscription_cycle'` after the trial.
+- **Trial plan, since 2026-11-05**: the 3-day trial is on Monthly (it was on Weekly before, and on legacy Pro before
+  that), so a converted trial's first charge is the monthly price. Identify trials by `subscriptions.trial_start`
+  and the `trial_*` events, never by plan code; a trial row's `plan_code` is the plan it converts to. Weekly trials
+  still running at the switch convert to Weekly. `billing_plan_catalog` moves `trial_supported` / `trial_days` from
+  `weekly` to `monthly` at the first daily refresh after the deploy.
+- **`checkout_attempts.trial_requested`** is the request's explicit `with_trial`, else (transitionally, for tabs on the
+  pre-2026-11-05 bundle) `true` only on Weekly: that old tab's trial button, refused with `409 trial_unavailable`,
+  `outcome = 'failed'`. An omitted `with_trial` on Monthly or Annual is `false` (a paid checkout). Before 2026-11-05 it was `with_trial` not `false`, so attempts on Monthly and Annual that omitted
+  `with_trial` were recorded as `true` without any trial on offer. An explicit trial request on a plan without the
+  trial is refused (`409 trial_unavailable`) and recorded as `outcome = 'failed'` with `trial_requested = true`.
 - **`billing_invoices.status`** is Stripe's status, except a paid invoice with refunds becomes
   `refunded` / `partially_refunded`. `created_at` is the invoice creation time at Stripe.
   `period_start/end` are the service period of the plan line (not Stripe's invoice period).

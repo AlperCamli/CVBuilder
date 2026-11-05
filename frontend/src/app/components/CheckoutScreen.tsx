@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BellRing, CalendarCheck, Check, ChevronDown, CreditCard, Download, Loader2, LockKeyhole, Mail, PauseCircle, ShieldCheck, Sparkles, Target } from "lucide-react";
 import { Link } from "react-router";
-import type { CheckoutTarget } from "../../content/pricing";
+import { trialPlanCode, type CheckoutTarget } from "../../content/pricing";
 import type { BillingPlanResponseData } from "../integration/api-types";
 import { checkoutKey, planDate, trialEndDate, welcomeContinueLabel, type CheckoutAction, type CheckoutChoice, type CheckoutMascot, type CheckoutScreen as CheckoutScreenModel } from "../integration/checkout-screen";
-import { formatMoney, type useRegionalPricing } from "../integration/regional-pricing";
+import { formatMoney, type BillingPrices, type useRegionalPricing } from "../integration/regional-pricing";
 import type { PromotionPlanPrice } from "../integration/promotion-offer";
 import type { CheckoutSource } from "../integration/subscription-flow";
 import { localeCode, translate as t } from "../localization/i18n";
@@ -16,6 +16,31 @@ type Regional = ReturnType<typeof useRegionalPricing>;
 
 const PLAN_NAME: Record<CheckoutTarget, string> = { weekly: "Weekly", monthly: "Monthly", annual: "Yearly" };
 const BILLED: Record<CheckoutTarget, string> = { weekly: "billed weekly", monthly: "billed monthly", annual: "billed yearly" };
+// What the trial turns into, by the billing interval of its plan: Monthly for new trials, Weekly for a trial started
+// before 2026-11-05 (or a server that still attaches the trial to Weekly). Other intervals use the generic copy.
+interface TrialRenewalCopy { charge: string; faq: string; terms: string; welcome: string }
+const TRIAL_RENEWAL: Partial<Record<BillingPrices["plans"][number]["interval"], TrialRenewalCopy>> = {
+  week: {
+    charge: "{{date}}: {{price}}/week",
+    faq: "Not today. If you keep Pro, your first payment of {{price}} is on {{date}}, then every week. We’ll email you a reminder before your trial ends.",
+    terms: "Card required to start. After 3 days, {{amount}} is billed weekly until you cancel.",
+    welcome: "Free until {{date}}, then {{price}} a week. We’ll email you before your trial ends.",
+  },
+  month: {
+    charge: "{{date}}: {{price}}/month",
+    faq: "Not today. If you keep Pro, your first payment of {{price}} is on {{date}}, then every month. We’ll email you a reminder before your trial ends.",
+    terms: "Card required to start. After 3 days, {{amount}} is billed monthly until you cancel.",
+    welcome: "Free until {{date}}, then {{price}} a month. We’ll email you before your trial ends.",
+  },
+};
+
+/** A plan's live price and its trial copy; null without a catalog or for an interval without trial copy. */
+function renewalOf(prices: BillingPrices | null | undefined, plan: CheckoutTarget | null): { price: string; trialDays: number; copy: TrialRenewalCopy } | null {
+  const item = plan ? prices?.plans.find(entry => entry.code === plan) : undefined;
+  const copy = item ? TRIAL_RENEWAL[item.interval] : undefined;
+  return prices && item && copy ? { price: formatMoney(item.amount, prices.currency), trialDays: item.trial_days, copy } : null;
+}
+
 const UNLOCKS = ["Tailor your CV to every opportunity", "Unlimited PDF & DOCX exports", "AI improvements whenever you need them", "Cover letters for every application"];
 
 /** The mascot card shared by every checkout state: start, cancelled, confirming and loading. */
@@ -54,7 +79,7 @@ export function CancelAnytime({ trial, endDate }: { trial: boolean; endDate?: st
 }
 
 /** Today, the reminder, then the first charge: what happens after "Start my free trial". */
-function TrialTimeline({ today, endDate, renewal }: { today: string; endDate: string; renewal: string | null }) {
+function TrialTimeline({ today, endDate, plan, renewal }: { today: string; endDate: string; plan: CheckoutTarget; renewal: ReturnType<typeof renewalOf> }) {
   return <ol className="checkout-screen-timeline" aria-label={t("How your free trial works")}>
     <li>
       <span><Sparkles size={14} aria-hidden="true" /></span>
@@ -67,8 +92,8 @@ function TrialTimeline({ today, endDate, renewal }: { today: string; endDate: st
     <li>
       <span><CalendarCheck size={14} aria-hidden="true" /></span>
       <div>
-        <strong>{renewal ? t("{{date}}: {{price}}/week", { date: endDate, price: renewal }) : endDate}</strong>
-        <p>{t("Your weekly plan starts, unless you cancel before then.")}</p>
+        <strong>{renewal ? t(renewal.copy.charge, { date: endDate, price: renewal.price }) : endDate}</strong>
+        <p>{t("Your {{plan}} plan starts, unless you cancel before then.", { plan: t(PLAN_NAME[plan]) })}</p>
       </div>
     </li>
   </ol>;
@@ -85,12 +110,12 @@ export function StripeTrust() {
   </div>;
 }
 
-function CheckoutFaq({ trial, endDate, renewal }: { trial: boolean; endDate: string; renewal: string | null }) {
+function CheckoutFaq({ trial, endDate, renewal }: { trial: boolean; endDate: string; renewal: ReturnType<typeof renewalOf> }) {
   const items = trial ? [
     { question: "Why do you need a card?", answer: t("It keeps the free trial to one per person and lets Pro continue without interruption if you stay. You pay nothing today, and your card details are stored by Stripe, not by us.") },
     { question: "When will I be charged?", answer: renewal
-      ? t("Not today. If you keep Pro, your first payment of {{price}} is on {{date}}, then every week. We’ll email you a reminder before your trial ends.", { price: renewal, date: endDate })
-      : t("Not today. If you keep Pro, your first weekly payment is on {{date}}. We’ll email you a reminder before your trial ends.", { date: endDate }) },
+      ? t(renewal.copy.faq, { price: renewal.price, date: endDate })
+      : t("Not today. If you keep Pro, your first payment is on {{date}}. We’ll email you a reminder before your trial ends.", { date: endDate }) },
     { question: "How do I cancel?", answer: t("Open your Profile, choose Cancel trial and confirm. That’s it: no forms, no calls. You keep Pro until your trial ends.") },
   ] : [
     { question: "When will I be charged?", answer: t("When you confirm at Stripe. Your plan then renews at the price shown until you cancel.") },
@@ -127,10 +152,10 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
   const prices = regional.prices;
   const amount = (plan: CheckoutTarget) => prices?.plans.find(item => item.code === plan)?.amount;
   const money = (value: number | undefined) => prices && value !== undefined ? formatMoney(value, prices.currency) : "—";
-  const weekly = amount("weekly");
-  const trialDays = prices?.plans.find(item => item.code === "weekly")?.trial_days;
-  const endDate = trialEndDate(trialDays && trialDays > 0 ? trialDays : 3, localeCode());
-  const renewal = weekly !== undefined ? money(weekly) : null;
+  // The trial converts to the catalog's trial plan (Monthly), at that plan's live price.
+  const trialPlan = trialPlanCode(prices);
+  const renewal = renewalOf(prices, trialPlan);
+  const endDate = trialEndDate(renewal && renewal.trialDays > 0 ? renewal.trialDays : 3, localeCode());
   const trialOffer = screen.offer === "trial";
   const discount = screen.offer === "plan" && promotion?.code === screen.offerPlan ? promotion : null;
   const promoMoney = (value: number) => discount ? formatMoney(value, discount.currency) : "—";
@@ -172,7 +197,7 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
     {screen.offer === "none" ? actions : <>
       <PricingAvailability {...regional} />
       {trialOffer
-        ? <TrialTimeline today={zero} endDate={endDate} renewal={renewal} />
+        ? <TrialTimeline today={zero} endDate={endDate} plan={trialPlan} renewal={renewal} />
         : <div className="checkout-screen-offer">
           <div>
             <strong>{t("Pro {{plan}}", { plan: t(PLAN_NAME[screen.offerPlan]) })}</strong>
@@ -192,7 +217,7 @@ export function CheckoutScreen({ screen, outcome, regional, eligibility, opening
       <CancelAnytime trial={trialOffer} endDate={endDate} />
       {actions}
       <p className="checkout-screen-terms">{trialOffer
-        ? weekly !== undefined ? t("Card required to start. After 3 days, {{amount}} is billed weekly until you cancel.", { amount: money(weekly) })
+        ? renewal ? t(renewal.copy.terms, { amount: renewal.price })
           : t("Credit card required. Renewal terms will be shown before you activate your trial.")
         : discount ? t("{{percent}}% off your first month, charged today. Then {{price}}/month until you cancel.", { percent: discount.percent_off, price: promoMoney(discount.amount) })
           : t("Your plan renews automatically at the price shown until you cancel.")}</p>
@@ -244,12 +269,13 @@ export function CheckoutWelcome({ billing, regional, source, destination, onCont
 }) {
   const trial = billing.subscription_status === "trialing";
   const date = planDate(billing.current_period_end, localeCode());
-  const weekly = regional.prices?.plans.find(item => item.code === "weekly")?.amount;
-  const price = regional.prices && weekly !== undefined ? formatMoney(weekly, regional.prices.currency) : null;
-  const plan = billing.plan_code in PLAN_NAME ? PLAN_NAME[billing.plan_code as CheckoutTarget] : null;
+  const planCode = billing.plan_code in PLAN_NAME ? billing.plan_code as CheckoutTarget : null;
+  const plan = planCode ? PLAN_NAME[planCode] : null;
+  // The subscription's own plan: a weekly trial (started before 2026-11-05) renews weekly, a monthly one monthly.
+  const renewal = renewalOf(regional.prices, planCode);
   const terms = trial
     ? date
-      ? price ? t("Free until {{date}}, then {{price}} a week. We’ll email you before your trial ends.", { date, price })
+      ? renewal ? t(renewal.copy.welcome, { date, price: renewal.price })
         : t("Free until {{date}}. We’ll email you before your trial ends.", { date })
       : t("We’ll email you before your trial ends.")
     : date && plan ? t("Your {{plan}} plan renews on {{date}}. Manage it anytime in Profile.", { plan: t(plan), date })

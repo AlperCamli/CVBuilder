@@ -3,7 +3,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app/create-app";
 import { AuthService } from "../src/modules/auth/auth.service";
 import { BillingService, pendingChange } from "../src/modules/billing/billing.service";
@@ -40,12 +40,12 @@ const PAID_PROMOTIONS: Record<"weekly" | "monthly", CancelFlowPromotion> = {
 
 const prices = (market: BillingMarket): BillingPrices => market === "TR"
   ? { market, currency: "try", available: true, quote: "q", plans: [
-    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 34990, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: 34990, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: 149900, interval: "year", interval_count: 1, trial_days: 0 }] }
   : { market, currency: "usd", available: true, quote: "q", plans: [
-    { code: "weekly", amount: 499, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 1499, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "weekly", amount: 499, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: 1499, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: 9990, interval: "year", interval_count: 1, trial_days: 0 }] };
 
 class InMemoryCancelOffers implements CancelOffersPort {
@@ -149,7 +149,8 @@ const fixture = async (options: { market?: BillingMarket | null; status?: string
   const trialStart = new Date(Date.now() - 24 * HOUR).toISOString();
   const subscription: SubscriptionRecord = {
     id: "local-sub", user_id: owner.id, provider: "stripe", provider_customer_id: "cus_owner", provider_subscription_id: "sub_trial",
-    plan_code: options.plan ?? "weekly", status: options.status ?? "trialing", current_period_start: options.periodEndMissing ? null : trialStart,
+    // The trial is on Monthly since 2026-11-05; plan: "weekly" with the default trialing status is a trial started before.
+    plan_code: options.plan ?? "monthly", status: options.status ?? "trialing", current_period_start: options.periodEndMissing ? null : trialStart,
     current_period_end: options.periodEndMissing ? null : trialEnd, trial_end: trialEnd,
     cancel_at_period_end: options.cancelScheduled ?? false, created_at: trialStart, updated_at: trialStart
   };
@@ -180,9 +181,11 @@ const fixture = async (options: { market?: BillingMarket | null; status?: string
     recordCheckoutAttempt: async (row: CheckoutAttemptRow) => { attempts.push(row); },
     resolveCheckoutAttempt: async (id: string, outcome: string) => { resolved.push([id, outcome]); }
   } as unknown as MonetizationRepository;
+  const warnings: unknown[] = [];
   const billingService = new BillingService(usersRepository, subscriptionsRepository, new UsageService(new InMemoryUsageRepository()), new EntitlementsService(createPlanCatalog()), gateway, {
     provider: "stripe", regionalPricing: regional, checkoutSuccessUrl: config.billing.checkoutSuccessUrl, checkoutCancelUrl: config.billing.checkoutCancelUrl,
-    portalReturnUrl: config.billing.portalReturnUrl, stripeWebhookSecret: "whsec_test", trialPeriodDays: 3, cancelOffers, monetization
+    portalReturnUrl: config.billing.portalReturnUrl, stripeWebhookSecret: "whsec_test", trialPeriodDays: 3, cancelOffers, monetization,
+    logger: { warn: (details: unknown) => { warnings.push(details); } } as never
   });
   const app = createApp({
     config,
@@ -198,7 +201,7 @@ const fixture = async (options: { market?: BillingMarket | null; status?: string
     return { trial: trial?.status, current: current && `${current.provider_subscription_id}:${current.plan_code}:${current.status}` };
   };
   return {
-    owner, gateway, cancelOffers, subscriptionsRepository, trialEnd, billingService, attempts, resolved, urls, rows,
+    owner, gateway, cancelOffers, subscriptionsRepository, trialEnd, billingService, attempts, resolved, urls, rows, warnings,
     getOffer: () => auth(request(app).get("/api/v1/billing/cancel-offer")),
     checkout: (body: Record<string, unknown> = urls) => auth(request(app).post("/api/v1/billing/cancel-offer/checkout")).send(body),
     accept: (body: Record<string, unknown> = {}) => auth(request(app).post("/api/v1/billing/cancel-offer/accept")).send(body),
@@ -214,25 +217,25 @@ const fixture = async (options: { market?: BillingMarket | null; status?: string
 const sessionObject = (session: StripeCheckoutSessionSummary) => ({ id: session.id, mode: "subscription", customer: session.customer_id, subscription: session.subscription_id, metadata: session.metadata });
 
 describe("cancel-flow offer", () => {
-  it("offers the promoted plan at its discounted first month in the trial's market and records the show", async () => {
-    const f = await fixture();
+  it.each([["monthly", 34990], ["weekly", 14990]] as const)("offers the promoted plan at its discounted first month to a %s trial in its market and records the show", async (plan, currentAmount) => {
+    const f = await fixture({ plan });
     const response = await f.getOffer();
     expect(response.status).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.body.data).toEqual({
       status: "available",
-      offer: { slug: "trial-cancel-save50", percent_off: 50, plan_code: "monthly", currency: "try", amount: 34990, discounted_amount: 17495, current_plan_code: "weekly", current_amount: 14990, period_end: f.trialEnd, kind: "checkout" }
+      offer: { slug: "trial-cancel-save50", percent_off: 50, plan_code: "monthly", currency: "try", amount: 34990, discounted_amount: 17495, current_plan_code: plan, current_amount: currentAmount, period_end: f.trialEnd, kind: "checkout" }
     });
     // The response never carries the coupon, price ids or provider ids.
     expect(JSON.stringify(response.body.data)).not.toMatch(/coupon|price_|sub_|cus_/);
-    expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)).toMatchObject({ provider_subscription_id: "sub_trial", from_plan_code: "weekly", show_count: 1, accepted_at: null });
+    expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)).toMatchObject({ provider_subscription_id: "sub_trial", from_plan_code: plan, show_count: 1, accepted_at: null });
     await f.getOffer();
     expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)!.show_count).toBe(2);
   });
 
   it("prices a GLOBAL trial in USD", async () => {
     const f = await fixture({ market: "GLOBAL" });
-    expect((await f.getOffer()).body.data.offer).toMatchObject({ currency: "usd", amount: 1499, discounted_amount: 749, current_amount: 499 });
+    expect((await f.getOffer()).body.data.offer).toMatchObject({ currency: "usd", amount: 1499, discounted_amount: 749, current_plan_code: "monthly", current_amount: 1499 });
   });
 
   it.each([
@@ -271,8 +274,8 @@ describe("cancel-flow offer", () => {
     expect((await f.getOffer()).body.data.status).toBe("unavailable");
   });
 
-  it("Keep Pro opens a paid checkout for the discounted monthly plan and leaves the trial running until payment", async () => {
-    const f = await fixture();
+  it.each(["monthly", "weekly"])("Keep Pro opens a paid checkout for the discounted monthly plan and leaves the %s trial running until payment", async plan => {
+    const f = await fixture({ plan });
     await f.getOffer();
     const response = await f.checkout();
     expect(response.status).toBe(200);
@@ -281,7 +284,7 @@ describe("cancel-flow offer", () => {
     expect(input).toMatchObject({
       customer_id: "cus_owner", price_id: "price_tr_monthly", currency: "try", mode: "subscription", trial_period_days: null,
       discounts: [{ coupon: "coupon_save50" }], success_url: f.urls.success_url, cancel_url: f.urls.cancel_url,
-      metadata: { app_user_id: f.owner.id, plan_code: "monthly", billing_market: "TR", billing_currency: "try", promotion_slug: "trial-cancel-save50", promotion_id: PROMOTION.id, cancel_offer: "1", replaces_subscription: "sub_trial", replaces_plan_code: "weekly" }
+      metadata: { app_user_id: f.owner.id, plan_code: "monthly", billing_market: "TR", billing_currency: "try", promotion_slug: "trial-cancel-save50", promotion_id: PROMOTION.id, cancel_offer: "1", replaces_subscription: "sub_trial", replaces_plan_code: plan }
     });
     // The session closes within 60-90 minutes; the offer needs two hours of trial left.
     const minutesOpen = (input.expires_at! * 1000 - Date.now()) / 60_000;
@@ -292,19 +295,22 @@ describe("cancel-flow offer", () => {
     expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)!.last_checkout_at).not.toBeNull();
     // Nothing is ended before payment.
     expect(f.gateway.canceled).toEqual([]);
-    expect(await f.rows()).toEqual({ trial: "trialing", current: "sub_trial:weekly:trialing" });
+    expect(await f.rows()).toEqual({ trial: "trialing", current: `sub_trial:${plan}:trialing` });
     // A second click reuses the same Stripe session (same idempotency key).
     await f.checkout();
     expect(f.gateway.checkouts[1].idempotency_key).toBe(input.idempotency_key);
   });
 
-  it("on payment (webhook), ends the trial at Stripe so the weekly price is never charged, and starts Pro", async () => {
-    const f = await fixture();
+  it.each(["monthly", "weekly"])("on payment (webhook), ends the %s trial at Stripe so it is never charged, and starts Pro", async plan => {
+    const f = await fixture({ plan });
+    const accepted = vi.spyOn(f.cancelOffers, "markCancelOfferAccepted");
     await f.getOffer();
     await f.checkout();
     const session = f.gateway.pay();
     expect((await f.webhook("evt_paid", "checkout.session.completed", sessionObject(session))).processed).toBe(true);
     expect(f.gateway.canceled).toEqual([["sub_trial", "sub_monthly_1"]]);
+    // The accepted offer names the trial's own plan.
+    expect(accepted).toHaveBeenCalledWith({ promotionId: PROMOTION.id, userId: f.owner.id, providerSubscriptionId: "sub_trial", fromPlanCode: plan });
     // Pro Monthly is the current plan; the trial is kept as superseded, not as a canceled trial.
     expect(await f.rows()).toEqual({ trial: "inactive", current: "sub_monthly_1:monthly:active" });
     expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)!.accepted_at).not.toBeNull();
@@ -313,7 +319,7 @@ describe("cancel-flow offer", () => {
     await f.webhook("evt_paid", "checkout.session.completed", sessionObject(session));
     await f.webhook("evt_trial_deleted", "customer.subscription.deleted", {
       id: "sub_trial", customer: "cus_owner", status: "canceled", cancel_at_period_end: false, metadata: { app_user_id: f.owner.id },
-      cancellation_details: { reason: "cancellation_requested", comment: "replaced_by:sub_monthly_1" }, items: { data: [{ price: { id: "price_tr_weekly" } }] }
+      cancellation_details: { reason: "cancellation_requested", comment: "replaced_by:sub_monthly_1" }, items: { data: [{ price: { id: `price_tr_${plan}` } }] }
     });
     expect(f.gateway.canceled).toHaveLength(1);
     expect(await f.rows()).toEqual({ trial: "inactive", current: "sub_monthly_1:monthly:active" });
@@ -321,6 +327,41 @@ describe("cancel-flow offer", () => {
     expect(await f.billingService.getBillingPlan(f.owner.id)).toMatchObject({ plan_code: "monthly", subscription_status: "active", app_access: true });
     // One offer per account: now on paid Monthly, the Monthly offer does not show either.
     expect((await f.getOffer()).body.data.status).toBe("unavailable");
+  });
+
+  it("records the replaced trial's own plan, read from its price, when the metadata does not name it", async () => {
+    const f = await fixture();
+    const accepted = vi.spyOn(f.cancelOffers, "markCancelOfferAccepted");
+    await f.checkout();
+    const session = f.gateway.pay();
+    const paid = f.gateway.subscriptions.get(session.subscription_id!)!;
+    const { replaces_plan_code: _named, ...unnamed } = paid.metadata;
+    f.gateway.subscriptions.set(paid.id, { ...paid, metadata: unnamed });
+    const trial = f.gateway.subscriptions.get("sub_trial")!;
+    f.gateway.subscriptions.set("sub_trial", { ...trial, metadata: { app_user_id: f.owner.id } });
+    await f.webhook("evt_paid", "checkout.session.completed", { ...sessionObject(session), metadata: unnamed });
+    expect(f.gateway.canceled).toEqual([["sub_trial", "sub_monthly_1"]]);
+    expect(accepted).toHaveBeenCalledWith(expect.objectContaining({ providerSubscriptionId: "sub_trial", fromPlanCode: "monthly" }));
+    expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)).toMatchObject({ from_plan_code: "monthly" });
+    expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)!.accepted_at).not.toBeNull();
+  });
+
+  it.each([
+    ["its billing interval when the price is unknown", "week", "weekly", false],
+    ["Monthly, with a warning, when neither the price nor the interval is known (never free)", null, "monthly", true]
+  ] as const)("records the replaced trial's plan from %s", async (_label, interval, expected, warned) => {
+    const f = await fixture({ plan: "weekly" });
+    await f.checkout();
+    const session = f.gateway.pay();
+    const paid = f.gateway.subscriptions.get(session.subscription_id!)!;
+    const { replaces_plan_code: _named, ...unnamed } = paid.metadata;
+    f.gateway.subscriptions.set(paid.id, { ...paid, metadata: unnamed });
+    const trial = f.gateway.subscriptions.get("sub_trial")!;
+    f.gateway.subscriptions.set("sub_trial", { ...trial, metadata: { app_user_id: f.owner.id }, price_ids: ["price_retired_unknown"], details: { ...trial.details!, billing_interval: interval } });
+    await f.webhook("evt_paid", "checkout.session.completed", { ...sessionObject(session), metadata: unnamed });
+    expect(f.gateway.canceled).toEqual([["sub_trial", "sub_monthly_1"]]);
+    expect(f.cancelOffers.rows.get(`${PROMOTION.id}:${f.owner.id}`)).toMatchObject({ from_plan_code: expected });
+    expect(f.warnings).toEqual(warned ? [expect.objectContaining({ code: "CANCEL_OFFER_FROM_PLAN_UNKNOWN", provider_subscription_id: "sub_trial" })] : []);
   });
 
   it("the return page's confirmation ends the trial too, when it arrives before the webhook", async () => {
@@ -478,11 +519,11 @@ describe("changing plans", () => {
     expect(g.gateway.portals).toEqual([]);
   });
 
-  it("a trial changes plan through Stripe's confirmation (the trial is kept), never through the schedule", async () => {
-    const f = await fixture();
-    expect((await f.portal({ flow: "change_plan", plan_code: "monthly" })).status).toBe(200);
-    expect(f.gateway.portals[0].flow).toEqual({ type: "subscription_update_confirm", subscription_id: "sub_trial", price_id: "price_tr_monthly" });
-    expect((await f.planChange("weekly")).status).toBe(409);
+  it.each([["monthly", "annual"], ["weekly", "monthly"]] as const)("a %s trial changes plan through Stripe's confirmation (the trial is kept), never through the schedule", async (plan, target) => {
+    const f = await fixture({ plan });
+    expect((await f.portal({ flow: "change_plan", plan_code: target })).status).toBe(200);
+    expect(f.gateway.portals[0].flow).toEqual({ type: "subscription_update_confirm", subscription_id: "sub_trial", price_id: `price_tr_${target}` });
+    expect((await f.planChange(plan === "weekly" ? "annual" : "weekly")).status).toBe(409);
   });
 
   it("refuses a plan set to end, the current plan, a renewal that is too close, and malformed requests", async () => {

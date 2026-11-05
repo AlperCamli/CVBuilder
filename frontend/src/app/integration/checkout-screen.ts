@@ -1,11 +1,11 @@
-import type { CheckoutTarget } from "../../content/pricing";
+import { TRIAL_PLAN, type CheckoutTarget } from "../../content/pricing";
 import type { CheckoutSource } from "./subscription-flow";
 import type { PromotionUnavailableDetail } from "./promotion-offer";
 
 // Decides what the checkout page says and offers before and after Stripe. Copy is
 // returned as translation keys; the component translates and fills {{plan}}/{{price}}.
 // Every "checkout" action opens Stripe directly, so no state routes through a second
-// confirmation page.
+// confirmation page. The trial is always the trial plan's (Monthly); Weekly is sold without one.
 
 export interface CheckoutChoice { plan: CheckoutTarget; withTrial: boolean }
 export const checkoutKey = (choice: CheckoutChoice) => `${choice.plan}:${choice.withTrial}`;
@@ -23,7 +23,7 @@ export interface CheckoutScreen {
   eyebrow: string;
   title: string;
   lead: string;
-  /** "trial" shows the 3-day offer at zero today; "plan" shows offerPlan at its list price; "none" only the actions. */
+  /** "trial" shows the 3-day offer at zero today (offerPlan: the trial plan); "plan" shows offerPlan at its list price; "none" only the actions. */
   offer: "trial" | "plan" | "none";
   offerPlan: CheckoutTarget;
   primary: CheckoutAction;
@@ -48,8 +48,9 @@ export interface CheckoutScreenInput {
 }
 
 const SEE_PLANS: CheckoutAction = { kind: "pricing", label: "See Pro plans" };
-const START_TRIAL: CheckoutAction = { kind: "checkout", plan: "weekly", withTrial: true, label: "Start my 3-day free trial" };
-const PAID_WEEKLY: CheckoutAction = { kind: "checkout", plan: "weekly", withTrial: false, label: "Continue with Weekly · {{price}}" };
+const START_TRIAL: CheckoutAction = { kind: "checkout", plan: TRIAL_PLAN, withTrial: true, label: "Start my 3-day free trial" };
+// After a used trial: the plan the trial would have become, paid now at its price.
+const PAID_TRIAL_PLAN: CheckoutAction = { kind: "checkout", plan: TRIAL_PLAN, withTrial: false, label: "Continue with {{plan}} · {{price}}" };
 const REGULAR_PRICE_LABEL = "Continue at the regular price · {{price}}";
 const PROMOTION_ISSUE: Record<PromotionUnavailableDetail, { title: string; lead: string }> = {
   ended: { title: "This offer has ended", lead: "The discount is no longer available, but you can still get Pro at the regular price. Your CV and next step are saved." },
@@ -127,18 +128,18 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
       mascot: "thinking", eyebrow: "YOUR NEXT STEP",
       title: outcome === "cancel" ? "Let’s pick up where you left off." : "You’ve already used your free trial",
       lead: "Your next step is saved. Choose a Pro plan to keep going.",
-      offer: "plan", offerPlan: "weekly", primary: SEE_PLANS, secondary: PAID_WEEKLY,
+      offer: "plan", offerPlan: TRIAL_PLAN, primary: SEE_PLANS, secondary: PAID_TRIAL_PLAN,
     };
   }
   if (trial) {
     return outcome === "cancel"
       ? { mascot: "guide", eyebrow: "NOTHING TO PAY TODAY", title: "Your free trial is still waiting.",
           lead: "Nothing is charged today. Cancel before the 3 days end and you won’t pay a thing.",
-          offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS }
+          offer: "trial", offerPlan: TRIAL_PLAN, primary: START_TRIAL, secondary: SEE_PLANS }
       : { mascot: "celebrate", eyebrow: "3 DAYS OF PRO, FREE",
           title: source ? TRIAL_HEADLINE[source].title : "Activate your 3-day free trial",
           lead: source ? TRIAL_HEADLINE[source].lead : "Your CV and selected next step are saved. We will take you back automatically after activation.",
-          offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: SEE_PLANS };
+          offer: "trial", offerPlan: TRIAL_PLAN, primary: START_TRIAL, secondary: SEE_PLANS };
   }
   if (outcome === "cancel" && promotion) {
     // Back from Stripe with the offer still on: the discount stays first, the trial is the way to try before paying.
@@ -153,7 +154,7 @@ export function checkoutScreen({ outcome, plan, trial, eligibility, error = fals
     return eligibility === true && !promotion
       ? { mascot: "guide", eyebrow: "GIVE PRO A TRY", title: "Why don’t you try the free trial first?",
           lead: "A little time to see what Pro can do. All the features. Three days to explore.",
-          offer: "trial", offerPlan: "weekly", primary: START_TRIAL, secondary: paid("Continue with {{plan}} · {{price}}") }
+          offer: "trial", offerPlan: TRIAL_PLAN, primary: START_TRIAL, secondary: paid("Continue with {{plan}} · {{price}}") }
       : { mascot: "guide", eyebrow: "YOUR NEXT STEP", title: "Let’s pick up where you left off.",
           lead: "Your next step is saved. You can retry your purchase or explore the Pro plans.",
           offer: "plan", offerPlan: plan, primary: paid(RETRY_LABEL[plan]), secondary: SEE_PLANS };

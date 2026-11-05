@@ -1,4 +1,6 @@
 -- Cancel-flow offers and the trial reminder queue (20261111120000_cancel_flow_offers.sql).
+-- The trial audience covers both trial plans: the legacy weekly trials and the monthly trials from 2026-11-05. The offer
+-- (Monthly, first month 50% off, paid at once) and the queue rules are the same for both.
 begin;
 
 create function pg_temp.mk_user(p_email text) returns uuid
@@ -20,6 +22,7 @@ $$;
 do $$
 declare
   promo uuid; email_promo uuid; trialing uuid; upgraded uuid; upgraded_canceled uuid; superseded uuid; plain_cancel uuid;
+  m_trialing uuid; m_upgraded uuid; m_upgraded_canceled uuid; m_plain_cancel uuid;
 begin
   insert into public.promotions(slug, name, percent_off, plan_codes, duration, stripe_coupon_id, site_url, channel, cancel_audience)
   values ('cancel-test', 'Cancel test', 50, array['monthly'], 'once', 'coupon_cancel', 'https://example.invalid', 'cancel_flow', 'trial')
@@ -88,9 +91,40 @@ begin
   plain_cancel := pg_temp.mk_user('offer-plain-cancel@example.invalid');
   perform pg_temp.mk_sub(plain_cancel, 'sub_plain', 'weekly', 'canceled', true, now() - interval '1 hour');
 
+  -- The same cases for a monthly trial (the trial plan from 2026-11-05): the offer is made for the monthly trial, and
+  -- paying it replaces the monthly trial with a paid monthly subscription. The monthly trial ends a little later so the
+  -- queue order is fixed.
+  m_trialing := pg_temp.mk_user('offer-m-trialing@example.invalid');
+  perform pg_temp.mk_sub(m_trialing, 'sub_m_trialing', 'monthly', 'trialing', true);
+  update public.subscriptions set trial_end = now() + interval '70 hours', current_period_end = now() + interval '70 hours'
+  where provider_subscription_id = 'sub_m_trialing';
+  insert into public.promotion_cancel_offers(promotion_id, user_id, provider_subscription_id, from_plan_code, declined_at)
+  values (promo, m_trialing, 'sub_m_trialing', 'monthly', now());
+  m_upgraded := pg_temp.mk_user('offer-m-upgraded@example.invalid');
+  perform pg_temp.mk_sub(m_upgraded, 'sub_m_upgraded_trial', 'monthly', 'inactive', true);
+  perform pg_temp.mk_sub(m_upgraded, 'sub_m_upgraded_monthly', 'monthly', 'active', false);
+  insert into public.promotion_cancel_offers(promotion_id, user_id, provider_subscription_id, from_plan_code, last_checkout_at, accepted_at)
+  values (promo, m_upgraded, 'sub_m_upgraded_trial', 'monthly', now(), now());
+  m_upgraded_canceled := pg_temp.mk_user('offer-m-upgraded-canceled@example.invalid');
+  perform pg_temp.mk_sub(m_upgraded_canceled, 'sub_m_uc_trial', 'monthly', 'canceled', true, now() - interval '1 minute');
+  perform pg_temp.mk_sub(m_upgraded_canceled, 'sub_m_uc_monthly', 'monthly', 'active', false);
+  m_plain_cancel := pg_temp.mk_user('offer-m-plain-cancel@example.invalid');
+  perform pg_temp.mk_sub(m_plain_cancel, 'sub_m_plain', 'monthly', 'canceled', true, now() - interval '1 hour');
+  update public.subscriptions set trial_end = now() + interval '70 hours' where provider_subscription_id = 'sub_m_plain';
+
   if (select string_agg(email || ':' || category, ' ' order by sort_order) from public.trial_reminder_queue where email like 'offer-%')
-     <> 'offer-trialing@example.invalid:in_trial offer-plain-cancel@example.invalid:trial_canceled' then
+     <> 'offer-trialing@example.invalid:in_trial offer-m-trialing@example.invalid:in_trial '
+        'offer-plain-cancel@example.invalid:trial_canceled offer-m-plain-cancel@example.invalid:trial_canceled' then
     raise exception 'queue rows wrong: %', (select string_agg(email || ':' || category, ' ' order by sort_order) from public.trial_reminder_queue where email like 'offer-%');
+  end if;
+  -- The monthly trial's row carries the monthly price and interval (the reminder says "a month").
+  if (select concat_ws('/', plan_code, billing_interval, unit_amount, price_display) from public.trial_reminder_queue where user_id = m_trialing)
+     is distinct from 'monthly/month/34990/349,90 TL' then
+    raise exception 'monthly trial queue row wrong: %', (select row_to_json(q) from public.trial_reminder_queue q where q.user_id = m_trialing);
+  end if;
+  if (select from_plan_code from public.promotion_cancel_offers where user_id = m_upgraded) is distinct from 'monthly'
+     or (select accepted_at from public.promotion_cancel_offers where user_id = m_upgraded) is null then
+    raise exception 'monthly trial offer row wrong';
   end if;
 
   -- A pending plan change is stored on the subscription.

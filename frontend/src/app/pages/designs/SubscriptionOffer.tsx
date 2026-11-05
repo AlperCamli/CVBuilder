@@ -128,8 +128,7 @@ export function SubscriptionOffer({
               </button>
               <small>
                 {price.renewal}.<br />
-                Confirm your plan at checkout.
-                {period === "weekly" && <> This choice has no trial.</>}
+                Confirm your plan at checkout. This choice has no trial.
               </small>
             </div>
           </div>
@@ -157,7 +156,7 @@ export function SubscriptionOffer({
           <StartLink className="v2-free-link">
             Start Free Trial <ArrowRight size={15} />
           </StartLink>
-          <p>Card required. Renews weekly after 3 days unless cancelled.</p>
+          <p>Card required. Continues as Monthly Pro after 3 days unless cancelled.</p>
         </article>
       </div>
       {full ? (

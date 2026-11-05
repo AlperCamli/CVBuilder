@@ -1,6 +1,6 @@
 begin;
 do $$
-declare u uuid; consenting uuid; internal uuid; sub uuid; other uuid; usage public.usage_counters; today date:=(now() at time zone 'UTC')::date;
+declare u uuid; consenting uuid; internal uuid; sub uuid; other uuid; m_user uuid; m_sub uuid; usage public.usage_counters; today date:=(now() at time zone 'UTC')::date;
 begin
   set local role service_role;
   insert into public.users(auth_user_id,email) values(gen_random_uuid(),'money@example.invalid') returning id into u;
@@ -44,6 +44,23 @@ begin
   update public.subscriptions set status='inactive' where id=other;
   if not exists(select 1 from public.subscription_events where subscription_id=other and event_type='superseded' and source='app' and stripe_event_id is null) then raise exception 'supersede not recorded'; end if;
 
+  -- The free trial on the Monthly plan (from 2026-11-05) writes the same history as the weekly one: the event kinds
+  -- follow the status, and the plan is whatever the subscription says.
+  insert into public.users(auth_user_id,email) values(gen_random_uuid(),'money-monthly-trial@example.invalid') returning id into m_user;
+  insert into public.subscriptions(user_id,provider,provider_customer_id,provider_subscription_id,plan_code,status,trial_start,trial_end,
+      current_period_start,current_period_end,currency,unit_amount,billing_interval,last_provider_event_id,last_provider_event_at)
+    values(m_user,'stripe','cus_money_m','sub_money_m','monthly','trialing',now(),now()+interval '3 days',now(),now()+interval '3 days',
+      'try',34990,'month','evt_m1',now()) returning id into m_sub;
+  update public.subscriptions set status='active',current_period_start=now()+interval '3 days',current_period_end=now()+interval '33 days',
+      last_provider_event_id='evt_m2' where id=m_sub;
+  if (select string_agg(event_type||':'||coalesce(from_plan_code,'-')||'>'||to_plan_code,',' order by stripe_event_id,event_type)
+      from public.subscription_events where subscription_id=m_sub)
+    is distinct from 'created:->monthly,trial_started:->monthly,trial_converted:monthly>monthly' then
+    raise exception 'monthly trial history wrong: %',(select string_agg(event_type||':'||coalesce(from_plan_code,'-')||'>'||to_plan_code,',' order by stripe_event_id,event_type) from public.subscription_events where subscription_id=m_sub);
+  end if;
+  usage:=public.increment_usage_counters(m_user,null,0,1,0,0);
+  if usage.plan_code is distinct from 'monthly' or usage.subscription_id is distinct from m_sub then raise exception 'monthly usage not plan-stamped'; end if;
+
   -- Paywall hits: anonymous without consent, attributed with consent, skipped for internal accounts.
   perform public.record_entitlement_denial(u,'free','app_access','ai','subscription_inactive');
   perform public.record_entitlement_denial(u,'free','app_access','ai','subscription_inactive');
@@ -76,6 +93,7 @@ begin
   update public.users set analytics=true where id=u;
   perform public.record_entitlement_denial(u,'free','export_pdf',null,'no_subscription');
   insert into public.checkout_attempts(user_id,plan_code,trial_requested,checkout_session_id,outcome) values(u,'weekly',true,'cs_money','completed');
+  insert into public.checkout_attempts(user_id,plan_code,trial_requested,trial_applied,checkout_session_id,outcome) values(u,'monthly',true,true,'cs_money_m','completed');
   insert into public.trial_transition_cohorts(cohort,granted_at,cohort_size) values('release_2026_10_24',now(),10) on conflict(cohort) do nothing;
   insert into public.trial_transition_grants(user_id,redeemed_at) values(u,now()) on conflict(user_id) do update set redeemed_at=now();
   perform public.archive_billing_history(u);

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { InternalServerError } from "../../shared/errors/app-error";
 import type { SubscriptionRecord } from "../../shared/types/domain";
+import { TRIAL_CAPABLE_PLAN_CODES } from "../entitlements/plan-definitions";
+
+// Stripe statuses of a subscription whose first payment never completed: it never gave access.
+export const NEVER_ACTIVATED_STATUSES = ["incomplete", "incomplete_expired"] as const;
 
 export interface SyncSubscriptionInput {
   user_id: string;
@@ -71,6 +75,7 @@ const toSubscriptionRecord = (row: Record<string, unknown>): SubscriptionRecord 
     status: String(row.status),
     current_period_start: (row.current_period_start as string | null) ?? null,
     current_period_end: (row.current_period_end as string | null) ?? null,
+    trial_start: (row.trial_start as string | null) ?? null,
     trial_end: (row.trial_end as string | null) ?? null,
     cancel_at_period_end: Boolean(row.cancel_at_period_end),
     scheduled_plan_code: (row.scheduled_plan_code as string | null) ?? null,
@@ -142,15 +147,15 @@ export class SupabaseBillingSubscriptionsRepository implements BillingSubscripti
   }
 
   async hasUsedTrial(userId: string): Promise<boolean> {
-    // Legacy Pro and the new Weekly plan are the only plans that have ever
-    // granted trials. A real Stripe subscription id is the durable signal that a
-    // user entered one of those trial-capable checkout flows.
+    // Used = any real Stripe subscription (provider_subscription_id) on a plan that has ever granted the trial, even
+    // one bought without it (so past paying Monthly customers get no free trial), or any row Stripe reported a trial on
+    // (trial_start), whatever its status. A subscription that never activated (incomplete / incomplete_expired, e.g. a
+    // failed 3-D Secure after Checkout) and had no trial does not use it up.
     const { data, error } = await this.supabaseClient
       .from("subscriptions")
       .select("id")
       .eq("user_id", userId)
-      .in("plan_code", ["pro", "weekly"])
-      .not("provider_subscription_id", "is", null)
+      .or(`and(plan_code.in.(${TRIAL_CAPABLE_PLAN_CODES.join(",")}),provider_subscription_id.not.is.null,status.not.in.(${NEVER_ACTIVATED_STATUSES.join(",")})),trial_start.not.is.null`)
       .limit(1);
 
     if (error) {

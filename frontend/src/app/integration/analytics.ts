@@ -2,6 +2,7 @@ import { analyticsAllowed, PRIVACY_EVENT, CONSENT_KEY, getPrivacyConfig } from "
 import { analyticsPage, type AnalyticsPage } from "./analytics-pages";
 import { trackFunnelEvent } from "./funnel-events";
 import { adConsentState, advertisingTagLoaded } from "./advertising";
+import { isCheckoutTarget, PLAN_VALUE_USD } from "../../content/pricing";
 type AnalyticsValue = string | number | boolean | null | undefined;
 
 export type AnalyticsParams = Record<string, AnalyticsValue>;
@@ -146,13 +147,13 @@ export function trackCtaClick(location: string, destination?: string): void {
   trackEvent("cta_click", {location, destination});
 }
 
+// A trial checkout is worth 0 today whatever plan it converts to (weekly before 2026-11-05, monthly since);
+// a paid one is worth its plan's price.
 const normalizePlanValue = (planCode?: string, trialApplied?: boolean): number | undefined => {
   if (planCode === "lifetime") return 99;
-  if (planCode === "pro") return trialApplied ? 0 : 10;
-  if (planCode === "weekly") return trialApplied ? 0 : 4.99;
-  if (planCode === "monthly") return 14.99;
-  if (planCode === "annual") return 99.9;
-  return undefined;
+  if (planCode !== "pro" && !isCheckoutTarget(planCode)) return undefined;
+  if (trialApplied) return 0;
+  return planCode === "pro" ? 10 : PLAN_VALUE_USD[planCode];
 };
 
 export function initializeAnalytics(): void {

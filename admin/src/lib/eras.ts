@@ -55,6 +55,11 @@ export const ERAS: Era[] = [
       "stickiness",
     ],
   },
+  {
+    date: "2026-11-05",
+    label: "Free trial converts to Monthly (was Weekly)",
+    metrics: ["trial_to_paid", "kpi_overview", "revenue", "mrr_movement", "plan_mix", "checkout_funnel", "subscriber_ltv"],
+  },
 ];
 
 export const erasFor = (metric: string, eras: Era[] = ERAS) => eras.filter((e) => e.metrics.includes(metric));

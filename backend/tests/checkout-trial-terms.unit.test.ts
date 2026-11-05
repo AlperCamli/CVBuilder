@@ -24,7 +24,7 @@ const build = (locale: "en" | "tr" = "en") => {
   } satisfies StripeGateway;
   const billing = new BillingService(
     users, subscriptions, new UsageService(new InMemoryUsageRepository()),
-    new EntitlementsService(createPlanCatalog({ weeklyStripePriceId: config.billing.stripeWeeklyPriceId })),
+    new EntitlementsService(createPlanCatalog({ weeklyStripePriceId: config.billing.stripeWeeklyPriceId, monthlyStripePriceId: config.billing.stripeMonthlyPriceId })),
     gateway,
     {
       provider: "stripe", checkoutSuccessUrl: config.billing.checkoutSuccessUrl, checkoutCancelUrl: config.billing.checkoutCancelUrl,
@@ -32,8 +32,8 @@ const build = (locale: "en" | "tr" = "en") => {
     }
   );
   const user = () => users.ensureByAuthIdentity({ auth_user_id: "auth-1", email: "payer@example.invalid", full_name: null, locale });
-  const seed = (status: string, extra: { cancel_at_period_end?: boolean } = {}) => (userId: string) => subscriptions.seed({
-    id: "row-1", user_id: userId, provider: "stripe", provider_customer_id: "cus_1", provider_subscription_id: "sub_1", plan_code: "weekly", status,
+  const seed = (status: string, extra: { cancel_at_period_end?: boolean; plan_code?: string } = {}) => (userId: string) => subscriptions.seed({
+    id: "row-1", user_id: userId, provider: "stripe", provider_customer_id: "cus_1", provider_subscription_id: "sub_1", plan_code: extra.plan_code ?? "monthly", status,
     current_period_start: null, current_period_end: new Date(Date.now() + 86_400_000).toISOString(), cancel_at_period_end: extra.cancel_at_period_end ?? false,
     created_at: "2026-10-01", updated_at: "2026-10-01"
   });
@@ -53,13 +53,16 @@ describe("trial terms at Stripe Checkout", () => {
   it("explains the trial next to the submit button only when a trial applies", async () => {
     const f = build("tr");
     const user = await f.user();
-    await f.billing.createCheckoutSession(user.id, { plan_code: "weekly", time_zone: "Europe/Istanbul" });
+    await f.billing.createCheckoutSession(user.id, { plan_code: "monthly", with_trial: true, time_zone: "Europe/Istanbul" });
     const message = f.createCheckoutSession.mock.calls[0][0].submit_message;
     expect(message).toBe(trialSubmitMessage("tr", trialEndLabel("tr", 3, "Europe/Istanbul")));
-    expect(f.createCheckoutSession.mock.calls[0][0].trial_period_days).toBe(3);
+    expect(f.createCheckoutSession.mock.calls[0][0]).toMatchObject({ price_id: "price_monthly", trial_period_days: 3 });
 
-    await f.billing.createCheckoutSession(user.id, { plan_code: "weekly", with_trial: false });
+    await f.billing.createCheckoutSession(user.id, { plan_code: "monthly", with_trial: false });
     expect(f.createCheckoutSession.mock.calls[1][0].submit_message).toBeUndefined();
+    // Weekly is a paid plan without a trial: no "won't be charged today" line.
+    await f.billing.createCheckoutSession(user.id, { plan_code: "weekly", with_trial: false });
+    expect(f.createCheckoutSession.mock.calls[2][0]).toMatchObject({ price_id: "price_weekly", trial_period_days: null, submit_message: undefined });
   });
 });
 
@@ -69,7 +72,7 @@ describe("billing portal reachability", () => {
       const f = build();
       const user = await f.user();
       f.seed(status)(user.id);
-      const rejected = f.billing.createCheckoutSession(user.id, { plan_code: "weekly" });
+      const rejected = f.billing.createCheckoutSession(user.id, { plan_code: "monthly" });
       await expect(rejected).rejects.toBeInstanceOf(ConflictError);
       await expect(rejected).rejects.toMatchObject({ details: { reason: "subscription_active", billing_issue: true } });
       expect(f.createCheckoutSession).not.toHaveBeenCalled();
@@ -80,10 +83,10 @@ describe("billing portal reachability", () => {
     }
   });
 
-  it("opens trial cancellation directly and falls back to the portal home when Stripe refuses the deep link", async () => {
+  it.each(["monthly", "weekly"])("opens %s trial cancellation directly and falls back to the portal home when Stripe refuses the deep link", async planCode => {
     const f = build();
     const user = await f.user();
-    f.seed("trialing")(user.id);
+    f.seed("trialing", { plan_code: planCode })(user.id);
     await f.billing.createPortalSession(user.id, { flow: "cancel" });
     expect(f.createPortalSession.mock.calls[0][0].flow).toEqual({ type: "subscription_cancel", subscription_id: "sub_1" });
 

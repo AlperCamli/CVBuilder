@@ -474,7 +474,8 @@ export function createDemoStore(
           ],
           interval: ["week", "month", "year"][i],
           interval_count: 1,
-          trial_days: i === 0 ? 3 : 0,
+          // The free trial converts to Monthly (Weekly before 2026-11-05).
+          trial_days: code === "monthly" ? 3 : 0,
         })),
       };
     if (path === "/dashboard")

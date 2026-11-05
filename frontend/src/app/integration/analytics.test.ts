@@ -135,3 +135,21 @@ describe("signup and CTA tracking", () => {
       ["/tr", "/tr/pricing", "/support", "/tr/support", "/app/checkout"]);
   });
 });
+
+describe("checkout value", () => {
+  it("values a trial checkout at zero whatever plan it converts to, and a paid one at its plan price", () => {
+    consent.allowed = true;
+    const stored = () => JSON.parse(vi.mocked(window.sessionStorage.setItem).mock.calls.at(-1)![1] as string);
+    for (const plan_code of ["weekly", "monthly", "annual", "pro"]) {
+      analytics.rememberCheckoutAttribution({ checkout_session_id: "cs_trial", plan_code, trial_applied: true });
+      expect(stored()).toMatchObject({ plan_code, value: 0, currency: "USD" });
+    }
+    for (const [plan_code, value] of [["weekly", 4.99], ["monthly", 14.99], ["annual", 99.9]] as const) {
+      analytics.rememberCheckoutAttribution({ checkout_session_id: "cs_paid", plan_code, trial_applied: false });
+      expect(stored()).toMatchObject({ plan_code, value });
+    }
+    // A value computed from the live price wins over the USD list price.
+    analytics.rememberCheckoutAttribution({ plan_code: "monthly", trial_applied: false, value: 349.9, currency: "TRY" });
+    expect(stored()).toMatchObject({ value: 349.9, currency: "TRY" });
+  });
+});

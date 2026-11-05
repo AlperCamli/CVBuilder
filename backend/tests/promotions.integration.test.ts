@@ -72,8 +72,8 @@ class InMemoryPromotionsRepository implements PromotionsRepository {
 const tryPrices = (): BillingPrices => ({
   market: "TR", currency: "try", available: true, quote: "signed-quote",
   plans: [
-    { code: "weekly", amount: 6990, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 29990, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "weekly", amount: 6990, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: 29990, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: 149990, interval: "year", interval_count: 1, trial_days: 0 }
   ]
 });
@@ -248,18 +248,23 @@ describe("promotional checkout", () => {
     expect(f.attempts).toEqual([expect.objectContaining({ outcome: "open", checkout_session_id: "cs_promo_1", promotion_id: f.repository.promotion.id })]);
   });
 
-  it("forces the trial off even for a trial-eligible weekly checkout, and never reports a trial change", async () => {
-    const f = await promoFixture({ planCodes: ["weekly"] });
-    const response = await f.checkout({ plan_code: "weekly", with_trial: true, promotion_token: "tok_owner" });
+  it("forces the trial off even for a trial-eligible Monthly checkout, and never reports a trial change", async () => {
+    const f = await promoFixture();
+    const response = await f.checkout({ plan_code: "monthly", with_trial: true, promotion_token: "tok_owner" });
     expect(response.status).toBe(200);
-    expect(response.body.data).toMatchObject({ trial_applied: false, trial_period_days: null, promotion: { amount_due: 3495 } });
+    expect(response.body.data).toMatchObject({ trial_applied: false, trial_period_days: null, promotion: { amount_due: 14995 } });
     expect(f.gateway.checkouts[0].trial_period_days).toBeNull();
     expect(f.gateway.checkouts[0].submit_message).toBeUndefined();
     // A user who already used a trial gets no "Trial eligibility changed" 409 for a promotional checkout.
-    const g = await promoFixture({ planCodes: ["weekly"] });
+    const g = await promoFixture();
     g.subscriptionsRepository.seed({ id: "prior", user_id: g.owner.id, provider: "stripe", provider_customer_id: "cus_prior", provider_subscription_id: "sub_prior", plan_code: "weekly", status: "canceled", current_period_start: "2026-01-01T00:00:00.000Z", current_period_end: "2026-01-04T00:00:00.000Z", cancel_at_period_end: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-04T00:00:00.000Z" });
-    expect((await g.checkout({ plan_code: "weekly", promotion_token: "tok_owner" })).status).toBe(200);
+    expect((await g.checkout({ plan_code: "monthly", promotion_token: "tok_owner" })).status).toBe(200);
     expect(g.gateway.checkouts[0].trial_period_days).toBeNull();
+    // A promotion on Weekly charges now as well: its explicit with_trial is not refused as trial_unavailable.
+    const h = await promoFixture({ planCodes: ["weekly"] });
+    const weekly = await h.checkout({ plan_code: "weekly", with_trial: true, promotion_token: "tok_owner" });
+    expect(weekly.status).toBe(200);
+    expect(weekly.body.data).toMatchObject({ trial_applied: false, promotion: { amount_due: 3495 } });
   });
 
   it("puts the coupon in the checkout reservation key and leaves regular checkouts untagged", async () => {

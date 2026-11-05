@@ -37,11 +37,12 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
   const appUser = { id: userId, auth_user_id: userId, email: user.email, full_name: "Test Candidate", locale, default_cv_language: "en", onboarding_completed: transition, onboarding_state: transition ? { completed_at: now } : {}, onboarding_answers: {}, created_at: now, updated_at: now };
   const entitlements = { plan_code: "free", limits, remaining: limits, can_generate_tailored_cv: true, can_export_pdf: true, can_export_docx: true, can_use_ai_actions: true };
   const usage = { plan_code: "free", limits, remaining: limits, period_month: now.slice(0, 7), tailored_cv_generations_count: 0, exports_count: 0, ai_actions_count: 0, storage_bytes_used: 0 };
-  let active = false, checkoutInput, selectedPlan = "weekly", trial = true, masterCreated = transition;
+  let active = false, checkoutInput, selectedPlan = "monthly", trial = true, masterCreated = transition;
   const billing = () => ({ app_access: active, can_edit_existing_cvs: transition || active, subscription_required: true, trial_transition: transition ? { eligible: !active && !renewedTrialUsed } : null, plan_code: active ? selectedPlan : "free", subscription_status: active ? trial ? "trialing" : "active" : "inactive", current_period_start: now, current_period_end: new Date(Date.now() + 3 * 86400000).toISOString(), cancel_at_period_end: false, trial_eligible: !active && (!transition || !renewedTrialUsed), provider: { provider: "stripe" }, entitlement_summary: entitlements });
   const prices = { market, currency: market === "TR" ? "try" : "usd", available: true, quote: "isolated-pricing", plans: [
-    { code: "weekly", amount: market === "TR" ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: market === "TR" ? 34990 : 1499, interval: "month", interval_count: 1, trial_days: 0 },
+    // Since 2026-11-05 the trial is on Monthly; Weekly is sold without one.
+    { code: "weekly", amount: market === "TR" ? 14990 : 499, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: market === "TR" ? 34990 : 1499, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: market === "TR" ? 149900 : 9990, interval: "year", interval_count: 1, trial_days: 0 }
   ] };
   const template = { id: templateId, name: "Mosaic Rose", slug: "mosaic-columns-rose", status: "active", module_type: "standard", preview_config: {}, export_config: {}, created_at: now, updated_at: now };
@@ -98,7 +99,10 @@ async function fixture({ signedIn = true, method = "email", failPayment = false,
       if (path === "/billing/usage") return void await respond(usage);
       if (path === "/billing/entitlements") return void await respond(entitlements);
       if (path === "/billing/checkout") {
-        checkoutInput = body; selectedPlan = body.plan_code; trial = selectedPlan === "weekly" && body.with_trial !== false;
+        // As the server does: a trial only on the trial plan, and an explicit trial on another plan is refused.
+        const planTrial = prices.plans.find(item => item.code === body.plan_code)?.trial_days > 0;
+        if (body.with_trial === true && !planTrial) return void await req.respond({ status: 409, headers, body: JSON.stringify({ success: false, error: { code: "CONFLICT", message: "This plan has no free trial.", details: { reason: "trial_unavailable" } } }) });
+        checkoutInput = body; selectedPlan = body.plan_code; trial = planTrial && body.with_trial !== false;
         notifyCheckoutStarted();
         await checkoutReady;
         if (checkoutError && !trial) return void await req.respond({ status: 502, headers, body: JSON.stringify({ success: false, error: { code: "BILLING_PROVIDER_ERROR", message: "Unable to open payment. Please try again." } }) });
@@ -229,9 +233,10 @@ try {
         await f.page.waitForSelector('[role="dialog"]', { hidden: true });
         await clickText(f.page, "Tailor for a job");
         await waitText(f.page, "Tailor your CV with Pro");
-        await clickText(f.page, "Start weekly plan");
+        await clickText(f.page, "Start monthly plan");
         await waitText(f.page, "Test payment details");
         const checkout = f.requests.findLast(row => row.path === "/billing/checkout").body;
+        assert.equal(checkout.plan_code, "monthly");
         assert.equal(checkout.with_trial, false);
         assert.equal(new URL(checkout.success_url).searchParams.get("next"), `/app/tailor/${f.cvId}`);
         await clickText(f.page, "Activate subscription");
@@ -359,7 +364,8 @@ try {
       await waitText(f.page, "Test payment details");
       const checkout = f.requests.find(row => row.path === "/billing/checkout");
       assert.equal(checkout.body.plan_code, plan);
-      if (plan === "weekly") assert.equal(checkout.body.with_trial, false);
+      // A paid choice always says so: Monthly carries the trial, so a paid Monthly checkout must opt out explicitly.
+      assert.equal(checkout.body.with_trial, false);
       assert.equal(f.requests.filter(row => /master-cvs|guest-imports|onboarding-answers/.test(row.path)).length, 0);
       await clickText(f.page, "Activate subscription");
       await f.page.waitForSelector(".ob-create-zone");
@@ -442,15 +448,17 @@ try {
   {
     const f = await fixture({ market: "TR" });
     try {
+      // A Stripe return from a weekly-trial checkout opened before the switch: "trial wins", it resumes as the Monthly trial.
       await f.page.goto(`${base}/app/checkout?plan=weekly&trial=1&checkout=cancel`, { waitUntil: "networkidle0" });
-      await waitText(f.page, "Why don’t you try the free trial first?");
-      assert((await f.page.$eval(".checkout-cancelled-terms", el => el.innerText)).includes("149.90"));
+      await waitText(f.page, "Your free trial is still waiting.");
+      const terms = await f.page.$eval(".checkout-screen-terms", el => el.innerText);
+      assert(terms.includes("349.90") && !terms.includes("149.90"), terms);
       await clickText(f.page, "Start my 3-day free trial");
       await waitText(f.page, "Test payment details");
       const checkout = f.requests.find(row => row.path === "/billing/checkout").body;
-      assert.equal(checkout.plan_code, "weekly");
-      assert.notEqual(checkout.with_trial, false);
-      console.log("PASS canceled trial resumes trial activation with the regional weekly renewal price");
+      assert.equal(checkout.plan_code, "monthly");
+      assert.equal(checkout.with_trial, true);
+      console.log("PASS an old weekly-trial return resumes as the Monthly trial with the regional monthly renewal price");
     } finally { await f.close(); }
   }
   {

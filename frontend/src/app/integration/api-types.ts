@@ -1185,6 +1185,9 @@ export interface CancelOfferCheckoutResponseData {
   amount_due: number;
 }
 
+// details.reason of a 409 from POST /billing/checkout. trial_unavailable: with_trial: true on a plan without a trial.
+export type BillingCheckoutConflictReason = "checkout_pending" | "subscription_active" | "pricing_changed" | "trial_unavailable" | "promotion_unavailable";
+
 export interface CreateCheckoutResponseData {
   currency?: string;
   amount?: number;

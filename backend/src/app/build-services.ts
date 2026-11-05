@@ -88,7 +88,7 @@ import {
   StripeBillingGateway,
   type StripeGateway
 } from "../modules/billing/stripe-gateway";
-import { createPlanCatalog } from "../modules/entitlements/plan-definitions";
+import { createPlanCatalog, trialPlanCodes } from "../modules/entitlements/plan-definitions";
 import { EntitlementsService } from "../modules/entitlements/entitlements.service";
 import { SupabaseUsageRepository, type UsageRepository } from "../modules/usage/usage.repository";
 import { UsageService } from "../modules/usage/usage.service";
@@ -279,7 +279,9 @@ export const buildDefaultServices = (
     productIds: { weekly: config.billing.weeklyProductId ?? null, monthly: config.billing.monthlyProductId ?? null, annual: config.billing.annualProductId ?? null },
     prices: marketPrices,
     portals: { GLOBAL: config.billing.usdPortalConfigurationId ?? null, TR: config.billing.tryPortalConfigurationId ?? null },
-    historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays
+    historicalPrices: config.billing.historicalPrices, trialDays: config.billing.trialPeriodDays,
+    // The same catalog checkout reads, so the prices shown and the trial granted always agree.
+    trialPlans: trialPlanCodes(entitlementsService.getPlanCatalog())
   });
   const promotionsService = new PromotionsService(
     overrides?.promotionsRepository ?? new SupabasePromotionsRepository(supabaseClients.serviceRoleClient), regionalPricing, { logger }
@@ -303,7 +305,8 @@ export const buildDefaultServices = (
         trialPeriodDays: config.billing.trialPeriodDays,
         monetization: monetizationRepository,
         promotions: promotionsService,
-        cancelOffers: promotionsService
+        cancelOffers: promotionsService,
+        logger
       }
     );
 

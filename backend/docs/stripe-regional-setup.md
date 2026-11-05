@@ -129,3 +129,25 @@ Store signing secrets and Stripe secret keys as Secret variables. Price, product
 Apply the additive database migration and install the localized Supabase email templates as described in [the release guide](localization-regional-pricing-release.md). Configure/test the backend before deploying the localized frontend. TRY checkout remains disabled until all three TRY prices and the TRY portal validate.
 
 The setup helper is provided for you to run after filling the IDs. No Stripe portal configuration or live deployment is created merely by adding this script to the repository.
+
+## 6. The free trial
+
+The 3-day free trial is not a Stripe object: it is the Checkout Session parameter
+`subscription_data.trial_period_days` (`BILLING_TRIAL_PERIOD_DAYS`, default `3`) that the backend adds to a checkout of
+the plan catalog's trial plan. Since 2026-11-05 that is **Monthly** (it was Weekly before), on the existing USD and TRY
+monthly prices; at the trial end Stripe charges the monthly price of the customer's market. Moving the trial between
+plans needs no new product, price, coupon or portal configuration, and no environment change.
+
+To check the trial end to end in Stripe **test mode** (never live), run from `backend/`:
+
+```sh
+npx tsx scripts/verify-regional-trial-sandbox.ts
+```
+
+It reads the trial plan from the plan catalog, reads that plan's current prices for both markets with the configured
+key (read-only), copies them into test mode, completes a hosted test-card Checkout with the trial, checks that nothing
+is due today and the subscription is `trialing` for 3 days, advances a test clock past the trial end, checks that the
+first `subscription_cycle` invoice charged the full plan price, then archives and deletes everything it created.
+Process environment values override `.env.local`, so pass the production price IDs to check exactly the live amounts.
+Run on 2026-11-05 with the production price IDs: TRY 349.90 and USD 14.99 monthly, due today 0, then paid in full
+after 3 days in both markets.

@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../../src/shared/config/env";
 import { getCurrentPeriodMonthUtc } from "../../src/shared/utils/date";
 import type { AuthIdentity, AuthProvider } from "../../src/modules/auth/auth.types";
-import type {
-  BillingSubscriptionsRepository,
-  SyncSubscriptionInput
+import {
+  NEVER_ACTIVATED_STATUSES,
+  type BillingSubscriptionsRepository,
+  type SyncSubscriptionInput
 } from "../../src/modules/billing/subscriptions.repository";
+import { TRIAL_CAPABLE_PLAN_CODES } from "../../src/modules/entitlements/plan-definitions";
 import type {
   FreeTierMarkers,
   FreeTierUse,
@@ -168,9 +170,12 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
     return latest[0] ?? null;
   }
 
+  // Mirrors SupabaseBillingSubscriptionsRepository.hasUsedTrial.
   async hasUsedTrial(userId: string): Promise<boolean> {
     return this.listByUser(userId).some(
-      (row) => ["pro", "weekly"].includes(row.plan_code) && row.provider_subscription_id !== null
+      (row) => ((TRIAL_CAPABLE_PLAN_CODES as readonly string[]).includes(row.plan_code) && row.provider_subscription_id !== null
+        && !(NEVER_ACTIVATED_STATUSES as readonly string[]).includes(row.status))
+        || Boolean(row.trial_start)
     );
   }
 
@@ -272,6 +277,8 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
         ...(input.tracking && "scheduled_plan_code" in input.tracking
           ? { scheduled_plan_code: input.tracking.scheduled_plan_code ?? null, scheduled_change_at: input.tracking.scheduled_change_at ?? null }
           : {}),
+        ...(input.tracking && "trial_start" in input.tracking ? { trial_start: input.tracking.trial_start ?? null } : {}),
+        ...(input.tracking && "trial_end" in input.tracking ? { trial_end: input.tracking.trial_end ?? null } : {}),
         updated_at: nowIso()
       };
 
@@ -293,6 +300,8 @@ export class InMemorySubscriptionsRepository implements BillingSubscriptionsRepo
       cancel_at_period_end: input.cancel_at_period_end,
       scheduled_plan_code: input.tracking?.scheduled_plan_code ?? null,
       scheduled_change_at: input.tracking?.scheduled_change_at ?? null,
+      trial_start: input.tracking?.trial_start ?? null,
+      trial_end: input.tracking?.trial_end ?? null,
       created_at: nowIso(),
       updated_at: nowIso()
     };

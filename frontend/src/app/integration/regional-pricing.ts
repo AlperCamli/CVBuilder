@@ -5,6 +5,7 @@ import { integrationConfig } from "./config";
 import { createApiClient } from "./api-client";
 import {
   PLAN_CARDS,
+  trialPlanCode,
   type CheckoutTarget,
   type PlanCard,
 } from "../../content/pricing";
@@ -63,14 +64,27 @@ export function formatMoney(amount: number, currency: string): string {
     currencyDisplay: "narrowSymbol",
   }).format(amount / 100);
 }
+// What the trial renews into, by the trial plan's billing interval (Monthly since 2026-11-05, Weekly before).
+const TRIAL_RENEWAL: Partial<Record<BillingPrices["plans"][number]["interval"], string>> = {
+  week: "After 3 days, {{amount}} billed weekly unless cancelled.",
+  month: "After 3 days, {{amount}} a month unless you cancel.",
+};
+/** The plan the free trial converts to, from the live catalog; null when prices are unavailable. */
+export function trialPlanPrice(prices: BillingPrices | null): BillingPrices["plans"][number] | null {
+  if (!prices?.available) return null;
+  const code = trialPlanCode(prices);
+  return prices.plans.find((plan) => plan.code === code) ?? null;
+}
 export function regionalCards(prices: BillingPrices | null): PlanCard[] {
+  const trialPlan = trialPlanPrice(prices);
+  const trialRenewal = trialPlan ? TRIAL_RENEWAL[trialPlan.interval] : undefined;
   return PLAN_CARDS.map((card) => {
     if (card.code === "trial")
       return {
         ...card,
         name: t("3-day free trial"),
         weeklyPrice: prices ? formatMoney(0, prices.currency) : "0",
-        totalPrice: prices?.available && prices.plans.some(p => p.code === "weekly") ? t("After 3 days, {{amount}} billed weekly unless cancelled.", { amount: formatMoney(prices.plans.find(p => p.code === "weekly")!.amount, prices.currency) }) : t("Card required to activate. Renewal terms confirmed at checkout."),
+        totalPrice: trialPlan && trialRenewal ? t(trialRenewal, { amount: formatMoney(trialPlan.amount, prices!.currency) }) : t("Card required to activate. Renewal terms confirmed at checkout."),
         billingPeriod: t("3 days"),
         description: t(card.description),
         features: card.features.map((f) => t(f)),
@@ -99,6 +113,8 @@ export function regionalCards(prices: BillingPrices | null): PlanCard[] {
       description: t(card.description),
       features: card.features.map((f) => t(f)),
       badge: card.badge ? t(card.badge) : undefined,
+      // The live catalog says which plan the trial converts to.
+      trialEligible: plan ? plan.trial_days > 0 : card.trialEligible,
       savings:
         base && weekly !== null && weekly < base && plan?.code !== "weekly"
           ? t("Save {{percent}}% vs weekly", {

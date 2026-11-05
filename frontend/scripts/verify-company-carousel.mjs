@@ -33,8 +33,8 @@ try {
         market: responseMarket, currency: responseMarket === "TR" ? "try" : "usd",
         available: true, quote: "carousel-browser-fixture",
         plans: [
-          { code: "weekly", amount: 499, interval: "week", interval_count: 1, trial_days: 3 },
-          { code: "monthly", amount: 1499, interval: "month", interval_count: 1, trial_days: 0 },
+          { code: "weekly", amount: 499, interval: "week", interval_count: 1, trial_days: 0 },
+          { code: "monthly", amount: 1499, interval: "month", interval_count: 1, trial_days: 3 },
           { code: "annual", amount: 9990, interval: "year", interval_count: 1, trial_days: 0 },
         ],
       } }),

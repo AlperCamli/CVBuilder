@@ -19,7 +19,8 @@ function ProfileFooter() {
 
 interface Step { Icon: typeof CreditCard; title: string; text: string }
 
-// Per kind: a trial pays the discounted month now (then the trial ends); paid weekly moves to the offered plan when
+// Per kind: a trial (weekly before 2026-11-05, monthly since) pays the discounted month now, then the trial ends
+// uncharged, so its copy never names the trial's own plan; paid weekly moves to the offered plan when
 // its paid week ends; monthly and annual keep their plan with the next renewal discounted. Nothing is charged today
 // for the paid kinds.
 function copyFor(offer: CancelOffer, view: CancelOfferView) {
@@ -32,12 +33,12 @@ function copyFor(offer: CancelOffer, view: CancelOfferView) {
     status: t("Your free trial is still active until {{date}}.", { date }),
     priceNote: t("first month"),
     steps: [
-      { Icon: CreditCard, title: t("Today: {{amount}}", { amount: first }), text: t("Pro {{plan}} starts right away. Your free trial ends, and the weekly price is never charged.", { plan }) },
+      { Icon: CreditCard, title: t("Today: {{amount}}", { amount: first }), text: t("Pro {{plan}} starts right away. Your free trial ends and is never charged.", { plan }) },
       { Icon: CalendarCheck, title: t("{{date}}: {{price}}", { date: nextDate, price }), text: t("Then every month until you cancel.") },
       { Icon: ShieldCheck, title: t("Cancel anytime"), text: t("From your Profile, in two clicks.") },
     ] satisfies Step[],
     accept: t("Keep Pro at {{percent}}% off", { percent }),
-    terms: t("Keeping Pro starts the {{plan}} plan today: {{first}} now, then {{price}} every month until you cancel. Your free trial ends at once and its weekly price is never charged.", { plan, first, price }),
+    terms: t("Keeping Pro starts the {{plan}} plan today: {{first}} now, then {{price}} every month until you cancel. Your free trial ends at once and is never charged.", { plan, first, price }),
   };
   if (offer.kind === "switch_at_period_end") return {
     title: percent === 50 ? t("Still job hunting? Get a month of Pro for half price.") : t("Still job hunting? Get {{percent}}% off a month of Pro.", { percent }),

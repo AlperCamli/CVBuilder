@@ -4,10 +4,11 @@ import type { Request } from "express";
 import { verifyGeoContext } from "../src/modules/billing/geo-context";
 import { RegionalPricingService, type RegionalPricingOptions } from "../src/modules/billing/regional-pricing";
 import type { StripeGateway } from "../src/modules/billing/stripe-gateway";
+import { createPlanCatalog, trialPlanCodes } from "../src/modules/entitlements/plan-definitions";
 
 const secret = "test-secret-with-more-than-thirty-two-characters";
 const options: RegionalPricingOptions = {
-  secret, productId: "prod_cv", trialDays: 3,
+  secret, productId: "prod_cv", trialDays: 3, trialPlans: trialPlanCodes(createPlanCatalog()),
   prices: { GLOBAL: { weekly: "price_us_week", monthly: "price_us_month", annual: "price_us_year" }, TR: { weekly: "price_tr_week", monthly: "price_tr_month", annual: "price_tr_year" } },
   portals: { GLOBAL: "bpc_us", TR: "bpc_tr" }, historicalPrices: { price_old_month: "monthly" }
 };
@@ -54,6 +55,22 @@ describe("regional pricing and immutable markets", () => {
     expect((await service.getPrices("TR", "existing")).currency).toBe("usd");
     markets.set("turkish", "TR");
     expect((await service.getPrices("US", "turkish")).currency).toBe("try");
+  });
+  it("reports the free trial on the catalog's trial plan only: Monthly, never Weekly or Annual", async () => {
+    const { service } = fixture();
+    expect(trialPlanCodes(createPlanCatalog())).toEqual(["monthly"]);
+    for (const country of ["TR", "US"]) {
+      const prices = await service.getPrices(country);
+      expect(prices.plans.map(plan => [plan.code, plan.trial_days])).toEqual([["weekly", 0], ["monthly", 3], ["annual", 0]]);
+    }
+  });
+  it("takes the trial plan and length from its options, not from a plan code", async () => {
+    const { service } = fixture();
+    service.options.trialPlans = ["annual"];
+    service.options.trialDays = 7;
+    expect((await service.getPrices("US")).plans.map(plan => plan.trial_days)).toEqual([0, 0, 7]);
+    service.options.trialPlans = [];
+    expect((await service.getPrices("US")).plans.every(plan => plan.trial_days === 0)).toBe(true);
   });
   it("requires an authentic account-bound quote and resolves the Price ID on the server", async () => {
     const { service } = fixture();

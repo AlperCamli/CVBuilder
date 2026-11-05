@@ -56,14 +56,14 @@ page.on("request", (request) => {
             amount: 9900,
             interval: "week",
             interval_count: 1,
-            trial_days: 3,
+            trial_days: 0,
           },
           {
             code: "monthly",
             amount: 24900,
             interval: "month",
             interval_count: 1,
-            trial_days: 0,
+            trial_days: 3,
           },
           {
             code: "annual",

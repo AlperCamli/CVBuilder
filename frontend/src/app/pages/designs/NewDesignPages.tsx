@@ -260,7 +260,7 @@ function ShortFAQ({ pricing = false }: { pricing?: boolean }) {
   const items = [
     [
       "Can I start for free?",
-      "Start a 3-day trial with a card. Pro features are available once the trial is activated. It renews weekly unless cancelled.",
+      "Start a 3-day trial with a card. Pro features are available once the trial is activated. It continues as Monthly Pro unless cancelled.",
     ],
     [
       "Will it stay true to my experience?",
@@ -271,7 +271,7 @@ function ShortFAQ({ pricing = false }: { pricing?: boolean }) {
         ? "How does the subscription work?"
         : "Can I edit and download my CV?",
       pricing
-        ? "Choose weekly, monthly, or annual billing. Your plan renews at that interval, with the full charge shown above. Manage your subscription in the app’s billing settings. The weekly option here selects the paid plan without a trial."
+        ? "Choose weekly, monthly, or annual billing. Your plan renews at that interval, with the full charge shown above. Manage your subscription in the app’s billing settings. These options select the paid plan without a trial."
         : "Yes. Edit the content, choose your template, and adjust the layout. Export the finished CV as a PDF or an editable DOCX.",
     ],
   ];

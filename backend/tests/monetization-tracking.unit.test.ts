@@ -62,7 +62,7 @@ const build = (options: { requireSubscription?: boolean } = {}) => {
   } satisfies StripeGateway;
   const billing = new BillingService(
     users, subscriptions, new UsageService(new InMemoryUsageRepository()),
-    new EntitlementsService(createPlanCatalog({ weeklyStripePriceId: config.billing.stripeWeeklyPriceId })),
+    new EntitlementsService(createPlanCatalog({ weeklyStripePriceId: config.billing.stripeWeeklyPriceId, monthlyStripePriceId: config.billing.stripeMonthlyPriceId, annualStripePriceId: config.billing.stripeAnnualPriceId })),
     gateway,
     {
       provider: "stripe", requireSubscription: options.requireSubscription ?? false, checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
@@ -77,6 +77,26 @@ const build = (options: { requireSubscription?: boolean } = {}) => {
 };
 
 describe("monetization tracking", () => {
+  it("syncs a trialing Monthly subscription with its trial dates, monthly price and interval, like a Weekly one", async () => {
+    const f = build();
+    const user = await f.user();
+    const upsert = vi.spyOn(f.subscriptions, "upsertProviderSubscription");
+    await f.webhook("customer.subscription.created", {
+      id: "sub_monthly_trial", customer: "cus_1", status: "trialing", cancel_at_period_end: false,
+      current_period_start: 1793800000, current_period_end: 1794059200, trial_start: 1793800000, trial_end: 1794059200,
+      metadata: { app_user_id: user.id, plan_code: "monthly", billing_market: "TR", billing_currency: "try" },
+      items: { data: [{ price: { id: f.config.billing.stripeMonthlyPriceId, unit_amount: 34990, currency: "try", recurring: { interval: "month" } } }] }
+    }, "evt_monthly_trial");
+
+    const input = upsert.mock.calls[0][0];
+    expect(input).toMatchObject({ provider_subscription_id: "sub_monthly_trial", plan_code: "monthly", status: "trialing", cancel_at_period_end: false });
+    expect(input.tracking).toMatchObject({
+      trial_start: new Date(1793800000 * 1000).toISOString(), trial_end: new Date(1794059200 * 1000).toISOString(),
+      unit_amount: 34990, currency: "try", billing_interval: "month", last_provider_event_id: "evt_monthly_trial"
+    });
+    expect(await f.billing.getBillingPlan(user.id)).toMatchObject({ plan_code: "monthly", subscription_status: "trialing", trial_eligible: false });
+  });
+
   it("passes the Stripe event and descriptive subscription fields to the sync without changing access fields", async () => {
     const f = build();
     const user = await f.user();
@@ -128,10 +148,32 @@ describe("monetization tracking", () => {
   it("records each checkout attempt and resolves it from Stripe", async () => {
     const f = build();
     const user = await f.user();
-    const response = await f.billing.createCheckoutSession(user.id, { plan_code: "weekly" });
+    const response = await f.billing.createCheckoutSession(user.id, { plan_code: "monthly", with_trial: true });
     expect(response.checkout_session_id).toBe("cs_1");
     expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({
-      user_id: user.id, plan_code: "weekly", trial_requested: true, trial_applied: true, checkout_session_id: "cs_1", outcome: "open"
+      user_id: user.id, plan_code: "monthly", trial_requested: true, trial_applied: true, checkout_session_id: "cs_1", outcome: "open"
+    }));
+    // A paid Weekly asks for no trial.
+    await f.billing.createCheckoutSession(user.id, { plan_code: "weekly", with_trial: false });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({
+      plan_code: "weekly", trial_requested: false, trial_applied: false, checkout_session_id: "cs_1", outcome: "open"
+    }));
+    // An old tab's Weekly trial button (with_trial omitted) is a trial request, refused and recorded as failed.
+    await expect(f.billing.createCheckoutSession(user.id, { plan_code: "weekly" })).rejects.toMatchObject({ details: { reason: "trial_unavailable" } });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({
+      plan_code: "weekly", trial_requested: true, trial_applied: false, checkout_session_id: null, outcome: "failed"
+    }));
+    await f.billing.createCheckoutSession(user.id, { plan_code: "annual" });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({ plan_code: "annual", trial_requested: false, trial_applied: false }));
+    // On Monthly an omitted with_trial is a paid checkout (a pre-switch tab's paid button), as is false.
+    await f.billing.createCheckoutSession(user.id, { plan_code: "monthly" });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({ plan_code: "monthly", trial_requested: false, trial_applied: false }));
+    await f.billing.createCheckoutSession(user.id, { plan_code: "monthly", with_trial: false });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({ plan_code: "monthly", trial_requested: false, trial_applied: false }));
+    // An explicit trial on Weekly is refused before Stripe, and recorded as a failed attempt that asked for a trial.
+    await expect(f.billing.createCheckoutSession(user.id, { plan_code: "weekly", with_trial: true })).rejects.toMatchObject({ details: { reason: "trial_unavailable" } });
+    expect(f.monetization.recordCheckoutAttempt).toHaveBeenLastCalledWith(expect.objectContaining({
+      plan_code: "weekly", trial_requested: true, trial_applied: false, checkout_session_id: null, outcome: "failed"
     }));
 
     await f.webhook("checkout.session.expired", { id: "cs_1" });
@@ -222,7 +264,9 @@ describe("monetization reference refresh", () => {
     expect(repository.markInternalUsers).toHaveBeenCalledWith(["admin@example.invalid"]);
     expect(result.internal_accounts).toBe(1);
     expect(repository.upsertPlanCatalog).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ plan_code: "weekly", trial_days: 3 }),
+      expect.objectContaining({ plan_code: "monthly", trial_supported: true, trial_days: 3 }),
+      expect.objectContaining({ plan_code: "weekly", trial_supported: false, trial_days: 0 }),
+      expect.objectContaining({ plan_code: "annual", trial_supported: false, trial_days: 0 }),
       expect.objectContaining({ plan_code: "free", trial_days: 0, limits: expect.objectContaining({ exports: 5 }) })
     ]));
   });

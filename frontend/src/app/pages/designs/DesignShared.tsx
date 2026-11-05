@@ -1,6 +1,6 @@
 import { checkoutPath, rememberOnboardingTemplate, ONBOARDING_ENTRY_PATH } from "../../integration/subscription-flow";
 import { publicPath } from "../../localization/i18n";
-import { useRegionalPricing, formatMoney } from "../../integration/regional-pricing";
+import { useRegionalPricing, formatMoney, type BillingPrices } from "../../integration/regional-pricing";
 import { PricingAvailability } from "../../components/PricingAvailability";
 import { translate as t } from "../../localization/i18n";
 import { useTranslation } from "react-i18next";
@@ -23,6 +23,7 @@ import {
 import {
   isCheckoutTarget,
   PLAN_CARDS,
+  trialPlanCode,
   type CheckoutTarget,
 } from "../../../content/pricing";
 import {
@@ -360,6 +361,18 @@ export function Transformation({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/**
+ * The checkout behind the public Pro button. On the catalog's trial plan (Monthly since 2026-11-05) it starts the free
+ * trial, so nobody pays today for what the trial card next to it offers free; checkout asks to confirm the paid price
+ * when the account is not eligible. A promotion covering that plan replaces the trial. Weekly and Annual (and every
+ * plan when the catalog offers no trial) stay explicit paid choices.
+ */
+export function proCheckoutIntent(period: CheckoutTarget, prices: BillingPrices | null | undefined, promotionCovers = false) {
+  const trialOffered = !prices || prices.plans.some(plan => plan.trial_days > 0);
+  const withTrial = trialOffered && !promotionCovers && period === trialPlanCode(prices);
+  return { plan_code: period, with_trial: withTrial, return_path: ONBOARDING_ENTRY_PATH };
+}
+
 type PricingCardsProps = {
   concept: Concept;
   teaser?: boolean;
@@ -407,9 +420,18 @@ export function RegionalPricingCards({
   const annual = regional.prices?.plans.find(plan => plan.code === "annual")?.amount ?? 0;
   const annualSavings = monthly ? Math.round((1 - annual / (monthly * 12)) * 100) : 0;
   const monthlySavings = weeklyBase ? Math.round((1 - Math.round(monthly * 12 / 52) / weeklyBase) * 100) : 0;
+  // The plan the free trial continues as comes from the live catalog (Monthly Pro since
+  // 2026-11-05, Weekly before). If a catalog still marks a non-monthly trial plan, fall back
+  // to neutral terms instead of stating a monthly renewal the visitor would not get.
+  const trialPlan = regional.prices?.plans.find(plan => plan.code === trialPlanCode(regional.prices));
+  const trialTerms = regional.ready && trialPlan?.interval !== "month"
+    ? t("Card required to activate. Renewal terms confirmed at checkout.")
+    : t("After 3 days, it continues as Monthly Pro at {{amount}} a month unless you cancel before the trial ends. Finish onboarding first, then start your trial with a card.", { amount: money(trialPlan?.amount ?? 0) });
   const promoCovered = Boolean(promotion?.covers(period));
   const promoPrice = promotion?.planPrice(period, selected && regional.prices ? { amount: selected.amount, currency: regional.prices.currency } : null) ?? null;
   const promoMoney = (amount: number) => formatMoney(amount, promoPrice!.currency);
+  const proIntent = proCheckoutIntent(period, regional.prices, promoCovered);
+  const startsTrial = proIntent.with_trial;
   const selectPeriod = (next: CheckoutTarget) => {
     setTeaserPeriod(next);
     if (!teaser) {
@@ -424,15 +446,14 @@ export function RegionalPricingCards({
   const choosePro = () => {
     if (!regional.ready) return;
     trackCtaClick("pricing_pro", "/signup");
-    // The paid weekly choice is explicit: do not imply unverified trial terms.
+    // The trial plan starts the trial ({ plan_code: "monthly", with_trial: true }); other periods are explicit paid
+    // choices (with_trial: false). See proCheckoutIntent.
     setPendingCheckout({
-      plan_code: period,
-      with_trial: false,
-      return_path: ONBOARDING_ENTRY_PATH,
+      ...proIntent,
       // Only the plan the offer covers carries the link token into checkout.
       ...(promoCovered && promotion?.token ? { promotion_token: promotion.token } : {}),
     });
-    navigate("/signup?purchase=1", { state: { from: checkoutPath({ plan_code: period, with_trial: false, return_path: ONBOARDING_ENTRY_PATH, auto: true }) } });
+    navigate("/signup?purchase=1", { state: { from: checkoutPath({ ...proIntent, auto: true }) } });
   };
   const proFeatures = [
     "Unlimited tailored CVs",
@@ -503,8 +524,7 @@ export function RegionalPricingCards({
               <Check size={16} />
               {t("PDF & DOCX export")}</li>
           </ul>
-          <p className="cv-plan-footnote">
-            {t("After 3 days, renews at {{amount}} per week unless cancelled. Complete onboarding, then activate with your card.", { amount: money(weeklyBase) })}</p>
+          <p className="cv-plan-footnote">{trialTerms}</p>
         </article>
         <article className="cv-plan cv-plan-pro">
           <div className="cv-plan-label">
@@ -551,14 +571,18 @@ export function RegionalPricingCards({
                 </span>
               </div>
               <div className="cv-price-caption">
-                {t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
+                {startsTrial
+                  ? t("Free for 3 days, then {{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })
+                  : t("{{amount}} billed {{period}}.", { amount: price.price, period: t(period === "annual" ? "annually" : period) })}
               </div>
             </>
           )}
           <button className="cv-button" onClick={choosePro} disabled={!regional.ready}>
             {promoCovered && promotion?.offer?.promotion
               ? t("Get {{percent}}% off {{plan}}", { percent: promotion.offer.promotion.percent_off, plan: price.label })
-              : <>{t("Choose Pro")}{" "}{price.label.toLowerCase()}</>}{" "}<ArrowUpRight size={17} />
+              : startsTrial
+                ? t("Start 3-day free trial")
+                : <>{t("Choose Pro")}{" "}{price.label.toLowerCase()}</>}{" "}<ArrowUpRight size={17} />
           </button>
           <ul>
             {proFeatures.map((feature, index) => (
@@ -592,7 +616,11 @@ export function RegionalPricingCards({
               </li>
             ))}
           </ul>
-          <p className="cv-plan-footnote">{t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}</p>
+          <p className="cv-plan-footnote">
+            {startsTrial
+              ? t("Create your account, then start your free trial at secure checkout. Nothing to pay today. If you’ve already had a trial, you’ll confirm the price before paying.")
+              : t("Create your account, then continue directly to secure checkout. Onboarding follows payment.")}
+          </p>
         </article>
       </div>
       <p className="cv-cancel-anytime">
@@ -652,7 +680,7 @@ export function PlanComparison() {
         </table>
       </div>
       <p className="cv-table-note">
-        {t("Trial and Pro include the same features. Activate the trial with a credit card; it renews weekly unless cancelled before the trial ends.")}</p>
+        {t("The trial and Pro include the same features. You start the trial with a card, and it continues as Monthly Pro unless you cancel before the trial ends.")}</p>
     </section>
   );
 }

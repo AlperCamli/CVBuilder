@@ -185,9 +185,10 @@ describe("billing endpoints", () => {
     expect((await plan()).body.data.trial_eligible).toBe(false);
     f.subscriptionsRepository.transitionGrants.set(user.id, { redeemed_at: null });
     expect((await plan()).body.data).toMatchObject({ trial_eligible: true, trial_transition: { eligible: true } });
-    const checkout = await request(f.app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", with_trial: true });
+    const checkout = await request(f.app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly", with_trial: true });
     expect(checkout.status).toBe(200);
-    expect(checkout.body.data.trial_period_days).toBe(3);
+    expect(checkout.body.data).toMatchObject({ plan_code: "monthly", trial_applied: true, trial_period_days: 3 });
+    expect(f.stripeGateway.lastCheckoutPriceId).toBe("price_monthly");
     expect(f.stripeGateway.lastCheckoutMetadata.trial_transition).toBe("1");
     expect((await plan()).body.data.trial_eligible).toBe(true);
     const webhook = async (status: string, trialStart?: number) => request(f.app)
@@ -197,7 +198,7 @@ describe("billing endpoints", () => {
         data: { object: {
           id: "sub_test_1", customer: "cus_test_1", status, trial_start: trialStart,
           metadata: f.stripeGateway.lastCheckoutMetadata,
-          items: { data: [{ price: { id: "price_weekly" } }] }
+          items: { data: [{ price: { id: "price_monthly" } }] }
         } }
       }));
     expect((await webhook("incomplete")).status).toBe(200);
@@ -205,6 +206,7 @@ describe("billing endpoints", () => {
     expect((await webhook("trialing", 1792800000)).status).toBe(200);
     const redeemedAt = f.subscriptionsRepository.transitionGrants.get(user.id)!.redeemed_at;
     expect(redeemedAt).toBeTruthy();
+    expect((await plan()).body.data).toMatchObject({ plan_code: "monthly", subscription_status: "trialing" });
     expect((await webhook("canceled", 1792800000)).status).toBe(200);
     expect((await plan()).body.data).toMatchObject({ trial_eligible: false, trial_transition: { eligible: false } });
     expect(f.subscriptionsRepository.transitionGrants.get(user.id)!.redeemed_at).toBe(redeemedAt);
@@ -222,9 +224,9 @@ describe("billing endpoints", () => {
     expect(f.subscriptionsRepository.transitionGrants.get(user.id)!.redeemed_at).toBeNull();
   });
 
-  it("requires explicit paid intent if regional checkout is no longer trial eligible", async () => {
+  it("requires explicit paid intent if regional Monthly checkout is no longer trial eligible", async () => {
     const regional = {
-      resolveCheckout: async () => ({ priceId: "price_tr_week", market: "TR", currency: "try", amount: 6990 }),
+      resolveCheckout: async () => ({ priceId: "price_tr_month", market: "TR", currency: "try", amount: 34990 }),
       reserveCheckout: async () => ({ nonce: "checkout-reservation", expires_at: new Date(Date.now() + 31 * 60_000).toISOString() }),
       rememberCheckout: async () => {}
     } as unknown as RegionalPricingService;
@@ -232,15 +234,20 @@ describe("billing endpoints", () => {
     await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
     const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
     subscriptionsRepository.seed({ id: "prior-trial", user_id: user!.id, provider: "stripe", provider_customer_id: "cus_prior", provider_subscription_id: "sub_prior", plan_code: "weekly", status: "canceled", current_period_start: "2026-01-01T00:00:00.000Z", current_period_end: "2026-01-04T00:00:00.000Z", cancel_at_period_end: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-04T00:00:00.000Z" });
-    const declined = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", pricing_quote: "signed-quote" });
+    // A Weekly trial taken before the trial moved to Monthly still counts as the account's trial.
+    const declined = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly", pricing_quote: "signed-quote", with_trial: true });
     expect(declined.status).toBe(409);
     expect(declined.body.error.details.reason).toBe("pricing_changed");
     expect(stripeGateway.lastCheckoutPriceId).toBeUndefined();
-    const confirmed = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", pricing_quote: "signed-quote", with_trial: false });
+    const confirmed = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly", pricing_quote: "signed-quote", with_trial: false });
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.data.trial_applied).toBe(false);
     expect(confirmed.body.data.currency).toBe("try");
-    expect(stripeGateway.lastCheckoutPriceId).toBe("price_tr_week");
+    expect(stripeGateway.lastCheckoutPriceId).toBe("price_tr_month");
+    // A pre-switch tab's paid "Continue with Monthly" (with_trial omitted) is a paid checkout, not a pricing_changed 409.
+    const oldTab = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly", pricing_quote: "signed-quote" });
+    expect(oldTab.status).toBe(200);
+    expect(oldTab.body.data.trial_applied).toBe(false);
   });
   it("blocks another checkout when Stripe has an active subscription before its webhook arrives", async () => {
     const { app, stripeGateway } = buildApp();
@@ -294,12 +301,15 @@ describe("billing endpoints", () => {
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
       .send({
-        plan_code: "weekly"
+        plan_code: "weekly",
+        with_trial: false
       });
 
     expect(checkoutResponse.status).toBe(200);
     expect(checkoutResponse.body.success).toBe(true);
     expect(checkoutResponse.body.data.checkout_url).toContain("checkout.stripe.test");
+    // Weekly carries no trial since 2026-11-05: a paid checkout.
+    expect(checkoutResponse.body.data).toMatchObject({ plan_code: "weekly", trial_applied: false, trial_period_days: null });
 
     const portalResponse = await request(app)
       .post("/api/v1/billing/portal")
@@ -363,34 +373,53 @@ describe("billing endpoints", () => {
     expect(updatedUsage.body.data.remaining.tailored_cv_generations).toBeNull();
   });
 
-  it("grants a trial on the first Weekly checkout", async () => {
+  it("grants a trial on the first Monthly checkout that asks for it", async () => {
     const { app, stripeGateway } = buildApp();
 
     const response = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "weekly" });
+      .send({ plan_code: "monthly", with_trial: true });
 
     expect(response.status).toBe(200);
+    expect(response.body.data.plan_code).toBe("monthly");
     expect(response.body.data.trial_applied).toBe(true);
     expect(response.body.data.trial_period_days).toBe(3);
-    expect(stripeGateway.lastCheckoutPriceId).toBe("price_weekly");
+    expect(stripeGateway.lastCheckoutPriceId).toBe("price_monthly");
     expect(stripeGateway.lastCheckoutMode).toBe("subscription");
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBe(3);
+    expect(stripeGateway.lastCheckoutMetadata.plan_code).toBe("monthly");
   });
 
-  it("does not grant a second trial once the user has already had a Weekly subscription", async () => {
+  it("charges a trial-eligible account at once for Monthly when with_trial is omitted (a pre-switch tab's paid button)", async () => {
+    const { app, stripeGateway } = buildApp();
+
+    const response = await request(app)
+      .post("/api/v1/billing/checkout")
+      .set("Authorization", "Bearer valid-token")
+      .send({ plan_code: "monthly" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ plan_code: "monthly", trial_applied: false, trial_period_days: null });
+    expect(stripeGateway.lastCheckoutPriceId).toBe("price_monthly");
+    expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
+    // The account keeps its trial.
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data.trial_eligible).toBe(true);
+  });
+
+  it("does not grant a second trial once the user has already had a Monthly trial", async () => {
     const { app, stripeGateway } = buildApp();
 
     // First trial checkout.
     const firstCheckout = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "weekly" });
+      .send({ plan_code: "monthly", with_trial: true });
     expect(firstCheckout.body.data.trial_applied).toBe(true);
 
     // The trial runs and is later canceled; Stripe ultimately reports the
-    // subscription as canceled, which persists a real `weekly` subscription row.
+    // subscription as canceled, which persists a real `monthly` subscription row.
     const canceledWebhook = {
       id: "evt_trial_canceled",
       type: "customer.subscription.deleted",
@@ -403,7 +432,7 @@ describe("billing endpoints", () => {
           current_period_start: 1711929600,
           current_period_end: 1712188800,
           metadata: {},
-          items: { data: [{ price: { id: "price_weekly" } }] }
+          items: { data: [{ price: { id: "price_monthly" } }] }
         }
       }
     };
@@ -426,7 +455,7 @@ describe("billing endpoints", () => {
     const secondCheckout = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "weekly" });
+      .send({ plan_code: "monthly", with_trial: true });
 
     expect(secondCheckout.status).toBe(200);
     expect(secondCheckout.body.data.trial_applied).toBe(false);
@@ -434,31 +463,33 @@ describe("billing endpoints", () => {
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
   });
 
-  it("lets a user buy Weekly directly without a trial via with_trial=false", async () => {
+  it.each(["weekly", "monthly"] as const)("lets a user buy %s directly without a trial via with_trial=false", async planCode => {
     const { app, stripeGateway } = buildApp();
 
     const response = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "weekly", with_trial: false });
+      .send({ plan_code: planCode, with_trial: false });
 
     expect(response.status).toBe(200);
+    expect(response.body.data.plan_code).toBe(planCode);
     expect(response.body.data.trial_applied).toBe(false);
     expect(response.body.data.trial_period_days).toBeNull();
     expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
   });
 
-  it("never applies a trial to Monthly or Annual checkout", async () => {
+  it("never applies a trial to Weekly or Annual checkout", async () => {
     const { app, stripeGateway } = buildApp();
 
-    for (const [planCode, priceId] of [
-      ["monthly", "price_monthly"],
-      ["annual", "price_annual"]
+    for (const [planCode, priceId, input] of [
+      ["weekly", "price_weekly", { with_trial: false }],
+      ["annual", "price_annual", {}],
+      ["annual", "price_annual", { with_trial: false }]
     ] as const) {
       const response = await request(app)
         .post("/api/v1/billing/checkout")
         .set("Authorization", "Bearer valid-token")
-        .send({ plan_code: planCode });
+        .send({ plan_code: planCode, ...input });
 
       expect(response.status).toBe(200);
       expect(response.body.data.plan_code).toBe(planCode);
@@ -469,7 +500,121 @@ describe("billing endpoints", () => {
     }
   });
 
-  it("does not grant a Weekly trial after prior legacy Pro trial usage", async () => {
+  // Transitional rule for tabs still running the pre-2026-11-05 bundle (LEGACY_TRIAL_PLAN_CODES in billing.service.ts).
+  it("refuses an old tab's Weekly trial button (with_trial omitted) instead of charging Weekly, and asks for a refresh", async () => {
+    const { app, stripeGateway } = buildApp();
+
+    const stale = await request(app)
+      .post("/api/v1/billing/checkout")
+      .set("Authorization", "Bearer valid-token")
+      .send({ plan_code: "weekly" });
+
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.message).toBe("The free trial now continues as Monthly Pro. Refresh the page and start it from there.");
+    expect(stale.body.error.details).toEqual({ reason: "trial_unavailable", plan_code: "weekly", trial_plan_code: "monthly" });
+    expect(stripeGateway.lastCheckoutPriceId).toBeUndefined();
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data.trial_eligible).toBe(true);
+    // An explicit paid Weekly is a normal checkout; the old tab's paid Monthly (with_trial omitted) is paid too.
+    const paid = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "weekly", with_trial: false });
+    expect(paid.status).toBe(200);
+    expect(paid.body.data).toMatchObject({ plan_code: "weekly", trial_applied: false });
+    const monthly = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly" });
+    expect(monthly.status).toBe(200);
+    expect(monthly.body.data).toMatchObject({ plan_code: "monthly", trial_applied: false, trial_period_days: null });
+  });
+
+  it.each(["weekly", "annual"] as const)("refuses an explicit trial request on %s with 409 trial_unavailable instead of charging", async planCode => {
+    const { app, stripeGateway } = buildApp();
+
+    const response = await request(app)
+      .post("/api/v1/billing/checkout")
+      .set("Authorization", "Bearer valid-token")
+      .send({ plan_code: planCode, with_trial: true });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.details).toEqual({ reason: "trial_unavailable", plan_code: planCode, trial_plan_code: "monthly" });
+    expect(stripeGateway.lastCheckoutPriceId).toBeUndefined();
+    // The account keeps its trial for the Monthly checkout.
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data.trial_eligible).toBe(true);
+  });
+
+  it.each([
+    ["a direct Monthly purchase", { plan_code: "monthly", provider_subscription_id: "sub_paid_monthly" }],
+    ["a paid Weekly plan", { plan_code: "weekly", provider_subscription_id: "sub_paid_weekly" }],
+    ["a trial Stripe reported on any plan", { plan_code: "annual", provider_subscription_id: null, trial_start: "2026-01-01T00:00:00.000Z" }]
+  ] as const)("does not grant a Monthly trial after %s", async (_label, history) => {
+    const { app, subscriptionsRepository, usersRepository, stripeGateway } = buildApp();
+    await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+    subscriptionsRepository.seed({
+      id: "sub_record_history", user_id: user!.id, provider: "stripe", provider_customer_id: "cus_history",
+      status: "canceled", current_period_start: "2026-01-01T00:00:00.000Z", current_period_end: "2026-02-01T00:00:00.000Z",
+      cancel_at_period_end: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-02-01T00:00:00.000Z", ...history
+    });
+
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data.trial_eligible).toBe(false);
+    const response = await request(app)
+      .post("/api/v1/billing/checkout")
+      .set("Authorization", "Bearer valid-token")
+      .send({ plan_code: "monthly", with_trial: true });
+    expect(response.status).toBe(200);
+    expect(response.body.data.trial_applied).toBe(false);
+    expect(stripeGateway.lastCheckoutTrialPeriodDays).toBeNull();
+  });
+
+  it.each([
+    ["incomplete", null, true],
+    ["incomplete_expired", null, true],
+    ["incomplete_expired", "2026-01-01T00:00:00.000Z", false]
+  ] as const)("a %s Monthly subscription (trial_start %s) leaves the trial unused: %s", async (status, trialStart, eligible) => {
+    const { app, subscriptionsRepository, usersRepository, stripeGateway } = buildApp();
+    await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+    // A Checkout whose first payment never completed (e.g. failed 3-D Secure): Stripe keeps the subscription id.
+    subscriptionsRepository.seed({
+      id: "sub_record_never_activated", user_id: user!.id, provider: "stripe", provider_customer_id: "cus_test_1",
+      provider_subscription_id: "sub_never_activated", plan_code: "monthly", status, trial_start: trialStart,
+      current_period_start: "2026-01-01T00:00:00.000Z", current_period_end: "2026-02-01T00:00:00.000Z",
+      cancel_at_period_end: false, created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z"
+    });
+
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data.trial_eligible).toBe(eligible);
+    const response = await request(app).post("/api/v1/billing/checkout").set("Authorization", "Bearer valid-token").send({ plan_code: "monthly", with_trial: true });
+    expect(response.status).toBe(200);
+    expect(response.body.data.trial_applied).toBe(eligible);
+    expect(stripeGateway.lastCheckoutTrialPeriodDays).toBe(eligible ? 3 : null);
+  });
+
+  it("keeps a Weekly trial started before the move on Weekly, with access, until Stripe converts it", async () => {
+    const { app, subscriptionsRepository, usersRepository } = buildApp();
+    await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    const user = await usersRepository.getByAuthUserId("00000000-0000-0000-0000-000000000001");
+    subscriptionsRepository.seed({
+      id: "sub_record_legacy_weekly_trial", user_id: user!.id, provider: "stripe", provider_customer_id: "cus_test_1",
+      provider_subscription_id: "sub_legacy_weekly_trial", plan_code: "weekly", status: "trialing",
+      current_period_start: new Date(Date.now() - 86_400_000).toISOString(), current_period_end: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+      trial_start: new Date(Date.now() - 86_400_000).toISOString(), trial_end: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+      cancel_at_period_end: false, created_at: new Date(Date.now() - 86_400_000).toISOString(), updated_at: new Date().toISOString()
+    });
+
+    const sync = await request(app).post("/api/v1/billing/webhooks").set("stripe-signature", "sig_test").set("Content-Type", "application/json")
+      .send(JSON.stringify({ id: "evt_legacy_weekly_trial", type: "customer.subscription.updated", data: { object: {
+        id: "sub_legacy_weekly_trial", customer: "cus_test_1", status: "trialing", cancel_at_period_end: false,
+        current_period_start: Math.floor(Date.now() / 1000) - 86_400, current_period_end: Math.floor(Date.now() / 1000) + 2 * 86_400,
+        trial_start: Math.floor(Date.now() / 1000) - 86_400, trial_end: Math.floor(Date.now() / 1000) + 2 * 86_400,
+        metadata: { app_user_id: user!.id, plan_code: "weekly" }, items: { data: [{ price: { id: "price_weekly" } }] }
+      } } }));
+    expect(sync.status).toBe(200);
+    const plan = await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
+    expect(plan.body.data).toMatchObject({ plan_code: "weekly", subscription_status: "trialing", trial_eligible: false });
+    expect(plan.body.data.entitlement_summary.can_use_ai_actions).toBe(true);
+  });
+
+  it("does not grant a Monthly trial after prior legacy Pro trial usage", async () => {
     const { app, subscriptionsRepository, usersRepository, stripeGateway } = buildApp();
 
     await request(app).get("/api/v1/billing/plan").set("Authorization", "Bearer valid-token");
@@ -495,7 +640,7 @@ describe("billing endpoints", () => {
     const response = await request(app)
       .post("/api/v1/billing/checkout")
       .set("Authorization", "Bearer valid-token")
-      .send({ plan_code: "weekly" });
+      .send({ plan_code: "monthly", with_trial: true });
 
     expect(response.status).toBe(200);
     expect(response.body.data.trial_applied).toBe(false);

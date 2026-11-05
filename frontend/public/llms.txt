@@ -2,13 +2,13 @@
 
 > jobspecificCV is an AI-assisted CV and resume builder for job seekers who want to tailor a real CV to a specific job description. The product emphasizes human review, truthful experience, ATS-readable formatting, and role-specific evidence rather than one-click generic rewriting.
 
-Last updated: 2026-06-30
+Last updated: 2026-11-05
 Canonical site: https://jobspecificcv.com/
 
 ## Primary Pages
 
 - [Home](https://jobspecificcv.com/): Product overview for tailoring a CV to a job description.
-- [Pricing](https://jobspecificcv.com/pricing): Free, monthly, and lifetime plan information.
+- [Pricing](https://jobspecificcv.com/pricing): Pro plans with prices for the visitor's region: a 3-day free trial (card required) that continues as Monthly Pro, Weekly Pro as the lowest-commitment paid plan without a trial, and Annual Pro as the best value.
 - [Career Advice](https://jobspecificcv.com/career-advice): Practical CV, resume, ATS, tailoring, NHS, and medical application guides.
 
 ## Product Summary

@@ -37,7 +37,8 @@ The 3-day trial needs a card. That is a real hesitation point, so we:
 - **Explain why** when it helps: the card keeps the trial fair and lets Pro continue without interruption if they want to keep it.
 - **Reassure on safety, truthfully:** "Payments are handled securely by Stripe. We never see or store your card number."
 - **Make cancelling feel easy:** "Cancel anytime in a couple of clicks from your account."
-- **Still state renewal clearly** wherever someone commits: price, when it starts, and that it renews weekly unless cancelled before the trial ends. This is required by consumer-protection rules and it's what earns trust.
+- **Still state renewal clearly** wherever someone commits: price, when it starts, and that it continues as Monthly Pro and renews monthly unless cancelled before the trial ends. This is required by consumer-protection rules and it's what earns trust. (Since 2026-11-05 the trial continues as Monthly Pro; before that it renewed as Weekly Pro. Weekly is still sold, without a trial.)
+- **Name the plan the trial becomes** when it matters: "Start with a 3-day free trial on Monthly Pro", "After 3 days, {{amount}} a month unless you cancel". The amount always comes from the live regional catalog, never from a hard-coded price.
 - Don't promise anything the product doesn't do (for example, reminder emails) until it exists.
 
 ## Turkish

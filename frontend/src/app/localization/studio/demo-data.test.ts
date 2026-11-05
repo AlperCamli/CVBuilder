@@ -4,6 +4,8 @@ import type {
   JobBoardResponse,
   MasterCvDetail,
 } from "../../integration/api-types";
+import type { BillingPrices } from "../../integration/regional-pricing";
+import { trialPlanCode } from "../../../content/pricing";
 
 describe("isolated Language Studio data", () => {
   it("keeps document languages independent and returned data detached", async () => {
@@ -52,6 +54,13 @@ describe("isolated Language Studio data", () => {
     }
     expect(fetch).not.toHaveBeenCalled();
     fetch.mockRestore();
+  });
+  it("offers the demo free trial on Monthly, like the live catalog", async () => {
+    for (const market of ["TR", "GLOBAL"] as const) {
+      const prices = await createDemoStore("populated", "monthly", market).client.get<BillingPrices>("/billing/prices");
+      expect(prices.plans.filter((plan) => plan.trial_days > 0).map((plan) => plan.code)).toEqual(["monthly"]);
+      expect(trialPlanCode(prices)).toBe("monthly");
+    }
   });
   it("changes sample job status and exposes empty, error and cancellable loading states", async () => {
     const populated = createDemoStore();

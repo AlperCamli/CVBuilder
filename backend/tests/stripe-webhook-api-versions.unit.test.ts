@@ -4,7 +4,7 @@ import { BillingService } from "../src/modules/billing/billing.service";
 import type { StripeGateway, StripeWebhookEvent } from "../src/modules/billing/stripe-gateway";
 import { SupabaseBillingSubscriptionsRepository } from "../src/modules/billing/subscriptions.repository";
 import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
-import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
+import { createPlanCatalog, TRIAL_CAPABLE_PLAN_CODES, trialPlanCodes } from "../src/modules/entitlements/plan-definitions";
 import { UsageService } from "../src/modules/usage/usage.service";
 import { InMemorySubscriptionsRepository, InMemoryUsageRepository, InMemoryUsersRepository } from "./helpers/in-memory";
 
@@ -141,5 +141,29 @@ describe("Stripe webhook payloads across API versions", () => {
     });
     const repository = new SupabaseBillingSubscriptionsRepository({ from: () => builder } as unknown as SupabaseClient);
     expect(await repository.getCurrentForUser("user_1")).toMatchObject({ trial_end: "2026-11-05T09:13:29+00:00", current_period_end: null });
+  });
+});
+
+describe("trial eligibility query", () => {
+  it("counts a used trial in one query: a real, activated subscription on any plan that has carried the trial, or any Stripe trial", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const builder: Record<string, unknown> = new Proxy({}, {
+      get: (_target, key) => key === "then"
+        ? (resolve: (value: unknown) => void) => resolve({ data: [], error: null })
+        : (...args: unknown[]) => { calls.push([String(key), args]); return builder; }
+    });
+    const repository = new SupabaseBillingSubscriptionsRepository({ from: () => builder } as unknown as SupabaseClient);
+    expect(await repository.hasUsedTrial("user_1")).toBe(false);
+    expect(calls).toEqual([
+      ["select", ["id"]],
+      ["eq", ["user_id", "user_1"]],
+      ["or", ["and(plan_code.in.(pro,weekly,monthly),provider_subscription_id.not.is.null,status.not.in.(incomplete,incomplete_expired)),trial_start.not.is.null"]],
+      ["limit", [1]]
+    ]);
+  });
+
+  it("keeps every plan that grants the trial today in the trial history", () => {
+    expect(trialPlanCodes(createPlanCatalog())).toEqual(["monthly"]);
+    for (const plan of trialPlanCodes(createPlanCatalog())) expect(TRIAL_CAPABLE_PLAN_CODES).toContain(plan);
   });
 });

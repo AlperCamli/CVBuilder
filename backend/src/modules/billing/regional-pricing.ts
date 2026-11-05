@@ -25,6 +25,9 @@ export interface RegionalPricingOptions {
   portals: Record<BillingMarket, string | null>;
   historicalPrices?: Record<string, PurchasePlan>;
   trialDays: number;
+  // The plans whose checkout grants the trial: the plan catalog's trial_supported plans (trialPlanCodes), never a
+  // hard-coded plan. Only these report trial_days > 0.
+  trialPlans: readonly string[];
 }
 export interface BillingPrices {
   market: BillingMarket;
@@ -126,7 +129,7 @@ export class RegionalPricingService {
           amount: price.amount,
           interval: intervals[code],
           interval_count: 1,
-          trial_days: code === "weekly" ? this.options.trialDays : 0,
+          trial_days: this.options.trialPlans.includes(code) ? this.options.trialDays : 0,
         });
       }
     } catch {

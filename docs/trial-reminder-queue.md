@@ -12,7 +12,7 @@
 - The view holds personal data (email, name). Keep only what you need to send the email, and don't log full rows.
 
 ## Rows
-There is one row per account, built from its **latest trial subscription** (the one with the latest `trial_start`). The account appears only if that subscription is in one of these categories:
+There is one row per account, built from its **latest trial subscription** (the one with the latest `trial_start`). A trial is any subscription with `trial_start` and `trial_end`, whatever its plan: since 2026-11-05 the free trial is on the **Monthly** plan, and the trials started before the switch are on **Weekly** (they all end within 3 days of it). The plan, price and interval in each row are that subscription's own, so the view needed no change for the switch. The account appears only if that subscription is in one of these categories:
 
 | `category` | Meaning |
 |---|---|
@@ -34,12 +34,12 @@ Ordering: `in_trial` rows come first, soonest `trial_end` first, then `trial_can
 | `email` | text | Account email (`public.users.email`) |
 | `full_name` | text, nullable | Name the person gave at signup |
 | `locale` | text | Interface language: `en` or `tr`. Send the email in this language. |
-| `plan_code` | text | Plan the trial converts to (for example `weekly`) |
+| `plan_code` | text | Plan the trial converts to: `monthly` for trials started from 2026-11-05, `weekly` for the earlier ones |
 | `market` | text, nullable | `TR` or `GLOBAL` (from the subscription, else the account's locked billing market) |
 | `currency` | text, nullable | `USD` or `TRY` |
 | `unit_amount` | bigint, nullable | Price charged after the trial, in minor units (cents or kuruş) |
 | `billing_interval` | text, nullable | `week`, `month` or `year` |
-| `price_display` | text, nullable | Ready-to-print price: `$4.99` for USD, `149,90 TL` for TRY. Add the interval yourself, for example "per week" or "haftalık". |
+| `price_display` | text, nullable | Ready-to-print price: `$14.99` for USD, `349,90 TL` for TRY (the monthly prices; a legacy weekly trial shows `$4.99` / `149,90 TL`). Add the interval yourself from `billing_interval`: "per month" / "aylık" for `month`, "per week" / "haftalık" for `week`. |
 | `trial_start` | timestamptz | Trial start (UTC) |
 | `trial_end` | timestamptz | Trial end, which is when the first charge happens (UTC) |
 | `hours_until_trial_end` | numeric(1 decimal) | Hours from now to `trial_end`. It's negative for a trial that already ended, which only happens for `trial_canceled` rows, down to -24. |

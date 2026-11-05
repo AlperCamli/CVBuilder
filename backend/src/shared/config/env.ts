@@ -238,6 +238,7 @@ export interface AppConfig {
     stripeAnnualPriceId: string | null;
     stripeProPriceId: string | null;
     stripeLifetimePriceId: string | null;
+    // Free-trial length on the plan catalog's trial plan (trial_supported in plan-definitions.ts; Monthly since 2026-11-05).
     trialPeriodDays: number;
     checkoutSuccessUrl: string;
     checkoutCancelUrl: string;

@@ -25,7 +25,7 @@ Each page has a review bar for switching directions. Pricing-to-pricing switchin
 - In Studio, switch among the experience, opportunity, and tailoring steps. Toggle keyword chips and mark the sample reviewed. This is a local illustrative demo; it does not upload documents or call AI services.
 - On pricing, switch Weekly / Monthly / Annual. Prices use the existing shared catalog; annual savings are calculated against twelve monthly payments. The selected period survives refresh and is passed to the existing pending-checkout mechanism before signup.
 - Free CTAs clear any pending paid intent and use the existing signup route with `/app/create` as the destination.
-- Weekly Pro explicitly selects the paid weekly plan without a trial. The existing live pricing page and its trial behavior are unchanged.
+- Weekly Pro explicitly selects the paid weekly plan without a trial. The existing live pricing page and its trial behavior are unchanged. (Since 2026-11-05 the trial continues as Monthly Pro on every surface; the review copies say "Continues as Monthly Pro after 3 days" instead of "Renews weekly".)
 - FAQ accordions, mobile navigation, cross-page section links, and reduced-motion styles are implemented.
 
 ## Round 02

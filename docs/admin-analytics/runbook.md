@@ -67,6 +67,17 @@ AI cost is exact from 2026-10-27, when `ai_runs.cost_usd` starts being filled. O
 - **A sink failure never breaks an AI call:** each attempt waits at most 2 s for its insert and logs `AI_USAGE_EVENT_NOT_RECORDED` on failure. Data health's `ai_runs_without_attempts` shows runs whose attempts went missing.
 - **Before the ledger** (the first production app attempt), `ai_spend` falls back to the surviving `ai_runs`; deleted guest runs, retries and script calls before then are not recoverable.
 
+## Free trial on Monthly (from 2026-11-05)
+The 3-day free trial moved from the Weekly to the Monthly plan. No migration was needed: the metrics, `trial_outcomes` and `public.trial_reminder_queue` read each subscription's own plan, price and interval (era note in [metrics-inventory.md](metrics-inventory.md#data-eras)). After the backend deploy:
+1. **Plan catalog.** `public.billing_plan_catalog` is a nightly snapshot of the code's plan list, so until the next 03:30 UTC refresh it still says `weekly` has the trial. No metric reads `trial_supported`, so waiting is harmless; to flip it at once, run the cron from Vercel (`cv-builder-backend` → Settings → Cron Jobs → `/api/v1/billing/analytics/refresh` → Run). Check: `select plan_code, trial_supported, trial_days from public.billing_plan_catalog order by plan_code;` shows `monthly` true / 3 and `weekly` false / 0.
+2. **First monthly trial.** Once one exists, check that it was detected and that nothing trialing lacks `trial_start` (the trial rule needs it for any plan with Stripe detail):
+   ```sql
+   select plan_code, outcome_group, count(*) from analytics_private.trial_outcomes where t_start >= '2026-11-05' group by 1, 2;
+   select count(*) from public.subscriptions where status = 'trialing' and trial_start is null;  -- 0
+   select plan_code, billing_interval, unit_amount, price_display, category from public.trial_reminder_queue order by sort_order;  -- no emails or names
+   ```
+3. **Legacy weekly trials** started before the switch keep converting to Weekly; they all end within 3 days. Their rows show `plan_code = weekly` everywhere, which is correct.
+
 ## Rotate the `analytics_api` password
 1. Generate a new password: `openssl rand -hex 32`.
 2. In the SQL editor: `alter role analytics_api with password '<new>';`

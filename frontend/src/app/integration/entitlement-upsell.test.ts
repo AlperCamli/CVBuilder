@@ -37,6 +37,8 @@ describe("trial paywall for free accounts", () => {
     const url = new URL(paywallCheckoutPath("export", next), "https://app.invalid");
     expect(url.pathname).toBe("/app/checkout");
     expect(url.searchParams.get("trial")).toBe("1");
+    // The paywall's trial is the Monthly trial.
+    expect(url.searchParams.get("plan")).toBe("monthly");
     expect(url.searchParams.get("source")).toBe("export");
     expect(url.searchParams.get("next")).toBe(next);
     expect(new URL(paywallCheckoutPath("tailoring", "/app/resumes", false), "https://app.invalid").searchParams.get("trial")).toBe("0");

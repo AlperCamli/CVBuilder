@@ -46,11 +46,18 @@ describe("trial offer", () => {
     expect(html).toMatch(/class="checkout-screen-secondary cancel-offer-decline"[^>]*>No thanks, cancel my trial</);
   });
 
-  it("says Pro is paid today, the trial ends and the weekly price is never charged", () => {
-    const html = render(trialOffer);
-    expect(html).toContain("Today: ₺174.95");
-    expect(html).toContain("Pro Monthly starts right away. Your free trial ends, and the weekly price is never charged.");
-    expect(html).toContain("Secure checkout powered by Stripe");
+  it("says Pro is paid today and the trial ends uncharged, for a weekly trial and a monthly one", () => {
+    const monthlyTrial: CancelOffer = { ...trialOffer, current_plan_code: "monthly", current_amount: 34990 };
+    for (const offer of [trialOffer, monthlyTrial]) {
+      const html = render(offer);
+      expect(html).toContain("Today: ₺174.95");
+      expect(html).toContain("Pro Monthly starts right away. Your free trial ends and is never charged.");
+      expect(html).toContain("Keeping Pro starts the Monthly plan today: ₺174.95 now, then ₺349.90 every month until you cancel. Your free trial ends at once and is never charged.");
+      expect(html).not.toMatch(/weekly price/i);
+      expect(html).toContain("Secure checkout powered by Stripe");
+    }
+    // The "about one week" comparison only speaks to a weekly trial.
+    expect(cancelOfferView({ ...trialOffer, current_plan_code: "monthly", current_amount: 34990, amount: 29990, discounted_amount: 14995 }, "en-US").weekComparison).toBe(false);
   });
 
   it("tells someone back from Stripe that nothing changed, and locks both buttons while one is busy", () => {

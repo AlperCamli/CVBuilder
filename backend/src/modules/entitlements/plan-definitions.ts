@@ -1,4 +1,4 @@
-import type { PlanCatalog } from "./entitlements.types";
+import type { PlanCatalog, PlanCode } from "./entitlements.types";
 
 interface CreatePlanCatalogOptions {
   freeUsageLimitsEnabled?: boolean;
@@ -57,7 +57,9 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
       stripe_price_id: options?.weeklyStripePriceId ?? null,
       ...paidPlanDefaults,
       checkout_allowed: true,
-      trial_supported: true
+      // Carried the free trial until 2026-11-05; still sold, charged at checkout. Trials started on it before
+      // then still convert to Weekly (their plan comes from the subscription, never from this flag).
+      trial_supported: false
     },
     monthly: {
       code: "monthly",
@@ -65,7 +67,9 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
       stripe_price_id: options?.monthlyStripePriceId ?? null,
       ...paidPlanDefaults,
       checkout_allowed: true,
-      trial_supported: false
+      // The free trial plan since 2026-11-05: Checkout adds BILLING_TRIAL_PERIOD_DAYS, then Stripe bills the
+      // monthly price. The single source of truth for which plan carries the trial (prices, checkout, refresh).
+      trial_supported: true
     },
     annual: {
       code: "annual",
@@ -97,3 +101,12 @@ export const createPlanCatalog = (options?: CreatePlanCatalogOptions): PlanCatal
 };
 
 export const DEFAULT_FREE_PLAN_CODE = "free" as const;
+
+// Every plan that has ever granted the free trial: legacy Pro, Weekly (until 2026-11-05) and Monthly (since then).
+// History, not the catalog: a plan keeps its place here after its trial_supported flag is turned off, so its past
+// subscriptions still count as a used trial and its running trials still get the trial's cancel offer.
+export const TRIAL_CAPABLE_PLAN_CODES: readonly PlanCode[] = ["pro", "weekly", "monthly"];
+
+/** The plans whose checkout grants the free trial now, from the catalog's trial_supported flags. */
+export const trialPlanCodes = (catalog: PlanCatalog): PlanCode[] =>
+  Object.values(catalog).filter((plan) => plan.checkout_allowed && plan.trial_supported).map((plan) => plan.code);

@@ -78,6 +78,7 @@ social_profiles:
 
 ```yaml
 # 5-8 FAQs is the sweet spot. Each answer should be 2-3 sentences.
+# Example only: the live FAQ copy is frontend/src/content/seo-meta.mjs (pricing answers updated 2026-11-05 for the Monthly trial).
 faqs:
   - question: "How does jobspecificCV tailor my resume to a job?"
     answer: "You upload your master CV once, paste the job description, and our AI rewrites your bullets and reorders sections to match the role's keywords and required skills. You get a polished, ATS-friendly PDF in under a minute."
@@ -89,7 +90,7 @@ faqs:
     answer: "Yes. Every template is built to be parsed correctly by Applicant Tracking Systems like Workday, Greenhouse, and Lever. We use standard fonts, no images or tables, and clean section headers."
 
   - question: "How much does it cost?"
-    answer: "There's a free plan to try the product. Pro is $10/month with a 3-day free trial, and we offer a one-time Lifetime plan for $99."
+    answer: "Start with a 3-day free trial on Monthly Pro; after 3 days it is $14.99 a month unless you cancel. Weekly and Annual Pro plans are also available, billed from day one."
 
   - question: "Can I cancel my Pro subscription anytime?"
     answer: "Yes — cancel anytime from your account settings. If you cancel during the 3-day trial, you won't be charged."

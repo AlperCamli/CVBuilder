@@ -45,7 +45,7 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `mrr_movement` | timeseries (stacked) | market, plan / market, plan, currency | – | new, expansion, contraction (−), churn (−), reactivation, fx_effect, starting_mrr, ending_mrr, starting_customers, new_customers, reactivated_customers, churned_customers, ending_customers, fx_provisional. Day grain ≤ 366 days. |
 | `plan_mix` | breakdown | plan / market, plan, currency | – | subscriptions, share, mrr, mrr_usd_native, mrr_try_native, switched_in, switched_out, fx_provisional |
 | `subscriber_ltv` | breakdown | plan, market, currency | – | **ltv**, customers, ltv_usd_native, ltv_try_native, median_ltv, revenue(+natives), still_paying, censored_share, avg_paid_invoices, avg_observed_months, erased_customers, fx_provisional |
-| `trial_to_paid` | timeseries | market, plan | D | **trial_to_paid**, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved ("Needs check"), resolved, failed_charge_rate. Outcomes from `analytics_private.trial_outcomes` (converted includes plan-change and paid replacement subscriptions; charge_pending = trial ended < 1 day ago, first charge not collected yet; see api-contract.md **Trial outcomes**) |
+| `trial_to_paid` | timeseries | market, plan | D | **trial_to_paid**, trial_starts, converted, failed_first_charge, trial_canceled, superseded, in_trial, charge_pending, unresolved ("Needs check"), resolved, failed_charge_rate. Outcomes from `analytics_private.trial_outcomes` (converted includes plan-change and paid replacement subscriptions; charge_pending = trial ended < 1 day ago, first charge not collected yet; see api-contract.md **Trial outcomes**). Plan = the trial subscription's plan: `weekly` for trials started before 2026-11-05, `monthly` after (era below) |
 | `paywall_denials` | timeseries | market, plan | D C | user_days, users, hits, hits_consenting, hits_anonymous, anonymous_share |
 | `checkout_funnel` | funnel | market, plan | D | step_order, step (`attempts`, `session_created`, `completed`, `paid_within_7d`), users, conversion_from_prev, conversion_from_start, dropped, pending |
 | `subscription_churn` | timeseries (stacked) | market, plan | D | paid_churn, paid_voluntary, paid_involuntary, paid_other_or_unknown, ended_never_paid, replaced_excluded, cancel_scheduled_open, lost_to_erasure, lost_mrr(+natives), involuntary_share, fx_provisional |
@@ -106,6 +106,28 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `kpi_health` | kpi | – / market, plan (plan applies to payments and checkout only) | A | ai_runs, ai_failed_runs, ai_failure_rate, failed_payments, payment_failure_rate, checkout_attempts, checkout_abandon_rate, export_failures, export_failure_rate, import_failures, import_failure_rate, tailoring_task_failures, tailoring_task_failure_rate, unpriced_ai_runs |
 | `data_freshness` | table | none | – | item, label, status (`ok`/`warn`/`error`/`info`), value, value_text, at, detail. Items: nightly_refresh, last_recompute, pending_recompute, precomputed_as_of, scheduler, alerts_evaluated, fx_latest_month, billing_price_catalog, billing_plan_catalog, ai_model_prices, unpriced_ai_runs_30d, contract_violations |
 | `ai_ledger_health` | table | none | – | Same columns as `data_freshness`. Items (last 7 days, or since the ledger started): ai_ledger_last_attempt, ai_runs_without_attempts, ai_ledger_vs_runs_cost, ai_attempts_without_run, ai_failed_attempts, ai_unpriced_attempts |
+
+## Data eras
+Charts mark these dates when they fall inside the selected range (`admin/src/lib/eras.ts`, from the KB `new_analysis/README.md` "Era cutoffs"). Numbers on either side of a date are not directly comparable for the listed metrics.
+
+| Date | Change | Metrics |
+|---|---|---|
+| 2026-04-29 | AI token counts recorded | ai_cost, kpi_overview, ai_tokens_by_model |
+| 2026-06-03 | Import improve fans out; block suggestions auto-applied | ai_cost, ai_reliability, tailoring_card_acceptance |
+| 2026-10-06 | Guest upload onboarding and consents | signups, kpi_overview, activation_funnel, onboarding_segments, import_quality, stickiness |
+| 2026-10-12 | Regional pricing (TRY) | revenue, kpi_overview, mrr_movement, plan_mix, subscriber_ltv |
+| 2026-10-24 | Subscription paywall and trial transition | revenue, kpi_overview, trial_to_paid, checkout_funnel, paywall_denials |
+| 2026-10-26 | Manual-signup onboarding metrics counted | activation_funnel, onboarding_segments |
+| 2026-10-27 | Exact AI cost per run; tailoring v2 | ai_cost, kpi_overview, ai_cost_per_outcome, ai_wasted_spend, tailoring_funnel, tailoring_task_reliability, tailoring_card_acceptance |
+| 2026-10-29 | Subscription history and invoices tracked | revenue, kpi_overview, mrr_movement, trial_to_paid, checkout_funnel, subscription_churn, payment_issues, paywall_denials, stickiness |
+| 2026-11-05 | Free trial converts to Monthly (was Weekly) | trial_to_paid, kpi_overview, revenue, mrr_movement, plan_mix, checkout_funnel, subscriber_ltv |
+
+**2026-11-05, free trial on Monthly.** New trials are `monthly` subscriptions (`trialing`, `trial_start`/`trial_end` set, `billing_interval = 'month'`); trials started before are `weekly` and end within 3 days. No SQL changed: trials are found by `trial_start` on any plan, outcomes read invoices, MRR reads paid invoices (a trialing subscription has only its $0 invoice, so it never counts at list price), and the reminder queue reads each subscription's own plan, price and interval. What changes in the numbers:
+- `trial_to_paid` / `kpi_overview` trials: the `plan` breakdown and filter move from `weekly` to `monthly`; the day-3 conversion is now a monthly charge, a bigger ask than a weekly one, so compare conversion rates across the date with care.
+- `revenue`, `mrr_movement`, `kpi_overview` MRR: a converted trial adds the monthly price as new MRR (₺349,90 / $14.99) instead of a weekly invoice normalised to a month (x 30.4375 / 7, about 4.35); the first renewal comes a month after the trial instead of a week, so early cash per conversion is higher and renewal churn shows up later.
+- `plan_mix`: converted trials land on Monthly; a monthly trial replaced by the cancel-flow offer (Monthly, first month 50% off) is no longer a weekly → monthly switch.
+- `subscriber_ltv`: the first paid plan of trial converters becomes `monthly`.
+- `checkout_funnel`: trial checkouts are `plan = monthly` attempts; `paid_within_7d` is the first monthly charge.
 
 ## People functions (`analytics_people`, audited, `POST /admin/people/:name`)
 | Function | Columns |

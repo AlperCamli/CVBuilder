@@ -9,7 +9,7 @@ Status: approved separate-route release. `/guided-journey` and `/guided-journey/
 - `/designs/*`, including Companion Studio, remains available in local development. Default production builds exclude those routes and chunks. `VITE_ENABLE_DESIGN_TOOLS=true` enables a dedicated review build; leave it unset or false for production. The build removes unused review artwork from `dist` while keeping the four runtime mascot WebPs. Source artwork remains in Git.
 - Both public alternatives are prerendered with their headline, demo, plans, and FAQ. The server resolves the public lazy component before rendering; Vite's manifest supplies route CSS and preload links so the HTML is styled before JavaScript runs. Billing query parameters apply after hydration and preserve the selected checkout intent.
 - Both alternatives have titles, descriptions, self-referencing canonicals, social metadata, and structured data matching their visible FAQ. They use `noindex, follow` and stay out of the sitemap while `/` and `/pricing` remain the primary search pages.
-- Existing site structured offers now describe Free, Weekly ($4.99), Monthly ($14.99), and Annual ($99.90), with full-period prices and billing durations. The original pricing page's metadata no longer advertises retired Lifetime pricing or a Monthly trial. The eligible three-day trial belongs to Weekly Pro.
+- Existing site structured offers now describe Free, Weekly ($4.99), Monthly ($14.99), and Annual ($99.90), with full-period prices and billing durations. The original pricing page's metadata no longer advertises retired Lifetime pricing. The eligible three-day trial belonged to Weekly Pro until 2026-11-05. **Since 2026-11-05 the trial continues as Monthly Pro**: the guided pricing/FAQ metadata, the visible FAQ, the Support FAQ and the pricing cards say so, and Weekly is a paid plan without a trial.
 - No backend, authentication, billing-price, or API changes are included.
 
 ## Pricing presentation
@@ -17,7 +17,7 @@ Status: approved separate-route release. `/guided-journey` and `/guided-journey/
 | Selection | Weekly comparison | Actual recurring charge | Rounded savings vs Weekly |
 | --- | --- | --- | --- |
 | Weekly | $4.99/week | $4.99 every week | — |
-| Monthly (default, recommended) | $3.46/week equivalent | $14.99 every month | 31% |
+| Monthly (default, recommended; the trial plan since 2026-11-05) | $3.46/week equivalent | $14.99 every month | 31% |
 | Annual | $1.92/week equivalent | $99.90 every year | 62% |
 
 Equivalents use 52 weeks/year: Monthly is `14.99 × 12 / 52`; Annual is `99.90 / 52`. Savings compare the displayed cent-rounded rates, matching the current public pricing presentation. Monthly saves $1.53/week; Annual saves $3.07/week. Only the Monthly selector carries a savings badge; the selected-plan caption explains either discount. Full billing totals and renewal periods remain immediately below the headline price.

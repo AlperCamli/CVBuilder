@@ -4,6 +4,8 @@ How to run the external agent that sends trial reminder emails. JobSpecificCV do
 
 Why it matters: the checkout screen promises "We'll email you a reminder before your trial ends". This agent keeps that promise. A reminder that actually arrives is what makes people comfortable entering a card for a free trial, and it prevents "I was charged without warning" refunds and chargebacks.
 
+Which plan the trial converts to: since 2026-11-05 the free trial is on the **Monthly** plan, so at the trial end the card is charged the monthly price (₺349,90 / $14.99 a month). Trials started before the switch are on **Weekly** and convert to the weekly price; they all end within 3 days of it. Both kinds can be in the same export. The agent always takes the plan, price and interval from the row (`plan_code`, `price_display`, `billing_interval`) and never assumes them.
+
 ## 1. The routine
 
 | Step | Who | What |
@@ -38,7 +40,8 @@ The columns are described in [trial-reminder-queue.md](trial-reminder-queue.md).
 | `subscription_id` | The trial's id. Used in the send log so the same trial never gets the same email twice. |
 | `email`, `full_name` | Recipient. `full_name` may be empty. |
 | `locale` | `tr` or `en`. Write the email in this language. |
-| `price_display`, `billing_interval` | Price after the trial, e.g. `149,90 TL` + `week` → "haftalık 149,90 TL", or `$4.99` + `week` → "$4.99 per week". |
+| `plan_code` | The plan the trial converts to: `monthly` (every trial since 2026-11-05), or `weekly` for a trial started before that. |
+| `price_display`, `billing_interval` | Price after the trial, e.g. `349,90 TL` + `month` → "aylık 349,90 TL", or `$14.99` + `month` → "$14.99 per month". A legacy weekly trial has `week`: `149,90 TL` + `week` → "haftalık 149,90 TL". |
 | `trial_end` | When the trial ends and the first charge happens (UTC). |
 | `hours_until_trial_end` | Hours left at export time. Negative only for canceled trials that already ended. |
 | `category` | `in_trial` (will be charged at `trial_end`) or `trial_canceled` (canceled, won't be charged). |
@@ -62,7 +65,7 @@ The agent sends at most **one** email of each type per trial:
 
 What every email must contain:
 - the exact date and time of the charge (in_trial) or the confirmation that no charge will happen (canceled);
-- the price and interval exactly as the data says;
+- the price and interval exactly as the data says (monthly for current trials, weekly for a trial started before 2026-11-05);
 - how to cancel: **Profile → Cancel trial** at https://jobspecificcv.com/app/profile (in_trial only);
 - a plain, honest tone, with no pressure tactics, fake urgency, discounts or marketing content (these are service messages);
 - no tracking pixels and no link shorteners.
@@ -72,7 +75,7 @@ What every email must contain:
 Paste this as the agent's instructions. Replace the `{{…}}` parts each run, or let the agent read them from the files you attach.
 
 ````text
-You send trial reminder emails for JobSpecificCV (https://jobspecificcv.com), an AI CV builder. People start a 3-day free trial by entering a card; when the trial ends, the card is charged automatically for the plan shown in the data. We promised every trial user a reminder email before they are charged. Your job is to keep that promise accurately and politely.
+You send trial reminder emails for JobSpecificCV (https://jobspecificcv.com), an AI CV builder. People start a 3-day free trial by entering a card; when the trial ends, the card is charged automatically for the plan shown in the data (usually Monthly; some older trials are on Weekly). We promised every trial user a reminder email before they are charged. Your job is to keep that promise accurately and politely.
 
 ## Inputs (each run)
 1. EXPORT: the current trial list (CSV or JSON). Columns: subscription_id, email, full_name, locale (tr|en), plan_code, market (TR|GLOBAL), price_display, billing_interval (week|month|year), trial_end (UTC timestamp), hours_until_trial_end (hours left at export time), category (in_trial|trial_canceled), canceled_at.
@@ -91,7 +94,7 @@ Never email anyone who is not in this EXPORT. Never send the same subscription_i
 - Language: Turkish if locale = tr, English otherwise. Turkish uses the friendly "sen" form, like the product.
 - Greeting: use the first word of full_name when present ("Merhaba Ayşe," / "Hi Ayşe,"), otherwise "Merhaba," / "Hi,".
 - Time zone: Europe/Istanbul for market TR; otherwise UTC, written with "UTC". Use the person's language for date formats (TR: "4 Kasım 2026, 19:59"; EN: "November 4, 2026, 4:59 PM UTC").
-- Price: price_display plus the interval ("haftalık 149,90 TL" / "$4.99 per week"; monthly: "aylık" / "per month"; yearly: "yıllık" / "per year").
+- Price: price_display plus the row's own billing_interval, never an assumed one: month → "aylık 349,90 TL" / "$14.99 per month"; week → "haftalık 149,90 TL" / "$4.99 per week"; year → "yıllık" / "per year". The renewal sentence follows the same interval ("her ay yenilenir" / "renews every month"; week: "her hafta" / "every week"; year: "her yıl" / "every year").
 - Keep it short (under 120 words), honest and calm. No discounts, no pressure, no exclamation marks in subjects, no tracking links. Sign as "JobSpecificCV".
 
 ends_in_24h and ends_soon (charge is coming):
@@ -120,13 +123,24 @@ If you can't send emails, return the drafts (to, subject, body) instead and do N
 Use these as a reference for tone; the agent writes its own from the rules above.
 
 **TR, `ends_in_24h`**
-> **Konu:** JobSpecificCV denemen 4 Kasım 2026 tarihinde bitiyor
+> **Konu:** JobSpecificCV denemen 8 Kasım 2026 tarihinde bitiyor
 >
 > Merhaba Ayşe,
 >
-> 3 günlük ücretsiz denemen 4 Kasım 2026, 19:59'da bitiyor. Sonrasında kartından haftalık 149,90 TL otomatik olarak çekilecek; iptal edene kadar her hafta yenilenir.
+> 3 günlük ücretsiz denemen 8 Kasım 2026, 19:59'da bitiyor. Sonrasında kartından aylık 349,90 TL otomatik olarak çekilecek; iptal edene kadar her ay yenilenir.
 >
 > Kullanmaya devam etmek istiyorsan bir şey yapmana gerek yok. Ücret ödemek istemiyorsan bu tarihten önce Profil → Denemeyi iptal et adımıyla iptal edebilirsin: https://jobspecificcv.com/app/profile
+>
+> JobSpecificCV
+
+**EN, `ends_in_24h`**
+> **Subject:** Your JobSpecificCV trial ends on November 8, 2026
+>
+> Hi Sam,
+>
+> Your 3-day free trial ends on November 8, 2026, 4:59 PM UTC. Your card will then be charged $14.99 per month automatically, and it renews every month until you cancel.
+>
+> To keep using JobSpecificCV, you don't need to do anything. If you don't want to be charged, cancel before then in Profile → Cancel trial: https://jobspecificcv.com/app/profile
 >
 > JobSpecificCV
 

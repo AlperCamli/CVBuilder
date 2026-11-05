@@ -13,7 +13,7 @@ import { paywallCheckoutPath, trialPromptCopy } from "../integration/entitlement
 import { trackFunnelEvent } from "../integration/funnel-events";
 import {
   PAID_PLAN_CARDS,
-  WEEKLY_PRICE,
+  trialPlanCode,
   type CheckoutTarget,
   type PlanCard
 } from "../../content/pricing";
@@ -54,14 +54,13 @@ const POST_EXPORT_CHECKLIST = [
   "Use AI rewrites and track applications"
 ];
 
+// The trial plan's card (Monthly) carries the trial; Weekly is a plain paid option without one.
 const postExportPlanBadge = (
   card: (typeof PAID_PLAN_CARDS)[number],
+  trialPlan: CheckoutTarget,
   trialEligible: boolean
 ): string | null => {
-  if (card.code === "weekly") {
-    return trialEligible ? "3-day free trial" : "Flexible weekly access";
-  }
-
+  if (card.code === trialPlan && trialEligible) return "3-day free trial";
   return card.savings ?? card.badge ?? null;
 };
 
@@ -70,7 +69,8 @@ const getCopy = (
   options: UpgradePromptOptions,
   trialEligible: boolean
 ): VariantCopy => {
-  const weeklyCta = trialEligible ? "Start 3-day free trial" : "Start weekly plan";
+  // The primary button starts the trial plan: with the trial when eligible, else paid.
+  const planCta = trialEligible ? "Start 3-day free trial" : "Start monthly plan";
 
   switch (variant) {
     case "welcome":
@@ -78,9 +78,9 @@ const getCopy = (
         eyebrow: "Welcome",
         title: "Unlock the full job-specific CV workflow",
         body: trialEligible
-          ? "Start Weekly with a 3-day trial, then create unlimited tailored CVs, exports, cover letters, and AI rewrites."
+          ? "Start with a 3-day free trial on Monthly Pro, then create unlimited tailored CVs, exports, cover letters, and AI rewrites."
           : "Create unlimited tailored CVs, exports, cover letters, and AI rewrites with a paid plan.",
-        ctaPrimary: weeklyCta,
+        ctaPrimary: planCta,
         dismiss: "Maybe later"
       };
     case "trial_required": {
@@ -96,7 +96,7 @@ const getCopy = (
         eyebrow: "Limit reached",
         title: "You've reached your plan limit",
         body: options.reason ?? "Choose a Pro plan to keep going.",
-        ctaPrimary: weeklyCta,
+        ctaPrimary: planCta,
         dismiss: "Not now"
       };
     case "post_export":
@@ -105,7 +105,7 @@ const getCopy = (
         title: "Your customized CV is ready. Keep going with the full application workflow.",
         body:
           "You have seen the core value: one CV tailored for one real job. Choose a plan to create unlimited versions for every application.",
-        ctaPrimary: weeklyCta,
+        ctaPrimary: planCta,
         dismiss: "Not now"
       };
   }
@@ -191,6 +191,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
   ]);
 
   const copy = getCopy(variant, options, trialEligible);
+  const trialPlan = trialPlanCode(regional.prices);
   const isPostExport = variant === "post_export";
 
   const trackDismissIfNeeded = () => {
@@ -234,7 +235,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
     setBusy(target);
     setError(null);
     try {
-      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}`, withTrial: target === "weekly" && trialEligible, returnPath: options.returnPath ?? `${window.location.pathname}${window.location.search}` });
+      await startStripeCheckout(api, target, { source: `upgrade_prompt_${variant}`, withTrial: target === trialPlan && trialEligible, returnPath: options.returnPath ?? `${window.location.pathname}${window.location.search}` });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Failed to open checkout."));
       setBusy(null);
@@ -320,8 +321,9 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                   <PricingAvailability {...regional} />
                   {regional.cards.filter((card): card is PlanCard & { code: CheckoutTarget } => card.code !== "trial").map((card) => {
                     const isBusy = busy === card.code;
-                    const badge = postExportPlanBadge(card, trialEligible);
-                    const isEmphasized = card.code === "weekly" || card.highlighted;
+                    const badge = postExportPlanBadge(card, trialPlan, trialEligible);
+                    const isTrialPlan = card.code === trialPlan;
+                    const isEmphasized = isTrialPlan || card.highlighted;
 
                     return (
                       <button
@@ -333,7 +335,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                         style={{
                           borderColor: isEmphasized ? "var(--color-teal-400)" : "var(--color-border-tertiary)",
                           background:
-                            card.code === "weekly"
+                            isTrialPlan
                               ? "var(--color-teal-50)"
                               : card.highlighted
                                 ? "var(--color-background-secondary)"
@@ -363,9 +365,9 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                               style={{
                                 fontSize: "11px",
                                 background:
-                                  card.code === "weekly" ? "var(--color-teal-600)" : "var(--color-teal-100)",
+                                  isTrialPlan ? "var(--color-teal-600)" : "var(--color-teal-100)",
                                 color:
-                                  card.code === "weekly" ? "var(--color-teal-50)" : "var(--color-teal-800)"
+                                  isTrialPlan ? "var(--color-teal-50)" : "var(--color-teal-800)"
                               }}
                             >
                               {t(badge)}
@@ -388,11 +390,11 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                             className="font-medium"
                             style={{
                               fontSize: "11px",
-                              color: card.code === "weekly" ? "var(--color-teal-700)" : "var(--color-text-secondary)",
+                              color: isTrialPlan ? "var(--color-teal-700)" : "var(--color-text-secondary)",
                               marginTop: "5px"
                             }}
                           >
-                            {card.code === "weekly" && trialEligible ? t("Start trial") : t("Choose {{plan}}", { plan: card.name })}
+                            {isTrialPlan && trialEligible ? t("Start trial") : t("Choose {{plan}}", { plan: card.name })}
                           </p>
                         </div>
                       </button>
@@ -464,7 +466,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
 
               <button
                 type="button"
-                onClick={() => (isTrialPrompt ? goToTrialCheckout() : void startCheckout("weekly"))}
+                onClick={() => (isTrialPrompt ? goToTrialCheckout() : void startCheckout(trialPlan))}
                 disabled={busy !== null || (!isTrialPrompt && !regional.ready)}
                 className="w-full px-5 py-2.5 rounded-lg font-medium transition-colors inline-flex justify-center items-center gap-2"
                 style={{
@@ -475,7 +477,7 @@ export function UpgradePromptModal({ open, variant, options, onClose }: UpgradeP
                   cursor: busy !== null ? "wait" : "pointer"
                 }}
               >
-                {busy === "weekly" ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                {busy === trialPlan ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                 {t(copy.ctaPrimary)}
               </button>
             </>

@@ -26,8 +26,8 @@ export interface BillingPlanResponseData {
   cancel_at_period_end: boolean;
   // A plan change waiting for the end of the paid period (a downgrade, or the paid-weekly cancel offer's switch).
   scheduled_change: { plan_code: string; starts_at: string } | null;
-  // True only when checkout would still grant the free trial (trials enabled and
-  // an unused transition grant or first trial exists). Lets the UI swap the trial CTA for a plain
+  // True only when a checkout of the trial plan (the one GET /billing/prices reports with trial_days > 0) would still
+  // grant the free trial (trials enabled and an unused transition grant or first trial exists). Lets the UI swap the trial CTA for a plain
   // "subscribe" CTA once the trial has been consumed.
   trial_eligible: boolean;
   trial_transition: { eligible: boolean } | null;
@@ -54,8 +54,11 @@ export interface CreateCheckoutInput {
   plan_code: string;
   success_url?: string;
   cancel_url?: string;
-  // When explicitly false, the Weekly checkout skips the free trial and bills
-  // the user immediately. Defaults to true (trial granted if the user is eligible).
+  // Clients send an explicit boolean. true asks for the free trial, which is on the plan whose catalog entry has
+  // trial_supported (Monthly since 2026-11-05; Weekly before): granted if the user is eligible, refused with 409
+  // trial_unavailable (details.trial_plan_code names the trial plan) on any other plan. false is a paid checkout.
+  // Omitted (transitional, pre-2026-11-05 bundles; see wantsTrial): a trial request on Weekly, refused with 409
+  // trial_unavailable, and a paid checkout on Monthly and Annual.
   with_trial?: boolean;
   // The browser's IANA time zone, for the trial end date shown at Stripe.
   time_zone?: string;
@@ -91,7 +94,8 @@ export interface CreatePortalResponseData {
 export type { CancelOfferAudience } from "../promotions/promotions.types";
 
 // The offer on the cancel screen (docs/promotions/cancel-flow-offer.md). Amounts are minor units of currency.
-// kind: checkout = a trial pays the discounted first month now (then the trial ends); switch_at_period_end = paid
+// kind: checkout = a trial (Monthly, or a Weekly trial started before 2026-11-05) pays the discounted first period of
+// plan_code now, then the trial ends without ever being charged; switch_at_period_end = paid
 // weekly moves to plan_code at period_end with its first invoice discounted; renewal_discount = the next renewal of
 // the current plan (at period_end) is discounted.
 export interface CancelOffer {
@@ -103,7 +107,7 @@ export interface CancelOffer {
   // The promoted plan's list price, and the discounted charge.
   amount: number;
   discounted_amount: number;
-  // The trial's current plan and its list price, for comparison.
+  // The current plan (for a trial: the plan it would convert to) and its list price, for comparison.
   current_plan_code: "weekly" | "monthly" | "annual";
   current_amount: number | null;
   // The end of the current trial or paid period.

@@ -7,8 +7,8 @@ import { i18n } from "../localization/i18n";
 
 const regional = {
   prices: { market: "TR", currency: "try", available: true, quote: "fixture", plans: [
-    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 3 },
-    { code: "monthly", amount: 34990, interval: "month", interval_count: 1, trial_days: 0 },
+    { code: "weekly", amount: 14990, interval: "week", interval_count: 1, trial_days: 0 },
+    { code: "monthly", amount: 34990, interval: "month", interval_count: 1, trial_days: 3 },
     { code: "annual", amount: 149900, interval: "year", interval_count: 1, trial_days: 0 },
   ] },
   loading: false, ready: true, error: null, retry: () => undefined,
@@ -25,10 +25,10 @@ afterEach(async () => { await i18n.changeLanguage("en"); });
 
 describe("checkout mascot screen", () => {
   it("reassures about cancelling and shows lira with its symbol in English", () => {
-    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: true });
+    const html = render({ outcome: "start", plan: "monthly", trial: true, eligibility: true });
     expect(html).toContain("/images/designs/mascot/celebrate.webp");
     expect(html).toContain("Cancel anytime");
-    expect(html).toContain("₺149.90");
+    expect(html).toContain("₺349.90");
     expect(html).not.toContain("TRY");
     // The trial button opens Stripe itself; nothing links to another confirmation page.
     expect(html).not.toContain("/app/checkout");
@@ -42,25 +42,30 @@ describe("checkout mascot screen", () => {
 
   it("renders the Turkish copy", async () => {
     await i18n.changeLanguage("tr");
-    const html = render({ outcome: "cancel", plan: "weekly", trial: true, eligibility: true });
+    const html = render({ outcome: "cancel", plan: "monthly", trial: true, eligibility: true });
     expect(html).toContain("Ücretsiz denemeniz hâlâ sizi bekliyor.");
     expect(html).toContain("İstediğiniz zaman iptal edin");
-    expect(html).toContain("₺149,90");
+    expect(html).toContain("₺349,90");
+    expect(html).not.toContain("₺149,90");
   });
 
   it("shows the spinner only on the button that is opening checkout", () => {
-    const html = render({ outcome: "cancel", plan: "annual", trial: false, eligibility: true }, "weekly:true");
+    const html = render({ outcome: "cancel", plan: "annual", trial: false, eligibility: true }, "monthly:true");
     expect(html.match(/Opening secure checkout…/g)).toHaveLength(1);
     expect(html).toContain("Continue with Yearly");
   });
 
-  it("lays out today, the reminder and the first charge, with the cancel promise and Stripe", () => {
-    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: true, source: "export" });
+  it("lays out today, the reminder and the first Monthly charge, with the cancel promise and Stripe", () => {
+    const html = render({ outcome: "start", plan: "monthly", trial: true, eligibility: true, source: "export" });
     const date = trialEndDate(3, "en-US");
     expect(html).toContain("Your tailored CV is ready to download");
     expect(html).toContain("Today: ₺0<");
     expect(html).toContain("Reminder email before your trial ends");
-    expect(html).toContain(`${date}: ₺149.90/week`);
+    expect(html).toContain(`${date}: ₺349.90/month`);
+    expect(html).toContain("Your Monthly plan starts, unless you cancel before then.");
+    // The trial renews at the Monthly price; the weekly price is never promised.
+    expect(html).not.toContain("₺149.90");
+    expect(html).not.toMatch(/week/i);
     expect(html).toContain(`Cancel anytime from your Profile in two clicks. If you cancel before ${date}, you won’t be charged.`);
     expect(html).toContain("Secure checkout powered by Stripe");
     expect(html).toContain("We never see or store your card details.");
@@ -79,8 +84,30 @@ describe("checkout mascot screen", () => {
     expect(html).toContain("Secure checkout powered by Stripe");
   });
 
+  it("offers the paid Monthly plan at its price once the trial is used", () => {
+    const html = render({ outcome: "start", plan: "monthly", trial: true, eligibility: false });
+    expect(html).toContain("You’ve already used your free trial");
+    expect(html).toContain("Continue with Monthly · ₺349.90");
+    expect(html).not.toContain("Start my 3-day free trial");
+  });
+
+  it("names the paid Weekly plan without a trial", () => {
+    const html = render({ outcome: "start", plan: "weekly", trial: false, eligibility: true });
+    expect(html).toContain("Pro Weekly");
+    expect(html).toContain("₺149.90");
+    expect(html).not.toContain("Reminder email before your trial ends");
+  });
+
+  it("follows a catalog that still attaches the trial to Weekly", () => {
+    const legacy = { ...regional, prices: { ...regional.prices, plans: regional.prices.plans.map(plan => ({ ...plan, trial_days: plan.code === "weekly" ? 3 : 0 })) } };
+    const html = renderToStaticMarkup(<MemoryRouter><CheckoutScreen screen={checkoutScreen({ outcome: "start", plan: "monthly", trial: true, eligibility: true })} outcome="start"
+      regional={legacy as never} eligibility opening={null} error={null} plansPath="/app/pricing" onCheckout={() => undefined} onPortal={() => undefined} /></MemoryRouter>);
+    expect(html).toContain(`${trialEndDate(3, "en-US")}: ₺149.90/week`);
+    expect(html).toContain("Your Weekly plan starts, unless you cancel before then.");
+  });
+
   it("offers only the billing portal after a failed renewal", () => {
-    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: false, portal: "payment" });
+    const html = render({ outcome: "start", plan: "monthly", trial: true, eligibility: false, portal: "payment" });
     expect(html).toContain("Update payment method");
     expect(html).not.toContain("Start my 3-day free trial");
     expect(html).not.toContain("/app/pricing");
@@ -88,25 +115,37 @@ describe("checkout mascot screen", () => {
 
   it("renders the Turkish timeline and Stripe block", async () => {
     await i18n.changeLanguage("tr");
-    const html = render({ outcome: "start", plan: "weekly", trial: true, eligibility: true });
+    const html = render({ outcome: "start", plan: "monthly", trial: true, eligibility: true });
     expect(html).toContain("Bugün: ₺0<");
-    expect(html).toContain(`${trialEndDate(3, "tr-TR")}: haftalık ₺149,90`);
+    expect(html).toContain("₺349,90");
+    expect(html).not.toContain("haftalık ₺149,90");
     expect(html).toContain("Güvenli ödeme altyapısı: Stripe");
     expect(html).toContain("Neden kart gerekiyor?");
   });
 });
 
 describe("welcome after checkout", () => {
-  const welcome = (billing: { plan_code: "weekly" | "monthly"; subscription_status: string; current_period_end: string | null }, source: "export" | "tailoring" | null, destination = "/app/cv/1?resume=export") =>
+  const welcome = (billing: { plan_code: "weekly" | "monthly" | "annual"; subscription_status: string; current_period_end: string | null }, source: "export" | "tailoring" | null, destination = "/app/cv/1?resume=export") =>
     renderToStaticMarkup(<MemoryRouter><CheckoutWelcome billing={billing} regional={regional as never} source={source} destination={destination} onContinue={() => undefined} /></MemoryRouter>);
 
   it("welcomes a trial to Pro with the trial chip, the benefits, the task button and the trial dates", () => {
-    const html = welcome({ plan_code: "weekly", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, "export");
+    const html = welcome({ plan_code: "monthly", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, "export");
     expect(html).toContain("FREE TRIAL STARTED");
     expect(html).toContain("Welcome to Pro. Everything is unlocked.");
     for (const benefit of ["Tailor your CV to every job", "Unlimited PDF &amp; DOCX downloads", "AI improvements", "Cover letters"]) expect(html).toContain(benefit);
     expect(html).toContain("Download your CV");
+    expect(html).toContain("Free until November 5, then ₺349.90 a month. We’ll email you before your trial ends.");
+  });
+
+  it("tells a weekly trial started before the switch that it renews weekly", () => {
+    const html = welcome({ plan_code: "weekly", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, "export");
     expect(html).toContain("Free until November 5, then ₺149.90 a week. We’ll email you before your trial ends.");
+  });
+
+  it("never states a renewal price it has no trial copy for", () => {
+    const html = welcome({ plan_code: "annual", subscription_status: "trialing", current_period_end: "2026-11-05T12:00:00Z" }, null, "/app");
+    expect(html).toContain("Free until November 5. We’ll email you before your trial ends.");
+    expect(html).not.toContain("₺1,499.00");
   });
 
   it("uses the same headline for a Pro purchase, with the Pro chip and the renewal date", () => {

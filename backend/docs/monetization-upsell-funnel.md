@@ -113,6 +113,8 @@ Plain sign-in is unaffected: `SignIn` never stashes, and its default destination
 
 All variants share the checkout CTAs: Start 3-day free trial (or "Start your subscription" once the trial is consumed), Get Lifetime — $99, and a Compare plans link.
 
+> Since 2026-11-05 the 3-day free trial is on **Monthly Pro** (then the monthly price; it was on Weekly before, and Lifetime is no longer sold). The trial CTA opens `/app/checkout?plan=monthly&trial=1` and checks out `{ plan_code: "monthly", with_trial: true }`; see `billing-entitlements.md` → "Free Trial Flow".
+
 ## Files touched
 
 - `frontend/src/content/pricing.ts` — price constants

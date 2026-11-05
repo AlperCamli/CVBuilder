@@ -12,7 +12,7 @@ import { BillingService } from "../src/modules/billing/billing.service";
 import { RegionalPricingService, type BillingMarket, type PurchasePlan } from "../src/modules/billing/regional-pricing";
 import { StripeBillingGateway } from "../src/modules/billing/stripe-gateway";
 import { EntitlementsService } from "../src/modules/entitlements/entitlements.service";
-import { createPlanCatalog } from "../src/modules/entitlements/plan-definitions";
+import { createPlanCatalog, trialPlanCodes } from "../src/modules/entitlements/plan-definitions";
 import { UsageService } from "../src/modules/usage/usage.service";
 import { createTestConfig, FakeAuthProvider, InMemorySubscriptionsRepository, InMemoryUsageRepository, InMemoryUsersRepository } from "./helpers/in-memory";
 
@@ -34,12 +34,15 @@ async function fixture(country: "TR" | "US", trialDays = 3) {
   const checkouts: Array<{ body: URLSearchParams; idempotencyKey: string | undefined }> = [];
   let checkoutUserId = "";
   let checkoutPriceId = "";
+  let checkoutPlanCode = "";
   const subscription = () => ({
     id: "sub_trial", object: "subscription", customer: "cus_trial", status: "trialing",
     current_period_start: Math.floor(Date.now() / 1000),
     current_period_end: Math.floor(Date.now() / 1000) + 3 * 86400,
+    trial_start: Math.floor(Date.now() / 1000),
+    trial_end: Math.floor(Date.now() / 1000) + 3 * 86400,
     cancel_at_period_end: false,
-    metadata: { app_user_id: checkoutUserId, plan_code: "weekly" },
+    metadata: { app_user_id: checkoutUserId, plan_code: checkoutPlanCode },
     items: { data: [{ price: { id: checkoutPriceId } }] }
   });
   const server = createServer(async (req, res) => {
@@ -68,6 +71,7 @@ async function fixture(country: "TR" | "US", trialDays = 3) {
     } else if (url.pathname === "/v1/checkout/sessions" && req.method === "POST") {
       checkouts.push({ body, idempotencyKey: req.headers["idempotency-key"] as string | undefined });
       checkoutPriceId = body.get("line_items[0][price]")!;
+      checkoutPlanCode = body.get("metadata[plan_code]")!;
       payload = { id: "cs_test_trial", object: "checkout.session", url: "https://checkout.stripe.test/trial", customer: "cus_trial", subscription: null, metadata: { app_user_id: checkoutUserId } };
     } else {
       res.statusCode = 404;
@@ -101,9 +105,11 @@ async function fixture(country: "TR" | "US", trialDays = 3) {
       throw new Error(`Unexpected database RPC: ${name}`);
     }
   } as unknown as SupabaseClient;
+  // One catalog for prices and checkout, wired as build-services does.
+  const catalog = createPlanCatalog();
   const regional = new RegionalPricingService(db, gateway, {
     secret, productIds: { weekly: "prod_weekly", monthly: "prod_monthly", annual: "prod_annual" },
-    prices, portals: { GLOBAL: "bpc_us", TR: "bpc_tr" }, trialDays
+    prices, portals: { GLOBAL: "bpc_us", TR: "bpc_tr" }, trialDays, trialPlans: trialPlanCodes(catalog)
   });
   const usersRepository = new InMemoryUsersRepository();
   const subscriptionsRepository = new InMemorySubscriptionsRepository();
@@ -111,7 +117,7 @@ async function fixture(country: "TR" | "US", trialDays = 3) {
   const config = createTestConfig();
   config.appEnv = "staging"; // Require the same signed geo headers as production.
   config.billing.geoSecret = secret;
-  const billingService = new BillingService(usersRepository, subscriptionsRepository, new UsageService(usageRepository), new EntitlementsService(createPlanCatalog()), gateway, {
+  const billingService = new BillingService(usersRepository, subscriptionsRepository, new UsageService(usageRepository), new EntitlementsService(catalog), gateway, {
     provider: "stripe", regionalPricing: regional, checkoutSuccessUrl: config.billing.checkoutSuccessUrl,
     checkoutCancelUrl: config.billing.checkoutCancelUrl, portalReturnUrl: config.billing.portalReturnUrl,
     stripeWebhookSecret: "whsec_regional_trial", trialPeriodDays: trialDays
@@ -132,7 +138,7 @@ async function fixture(country: "TR" | "US", trialDays = 3) {
 }
 
 describe("regional free trial through HTTP and the Stripe SDK", () => {
-  it.each(["TR", "US"] as const)("preserves the three-day trial with %s pricing and unlocks access after signed checkout completion", async country => {
+  it.each(["TR", "US"] as const)("preserves the three-day Monthly trial with %s pricing and unlocks access after signed checkout completion", async country => {
     const f = await fixture(country);
     const market = country === "TR" ? "TR" : "GLOBAL";
     const currency = country === "TR" ? "try" : "usd";
@@ -141,13 +147,21 @@ describe("regional free trial through HTTP and the Stripe SDK", () => {
     const prices = await f.get("/api/v1/billing/prices");
     expect(prices.status).toBe(200);
     expect(prices.body.data).toMatchObject({ available: true, market, currency });
-    expect(prices.body.data.plans.find((p: { code: string }) => p.code === "weekly")).toMatchObject({ trial_days: 3, amount: f.amounts[market].weekly });
-    const checkout = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote });
+    // Same response shape as before; only the plan carrying trial_days moved from Weekly to Monthly.
+    expect(prices.body.data.plans).toEqual([
+      { code: "weekly", amount: f.amounts[market].weekly, interval: "week", interval_count: 1, trial_days: 0 },
+      { code: "monthly", amount: f.amounts[market].monthly, interval: "month", interval_count: 1, trial_days: 3 },
+      { code: "annual", amount: f.amounts[market].annual, interval: "year", interval_count: 1, trial_days: 0 }
+    ]);
+    const checkout = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: true });
     expect(checkout.status).toBe(200);
-    expect(checkout.body.data).toMatchObject({ plan_code: "weekly", currency, amount: f.amounts[market].weekly, trial_applied: true, trial_period_days: 3 });
+    expect(checkout.body.data).toMatchObject({ plan_code: "monthly", currency, amount: f.amounts[market].monthly, trial_applied: true, trial_period_days: 3 });
     expect(f.checkouts).toHaveLength(1);
     const { body, idempotencyKey } = f.checkouts[0];
-    expect(body.get("line_items[0][price]")).toBe(f.prices[market].weekly);
+    expect(body.get("line_items[0][price]")).toBe(f.prices[market].monthly);
+    expect(body.get("metadata[plan_code]")).toBe("monthly");
+    expect(body.get("payment_method_types[0]")).toBe("card");
+    expect(body.get("custom_text[submit][message]")).toContain(country === "TR" ? "Bugün ücret alınmaz" : "You won't be charged today");
     expect(body.get("currency")).toBe(currency);
     expect(body.get("mode")).toBe("subscription");
     expect(body.get("subscription_data[trial_period_days]")).toBe("3");
@@ -160,40 +174,78 @@ describe("regional free trial through HTTP and the Stripe SDK", () => {
     expect(completed.status).toBe(200);
     expect(completed.body.data.processed).toBe(true);
     const after = await f.get("/api/v1/billing/plan");
-    expect(after.body.data).toMatchObject({ plan_code: "weekly", subscription_status: "trialing", trial_eligible: false });
+    expect(after.body.data).toMatchObject({ plan_code: "monthly", subscription_status: "trialing", trial_eligible: false });
     const end = Date.parse(after.body.data.current_period_end);
     expect(end - Date.now()).toBeGreaterThan(3 * 86400000 - 10000);
     const usage = await f.get("/api/v1/billing/usage");
     expect(usage.body.data.limits).toMatchObject({ exports: null, tailored_cv_generations: null, ai_actions: null });
-    const duplicate = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote });
+    const duplicate = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: true });
     expect(duplicate.status).toBe(409);
     expect(f.checkouts).toHaveLength(1);
     const canceled = await f.webhook({ id: "evt_trial_canceled", type: "customer.subscription.deleted", data: { object: { ...f.subscription(), status: "canceled" } } });
     expect(canceled.status).toBe(200);
     expect((await f.get("/api/v1/billing/plan")).body.data).toMatchObject({ plan_code: "free", trial_eligible: false });
-    const repeated = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote });
+    const repeated = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: true });
     expect(repeated.status).toBe(409);
     expect(f.checkouts).toHaveLength(1);
   });
 
-  it.each(["monthly", "annual"] as const)("does not accidentally grant a trial to regional %s checkout", async plan => {
+  it.each(["weekly", "annual"] as const)("refuses an explicit trial on regional %s checkout instead of charging it now", async plan => {
     const f = await fixture("TR");
     const prices = await f.get("/api/v1/billing/prices");
-    const checkout = await f.checkout({ plan_code: plan, pricing_quote: prices.body.data.quote, with_trial: true });
-    expect(checkout.status).toBe(200);
-    expect(checkout.body.data).toMatchObject({ plan_code: plan, currency: "try", trial_applied: false, trial_period_days: null });
-    expect(f.checkouts[0].body.get("line_items[0][price]")).toBe(f.prices.TR[plan]);
+    const refused = await f.checkout({ plan_code: plan, pricing_quote: prices.body.data.quote, with_trial: true });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.details).toMatchObject({ reason: "trial_unavailable", plan_code: plan, trial_plan_code: "monthly" });
+    expect(f.checkouts).toHaveLength(0);
+    // Nothing was locked or reserved for the refused request: the market is still free to follow the paid checkout.
+    expect(f.markets.size).toBe(0);
+  });
+
+  it.each([["weekly", [{ with_trial: false }]], ["annual", [{}, { with_trial: false }]]] as const)("charges regional %s checkout at once without a trial when it asks for none", async (plan, inputs) => {
+    const f = await fixture("TR");
+    const prices = await f.get("/api/v1/billing/prices");
+    for (const input of inputs) {
+      const checkout = await f.checkout({ plan_code: plan, pricing_quote: prices.body.data.quote, ...input });
+      expect(checkout.status).toBe(200);
+      expect(checkout.body.data).toMatchObject({ plan_code: plan, currency: "try", amount: f.amounts.TR[plan], trial_applied: false, trial_period_days: null });
+      const { body } = f.checkouts.at(-1)!;
+      expect(body.get("line_items[0][price]")).toBe(f.prices.TR[plan]);
+      expect(body.has("subscription_data[trial_period_days]")).toBe(false);
+      expect(body.has("custom_text[submit][message]")).toBe(false);
+    }
+  });
+
+  // Transitional rule for tabs still running the pre-2026-11-05 bundle (LEGACY_TRIAL_PLAN_CODES in billing.service.ts).
+  it("refuses an old tab's Weekly trial request (with_trial omitted) before anything is locked or sent to Stripe", async () => {
+    const f = await fixture("TR");
+    const prices = await f.get("/api/v1/billing/prices");
+    const stale = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.details).toMatchObject({ reason: "trial_unavailable", plan_code: "weekly", trial_plan_code: "monthly" });
+    expect(f.checkouts).toHaveLength(0);
+    expect(f.markets.size).toBe(0);
+  });
+
+  it("charges Monthly at once with with_trial false, even for a trial-eligible account", async () => {
+    const f = await fixture("US");
+    const prices = await f.get("/api/v1/billing/prices");
+    const paid = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: false });
+    expect(paid.status).toBe(200);
+    expect(paid.body.data).toMatchObject({ plan_code: "monthly", amount: f.amounts.GLOBAL.monthly, trial_applied: false, trial_period_days: null });
     expect(f.checkouts[0].body.has("subscription_data[trial_period_days]")).toBe(false);
+    expect((await f.get("/api/v1/billing/plan")).body.data.trial_eligible).toBe(true);
   });
 
   it("requires explicit paid consent when trials are disabled", async () => {
     const f = await fixture("TR", 0);
     expect((await f.get("/api/v1/billing/plan")).body.data.trial_eligible).toBe(false);
     const prices = await f.get("/api/v1/billing/prices");
-    const rejected = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote });
+    expect(prices.body.data.plans.every((plan: { trial_days: number }) => plan.trial_days === 0)).toBe(true);
+    const rejected = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: true });
     expect(rejected.status).toBe(409);
+    expect(rejected.body.error.details.reason).toBe("pricing_changed");
     expect(f.checkouts).toHaveLength(0);
-    const paid = await f.checkout({ plan_code: "weekly", pricing_quote: prices.body.data.quote, with_trial: false });
+    const paid = await f.checkout({ plan_code: "monthly", pricing_quote: prices.body.data.quote, with_trial: false });
     expect(paid.status).toBe(200);
     expect(paid.body.data.trial_applied).toBe(false);
     expect(f.checkouts[0].body.has("subscription_data[trial_period_days]")).toBe(false);
@@ -206,7 +258,7 @@ describe("regional free trial through HTTP and the Stripe SDK", () => {
     const payload = { ...JSON.parse(Buffer.from(encoded, "base64url").toString()), subject: null };
     const changed = Buffer.from(JSON.stringify(payload)).toString("base64url");
     const quote = `${changed}.${createHmac("sha256", secret).update(changed).digest("hex")}`;
-    expect((await f.checkout({ plan_code: "weekly", pricing_quote: quote })).status).toBe(409);
+    expect((await f.checkout({ plan_code: "monthly", pricing_quote: quote, with_trial: true })).status).toBe(409);
     expect((await request(f.app).get("/api/v1/billing/prices").set("Authorization", authorization)).status).toBe(403);
     expect(f.checkouts).toHaveLength(0);
   });

@@ -20,7 +20,7 @@ describe("card-backed trial checkout", () => {
     try {
       const gateway = new StripeBillingGateway("sk_test_fixture");
       (gateway as unknown as { stripe: Stripe }).stripe = new Stripe("sk_test_fixture", { apiVersion: "2024-06-20", host: "127.0.0.1", port: (server.address() as AddressInfo).port, protocol: "http", maxNetworkRetries: 0 });
-      const input = { customer_id: "cus_owned", price_id: "price_weekly", success_url: "http://localhost/app/checkout?session_id={CHECKOUT_SESSION_ID}", cancel_url: "http://localhost/app/checkout?checkout=cancel", client_reference_id: "owner", metadata: { app_user_id: "owner" } };
+      const input = { customer_id: "cus_owned", price_id: "price_monthly", success_url: "http://localhost/app/checkout?session_id={CHECKOUT_SESSION_ID}", cancel_url: "http://localhost/app/checkout?checkout=cancel", client_reference_id: "owner", metadata: { app_user_id: "owner" } };
       await gateway.createCheckoutSession({ ...input, trial_period_days: 3, submit_message: "You won't be charged today." });
       expect(bodies[0].get("payment_method_collection")).toBe("always");
       expect(bodies[0].get("custom_text[submit][message]")).toBe("You won't be charged today.");
