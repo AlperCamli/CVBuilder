@@ -1,4 +1,4 @@
-// Google Ads measurement through Google Tag Manager (GTM-PGVDXFTR). The tag itself is
+// Google Ads measurement through Google Tag Manager (GTM-NQR6X7K9). The tag itself is
 // loaded by the inline loader at the top of index.html, and only after the visitor
 // allows ad measurement; this module owns that choice and the trial conversion.
 // AD_CHOICE_KEY, AD_NOTICE_VERSION and GTM_SCRIPT_ID must match the loader.

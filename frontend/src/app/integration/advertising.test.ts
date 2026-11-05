@@ -18,7 +18,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Google Ads measurement", () => {
   it("keeps the index.html loader in sync with this module", () => {
     const html = readFileSync(new URL("../../../index.html", import.meta.url), "utf8");
-    for (const value of [ads.AD_CHOICE_KEY, ads.AD_NOTICE_VERSION, ads.GTM_SCRIPT_ID, ads.AD_PRIVACY_EVENT, "gtm.js?id=GTM-PGVDXFTR"]) expect(html).toContain(value);
+    for (const value of [ads.AD_CHOICE_KEY, ads.AD_NOTICE_VERSION, ads.GTM_SCRIPT_ID, ads.AD_PRIVACY_EVENT, "gtm.js?id=GTM-NQR6X7K9"]) expect(html).toContain(value);
     expect(html.match(/googletagmanager\.com\/gtm\.js/g)).toHaveLength(1);
   });
 
