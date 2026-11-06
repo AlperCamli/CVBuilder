@@ -1,7 +1,7 @@
 import { PRE_SIGNUP_QUESTIONS, type OnboardingAnswers } from "../onboarding/pre-signup-questions";
 import type { Locale } from "../localization/i18n";
 import type { BackendApi } from "./backend-api";
-import { privacyApi } from "./privacy";
+import { choices, notifyAiChoiceChanged, privacyApi } from "./privacy";
 
 const KEY = "cv-builder:new-cv-onboarding";
 export interface NewCvOnboarding {
@@ -11,6 +11,8 @@ export interface NewCvOnboarding {
   answers: OnboardingAnswers;
   step: "questions" | "signup";
   question: number;
+  /** Chose "Create a new CV" beside the AI disclosure while the provider was enabled. */
+  aiConsent?: boolean;
   accountId?: string;
   masterCvId?: string;
 }
@@ -24,6 +26,7 @@ export function readNewCvOnboarding(): NewCvOnboarding | null {
       && Number.isInteger(row.question) && row.question >= 0 && row.question < PRE_SIGNUP_QUESTIONS.length
       && row.answers && typeof row.answers === "object" && !Array.isArray(row.answers)
       && Object.entries(row.answers).every(([id, value]) => PRE_SIGNUP_QUESTIONS.some(question => question.id === id && question.options.some(option => option.value === value)))
+      && (row.aiConsent === undefined || typeof row.aiConsent === "boolean")
       && (row.accountId === undefined || typeof row.accountId === "string")
       && (row.masterCvId === undefined || (typeof row.masterCvId === "string" && typeof row.accountId === "string"))) return row;
   } catch { /* Invalid or unavailable storage cannot resume a signup. */ }
@@ -40,6 +43,14 @@ export function saveNewCvOnboarding(row: NewCvOnboarding) {
 // stores nothing on the device, so it is counted regardless of analytics choice.
 export function recordNewCvStart() {
   void privacyApi.post("/onboarding/started", { path: "manual_create" }, { keepalive: true }).catch(() => undefined);
+}
+
+// A visitor has no guest record to hold the choice, so the AI consent given on the
+// create action is recorded on the account once it exists, like a claimed upload's.
+export async function recordNewCvAiConsent(row: NewCvOnboarding) {
+  if (!row.aiConsent) return;
+  await privacyApi.patch("/me/privacy", choices(true));
+  notifyAiChoiceChanged();
 }
 
 export function clearNewCvOnboarding() {

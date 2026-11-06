@@ -406,6 +406,8 @@ function OnboardingFlow() {
       const draft: NewCvOnboarding = {
         id: crypto.randomUUID(), expiresAt: Date.now() + 86_400_000,
         language: documentLocale(i18n.language) ?? "en", answers: {}, step: "questions", question: 0,
+        // Choosing to create next to the AI disclosure is the same affirmative consent as uploading.
+        aiConsent: !!config?.ai_enabled,
       };
       saveNewCvOnboarding(draft);
       recordNewCvStart();

@@ -15,7 +15,7 @@ import {
 } from "../integration/guest-import";
 import { useAuth } from "../integration/auth-context";
 import { trackEvent } from "../integration/analytics";
-import { saveNewCvOnboarding, readNewCvOnboarding, completeNewCvOnboarding, clearNewCvOnboarding } from "../integration/new-cv-onboarding";
+import { saveNewCvOnboarding, readNewCvOnboarding, completeNewCvOnboarding, clearNewCvOnboarding, recordNewCvAiConsent } from "../integration/new-cv-onboarding";
 import { applyOnboardingTemplate, clearOnboardingTemplate } from "../integration/subscription-flow";
 import { syncBrowserChoice } from "../integration/privacy";
 import { useOnboarding } from "../contexts/OnboardingContext";
@@ -40,6 +40,8 @@ export function OnboardingResume() {
     saveNewCvOnboarding({ ...(readNewCvOnboarding() ?? newCv), accountId: me.user.id });
     // Sync the visitor's analytics choice first so the signup count applies their consent.
     void syncBrowserChoice().catch(() => undefined)
+      // A failed save must not block the CV; the editor's AI actions then explain how to enable AI.
+      .then(() => recordNewCvAiConsent(newCv).catch(() => undefined))
       .then(() => api.patchOnboardingAnswers(newCv.answers, { path: "manual_create" }))
       // The save marks onboarding complete; refresh so the entry gate lets the account through.
       .then(() => refreshMe())

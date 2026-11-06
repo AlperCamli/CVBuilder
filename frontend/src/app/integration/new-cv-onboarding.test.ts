@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding, recordNewCvStart,
+  clearNewCvOnboarding, completeNewCvOnboarding, readNewCvOnboarding, recordNewCvAiConsent, recordNewCvStart,
   saveNewCvOnboarding, type NewCvOnboarding,
 } from "./new-cv-onboarding";
-import { privacyApi } from "./privacy";
+import { NOTICE_VERSION, privacyApi } from "./privacy";
 import type { BackendApi } from "./backend-api";
 
 let storage: Map<string, string>;
@@ -80,5 +80,24 @@ describe("new CV onboarding handoff", () => {
     expect(post).toHaveBeenCalledWith("/onboarding/started", { path: "manual_create" }, { keepalive: true });
     expect(storage).toEqual(stored);
     post.mockRestore();
+  });
+
+  it("keeps the create-time AI consent across the signup redirect and rejects malformed values", () => {
+    saveNewCvOnboarding({ ...draft(), aiConsent: true });
+    expect(readNewCvOnboarding()).toMatchObject({ aiConsent: true });
+    storage.set("cv-builder:new-cv-onboarding", JSON.stringify({ ...draft(), aiConsent: "yes" }));
+    expect(readNewCvOnboarding()).toBeNull();
+  });
+  it("records AI consent on the account only when it was given on the create action", async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { localStorage, dispatchEvent });
+    const patch = vi.spyOn(privacyApi, "patch").mockResolvedValue({});
+    await recordNewCvAiConsent(draft());
+    await recordNewCvAiConsent({ ...draft(), aiConsent: false });
+    expect(patch).not.toHaveBeenCalled();
+    await recordNewCvAiConsent({ ...draft(), aiConsent: true });
+    expect(patch).toHaveBeenCalledExactlyOnceWith("/me/privacy", expect.objectContaining({ ai_processing: true, notice_version: NOTICE_VERSION }));
+    expect(dispatchEvent).toHaveBeenCalledOnce();
+    patch.mockRestore();
   });
 });

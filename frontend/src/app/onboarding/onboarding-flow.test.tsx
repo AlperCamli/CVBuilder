@@ -122,7 +122,7 @@ describe("AI disclosure as upload consent", () => {
   const config = { ai_provider: "OpenAI", ai_required: true, ai_enabled: true, collection_enabled: true, processors: [] } as unknown as PrivacyConfig;
   it("shows what is sent, to which provider, and the privacy notice without a checkbox", () => {
     const html = renderToStaticMarkup(<MemoryRouter><AiUploadDisclosure consentOnUpload config={config} /></MemoryRouter>);
-    expect(html).toContain("By uploading, you agree");
+    expect(html).toContain("By uploading or creating a CV, you agree");
     expect(html).toContain("OpenAI");
     expect(html).toContain('href="/privacy"');
     expect(html).not.toContain('type="checkbox"');
@@ -130,7 +130,7 @@ describe("AI disclosure as upload consent", () => {
   it("is translated for Turkish visitors", async () => {
     await i18n.changeLanguage("tr");
     const html = renderToStaticMarkup(<MemoryRouter><AiUploadDisclosure consentOnUpload config={config} /></MemoryRouter>);
-    expect(html).toContain("Yükleyerek");
+    expect(html).toContain("CV yükleyerek veya oluşturarak");
     expect(html).toContain("OpenAI");
   });
 });
