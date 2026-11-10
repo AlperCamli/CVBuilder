@@ -62,7 +62,8 @@ begin
   insert into public.tailored_cvs(user_id,master_cv_id,job_id,title,language,current_content) values(u,m,j,'CV','en','{}') returning id into t;
   insert into public.cover_letters(user_id,job_id,tailored_cv_id,title) values(u,j,t,'Letter') returning id into c;
   update public.jobs set tailored_cv_id=t,cover_letter_id=c where id=j;
-  insert into public.ai_runs(user_id,tailored_cv_id,flow_type,provider,model_name,status,input_payload) values(u,t,'block_suggest','mock','test','pending','{}') returning id into run;
+  -- The run is linked to an import: erasing imports first would null import_id and trip the AI privacy guard.
+  insert into public.ai_runs(user_id,tailored_cv_id,import_id,flow_type,provider,model_name,status,input_payload) values(u,t,imp,'block_suggest','mock','test','pending','{}') returning id into run;
   insert into public.ai_suggestions(user_id,ai_run_id,tailored_cv_id,action_type,suggested_content) values(u,run,t,'rewrite','{}') returning id into s;
   insert into public.cv_block_revisions(user_id,cv_kind,tailored_cv_id,block_id,block_type,revision_number,content_snapshot,change_source,ai_suggestion_id) values(u,'tailored',t,'test','test',1,'{}','ai',s);
   perform public.set_privacy_restriction(u,null,true);
@@ -96,7 +97,7 @@ begin
     raise exception 'Late export registered';
   exception when others then if sqlerrm<>'privacy_subject_unavailable' then raise; end if; end;
   if not public.acquire_privacy_job(job) or public.acquire_privacy_job(job) then raise exception 'Concurrent job lease accepted'; end if;
-  foreach tbl in array array['cover_letter_exports','exports','cv_score_improvements','imports','cv_block_revisions','ai_suggestions','ai_runs','cover_letters','tailored_cvs','jobs','master_cvs','files','usage_counters','subscriptions'] loop
+  foreach tbl in array array['cover_letter_exports','exports','cv_score_improvements','cv_block_revisions','ai_suggestions','tailoring_session_tasks','tailoring_sessions','ai_runs','imports','cover_letters','tailored_cvs','jobs','master_cvs','files','usage_counters','subscriptions'] loop
     execute format('delete from public.%I where user_id=$1',tbl) using u;
   end loop;
   delete from public.guest_imports where claimed_user_id=u;
