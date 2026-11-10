@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import JSZip from "jszip";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PrivacyService } from "../src/modules/privacy/privacy.service";
+import { privacyConfig } from "../src/modules/privacy/privacy.config";
 
 // Exercise the production maintenance/export/deletion service against a stateful
 // port. SQL constraints, RPC atomicity and RLS are covered by privacy-controls.sql.
 class Database {
-  tables = new Map<string, any[]>(); objects = new Map<string, Uint8Array>(); failures = new Set<string>();
+  tables = new Map<string, any[]>(); objects = new Map<string, Uint8Array>(); failures = new Set<string>(); absentColumns = new Set<string>();
   remove = vi.fn(async (bucket: string, paths: string[]) => {
     if (paths.some(path => this.failures.has(`${bucket}/${path}`))) return { error: { message: "temporary failure" } };
     paths.forEach(path => this.objects.delete(`${bucket}/${path}`)); return { error: null };
@@ -18,7 +19,8 @@ class Database {
   from(name: string) { return new Query(this, name); }
   async rpc(name: string, args: any = {}) {
     if (name === "privacy_storage_inventory") {
-      const files = this.table("files").filter(row => row.user_id === args.p_user && row.storage_path.startsWith(`users/${args.p_user}/`)).map(row => ({ bucket: row.storage_bucket, path: row.storage_path }));
+      const files = this.table("files").filter(row => row.user_id === args.p_user && (row.storage_path.startsWith(`users/${args.p_user}/`) ||
+        (row.storage_bucket === "imports" && row.storage_path.startsWith("guests/") && !this.table("files").some(other => other.storage_path === row.storage_path && other.user_id !== row.user_id)))).map(row => ({ bucket: row.storage_bucket, path: row.storage_path }));
       files.push(...this.table("guest_imports").filter(row => row.claimed_user_id === args.p_user).map(row => ({ bucket: "imports", path: row.storage_path })));
       files.push(...this.table("privacy_jobs").filter(row => row.subject_user_id === args.p_user && row.kind === "export").map(row => ({ bucket: "exports", path: row.storage_path ?? `privacy/${args.p_user}/${row.id}.zip` })));
       for (const key of this.objects.keys()) {
@@ -69,6 +71,8 @@ class Query implements PromiseLike<any> {
   update(payload: any) { this.action = "update"; this.payload = payload; return this; }
   delete() { this.action = "delete"; return this; }
   then<TResult1 = any, TResult2 = never>(resolve?: ((value: any) => TResult1 | PromiseLike<TResult1>) | null, reject?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null): PromiseLike<TResult1 | TResult2> {
+    // PostgREST rejects a write naming a column its schema does not have yet.
+    if (this.action === "update" && Object.keys(this.payload).some(key => this.db.absentColumns.has(`${this.name}.${key}`))) return Promise.resolve({ data: null, error: { code: "PGRST204", message: "Could not find the column in the schema cache" }, count: null }).then(resolve, reject);
     const table = this.db.table(this.name); let rows = table.filter(row => this.filters.every(filter => filter(row))); const count = rows.length;
     if (this.action === "insert") { rows = [this.db.defaults(this.payload)]; table.push(...rows); }
     if (this.action === "update") for (const row of rows) Object.assign(row, Object.fromEntries(Object.entries(this.payload).filter(([, value]) => value !== undefined)));
@@ -80,10 +84,10 @@ class Query implements PromiseLike<any> {
 function setup() {
   const db = new Database(); const userId = randomUUID();
   db.table("users").push({ id: userId, auth_user_id: randomUUID(), ai_processing: false, analytics: false, privacy_revision: 0 });
-  db.table("privacy_cleanup_health").push({ id: true, initialized_at: new Date().toISOString(), last_success_at: null, backlog: 0, failures: 0 });
-  const cancel = vi.fn(async () => undefined);
-  const service = new PrivacyService(db as unknown as SupabaseClient, { cancelCustomerSubscriptions: cancel } as any, { error: vi.fn() });
-  return { db, userId, service, cancel };
+  db.table("privacy_cleanup_health").push({ id: true, initialized_at: new Date().toISOString(), last_success_at: null, guest_cleanup_success_at: null, backlog: 0, failures: 0 });
+  const cancel = vi.fn(async () => undefined); const logger = { error: vi.fn() };
+  const service = new PrivacyService(db as unknown as SupabaseClient, { cancelCustomerSubscriptions: cancel } as any, logger);
+  return { db, userId, service, cancel, logger };
 }
 const guest = (extra: any = {}) => ({ id: randomUUID(), storage_path: `guests/${randomUUID()}/source.pdf`, expires_at: new Date(Date.now() - 1000).toISOString(), created_at: new Date(Date.now() - 86_400_000).toISOString(), claimed_user_id: null, deleted_at: null, delete_attempts: 0, analytics: false, ...extra });
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] })); afterEach(() => vi.useRealTimers());
@@ -174,5 +178,106 @@ describe("account privacy jobs", () => {
     db.table("users").push({ id: "other", ai_processing: false }); await expect(service.exportDownload("other", job.id)).rejects.toThrow("expired");
     expect((await service.exportDownload(userId, job.id)).url).toContain("ttl=300");
     vi.setSystemTime(Date.now() + 86_400_001); await expect(service.exportDownload(userId, job.id)).rejects.toThrow("expired"); await service.cleanup(); expect(db.objects.has(path)).toBe(false);
+  });
+});
+const HOUR = 3_600_000;
+const processor = (id: string) => ({ id, name: id, purpose: "test", countries: "test", retention: "test", safeguards: "test" });
+function collecting() {
+  vi.stubEnv("PRIVACY_REVIEW_APPROVED", "true"); vi.stubEnv("PRIVACY_CONTROLLER_NAME", "Test operator");
+  vi.stubEnv("PRIVACY_CONTROLLER_ADDRESS", "Test address"); vi.stubEnv("PRIVACY_CONTACT_EMAIL", "privacy@example.invalid");
+  vi.stubEnv("AI_PROVIDER", "openai"); vi.stubEnv("PRIVACY_AI_PROVIDER_APPROVED", "true");
+  vi.stubEnv("PRIVACY_PROCESSORS_JSON", JSON.stringify([processor("supabase"), processor("vercel"), processor("openai")]));
+  expect(privacyConfig().collection_enabled).toBe(true);
+}
+const paused = { statusCode: 503, code: "PRIVACY_UNAVAILABLE" };
+// An account deletion whose storage removal fails on every attempt, as in the 2026-11-10 incident.
+async function failingDeletion(db: Database, service: PrivacyService, userId: string) {
+  const path = `users/${userId}/cv.pdf`;
+  db.table("files").push({ id: randomUUID(), user_id: userId, storage_bucket: "imports", storage_path: path }); db.objects.set(`imports/${path}`, Buffer.from("CV")); db.failures.add(`imports/${path}`);
+  await service.requestDeletion(userId, "auth_test", "verified-token");
+}
+function expiredUpload(db: Database) { const row = guest(); db.table("guest_imports").push(row); db.objects.set(`imports/${row.storage_path}`, Buffer.from("CV")); return row; }
+describe("guest upload cleanup guard", () => {
+  beforeEach(collecting); afterEach(() => vi.unstubAllEnvs());
+  it("keeps guest uploads open while an account deletion fails every night and the guest sweep succeeds", async () => {
+    const { db, service, userId, logger } = setup(); await failingDeletion(db, service, userId);
+    for (let day = 0; day < 3; day++) { vi.setSystemTime(Date.now() + 24 * HOUR); expiredUpload(db); expect(await service.cleanup()).toBe(1); }
+    const health = db.table("privacy_cleanup_health")[0];
+    expect(health).toMatchObject({ last_success_at: null, failures: 1, backlog: 0, guest_cleanup_success_at: new Date().toISOString() });
+    expect(db.table("privacy_jobs")[0].status).toBe("pending"); expect(db.table("guest_imports")).toHaveLength(0);
+    await expect(service.assertCollection()).resolves.toBeUndefined();
+    expect(await service.health()).toMatchObject({ overdue: true, guest_cleanup_overdue: false, failures: 1 });
+    const codes = logger.error.mock.calls.map(call => call[0].code);
+    expect(codes).toContain("PRIVACY_CLEANUP_OVERDUE"); expect(codes).toContain("PRIVACY_JOB_RETRY"); expect(codes).not.toContain("PRIVACY_GUEST_CLEANUP_OVERDUE");
+    expect(logger.error).toHaveBeenCalledWith({ code: "PRIVACY_CLEANUP_FAILURE", failures: 1, guest_failures: 0 }, expect.any(String));
+  });
+  it("pauses guest uploads 30 hours after the last guest sweep when guest deletions keep failing", async () => {
+    const { db, service, logger } = setup(); await service.cleanup(); const swept = db.table("privacy_cleanup_health")[0].guest_cleanup_success_at;
+    expect(swept).toBe(new Date().toISOString());
+    const row = expiredUpload(db); db.failures.add(`imports/${row.storage_path}`);
+    vi.setSystemTime(Date.now() + 24 * HOUR); await service.cleanup();
+    expect(db.table("guest_imports")[0].delete_attempts).toBe(1); expect(db.table("privacy_cleanup_health")[0]).toMatchObject({ guest_cleanup_success_at: swept, failures: 1 });
+    await expect(service.assertCollection()).resolves.toBeUndefined();
+    vi.setSystemTime(Date.now() + 7 * HOUR); await expect(service.assertCollection()).rejects.toMatchObject(paused);
+    expect(logger.error).toHaveBeenCalledWith({ code: "PRIVACY_GUEST_CLEANUP_OVERDUE" }, expect.any(String));
+    // In-app uploads by signed-in users are not gated on guest cleanup.
+    await expect(service.assertCollection(false)).resolves.toBeUndefined();
+  });
+  it("does not record a sweep stopped by the deadline with due uploads remaining", async () => {
+    const { db, service } = setup(); await service.cleanup(); const swept = db.table("privacy_cleanup_health")[0].guest_cleanup_success_at;
+    for (let index = 0; index < 5; index++) expiredUpload(db);
+    db.remove.mockImplementation(async (bucket, paths) => { paths.forEach(path => db.objects.delete(`${bucket}/${path}`)); vi.setSystemTime(Date.now() + 20_000); return { error: null }; });
+    vi.setSystemTime(Date.now() + 24 * HOUR); expect(await service.cleanup()).toBe(1);
+    // Nothing failed, so the whole-run heartbeat moves on; the guest one must not.
+    expect(db.table("privacy_cleanup_health")[0]).toMatchObject({ guest_cleanup_success_at: swept, failures: 0, backlog: 4 });
+    vi.setSystemTime(Date.now() + 7 * HOUR);
+    expect(await service.health()).toMatchObject({ overdue: false, guest_cleanup_overdue: true });
+    await expect(service.assertCollection()).rejects.toMatchObject(paused);
+  });
+  it("sweeps guest uploads before slow account jobs can use up the budget", async () => {
+    const { db, service, userId } = setup(); const path = `users/${userId}/cv.pdf`;
+    db.table("files").push({ id: randomUUID(), user_id: userId, storage_bucket: "imports", storage_path: path }); db.objects.set(`imports/${path}`, Buffer.from("CV"));
+    db.table("privacy_jobs").push(db.defaults({ subject_user_id: userId, user_id: userId, auth_user_id: "auth_test", kind: "deletion" }));
+    const row = expiredUpload(db);
+    db.remove.mockImplementation(async (bucket, paths) => { paths.forEach(path => db.objects.delete(`${bucket}/${path}`)); if (paths.some(path => path.startsWith("users/"))) vi.setSystemTime(Date.now() + 30_000); return { error: null }; });
+    expect(await service.cleanup()).toBe(1); expect(db.objects.has(`imports/${row.storage_path}`)).toBe(false);
+    // The slow removal used the rest of the budget, so the job yielded before its database step.
+    expect(db.table("privacy_jobs")[0]).toMatchObject({ status: "pending", step: "database" }); expect(db.table("users")).toHaveLength(1);
+    expect(db.table("privacy_cleanup_health")[0].guest_cleanup_success_at).not.toBeNull();
+  });
+  it("leaves account jobs part of the budget when the guest backlog is large", async () => {
+    const { db, service, userId } = setup();
+    db.table("privacy_jobs").push(db.defaults({ subject_user_id: userId, user_id: userId, auth_user_id: "auth_test", kind: "deletion" }));
+    for (let index = 0; index < 40; index++) expiredUpload(db);
+    db.remove.mockImplementation(async (bucket, paths) => { paths.forEach(path => db.objects.delete(`${bucket}/${path}`)); if (paths.some(path => path.startsWith("guests/"))) vi.setSystemTime(Date.now() + 1000); return { error: null }; });
+    const removed = await service.cleanup();
+    expect(db.table("users")).toHaveLength(0); expect(db.auth.admin.deleteUser).toHaveBeenCalledWith("auth_test");
+    // Time the job left over went back to the sweep, which still could not drain.
+    expect(removed).toBeGreaterThan(10); expect(db.table("guest_imports").length).toBe(40 - removed);
+    expect(db.table("privacy_cleanup_health")[0].guest_cleanup_success_at).toBeNull();
+  });
+  it("keeps the whole-run heartbeat and still completes cleanup while the column does not exist", async () => {
+    const { db, service, userId } = setup(); delete db.table("privacy_cleanup_health")[0].guest_cleanup_success_at;
+    db.absentColumns.add("privacy_cleanup_health.guest_cleanup_success_at");
+    expiredUpload(db); expect(await service.cleanup()).toBe(1);
+    expect(db.table("privacy_cleanup_health")[0]).toMatchObject({ last_success_at: new Date().toISOString(), failures: 0 });
+    expect(db.table("privacy_cleanup_health")[0]).not.toHaveProperty("guest_cleanup_success_at");
+    await failingDeletion(db, service, userId);
+    vi.setSystemTime(Date.now() + 24 * HOUR); expiredUpload(db); expect(await service.cleanup()).toBe(1);
+    await expect(service.assertCollection()).resolves.toBeUndefined();
+    vi.setSystemTime(Date.now() + 7 * HOUR); await expect(service.assertCollection()).rejects.toMatchObject(paused);
+  });
+  it("falls back to the whole-run heartbeat while the column is empty", async () => {
+    const { db, service } = setup(); const health = db.table("privacy_cleanup_health")[0];
+    health.initialized_at = new Date(Date.now() - 40 * HOUR).toISOString();
+    await expect(service.assertCollection()).rejects.toMatchObject(paused);
+    health.last_success_at = new Date(Date.now() - HOUR).toISOString(); health.backlog = 3;
+    await expect(service.assertCollection()).resolves.toBeUndefined();
+  });
+  it("credits a whole-run success that left no guest backlog, as recorded by a backend predating the column", async () => {
+    const { db, service } = setup(); const health = db.table("privacy_cleanup_health")[0];
+    Object.assign(health, { guest_cleanup_success_at: new Date(Date.now() - 40 * HOUR).toISOString(), last_success_at: new Date(Date.now() - HOUR).toISOString(), backlog: 2 });
+    await expect(service.assertCollection()).rejects.toMatchObject(paused);
+    health.backlog = 0; await expect(service.assertCollection()).resolves.toBeUndefined();
   });
 });

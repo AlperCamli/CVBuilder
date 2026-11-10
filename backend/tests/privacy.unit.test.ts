@@ -201,6 +201,13 @@ describe("privacy endpoints", () => {
     await request(server).post("/me/privacy/deletion").send({ confirmation: "DELETE" }).expect(401);
     expect(fake.requestDeletion).not.toHaveBeenCalled();
   });
+  it("reports unhealthy maintenance when either heartbeat is overdue or the last run had failures", async () => {
+    const { server, fake } = app();
+    await request(server).get("/privacy/health").expect(200, { success: true, data: { healthy: true } });
+    for (const health of [{ overdue: true, guest_cleanup_overdue: false, failures: 0 }, { overdue: false, guest_cleanup_overdue: true, failures: 0 }, { overdue: false, guest_cleanup_overdue: false, failures: 2 }]) {
+      fake.health = async () => health; await request(server).get("/privacy/health").expect(503, { success: true, data: { healthy: false } });
+    }
+  });
   it("rejects stale reauthentication before requesting deletion", async () => {
     const { server, fake } = app();
     await request(server).post("/me/privacy/deletion").set("Authorization", `Bearer ${jwt("auth-owner", "password", Date.now() / 1000 - 3600)}`).send({ confirmation: "DELETE" }).expect(401);

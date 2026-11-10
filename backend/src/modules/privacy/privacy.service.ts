@@ -91,13 +91,20 @@ export class PrivacyService {
   async health() {
     const { data, error } = await this.db.from("privacy_cleanup_health").select("*").eq("id", true).single();
     check(error);
-    const overdue = Date.now() - Date.parse(data.last_success_at ?? data.initialized_at) > 30 * 3_600_000;
+    const heartbeat = Date.parse(data.last_success_at ?? data.initialized_at);
+    // Guest uploads key on the guest sweep alone, so a failing account deletion cannot pause them. Until the sweep
+    // column exists and has a value they keep the whole-run rule. A whole run without failures that left no guest
+    // backlog also proves the sweep, which keeps a backend older than the column from letting the column go stale.
+    const guestHeartbeat = data.guest_cleanup_success_at == null ? heartbeat : Math.max(Date.parse(data.guest_cleanup_success_at), data.backlog === 0 && data.last_success_at ? Date.parse(data.last_success_at) : 0);
+    const overdue = Date.now() - heartbeat > 30 * 3_600_000;
+    const guest_cleanup_overdue = Date.now() - guestHeartbeat > 30 * 3_600_000;
     if (overdue) this.logger.error({ code: "PRIVACY_CLEANUP_OVERDUE" }, "Daily privacy cleanup is overdue");
-    return { overdue, backlog: data.backlog, failures: data.failures, oldest_expired_at: data.oldest_expired_at, last_success_at: data.last_success_at };
+    if (guest_cleanup_overdue) this.logger.error({ code: "PRIVACY_GUEST_CLEANUP_OVERDUE" }, "Guest upload cleanup is overdue; new guest uploads are paused");
+    return { overdue, guest_cleanup_overdue, backlog: data.backlog, failures: data.failures, oldest_expired_at: data.oldest_expired_at, last_success_at: data.last_success_at, guest_cleanup_success_at: data.guest_cleanup_success_at ?? null };
   }
   async assertCollection(checkCleanup = true) {
     assertCollectionEnabled();
-    if (checkCleanup && (await this.health()).overdue) throw new AppError({ statusCode: 503, code: "PRIVACY_UNAVAILABLE", message: "New uploads are paused while temporary data cleanup is restored. Please try again later." });
+    if (checkCleanup && (await this.health()).guest_cleanup_overdue) throw new AppError({ statusCode: 503, code: "PRIVACY_UNAVAILABLE", message: "New uploads are paused while temporary data cleanup is restored. Please try again later." });
   }
   async deleteGuest(id: string, tokenHash: string) {
     const { error } = await this.db.rpc("delete_guest_import", { p_id: id, p_token_hash: tokenHash });
@@ -351,38 +358,53 @@ export class PrivacyService {
     const hardDeadline = Date.now() + 20_000;
     return withRequestDeadline(hardDeadline, () => this.runCleanup(hardDeadline - 2500));
   }
+  // Returns true once no row is due: each was deleted or deliberately postponed. Stopping at `until` is not drained.
+  private async sweepGuests(until: number, tally: { removed: number; failed: number }) {
+    while (Date.now() < until) {
+      const guests = await this.db.from("guest_imports").select("id,storage_path,created_at,expires_at,claimed_user_id,deleted_at,delete_attempts").or(`expires_at.lt.${iso()},deleted_at.not.is.null`).or(`delete_retry_at.is.null,delete_retry_at.lte.${iso()}`).order("expires_at").limit(50);
+      check(guests.error); if (!guests.data?.length) return true;
+      for (const row of guests.data) {
+        if (Date.now() >= until) break;
+        try {
+          // A claimed object may still have a guests/ prefix: ownership is DB-based.
+          const ownership = await this.db.from("files").select("id").eq("storage_bucket", "imports").eq("storage_path", row.storage_path).limit(1);
+          check(ownership.error);
+          if (!ownership.data?.length) check((await this.db.storage.from("imports").remove([row.storage_path])).error);
+          const guard = Date.parse(row.created_at) + 2 * 3_600_000 + 300_000;
+          if (guard > Date.now()) {
+            check((await this.db.from("guest_imports").update({ delete_retry_at: iso(guard) }).eq("id", row.id)).error);
+            continue;
+          }
+          // Claim checks expiry/deleted_at under a lock, so cleanup cannot race a valid claim.
+          check((await this.db.rpc("count_guest_metrics", { p_id: row.id, p_stage: "abandoned" })).error);
+          check((await this.db.from("guest_imports").delete().eq("id", row.id)).error); tally.removed++;
+        } catch {
+          tally.failed++;
+          check((await this.db.from("guest_imports").update({ delete_attempts: row.delete_attempts + 1, delete_retry_at: iso(Date.now() + 86_400_000) }).eq("id", row.id)).error);
+        }
+      }
+    }
+    return false;
+  }
+  private async recordGuestSweep(tally: { failed: number }) {
+    if (tally.failed) return;
+    const { error } = await this.db.from("privacy_cleanup_health").update({ guest_cleanup_success_at: iso() }).eq("id", true);
+    // PGRST204: the column's migration is not applied yet, and uploads keep the whole-run heartbeat meanwhile.
+    if (error?.code !== "PGRST204") check(error);
+  }
   private async runCleanup(deadline: number) {
-    let removed = 0; let failed = 0;
+    let failed = 0; const guests = { removed: 0, failed: 0 };
     check((await this.db.from("privacy_cleanup_health").update({ last_attempt_at: iso() }).eq("id", true)).error);
     try {
+      // The guest sweep runs first so slow or failing account jobs cannot starve it or the upload heartbeat;
+      // its first pass stops 7.5 s early so a guest backlog cannot starve the jobs either.
+      const drained = await this.sweepGuests(deadline - 7_500, guests);
+      if (drained) await this.recordGuestSweep(guests);
       // Job leases survive serverless termination and can be retried next day.
       const jobs = await this.db.from("privacy_jobs").select("id").neq("status", "complete").lte("retry_at", iso()).order("retry_at").limit(100);
       check(jobs.error);
       for (const job of jobs.data ?? []) { if (Date.now() >= deadline - 500) break; if (!(await this.attemptJob(job.id, deadline))) failed++; }
-      while (Date.now() < deadline) {
-        const guests = await this.db.from("guest_imports").select("id,storage_path,created_at,expires_at,claimed_user_id,deleted_at,delete_attempts").or(`expires_at.lt.${iso()},deleted_at.not.is.null`).or(`delete_retry_at.is.null,delete_retry_at.lte.${iso()}`).order("expires_at").limit(50);
-        check(guests.error); if (!guests.data?.length) break;
-        for (const row of guests.data) {
-          if (Date.now() >= deadline) break;
-          try {
-            // A claimed object may still have a guests/ prefix: ownership is DB-based.
-            const ownership = await this.db.from("files").select("id").eq("storage_bucket", "imports").eq("storage_path", row.storage_path).limit(1);
-            check(ownership.error);
-            if (!ownership.data?.length) check((await this.db.storage.from("imports").remove([row.storage_path])).error);
-            const guard = Date.parse(row.created_at) + 2 * 3_600_000 + 300_000;
-            if (guard > Date.now()) {
-              check((await this.db.from("guest_imports").update({ delete_retry_at: iso(guard) }).eq("id", row.id)).error);
-              continue;
-            }
-            // Claim checks expiry/deleted_at under a lock, so cleanup cannot race a valid claim.
-            check((await this.db.rpc("count_guest_metrics", { p_id: row.id, p_stage: "abandoned" })).error);
-            check((await this.db.from("guest_imports").delete().eq("id", row.id)).error); removed++;
-          } catch {
-            failed++;
-            check((await this.db.from("guest_imports").update({ delete_attempts: row.delete_attempts + 1, delete_retry_at: iso(Date.now() + 86_400_000) }).eq("id", row.id)).error);
-          }
-        }
-      }
+      if (!drained && await this.sweepGuests(deadline, guests)) await this.recordGuestSweep(guests);
       const archives = await this.db.from("privacy_jobs").select("id,storage_path").eq("kind", "export").lt("expires_at", iso()).limit(100);
       check(archives.error);
       for (const row of archives.data ?? []) {
@@ -403,11 +425,12 @@ export class PrivacyService {
       check((await this.db.rpc("scrub_privacy_diagnostics")).error);
       const backlog = await this.db.from("guest_imports").select("expires_at", { count: "exact" }).or(`expires_at.lt.${iso()},deleted_at.not.is.null`).order("expires_at").limit(1);
       check(backlog.error);
-      check((await this.db.from("privacy_cleanup_health").update({ last_success_at: failed ? undefined : iso(), failures: failed, backlog: backlog.count ?? 0, oldest_expired_at: backlog.data?.[0]?.expires_at ?? null }).eq("id", true)).error);
-      if (failed) this.logger.error({ code: "PRIVACY_CLEANUP_FAILURE", failures: failed }, "Privacy cleanup has pending physical deletions");
-      return removed;
+      const failures = failed + guests.failed;
+      check((await this.db.from("privacy_cleanup_health").update({ last_success_at: failures ? undefined : iso(), failures, backlog: backlog.count ?? 0, oldest_expired_at: backlog.data?.[0]?.expires_at ?? null }).eq("id", true)).error);
+      if (failures) this.logger.error({ code: "PRIVACY_CLEANUP_FAILURE", failures, guest_failures: guests.failed }, "Privacy cleanup has pending physical deletions");
+      return guests.removed;
     } catch (error) {
-      await this.db.from("privacy_cleanup_health").update({ failures: failed + 1 }).eq("id", true);
+      await this.db.from("privacy_cleanup_health").update({ failures: failed + guests.failed + 1 }).eq("id", true);
       this.logger.error({ code: "PRIVACY_CLEANUP_FAILED" }, "Privacy cleanup failed"); throw error;
     }
   }

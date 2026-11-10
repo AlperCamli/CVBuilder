@@ -17,8 +17,9 @@ export function createPrivacyRouter(service: PrivacyService, auth: RequestHandle
   router.get("/privacy/config", asyncHandler(async (_, res) => { sendSuccess(res, service.config()); }));
   router.get("/privacy/health", asyncHandler(async (_, res) => {
     const health = await service.health();
-    res.status(health.overdue || health.failures > 0 ? 503 : 200);
-    sendSuccess(res, { healthy: !health.overdue && health.failures === 0 }, { statusCode: health.overdue || health.failures ? 503 : 200 });
+    const healthy = !health.overdue && !health.guest_cleanup_overdue && health.failures === 0;
+    res.status(healthy ? 200 : 503);
+    sendSuccess(res, { healthy }, { statusCode: healthy ? 200 : 503 });
   }));
   router.get("/me/privacy", auth, asyncHandler(async (req, res) => { sendSuccess(res, await service.preferences(req.auth!.appUser.id)); }));
   router.patch("/me/privacy", auth, validate({ body: privacyChoicesSchema }), asyncHandler(async (req, res) => {

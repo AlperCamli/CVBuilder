@@ -177,13 +177,35 @@ are in service-role-only `privacy_cleanup_health` / `privacy_jobs` rows.
 `GET /api/v1/privacy/health` exposes only a healthy boolean and HTTP 200/503 for
 uptime monitoring. Configure the production monitor to alert on 503 or a missed
 daily heartbeat. Initialization allows a 30-hour first-run grace period, not a
-fabricated successful run. Beyond 30 hours without success, new guest uploads
-are paused; existing accounts/recovery windows are preserved.
+fabricated successful run.
 
-Maintenance uses ordered batches with a 20-second time budget. Failure metadata
-and job leases remain durable. A successful heartbeat is not proof of zero
-backlog: monitor backlog/oldest expiry as well. Resolve repeated failures and
-run a protected manual retry; never delete retry metadata to hide a failure.
+There are two heartbeats. `last_success_at` moves only when a whole run had no
+failure of any kind (account deletions, exports, guest rows, export archives);
+beyond 30 hours without one the health endpoint returns 503 and the backend logs
+`PRIVACY_CLEANUP_OVERDUE`, but uploads stay open. New guest uploads key on the
+guest sweep alone (`guest_cleanup_success_at`, migration
+`20261113130000_guest_cleanup_health.sql`): a run records it when its sweep of
+expired or deleted `guest_imports` reached a point where no row was due and no
+storage or database deletion of a guest row failed in that run. Rows postponed on
+purpose (the 2-hour signed-upload window, or a failed row's 24-hour retry wait)
+do not count against it; a sweep stopped by the time budget with due rows left
+does not record it. A whole-run success that left no guest backlog also counts.
+Beyond 30 hours without either, new guest uploads are paused (HTTP 503
+`PRIVACY_UNAVAILABLE`), the health endpoint returns 503 and the backend logs
+`PRIVACY_GUEST_CLEANUP_OVERDUE`; existing accounts/recovery windows are
+preserved, and signed-in uploads are not gated. Until the column exists and holds
+a value, uploads follow `last_success_at` as before. A failing account deletion
+therefore shows up as `failures`, `PRIVACY_CLEANUP_FAILURE`/`PRIVACY_JOB_RETRY`
+and an unhealthy endpoint, without pausing onboarding.
+
+Maintenance uses ordered batches with a 20-second time budget (17.5 seconds of
+work). The guest sweep runs first, stopping 7.5 seconds before the end so pending
+account deletions and exports always get time; time they leave over goes back to
+the guest sweep. Failure metadata and job leases remain durable. A successful
+heartbeat is not proof of zero backlog: monitor backlog/oldest expiry as well.
+Resolve repeated failures and run a protected manual retry; never delete retry
+metadata to hide a failure. After uploads were paused, a manual retry that sweeps
+guest rows successfully reopens them immediately.
 
 ## Erasure and exports
 
