@@ -262,6 +262,17 @@ export class PrivacyService {
       await this.checkpoint(job, "database");
     }
     if (job.step === "database") {
+      // Some objects are named only by rows this step deletes (a claimed guest upload keeps its guests/ path), so a
+      // manifest built earlier, or by an older inventory, is topped up here; the upload-guard sweep removes the additions.
+      const known = new Set((job.manifest.files as StoredObject[]).map(file => `${file.bucket}/${file.path}`));
+      const late: StoredObject[] = [];
+      for (let offset = 0; ; offset += 500) {
+        withinBudget(deadline);
+        const page = await this.inventory(userId, offset);
+        late.push(...page.filter(file => !known.has(`${file.bucket}/${file.path}`)));
+        if (page.length < 500) break;
+      }
+      if (late.length) await this.checkpoint(job, "database", { ...job.manifest, files: [...(job.manifest.files as StoredObject[]), ...late] });
       withinBudget(deadline);
       check((await this.db.from("job_status_history").delete().eq("changed_by_user_id", userId)).error);
       // Keeps anonymised billing history and deletes the subscriptions; safe to repeat on resume.

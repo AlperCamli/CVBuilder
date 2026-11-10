@@ -155,6 +155,18 @@ describe("account privacy jobs", () => {
     expect(db.objects.has(path)).toBe(false); db.objects.set(`imports/users/${userId}/late-orphan.pdf`,Buffer.from("late"));
     vi.setSystemTime(Date.now()+3*3_600_000); await service.cleanup(); expect(db.objects.size).toBe(0); expect(db.table("privacy_jobs")[0].status).toBe("complete");
   });
+  it("tops up a manifest built before a claimed guest upload was inventoried, before its files row is deleted", async () => {
+    const { db, service, userId } = setup(); const path = `users/${userId}/cv.pdf`; const guestPath = `guests/${randomUUID()}/source.pdf`;
+    db.table("files").push({ id: randomUUID(), user_id: userId, storage_bucket: "imports", storage_path: path }); db.objects.set(`imports/${path}`, Buffer.from("CV"));
+    db.failures.add(`imports/${path}`); await service.requestDeletion(userId, "auth_test", "verified-token");
+    expect(db.table("privacy_jobs")[0].step).toBe("storage");
+    // Only this row names the object once the claimed guest row is gone, and the manifest above predates it.
+    db.table("files").push({ id: randomUUID(), user_id: userId, storage_bucket: "imports", storage_path: guestPath }); db.objects.set(`imports/${guestPath}`, Buffer.from("guest CV"));
+    db.failures.clear(); vi.setSystemTime(Date.now() + 600_000); await service.cleanup();
+    expect(db.table("files")).toHaveLength(0); expect(db.table("privacy_jobs")[0].manifest.files).toContainEqual({ bucket: "imports", path: guestPath });
+    vi.setSystemTime(Date.now() + 3 * 3_600_000); await service.cleanup();
+    expect(db.objects.size).toBe(0); expect(db.table("privacy_jobs")[0].status).toBe("complete");
+  });
   it("includes account rows and file bytes in private ZIP exports and enforces ownership/expiry", async () => {
     const { db, service, userId } = setup(); const id = randomUUID();
     db.table("files").push({ id, user_id: userId, original_filename: "cv.pdf", storage_bucket: "imports", storage_path: `users/${userId}/imports/cv.pdf` }); db.objects.set(`imports/users/${userId}/imports/cv.pdf`, Buffer.from("CV bytes"));
