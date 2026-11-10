@@ -135,6 +135,12 @@ Each is ported from its `new_analysis/` or `queries/` file, keeping the KB conve
 - `admin_app.alert_rules`: `name`, `metric`, `measure`, `params jsonb`, `condition` (`gt`/`lt`/`pct_change_gt`/`pct_change_lt`), `threshold`, `"window"`, `cooldown_hours`, `enabled`, `created_by` (full columns: api-contract.md "Phase 5").
 - `admin_app.alert_events`: `rule_id`, `fired_at`, `window_from/to`, `value`, `baseline`, `message`, `acknowledged_by/at`.
 - **Evaluation:** `evaluate_alerts()` checks the metric name against `pg_proc` in schema `analytics` before calling it dynamically (`format('%I', …)`), then compares the result and respects the cooldown. Only KPI-shaped metrics (a single row) can be alerted on, and the rule editor offers only those.
+- **Operational state as a metric:** the privacy cleanup alert (`20261113140000`) is a KPI too, not a parallel mechanism. `analytics.privacy_cleanup_health` reads `public.privacy_cleanup_health` and `public.privacy_jobs` as a definer function and returns aggregates only. `analytics_api` still cannot read either table, and browser roles cannot reach the function.
+  - Three optional meta keys extend the engine:
+    - `point_in_time`: current-state metrics, `today` + `gt`/`lt` only;
+    - `alert_detail`: a text column appended to the message;
+    - measure `severity: "high"`.
+  - No table or function signature changed.
 
 ### 3.7 Audit log
 

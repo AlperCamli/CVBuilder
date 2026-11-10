@@ -123,6 +123,8 @@ const measureSchema = z.object({
   color: z.enum(SERIES_COLORS).optional().catch(undefined),
   /** Filters the metric accepts but this column can't apply (e.g. `plan` for signups in kpi_overview). */
   ignores_filters: dimensionList.optional(),
+  /** Alert rules on this column are high severity (e.g. overdue account deletions, a legal obligation). */
+  severity: z.enum(["high"]).optional().catch(undefined),
 });
 /** Per-column labels/units; a malformed entry is dropped instead of failing the whole metric. */
 const measuresSchema = z
@@ -151,6 +153,8 @@ export const metricMetaSchema = z.object({
   kb: z.string().optional(),
   consent_scoped: z.boolean().optional(),
   alertable: z.boolean().optional(),
+  /** Reports the current state and ignores the range (privacy_cleanup_health): rules use `today` with gt / lt. */
+  point_in_time: z.boolean().optional().catch(undefined),
   min_group: z.number().optional(),
   measures: measuresSchema,
   /**
@@ -212,6 +216,7 @@ export interface Measure {
   description?: string;
   color?: SeriesColor;
   ignores_filters?: Dimension[];
+  severity?: "high";
 }
 export type CatalogEntry = { name: string; kind: "metric" | "people"; meta: MetricMeta };
 export type MetricResult = z.infer<typeof metricResultSchema>;
@@ -230,6 +235,7 @@ export function measureOf(meta: MetricMeta | undefined, key: string, fallbackLab
     ...(measure?.description ? { description: measure.description } : {}),
     ...(measure?.color ? { color: measure.color } : {}),
     ...(measure?.ignores_filters?.length ? { ignores_filters: measure.ignores_filters } : {}),
+    ...(measure?.severity ? { severity: measure.severity } : {}),
   };
 }
 

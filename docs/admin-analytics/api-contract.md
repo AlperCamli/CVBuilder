@@ -33,6 +33,8 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
   kb?: string;                      // KB path, e.g. "new_analysis/monetization/revenue_monthly_by_currency.md"
   consent_scoped?: boolean;         // label "of consenting users"
   alertable?: boolean;              // single-row KPI usable in alert rules
+  point_in_time?: boolean;          // alertable KPI of the current state: rules use `today` with gt / lt (Phase 5 "Alert meta keys")
+  alert_detail?: string;            // alertable KPI: text column appended to alert messages
   min_group?: number;               // small-sample warning threshold (default 5)
   drill?: boolean;                  // clicking a point opens the drill drawer (analytics_people.drill_users)
   breakdown_dimension?: Dimension;  // breakdown / funnel shapes: the Dimension its `dimension` column holds (enables click-to-filter)
@@ -48,6 +50,7 @@ Every `/admin/*` response sends `Cache-Control: no-store`.
     description?: string;
     color?: "pending" | "attention"; // timeseries `plot`: semantic series colour (pending = receding grey-blue, attention = amber); other series skip the slot it reuses
     ignores_filters?: Dimension[];  // filters the metric accepts but this column cannot apply
+    severity?: "high";              // alert rules on this column are high severity
   }>;
 }
 ```
@@ -328,6 +331,29 @@ Rules can only target metrics whose meta has `alertable: true` and `shape: "kpi"
   - `tailoring_task_failures bigint, tailoring_task_failure_rate numeric`: v2 tasks; failed / (done + skipped + failed).
   - `unpriced_ai_runs bigint`.
   - Rates are `null` without a denominator. Filters: `market` (every measure) and `plan` (payments and checkout; the other measures list it in `ignores_filters`).
+- `analytics.privacy_cleanup_health` (`20261113140000_privacy_cleanup_alert.sql`; kpi, standard signature, no filters or breakdowns). It reports the state at the time of the call from `public.privacy_cleanup_health` and `public.privacy_jobs`; the range, grain and currency don't apply. Columns:
+  - `cleanup_unhealthy bigint`: 1 when any of these holds, else 0:
+    - the last run reported failures (`failures > 0`);
+    - the last run did not finish (`last_attempt_at > last_success_at`, attempt over 15 minutes old);
+    - no successful run for more than 24 h (from `initialized_at` if none ever succeeded);
+    - no run attempted for more than 26 h.
+
+    It is also 1 when the health row is missing.
+  - `last_run_failures bigint`, `hours_since_success numeric`, `hours_since_attempt numeric` (hours to 1 decimal).
+  - `deletions_overdue bigint`: incomplete `deletion` jobs created more than 24 h ago (`severity: "high"`). `oldest_deletion_hours numeric`: the age of the oldest incomplete deletion (`severity: "high"`, null when there is none).
+  - `exports_overdue bigint`: incomplete `export` jobs over 24 h old. `guest_backlog bigint`: `privacy_cleanup_health.backlog`.
+  - `alert_detail text`: the summary appended to alert messages. It holds counts, ages, run times, step names (anything not matching `^[a-z_]{1,32}$` reads `other`), the highest attempt count, the next retry and where to look; never ids, emails, paths or manifests.
+  - Meta: `alertable`, `point_in_time`, `alert_detail: "alert_detail"`.
+  - Seeded rules (enabled, `created_by = 'migration 20261113140000'`, no audit row since no admin is involved):
+    - "Privacy cleanup unhealthy": `cleanup_unhealthy`, `today`, `gt 0`, cooldown 24 h;
+    - "Account deletion overdue": `deletions_overdue`, `today`, `gt 0`, cooldown 12 h.
+
+    An existing rule with the same name is kept instead.
+- **Alert meta keys** (from `20261113140000`, all optional; metrics without them behave and word their messages exactly as before):
+  - **`point_in_time: true`**: the metric reports the current state and ignores the range. Rules on it must use window `today` with `gt`/`lt` (22023 otherwise). They are checked hourly and, because `today` keeps changing, fire again after the cooldown while the condition holds. The message has no window days: `<rule>: <label> is <value>, above <threshold>.` The admin app shows the window as "Current state", hides the event's window dates and offers only those choices in the rule form.
+  - **`alert_detail: "<column>"`**: a text output column of the metric. When a rule fires, `analytics_private.alert_detail(metric, params, from, to)` reads it for the same window and parameters, and its first 700 characters are appended to the message after a space. The column is re-checked against the catalog first, as `alert_value` does. If the read fails, the message ends with `Details unavailable (<SQLSTATE>).` and the event is still inserted.
+  - **`measures.<key>.severity: "high"`**: rules on that column are high severity. The message starts with `[High severity] ` and the admin app shows a "High severity" pill on the event and the rule. There is no severity column; it comes from the catalog.
+  - The whole message is still capped at 1,000 characters.
 
 ### Tables (`admin_app`, RLS on, no grants; reached only through the definer functions below)
 - **`alert_rules`:** `id uuid pk, name text` (1–120 chars, unique case-insensitively), `metric text, measure text, params jsonb` (stored normalised: `{currency, include_internal, filters}`), `"window" text` (`today` \| `1d` \| `7d` \| `30d`), `condition text` (`gt` \| `lt` \| `pct_change_gt` \| `pct_change_lt`), `threshold numeric, cooldown_hours int default 24` (1–720), `enabled bool default true, created_by text, created_at, updated_by text, updated_at`, plus the last evaluation: `last_evaluated_at, last_value numeric, last_error text`.
@@ -349,7 +375,7 @@ Rules can only target metrics whose meta has `alertable: true` and `shape: "kpi"
   2. calls `analytics.<metric>` dynamically (`format('%I')`) for the window with the rule's `currency`, `include_internal` and `filters` (`p_grain = 'day'`, no breakdown), and reads the measure. More than one row is an error;
   3. for `pct_change_*`, reads the previous window too: change = (value − baseline) / |baseline|;
   4. fires when value > threshold (`gt`), value < threshold (`lt`), change > threshold (`pct_change_gt`) or change < threshold (`pct_change_lt`). It fires only if the rule is outside its cooldown (no event within `cooldown_hours` before `p_now`) and, for the complete windows (`1d`/`7d`/`30d`), no event of the rule exists yet for the same `window_from`/`window_to`: an unchanged window is reported once. `today` keeps changing, so it can fire again after the cooldown. A null value, or a null or zero baseline, never fires;
-  5. records `last_evaluated_at` / `last_value` on the rule and, when it fires, inserts an event with `fired_at = p_now`, the window, value, baseline and a message such as `AI runs up: AI runs is 7 for 2026-11-08 to 2026-11-14, +250% vs 2 for 2026-11-01 to 2026-11-07 (threshold +100%).`
+  5. records `last_evaluated_at` / `last_value` on the rule and, when it fires, inserts an event with `fired_at = p_now`, the window, value, baseline and a message such as `AI runs up: AI runs is 7 for 2026-11-08 to 2026-11-14, +250% vs 2 for 2026-11-01 to 2026-11-07 (threshold +100%).` Point-in-time metrics, `alert_detail` and `severity` change the wording as described under "Alert meta keys".
 - Each rule runs in its own subtransaction (`when others or query_canceled`): a failing or cancelled call (e.g. a metric no longer alertable, or the job's statement timeout) is stored in `last_error` (`SQLSTATE: message`), and the other rules still run.
 - **Time limits:** a `statement_timeout` set inside a function does not cap the statements it runs (checked on Postgres 17), so the limits work differently:
   - the cron command sets `statement_timeout` for the whole run. When it fires, the running rule catches the cancellation, and the timer does not re-arm;
@@ -375,6 +401,7 @@ Every write validates its input (22023), changes the table and writes its own au
   - the measure must be a numeric output column (bigint, integer, numeric, …; not boolean);
   - `params` keys must be among `currency` (`native`/`usd`/`try`, default `usd`), `include_internal` (boolean, default false) and `filters` (keys from the metric's meta `filters`, each value a scalar or an array of 1–50 scalars). Serialised `params` must be ≤ 2,000 characters;
   - the window and condition must come from the enums, and `pct_change_*` is not allowed on `today`;
+  - on a `point_in_time` metric, the window must be `today` and the condition `gt` or `lt`;
   - the threshold must be a finite number, `cooldown_hours` an integer from 1 to 720, `enabled` a boolean;
   - the name must be 1–120 characters after trimming;
   - unknown fields are rejected.

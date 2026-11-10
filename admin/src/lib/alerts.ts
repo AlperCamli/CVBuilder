@@ -269,6 +269,24 @@ export function formatCondition(rule: Pick<AlertRule, "condition" | "threshold" 
 
 export const windowLabel = (window: string) => WINDOW_LABELS[window as AlertWindow] ?? window;
 
+/**
+ * A point-in-time metric (`meta.point_in_time`, e.g. privacy_cleanup_health) reports the current state and ignores
+ * the range, so its rules use window `today` with gt / lt only (the database rejects anything else) and are shown
+ * as "Current state" without window dates.
+ */
+export const isPointInTime = (meta: MetricMeta | undefined) => meta?.point_in_time === true;
+export const CURRENT_STATE_LABEL = "Current state";
+export const allowedWindows = (meta: MetricMeta | undefined): readonly AlertWindow[] => (isPointInTime(meta) ? ["today"] : WINDOWS);
+export const allowedConditions = (meta: MetricMeta | undefined): readonly AlertCondition[] =>
+  isPointInTime(meta) ? ["gt", "lt"] : CONDITIONS;
+/** "Yesterday", or "Current state" for a point-in-time metric. */
+export const ruleWindowLabel = (window: string, meta: MetricMeta | undefined) =>
+  isPointInTime(meta) && window === "today" ? CURRENT_STATE_LABEL : windowLabel(window);
+
+/** Rules on a measure with `severity: "high"` (overdue account deletions) are flagged as high severity. */
+export const isHighSeverity = (meta: MetricMeta | undefined, measure: string | null | undefined) =>
+  Boolean(measure) && meta?.measures?.[measure!]?.severity === "high";
+
 /** "Overview KPIs · AI cost"; raw names when the catalog doesn't know the metric. */
 export const targetLabel = (metric: string, measure: string, meta: MetricMeta | undefined) =>
   `${meta?.title ?? metric} · ${meta ? measureOf(meta, measure).label : measure}`;

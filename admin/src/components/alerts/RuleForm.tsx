@@ -5,11 +5,15 @@ import { controlClass } from "@/components/ui/control";
 import { ApiError, measureOf, type CatalogEntry, type MetricMeta } from "@/lib/api";
 import {
   alertableMetrics,
+  allowedConditions,
+  allowedWindows,
   CONDITION_LABELS,
   CONDITIONS,
+  CURRENT_STATE_LABEL,
   filterInputOf,
   inputToThreshold,
   isPctChange,
+  isPointInTime,
   measureOptions,
   parseFilterInput,
   thresholdIsPercent,
@@ -125,9 +129,15 @@ export function RuleForm({ catalog, rule, saving, error, onSubmit, onCancel }: R
   }
   const measureKey = options.some((o) => o.key === form.measure) ? form.measure : (options[0]?.key ?? "");
   const measure = measureOf(meta, measureKey);
-  const percent = thresholdIsPercent(measure.unit, form.condition);
-  const prefix = !isPctChange(form.condition) && measure.unit === "currency" ? (form.currency === "try" ? "₺" : "$") : null;
-  const suffix = percent ? "%" : !isPctChange(form.condition) && measure.unit === "seconds" ? "s" : null;
+  // A point-in-time metric only takes `today` (shown as "Current state") with gt / lt; what the selects show is saved.
+  const pointInTime = isPointInTime(meta);
+  const windows = allowedWindows(meta);
+  const conditions = allowedConditions(meta);
+  const windowValue = windows.includes(form.window) ? form.window : windows[0];
+  const condition = conditions.includes(form.condition) ? form.condition : conditions[0];
+  const percent = thresholdIsPercent(measure.unit, condition);
+  const prefix = !isPctChange(condition) && measure.unit === "currency" ? (form.currency === "try" ? "₺" : "$") : null;
+  const suffix = percent ? "%" : !isPctChange(condition) && measure.unit === "seconds" ? "s" : null;
   const allowedFilters = meta?.filters ?? [];
   const activeFilters = allowedFilters.filter((d) => parseFilterInput(form.filters[d] ?? "") !== undefined);
   const ignored = notFilteredBy(activeFilters.filter((d) => measure.ignores_filters?.includes(d)));
@@ -164,9 +174,9 @@ export function RuleForm({ catalog, rule, saving, error, onSubmit, onCancel }: R
       name,
       metric: metricName,
       measure: measureKey,
-      window: form.window,
-      condition: form.condition,
-      threshold: inputToThreshold(threshold, measure.unit, form.condition),
+      window: windowValue,
+      condition,
+      threshold: inputToThreshold(threshold, measure.unit, condition),
       cooldown_hours: cooldown,
       enabled: form.enabled,
       params: {
@@ -220,11 +230,15 @@ export function RuleForm({ catalog, rule, saving, error, onSubmit, onCancel }: R
             ))}
           </select>
         </Field>
-        <Field label="Window" htmlFor={`${id}-window`} hint="UTC days; checked hourly.">
-          <select id={`${id}-window`} className={inputClass} value={form.window} onChange={(e) => set({ window: e.target.value as AlertWindow })}>
-            {WINDOWS.map((w) => (
+        <Field
+          label="Window"
+          htmlFor={`${id}-window`}
+          hint={pointInTime ? "This metric reports the current state; checked hourly." : "UTC days; checked hourly."}
+        >
+          <select id={`${id}-window`} className={inputClass} value={windowValue} onChange={(e) => set({ window: e.target.value as AlertWindow })}>
+            {windows.map((w) => (
               <option key={w} value={w}>
-                {WINDOW_LABELS[w]}
+                {pointInTime && w === "today" ? CURRENT_STATE_LABEL : WINDOW_LABELS[w]}
               </option>
             ))}
           </select>
@@ -233,10 +247,10 @@ export function RuleForm({ catalog, rule, saving, error, onSubmit, onCancel }: R
           <select
             id={`${id}-condition`}
             className={inputClass}
-            value={form.condition}
+            value={condition}
             onChange={(e) => set({ condition: e.target.value as AlertCondition })}
           >
-            {CONDITIONS.map((c) => (
+            {conditions.map((c) => (
               <option key={c} value={c}>
                 {CONDITION_LABELS[c]}
               </option>
@@ -247,7 +261,7 @@ export function RuleForm({ catalog, rule, saving, error, onSubmit, onCancel }: R
           label="Threshold"
           htmlFor={`${id}-threshold`}
           hint={
-            isPctChange(form.condition)
+            isPctChange(condition)
               ? "Percent change from the previous window of the same length; use a negative number for drops."
               : percent
                 ? "As a percentage."

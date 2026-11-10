@@ -99,11 +99,12 @@ Page layout lives in `admin/src/app/pages.ts`; Overview is `admin/src/pages/Over
 | `language_adoption` | breakdown | – / market, locale | – | language_name, cv_users, user_share, master_cvs, tailored_cvs, translation_runs, translations_completed/failed, translation_success_rate, translations_applied, translation_apply_rate, translating_users, translation_tokens |
 
 ### Alerts and Data health
-`kpi_health` is not drawn as a card; it is offered only as an alert-rule target on Alerts. `data_freshness` and `ai_ledger_health` are the checks lists on Data health.
+`kpi_health` and `privacy_cleanup_health` are not drawn as cards; they are offered only as alert-rule targets on Alerts (`privacy_cleanup_health` carries the two seeded privacy rules, runbook "Privacy cleanup alerts"). `data_freshness` and `ai_ledger_health` are the checks lists on Data health.
 
 | Function | Shape | Breakdowns / filters | Flags | Columns |
 |---|---|---|---|---|
 | `kpi_health` | kpi | – / market, plan (plan applies to payments and checkout only) | A | ai_runs, ai_failed_runs, ai_failure_rate, failed_payments, payment_failure_rate, checkout_attempts, checkout_abandon_rate, export_failures, export_failure_rate, import_failures, import_failure_rate, tailoring_task_failures, tailoring_task_failure_rate, unpriced_ai_runs |
+| `privacy_cleanup_health` | kpi | none (point in time: the range does not apply) | A | cleanup_unhealthy, last_run_failures, hours_since_success, hours_since_attempt, deletions_overdue, oldest_deletion_hours, exports_overdue, guest_backlog, alert_detail (text). `20261113140000_privacy_cleanup_alert.sql`; meta `point_in_time`, `alert_detail`; `deletions_overdue` and `oldest_deletion_hours` have `severity: "high"` |
 | `data_freshness` | table | none | – | item, label, status (`ok`/`warn`/`error`/`info`), value, value_text, at, detail. Items: nightly_refresh, last_recompute, pending_recompute, precomputed_as_of, scheduler, alerts_evaluated, fx_latest_month, billing_price_catalog, billing_plan_catalog, ai_model_prices, unpriced_ai_runs_30d, contract_violations |
 | `ai_ledger_health` | table | none | – | Same columns as `data_freshness`. Items (last 7 days, or since the ledger started): ai_ledger_last_attempt, ai_runs_without_attempts, ai_ledger_vs_runs_cost, ai_attempts_without_run, ai_failed_attempts, ai_unpriced_attempts |
 

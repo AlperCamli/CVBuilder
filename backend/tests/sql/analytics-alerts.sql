@@ -1,6 +1,297 @@
 -- Admin analytics Phase 5: kpi_health, alert rules / events / evaluation and audited audit-log reads
--- (20261104120000_analytics_alerts.sql).
+-- (20261104120000_analytics_alerts.sql), and the privacy cleanup alerts (20261113140000_privacy_cleanup_alert.sql).
 begin;
+
+-- ---------------------------------------------------------------------------
+-- Privacy cleanup alerts. Runs first and deletes every alert rule at the end (the seeded ones included), so the
+-- Phase 5 block below starts from empty alert tables as it always has. analytics.privacy_cleanup_health reports the
+-- state at now() (constant in this transaction), so fixtures are relative to now(); evaluate_alerts(p_now) only moves
+-- the cooldown clock.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  violations text;
+  ts constant timestamptz := now();
+  subj uuid;
+  subj_auth uuid := gen_random_uuid();
+  r_health uuid; r_del uuid; r_test uuid;
+  ev_health bigint; ev_del bigint;
+  k record; rec record;
+  n bigint; fired integer; t text; role_name text;
+  job_ids text[];
+  bad jsonb;
+  utc constant text := 'YYYY-MM-DD HH24:MI';
+begin
+  select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
+  if violations is not null then raise exception 'contract violations: %', violations; end if;
+
+  -- Seeded rules and the catalog entry.
+  select * into rec from admin_app.alert_rules where name = 'Privacy cleanup unhealthy';
+  if (rec.metric, rec.measure, rec."window", rec.condition, rec.threshold, rec.cooldown_hours, rec.enabled, rec.params)
+     is distinct from ('privacy_cleanup_health', 'cleanup_unhealthy', 'today', 'gt', 0::numeric, 24, true,
+                       '{"currency":"usd","include_internal":false,"filters":{}}'::jsonb) then
+    raise exception 'seeded cleanup rule: %', row_to_json(rec); end if;
+  r_health := rec.id;
+  select * into rec from admin_app.alert_rules where name = 'Account deletion overdue';
+  if (rec.metric, rec.measure, rec."window", rec.condition, rec.threshold, rec.cooldown_hours, rec.enabled)
+     is distinct from ('privacy_cleanup_health', 'deletions_overdue', 'today', 'gt', 0::numeric, 12, true) then
+    raise exception 'seeded deletion rule: %', row_to_json(rec); end if;
+  r_del := rec.id;
+  if (select count(*) from admin_app.alert_rules) <> 2 or exists (select 1 from admin_app.alert_events) then
+    raise exception 'unexpected alert rows before the privacy checks'; end if;
+  select c.meta into bad from admin_app.metric_catalog() c where c.name = 'privacy_cleanup_health';
+  if bad ->> 'alertable' is distinct from 'true' or bad ->> 'shape' <> 'kpi' or bad ->> 'point_in_time' <> 'true'
+     or bad ->> 'alert_detail' <> 'alert_detail' or bad -> 'measures' -> 'deletions_overdue' ->> 'severity' <> 'high'
+     or bad -> 'measures' -> 'cleanup_unhealthy' ->> 'severity' is not null then
+    raise exception 'privacy_cleanup_health catalog meta: %', bad; end if;
+
+  -- Fixtures: a clean nightly run 7 hours ago, a deletion requested 2 hours ago (in progress) and an export.
+  delete from public.privacy_jobs;
+  update public.privacy_cleanup_health
+  set initialized_at = ts - interval '30 days', last_attempt_at = ts - interval '7 hours',
+      last_success_at = ts - interval '7 hours' + interval '12 seconds', failures = 0, backlog = 0, oldest_expired_at = null;
+  insert into public.users(auth_user_id,email,created_at) values(subj_auth,'privacy-alert-subject@example.invalid','2026-10-01T09:00:00Z')
+    returning id into subj;
+  insert into public.privacy_jobs(user_id,subject_user_id,auth_user_id,kind,status,step,created_at)
+    values(subj,subj,subj_auth,'export','pending','start',ts - interval '1 hour');
+  insert into public.privacy_jobs(user_id,subject_user_id,auth_user_id,kind,status,step,manifest,attempts,created_at)
+    values(subj,subj,subj_auth,'deletion','pending','upload_guard',
+           jsonb_build_object('files', jsonb_build_array(jsonb_build_object('bucket','imports','path','users/'||subj||'/cv.pdf'))),
+           1,ts - interval '2 hours');
+
+  -- -------------------------------------------------------------------------
+  -- Healthy: no rule fires
+  -- -------------------------------------------------------------------------
+  select * into k from analytics.privacy_cleanup_health();
+  if (k.cleanup_unhealthy, k.last_run_failures, k.hours_since_success, k.hours_since_attempt, k.deletions_overdue,
+      k.oldest_deletion_hours, k.exports_overdue, k.guest_backlog)
+     is distinct from (0::bigint, 0::bigint, 7.0::numeric, 7.0::numeric, 0::bigint, 2.0::numeric, 0::bigint, 0::bigint) then
+    raise exception 'healthy state: %', row_to_json(k); end if;
+  if k.alert_detail <> format('Cleanup healthy. Last run %s UTC (7.0 h ago); last success %s UTC (7.0 h ago). No account deletion pending over 24 h (1 in progress).',
+                              to_char((ts - interval '7 hours') at time zone 'UTC', utc),
+                              to_char((ts - interval '7 hours' + interval '12 seconds') at time zone 'UTC', utc)) then
+    raise exception 'healthy detail: %', k.alert_detail; end if;
+  if analytics_private.evaluate_alerts(ts) <> 0 then raise exception 'a healthy cleanup fired'; end if;
+  if exists (select 1 from admin_app.alert_rules where id in (r_health, r_del)
+             and (last_evaluated_at is distinct from ts or last_value <> 0 or last_error is not null)) then
+    raise exception 'healthy evaluation not recorded: %', (select jsonb_agg(row_to_json(r)) from admin_app.alert_rules r); end if;
+  -- A run in progress (started a minute ago, after the last success) is not "did not finish".
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '1 minute';
+  if (select cleanup_unhealthy from analytics.privacy_cleanup_health()) <> 0 then raise exception 'run in progress flagged'; end if;
+
+  -- -------------------------------------------------------------------------
+  -- Each unhealthy condition on its own, and the thresholds (strictly more than 24 / 26 hours)
+  -- -------------------------------------------------------------------------
+  -- Exactly 24 hours since the last success (the next nightly run is due): still healthy; one minute more is not.
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '24 hours', last_success_at = ts - interval '24 hours', failures = 0;
+  if (select cleanup_unhealthy from analytics.privacy_cleanup_health()) <> 0 then raise exception '24 h flagged'; end if;
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '25 hours', last_success_at = ts - interval '25 hours';
+  select * into k from analytics.privacy_cleanup_health();
+  if k.cleanup_unhealthy <> 1 or k.hours_since_success <> 25.0
+     or k.alert_detail not like 'Cleanup unhealthy: no successful run for 25.0 h. Last run % UTC (25.0 h ago); last success % UTC (25.0 h ago). Guest uploads pause in 5.0 h. No account deletion pending over 24 h (1 in progress). Check public.privacy_jobs (step, attempts, retry_at) and the backend logs, then re-run /api/v1/guest-imports/cleanup from Vercel > cv-builder-backend > Settings > Cron Jobs (runbook: Privacy cleanup alerts).' then
+    raise exception 'no success for 25 h: %', row_to_json(k); end if;
+  -- The cron stopped: no attempt for 27 hours.
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '27 hours', last_success_at = ts - interval '27 hours';
+  select * into k from analytics.privacy_cleanup_health();
+  if k.cleanup_unhealthy <> 1 or k.hours_since_attempt <> 27.0
+     or k.alert_detail not like 'Cleanup unhealthy: no successful run for 27.0 h; no run attempted for 27.0 h (the cron is not firing).%' then
+    raise exception 'cron not firing: %', row_to_json(k); end if;
+  -- The last run failed.
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '3 hours', last_success_at = ts - interval '24 hours 30 minutes', failures = 1;
+  select * into k from analytics.privacy_cleanup_health();
+  if k.cleanup_unhealthy <> 1 or k.last_run_failures <> 1 or k.alert_detail not like 'Cleanup unhealthy: the last run reported 1 failure; no successful run for 24.5 h.%'
+  then raise exception 'one failure: %', row_to_json(k); end if;
+  -- A failed run the morning after a clean one: unhealthy at once, without waiting 24 hours.
+  update public.privacy_cleanup_health set last_success_at = ts - interval '4 hours';
+  if (select alert_detail from analytics.privacy_cleanup_health()) not like 'Cleanup unhealthy: the last run reported 1 failure. Last run%' then
+    raise exception 'failure without the age reason: %', (select alert_detail from analytics.privacy_cleanup_health()); end if;
+  -- The last run started after the last success and never finished (killed), with failures still 0 from before.
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '1 hour', last_success_at = ts - interval '25 hours' + interval '2 hours', failures = 0;
+  if (select alert_detail from analytics.privacy_cleanup_health()) not like 'Cleanup unhealthy: the last run did not finish. Last run%' then
+    raise exception 'unfinished run: %', (select alert_detail from analytics.privacy_cleanup_health()); end if;
+  -- Never succeeded since the health row was created two days ago.
+  update public.privacy_cleanup_health set initialized_at = ts - interval '2 days', last_success_at = null;
+  select * into k from analytics.privacy_cleanup_health();
+  if k.hours_since_success <> 48.0 or k.alert_detail not like 'Cleanup unhealthy: the last run did not finish; no successful run for 48.0 h.%last success never. Guest uploads are paused (503) until a run succeeds.%' then
+    raise exception 'never succeeded: %', row_to_json(k); end if;
+  -- No health row at all is unhealthy too.
+  delete from public.privacy_cleanup_health;
+  select * into k from analytics.privacy_cleanup_health();
+  if k.cleanup_unhealthy <> 1 or k.last_run_failures is not null or k.alert_detail not like '%has no row%' then
+    raise exception 'missing health row: %', row_to_json(k); end if;
+  insert into public.privacy_cleanup_health(id) values (true);
+
+  -- -------------------------------------------------------------------------
+  -- The 2026-11-04 incident: failures every night, three deletions stuck for 150 hours, uploads paused
+  -- -------------------------------------------------------------------------
+  update public.privacy_cleanup_health
+  set initialized_at = ts - interval '30 days', last_attempt_at = ts - interval '2 hours',
+      last_success_at = ts - interval '150 hours', failures = 3, backlog = 4, oldest_expired_at = ts - interval '40 hours';
+  insert into public.privacy_jobs(subject_user_id,kind,status,step,attempts,retry_at,created_at,manifest) values
+    (gen_random_uuid(),'deletion','pending','database',6,ts + interval '20 hours',ts - interval '150 hours','{"database_cursor":3}'),
+    (gen_random_uuid(),'deletion','working','database',6,ts + interval '22 hours',ts - interval '120 hours','{}'),
+    -- A step that is not a code constant is reported as `other`.
+    (gen_random_uuid(),'deletion','pending','Storage; users/x',5,ts + interval '21 hours',ts - interval '24 hours' - interval '1 minute','{}'),
+    -- Completed deletions never count, however old.
+    (gen_random_uuid(),'deletion','complete','auth',2,ts,ts - interval '200 hours','{}');
+  select array_agg(id::text) into job_ids from public.privacy_jobs;
+  select * into k from analytics.privacy_cleanup_health();
+  if (k.cleanup_unhealthy, k.last_run_failures, k.hours_since_success, k.hours_since_attempt, k.deletions_overdue,
+      k.oldest_deletion_hours, k.exports_overdue, k.guest_backlog)
+     is distinct from (1::bigint, 3::bigint, 150.0::numeric, 2.0::numeric, 3::bigint, 150.0::numeric, 0::bigint, 4::bigint) then
+    raise exception 'incident state: %', row_to_json(k); end if;
+
+  fired := analytics_private.evaluate_alerts(ts);
+  if fired <> 2 then raise exception 'incident fired % events: %', fired,
+    (select jsonb_agg(jsonb_build_object('rule', r.name, 'value', r.last_value, 'error', r.last_error)) from admin_app.alert_rules r); end if;
+  select * into rec from admin_app.alert_events where rule_id = r_health;
+  ev_health := rec.id;
+  if rec.value <> 1 or rec.fired_at <> ts or rec.window_from <> (ts at time zone 'UTC')::date or rec.window_to <> rec.window_from
+     or rec.message <> format('Privacy cleanup unhealthy: Cleanup unhealthy (1 = yes) is 1, above 0. Cleanup unhealthy: the last run reported 3 failures; no successful run for 150.0 h. Last run %s UTC (2.0 h ago); last success %s UTC (150.0 h ago). Guest uploads are paused (503) until a run succeeds. 3 account deletions pending over 24 h, oldest 150.0 h; steps: database 2, other 1; attempts up to 6; next retry %s UTC. Guest-upload cleanup backlog: 4 (oldest expired %s UTC). Check public.privacy_jobs (step, attempts, retry_at) and the backend logs, then re-run /api/v1/guest-imports/cleanup from Vercel > cv-builder-backend > Settings > Cron Jobs (runbook: Privacy cleanup alerts).',
+          to_char((ts - interval '2 hours') at time zone 'UTC', utc), to_char((ts - interval '150 hours') at time zone 'UTC', utc),
+          to_char((ts + interval '20 hours') at time zone 'UTC', utc), to_char((ts - interval '40 hours') at time zone 'UTC', utc)) then
+    raise exception 'cleanup event: %', row_to_json(rec); end if;
+  select * into rec from admin_app.alert_events where rule_id = r_del;
+  ev_del := rec.id;
+  if rec.value <> 3 or rec.message not like '[High severity] Account deletion overdue: Account deletions pending over 24 h is 3, above 0. Cleanup unhealthy: %3 account deletions pending over 24 h, oldest 150.0 h; steps: database 2, other 1;%' then
+    raise exception 'deletion event: %', row_to_json(rec); end if;
+  -- No personal data or identifiers in the messages: no user, auth or job ids, emails, paths or raw step text.
+  for t in select e.message from admin_app.alert_events e loop
+    if t like '%' || subj || '%' or t like '%' || subj_auth || '%' or t like '%example.invalid%' or t like '%users/%'
+       or t like '%Storage;%' or exists (select 1 from unnest(job_ids) j where t like '%' || j || '%') then
+      raise exception 'personal data in an alert message: %', t; end if;
+  end loop;
+  if (select length(message) from admin_app.alert_events where id = ev_health) > 1000 then raise exception 'message too long'; end if;
+  -- The listing carries the rule and the message for the Alerts page; the summary counts both.
+  if (select count(*) from admin_app.list_alert_events('open', 50) e where e.metric = 'privacy_cleanup_health') <> 2
+     or (select open_count from admin_app.alert_summary()) <> 2 then
+    raise exception 'privacy events not listed'; end if;
+
+  -- -------------------------------------------------------------------------
+  -- Cooldown and acknowledgement: acknowledging never silences a condition that still holds; the cooldown does
+  -- -------------------------------------------------------------------------
+  if analytics_private.evaluate_alerts(ts + interval '30 minutes') <> 0 then raise exception 'privacy cooldown ignored'; end if;
+  perform admin_app.ack_alert_event('owner@example.invalid', ev_health, 'req-privacy-ack-1');
+  perform admin_app.ack_alert_event('owner@example.invalid', ev_del, 'req-privacy-ack-2');
+  if (select open_count from admin_app.alert_summary()) <> 0
+     or (select count(*) from admin_app.audit_log where action = 'alert.event.ack' and request_id like 'req-privacy-ack-%') <> 2 then
+    raise exception 'privacy ack'; end if;
+  -- 13 hours later only the 12-hour deletion rule fires again; 25 hours later both do. (Each call is assigned first:
+  -- in one IF expression the sub-selects would be computed before the evaluation runs.)
+  fired := analytics_private.evaluate_alerts(ts + interval '13 hours');
+  if fired <> 1
+     or (select count(*) from admin_app.alert_events where rule_id = r_del and acknowledged_at is null) <> 1
+     or (select count(*) from admin_app.alert_events where rule_id = r_health) <> 1 then
+    raise exception 'deletion rule did not re-fire after its cooldown: % %', fired,
+      (select jsonb_agg(jsonb_build_object('deletion', e.rule_id = r_del, 'at', e.fired_at, 'ack', e.acknowledged_at)) from admin_app.alert_events e); end if;
+  fired := analytics_private.evaluate_alerts(ts + interval '25 hours');
+  if fired <> 2 or (select open_count from admin_app.alert_summary()) <> 3 then
+    raise exception 'rules did not re-fire after 25 hours: %', fired; end if;
+  -- A disabled rule is not evaluated.
+  perform admin_app.update_alert_rule('owner@example.invalid', r_del, '{"enabled":false}', null);
+  if analytics_private.evaluate_alerts(ts + interval '50 hours') <> 1 then raise exception 'disabled deletion rule fired'; end if;
+  perform admin_app.update_alert_rule('owner@example.invalid', r_del, '{"enabled":true}', null);
+
+  -- Recovery: a clean run and the deletions finished; nothing fires even after every cooldown.
+  update public.privacy_jobs set status = 'complete', completed_at = ts where kind = 'deletion';
+  update public.privacy_cleanup_health set last_attempt_at = ts - interval '10 minutes', last_success_at = ts - interval '9 minutes', failures = 0, backlog = 0, oldest_expired_at = null;
+  fired := analytics_private.evaluate_alerts(ts + interval '100 hours');
+  if fired <> 0
+     or exists (select 1 from admin_app.alert_rules where id in (r_health, r_del) and last_value <> 0) then
+    raise exception 'recovered cleanup still fires'; end if;
+  -- An export stuck over 24 hours is reported in the detail but fires neither rule.
+  update public.privacy_jobs set created_at = ts - interval '30 hours' where kind = 'export';
+  select * into k from analytics.privacy_cleanup_health();
+  if (k.cleanup_unhealthy, k.deletions_overdue, k.exports_overdue) is distinct from (0::bigint, 0::bigint, 1::bigint)
+     or k.alert_detail not like '%No account deletion pending. 1 data export pending over 24 h. Check public.privacy_jobs%' then
+    raise exception 'stuck export: %', row_to_json(k); end if;
+
+  -- -------------------------------------------------------------------------
+  -- Rule validation for point-in-time metrics
+  -- -------------------------------------------------------------------------
+  foreach bad in array array[
+    '{"name":"p","metric":"privacy_cleanup_health","measure":"cleanup_unhealthy","window":"1d","condition":"gt","threshold":0}',
+    '{"name":"p","metric":"privacy_cleanup_health","measure":"cleanup_unhealthy","window":"7d","condition":"pct_change_gt","threshold":1}',
+    '{"name":"p","metric":"privacy_cleanup_health","measure":"cleanup_unhealthy","window":"today","condition":"pct_change_gt","threshold":1}',
+    '{"name":"p","metric":"privacy_cleanup_health","measure":"alert_detail","window":"today","condition":"gt","threshold":0}',
+    '{"name":"p","metric":"privacy_cleanup_health","measure":"guest_backlog","window":"today","condition":"gt","threshold":0,"params":{"filters":{"market":"TR"}}}'
+  ]::jsonb[] loop
+    begin
+      perform admin_app.create_alert_rule('owner@example.invalid', bad, null);
+      raise exception 'invalid privacy rule accepted: %', bad;
+    exception when sqlstate '22023' then null; end;
+  end loop;
+  begin perform admin_app.update_alert_rule('owner@example.invalid', r_health, '{"window":"1d"}', null);
+    raise exception 'seeded rule moved to a past window';
+  exception when sqlstate '22023' then null; end;
+  select r.id into r_test from admin_app.create_alert_rule('owner@example.invalid',
+    '{"name":"Recent success","metric":"privacy_cleanup_health","measure":"hours_since_success","window":"today","condition":"lt","threshold":1,"cooldown_hours":1}', null) r;
+  -- An lt rule (an admin's own) fires with "below" and the detail. Other metrics keep the old message format: the
+  -- Phase 5 block below checks their exact messages.
+  fired := analytics_private.evaluate_alerts(ts + interval '101 hours');
+  if fired <> 1
+     or (select message from admin_app.alert_events where rule_id = r_test) not like 'Recent success: Hours since the last successful run is 0.2, below 1. Cleanup healthy.%' then
+    raise exception 'lt rule on a point-in-time metric: %', (select jsonb_agg(row_to_json(e)) from admin_app.alert_events e where e.rule_id = r_test); end if;
+
+  -- A detail column that is not text: the event still fires, saying the details are unavailable.
+  begin
+    create function analytics.test_detail_kpi(
+      p_from date default null, p_to date default null, p_grain text default 'day', p_currency text default 'usd',
+      p_include_internal boolean default false, p_breakdown text default null, p_filters jsonb default '{}'::jsonb)
+    returns table (n bigint, d integer) language sql stable security definer set search_path = '' as $f$ select 1::bigint, 2 $f$;
+    comment on function analytics.test_detail_kpi(date, date, text, text, boolean, text, jsonb) is
+      '{"title":"t","definition":"t","unit":"count","shape":"kpi","breakdowns":[],"filters":[],"alertable":true,"point_in_time":true,"alert_detail":"d"}';
+    insert into admin_app.alert_rules(name,metric,measure,"window",condition,threshold,created_by)
+      values('Detail broken','test_detail_kpi','n','today','gt',0,'owner@example.invalid');
+    perform analytics_private.evaluate_alerts(ts + interval '102 hours');
+    if (select e.message from admin_app.alert_events e join admin_app.alert_rules r on r.id = e.rule_id where r.name = 'Detail broken')
+       is distinct from 'Detail broken: n is 1, above 0. Details unavailable (22023).' then
+      raise exception 'broken detail: %', (select jsonb_agg(row_to_json(e)) from admin_app.alert_events e); end if;
+    raise exception 'undo';
+  exception when raise_exception then
+    if sqlerrm <> 'undo' then raise; end if;
+  end;
+
+  -- -------------------------------------------------------------------------
+  -- Privileges: only analytics_api reaches the new path, and only through EXECUTE
+  -- -------------------------------------------------------------------------
+  foreach role_name in array array['anon', 'authenticated', 'service_role'] loop
+    if has_function_privilege(role_name, 'analytics.privacy_cleanup_health(date, date, text, text, boolean, text, jsonb)', 'execute')
+       or has_function_privilege(role_name, 'analytics_private.alert_detail(text, jsonb, date, date)', 'execute')
+       or has_function_privilege(role_name, 'admin_app.list_alert_events(text, integer)', 'execute')
+       or has_table_privilege(role_name, 'admin_app.alert_events', 'select') then
+      raise exception '% can reach the privacy cleanup alert path', role_name; end if;
+  end loop;
+  foreach role_name in array array['anon', 'authenticated'] loop
+    execute format('set local role %I', role_name);
+    begin perform analytics.privacy_cleanup_health(); raise exception '% ran privacy_cleanup_health', role_name;
+    exception when insufficient_privilege then null; end;
+    begin perform analytics_private.alert_detail('privacy_cleanup_health', '{}', null, null); raise exception '% ran alert_detail', role_name;
+    exception when insufficient_privilege then null; end;
+    begin perform 1 from public.privacy_jobs; raise exception '% read privacy_jobs', role_name;
+    exception when insufficient_privilege then null; end;
+    begin perform 1 from public.privacy_cleanup_health; raise exception '% read privacy_cleanup_health', role_name;
+    exception when insufficient_privilege then null; end;
+    reset role;
+  end loop;
+  set local role analytics_api;
+  if (select exports_overdue from analytics.privacy_cleanup_health()) <> 1 then raise exception 'analytics_api cannot read privacy_cleanup_health'; end if;
+  begin perform 1 from public.privacy_jobs; raise exception 'analytics_api read privacy_jobs';
+  exception when insufficient_privilege then null; end;
+  begin perform 1 from public.privacy_cleanup_health; raise exception 'analytics_api read privacy_cleanup_health';
+  exception when insufficient_privilege then null; end;
+  begin perform analytics_private.alert_detail('privacy_cleanup_health', '{}', null, null); raise exception 'analytics_api ran alert_detail';
+  exception when insufficient_privilege then null; end;
+  reset role;
+
+  select string_agg(object_name || ': ' || problem, '; ') into violations from analytics_private.contract_violations();
+  if violations is not null then raise exception 'contract violations: %', violations; end if;
+
+  -- Hand the Phase 5 block empty alert tables (events cascade).
+  delete from admin_app.alert_rules;
+end $$;
+select 'Privacy cleanup alerts: seeded rules, conditions and thresholds, incident replay, cooldown, acknowledgement, validation and privileges passed' as verification;
+
 do $$
 declare
   violations text;

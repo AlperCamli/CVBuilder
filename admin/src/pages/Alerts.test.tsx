@@ -50,7 +50,28 @@ const CATALOG = [
   },
 ];
 
+const PRIVACY = {
+  name: "privacy_cleanup_health",
+  kind: "metric",
+  meta: {
+    title: "Privacy cleanup health",
+    definition: "d",
+    unit: "count",
+    shape: "kpi",
+    breakdowns: [],
+    filters: [],
+    alertable: true,
+    point_in_time: true,
+    alert_detail: "alert_detail",
+    measures: {
+      cleanup_unhealthy: measure("Cleanup unhealthy (1 = yes)", "count"),
+      deletions_overdue: measure("Account deletions pending over 24 h", "count", { severity: "high" }),
+    },
+  },
+};
+
 type Json = Record<string, unknown>;
+let catalog: unknown[];
 let rules: Json[];
 let events: Json[];
 let failNext: string | null;
@@ -72,6 +93,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   failNext = null;
   hold = null;
+  catalog = CATALOG;
   rules = [
     {
       id: "r1",
@@ -141,7 +163,7 @@ beforeEach(() => {
       failNext = null;
       return fail(400, "Threshold is out of range");
     }
-    if (path === "/admin/catalog") return json({ metrics: CATALOG });
+    if (path === "/admin/catalog") return json({ metrics: catalog });
     if (path === "/admin/alerts/rules" && method === "GET") return json(rules);
     if (path === "/admin/alerts/rules" && method === "POST") {
       const rule = { id: "r3", ...bodyOf(init) };
@@ -339,5 +361,56 @@ describe("Alerts page", () => {
     fireEvent.click(within(within(item).getByRole("group")).getByRole("button", { name: /Delete/ }));
     await waitFor(() => expect(within(screen.getByRole("heading", { name: "Rules" }).closest("section")!).queryByText("AI failures up")).toBeNull());
     expect(calls("DELETE", "/admin/alerts/rules/r2")).toHaveLength(1);
+  });
+
+  it("shows privacy cleanup alerts as the current state, flags overdue deletions as high severity and limits the form", async () => {
+    catalog = [...CATALOG, PRIVACY];
+    rules = [
+      { id: "p1", name: "Privacy cleanup unhealthy", metric: "privacy_cleanup_health", measure: "cleanup_unhealthy", params: {}, window: "today", condition: "gt", threshold: 0, cooldown_hours: 24, enabled: true },
+      { id: "p2", name: "Account deletion overdue", metric: "privacy_cleanup_health", measure: "deletions_overdue", params: {}, window: "today", condition: "gt", threshold: 0, cooldown_hours: 12, enabled: true },
+    ];
+    const detail = "3 account deletions pending over 24 h, oldest 150.0 h; steps: database 2, other 1.";
+    events = [
+      { id: 21, rule_id: "p2", rule_name: "Account deletion overdue", metric: "privacy_cleanup_health", measure: "deletions_overdue", condition: "gt", threshold: 0, fired_at: "2026-11-10T04:05:00Z", window_from: "2026-11-10", window_to: "2026-11-10", value: 3, baseline: null, message: `[High severity] Account deletion overdue: Account deletions pending over 24 h is 3, above 0. ${detail}`, acknowledged_by: null, acknowledged_at: null },
+      { id: 20, rule_id: "p1", rule_name: "Privacy cleanup unhealthy", metric: "privacy_cleanup_health", measure: "cleanup_unhealthy", condition: "gt", threshold: 0, fired_at: "2026-11-10T04:05:00Z", window_from: "2026-11-10", window_to: "2026-11-10", value: 1, baseline: null, message: "Privacy cleanup unhealthy: Cleanup unhealthy (1 = yes) is 1, above 0.", acknowledged_by: null, acknowledged_at: null },
+    ];
+    renderPage();
+    const fired = (await screen.findByRole("heading", { name: "Fired alerts" })).closest("section")!;
+    const deletion = (await within(fired).findByText("Account deletion overdue")).closest("li")!;
+    await waitFor(() => expect(within(deletion).getByText("High severity")).toBeTruthy());
+    expect(within(deletion).getByText(/Privacy cleanup health · Account deletions pending over 24 h/)).toBeTruthy();
+    expect(within(deletion).getByText(new RegExp(detail.replace(/[.()]/g, "\\$&")))).toBeTruthy();
+    // The state at firing time, not a window of days.
+    expect(within(deletion).queryByText(/window/)).toBeNull();
+    const cleanup = within(fired).getByText("Privacy cleanup unhealthy").closest("li")!;
+    expect(within(cleanup).queryByText("High severity")).toBeNull();
+
+    const deletionRule = await ruleItem("Account deletion overdue");
+    expect(within(deletionRule).getByText("Current state · Above 0 · cooldown 12 h")).toBeTruthy();
+    expect(within(deletionRule).getByText("High severity")).toBeTruthy();
+
+    fireEvent.click(within(await ruleItem("Privacy cleanup unhealthy")).getByRole("button", { name: "Edit Privacy cleanup unhealthy" }));
+    const form = screen.getByRole("form", { name: "Edit “Privacy cleanup unhealthy”" });
+    const windowSelect = within(form).getByLabelText("Window") as HTMLSelectElement;
+    expect([...windowSelect.options].map((o) => o.textContent)).toEqual(["Current state"]);
+    const conditionSelect = within(form).getByLabelText("Condition") as HTMLSelectElement;
+    expect([...conditionSelect.options].map((o) => o.value)).toEqual(["gt", "lt"]);
+    fireEvent.change(within(form).getByLabelText("Cooldown (hours)"), { target: { value: "6" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(calls("PATCH", "/admin/alerts/rules/p1")).toHaveLength(1));
+    expect(bodyOf(calls("PATCH", "/admin/alerts/rules/p1")[0][1])).toMatchObject({ window: "today", condition: "gt", threshold: 0, cooldown_hours: 6 });
+
+    // Switching a new rule to the point-in-time metric moves a past window and a % change to the allowed values.
+    await waitFor(() => expect(screen.queryByRole("form")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    const create = screen.getByRole("form", { name: "New alert rule" });
+    fireEvent.change(within(create).getByLabelText("Window"), { target: { value: "7d" } });
+    fireEvent.change(within(create).getByLabelText("Condition"), { target: { value: "pct_change_gt" } });
+    fireEvent.change(within(create).getByLabelText("Metric"), { target: { value: "privacy_cleanup_health" } });
+    fireEvent.change(within(create).getByLabelText("Name"), { target: { value: "Backlog" } });
+    fireEvent.change(within(create).getByLabelText("Threshold"), { target: { value: "0" } });
+    fireEvent.click(within(create).getByRole("button", { name: "Create rule" }));
+    await waitFor(() => expect(calls("POST", "/admin/alerts/rules")).toHaveLength(1));
+    expect(bodyOf(calls("POST", "/admin/alerts/rules")[0][1])).toMatchObject({ metric: "privacy_cleanup_health", window: "today", condition: "gt" });
   });
 });

@@ -62,6 +62,7 @@ Pages: **Overview, Monetization, AI cost & reliability, Engagement & retention, 
   - an Alerts page with history and acknowledge;
   - a banner on Overview.
 - Anomaly days (from `ai_daily_cost_anomalies`) are marked on the AI cost chart.
+- Operational alerts ship pre-configured. Since `20261113140000`, "Privacy cleanup unhealthy" and "Account deletion overdue" (high severity) watch the daily privacy cleanup and account erasure (runbook "Privacy cleanup alerts").
 
 ### FR7 — CSV export
 - Any chart's data or user list can be downloaded as CSV with the current filters.

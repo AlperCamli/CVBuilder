@@ -67,6 +67,56 @@ AI cost is exact from 2026-10-27, when `ai_runs.cost_usd` starts being filled. O
 - **A sink failure never breaks an AI call:** each attempt waits at most 2 s for its insert and logs `AI_USAGE_EVENT_NOT_RECORDED` on failure. Data health's `ai_runs_without_attempts` shows runs whose attempts went missing.
 - **Before the ledger** (the first production app attempt), `ai_spend` falls back to the surviving `ai_runs`; deleted guest runs, retries and script calls before then are not recoverable.
 
+## Privacy cleanup alerts
+Added after the 2026-11-10 incident (three account deletions failed every night from 2026-11-04, guest uploads paused after 30 hours, and nobody noticed for five and a half days). Migration `20261113140000_privacy_cleanup_alert.sql` adds the alertable metric `analytics.privacy_cleanup_health` and seeds two enabled rules on it. The hourly `analytics_alerts` job (:05 UTC) checks them against the current state of the daily cleanup: the Vercel cron `/api/v1/guest-imports/cleanup` at 03:00 UTC, which runs `PrivacyService.runCleanup()`.
+
+| Rule | Fires when | Cooldown | Severity |
+|---|---|---|---|
+| **Privacy cleanup unhealthy** | `cleanup_unhealthy > 0`, i.e. any of: the last run reported failures (`privacy_cleanup_health.failures > 0`); the last run did not finish (`last_attempt_at` is newer than `last_success_at` and more than 15 minutes old); no successful run for more than 24 hours; no run attempted for more than 26 hours (the cron is not firing). With no success ever, the age counts from `initialized_at`. | 24 h | normal |
+| **Account deletion overdue** | `deletions_overdue > 0`: an account-deletion job (`privacy_jobs.kind = 'deletion'`, status `pending` or `working`) was created more than 24 hours ago. Erasure is a legal obligation. | 12 h | **High** (red "High severity" pill; the message starts with `[High severity]`) |
+
+**Where the owner sees it:** the bell in the header shows the count of open alerts on every page, Overview shows the "N open alerts" banner, and **Alerts** lists each event with the full message. The rules appear under Alerts → Rules, where they can be edited or disabled. Nothing is sent outside the dashboard (v1 is in-app only), so the owner has to open the dashboard to see an alert.
+
+**When it fires:**
+- A failed 03:00 run is caught by the next hourly check (on Vercel Hobby the cron can start anywhere between 03:00 and 03:59, so by 05:05 UTC at the latest).
+- A cron that stops firing is caught 26 to 27 hours after the last attempt, before the 30-hour upload pause.
+- An overdue deletion is caught within an hour of its 24th hour.
+- **Acknowledging does not silence it.** While the condition still holds, the rule fires again after its cooldown (every 24 h, or every 12 h for deletions). It stops once the cause is fixed.
+
+**The message:** what is wrong, the last run and last success (UTC, hours ago), whether uploads are paused or how soon they will be, then the overdue deletions: count, oldest age, steps, highest attempt count and next retry. It ends with the guest-upload backlog and where to look. It never contains user, auth or job ids, emails, file paths or manifests. Example:
+`[High severity] Account deletion overdue: Account deletions pending over 24 h is 3, above 0. Cleanup unhealthy: the last run reported 3 failures; no successful run for 150.0 h. Last run 2026-11-10 03:00 UTC (2.0 h ago); last success 2026-11-04 03:00 UTC (150.0 h ago). Guest uploads are paused (503) until a run succeeds. 3 account deletions pending over 24 h, oldest 150.0 h; steps: database 3; attempts up to 6; next retry 2026-11-11 03:00 UTC. …`
+
+**What to do:**
+1. **Find the stuck step** (Supabase SQL editor, read-only). Select only these columns: `manifest` holds the user's storage paths.
+   ```sql
+   select * from public.privacy_cleanup_health;
+   select kind, status, step, attempts, retry_at, lease_until, created_at,
+          round(extract(epoch from now() - created_at) / 3600, 1) as age_hours,
+          manifest ->> 'billing_cursor' as billing_cursor, manifest ->> 'storage_cursor' as storage_cursor,
+          manifest ->> 'database_cursor' as database_cursor
+   from public.privacy_jobs where status <> 'complete' order by created_at;
+   ```
+   The steps run in this order (`privacy.service.ts`, `erase`):
+   - `start`/`inventory`: list the user's storage objects;
+   - `billing`: cancel Stripe subscriptions;
+   - `storage`: remove the objects;
+   - `database`: delete rows table by table. `database_cursor` is the index of the next table in the `tables` list there; `0` = `cover_letter_exports`;
+   - `auth`: delete the Supabase auth user;
+   - `upload_guard`: wait 2 h 5 min, then remove late uploads;
+   - complete.
+2. **Find the last error.** `privacy_jobs` has no error column, and the job's error is not logged either: `PRIVACY_JOB_RETRY` carries only the job kind. Vercel Hobby keeps runtime logs for about an hour. The step tells you which part fails. To see a failure live:
+   - open Vercel → `cv-builder-backend` → Logs and search `PRIVACY_` (`PRIVACY_JOB_RETRY`, `PRIVACY_CLEANUP_FAILURE`, `PRIVACY_CLEANUP_FAILED`, `PRIVACY_CLEANUP_OVERDUE`) and `Request failed`;
+   - then do step 3.
+3. **Re-run the cleanup:** Vercel → `cv-builder-backend` → Settings → Cron Jobs → `/api/v1/guest-imports/cleanup` → Run.
+   - A job is only retried once its `retry_at` has passed; until then the run skips it. The backoff is at most about 17 hours, so every failing job is due again by the next nightly run. Setting `retry_at = now()` on a job makes it due at once, but that is a production write: make it deliberately.
+   - A clean run sets `last_success_at` and `failures = 0`. The cleanup rule stops firing at the next hourly check, and the 503 upload pause lifts at once.
+   - Then fix the cause, deploy, and run it again.
+4. **Close it:** acknowledge the events on Alerts once the deletions show `status = 'complete'` and the cleanup row is healthy.
+
+**Known benign cases:**
+- **A late Hobby cron.** It can start any time in the scheduled hour. If today's run starts more than about 5 minutes later in the hour than yesterday's, the 03:05 check sees just over 24 hours since the last success, and "Privacy cleanup unhealthy" fires with `no successful run for 24.1 h` and `failures = 0`. It clears at the next check after the run. If this keeps happening, raise the 24-hour constant in `analytics.privacy_cleanup_health` to 25 with a new migration; 25 still fires before the 30-hour pause.
+- **A deletion requested between about 00:55 and 03:00 UTC.** Its `upload_guard` wait ends after that night's run, so it completes at the next night's run, 25 to 26 hours after the request. "Account deletion overdue" fires once, with step `upload_guard` and no failures. That is the designed wait, not a failure.
+
 ## Free trial on Monthly (from 2026-11-05)
 The 3-day free trial moved from the Weekly to the Monthly plan. No migration was needed: the metrics, `trial_outcomes` and `public.trial_reminder_queue` read each subscription's own plan, price and interval (era note in [metrics-inventory.md](metrics-inventory.md#data-eras)). After the backend deploy:
 1. **Plan catalog.** `public.billing_plan_catalog` is a nightly snapshot of the code's plan list, so until the next 03:30 UTC refresh it still says `weekly` has the trial. No metric reads `trial_supported`, so waiting is harmless; to flip it at once, run the cron from Vercel (`cv-builder-backend` → Settings → Cron Jobs → `/api/v1/billing/analytics/refresh` → Run). Check: `select plan_code, trial_supported, trial_days from public.billing_plan_catalog order by plan_code;` shows `monthly` true / 3 and `weekly` false / 0.
@@ -96,6 +146,7 @@ In the gap between steps 2 and 3, the dashboard returns `503 ANALYTICS_UNAVAILAB
 | Numbers differ from a KB query | Check the function comment's `definition` and the KB file's "Dashboard definition" note. The dashboard uses UTC, excludes internal, restricted and pending-deletion accounts, and uses `analysis_users`. |
 | Contract violations > 0 on Data health | A migration forgot the final `revoke … from public` or a grant leaked. Run `select * from analytics_private.contract_violations();`. |
 | Precomputed metrics stale | Check `analytics_nightly` in `cron.job_run_details` and `admin_app.refresh_runs`; trigger Recompute. |
+| "Privacy cleanup unhealthy" or "Account deletion overdue" alert | Follow [Privacy cleanup alerts](#privacy-cleanup-alerts): find the stuck step in `public.privacy_jobs`, watch the logs, re-run the cron from Vercel → `cv-builder-backend` → Settings → Cron Jobs. |
 
 ## Privacy guarantees (keep them when changing code)
 - User-level reads go only through `analytics_people.*`. Each read requires an audit row written in the same transaction (`admin_app.log_access`); the database refuses the read without it.

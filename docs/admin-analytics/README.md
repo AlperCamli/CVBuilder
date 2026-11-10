@@ -24,7 +24,7 @@ Also useful:
   - SQL in `backend/supabase/migrations/2026103*–2026110*_analytics_*.sql`
 - **Database:** Supabase project `brgzizrnwsqnvjtvfbbs` (eu-central-1). The backend connects as the execute-only role `analytics_api` via `ANALYTICS_DATABASE_URL` (pooler, port 6543, 15 s statement timeout).
 - **Schemas:**
-  - `analytics`: 40 metric functions (5 of them on the anonymous visitor funnel, `20261107120000_funnel_daily_stats.sql`).
+  - `analytics`: 43 metric functions (5 of them on the anonymous visitor funnel, `20261107120000_funnel_daily_stats.sql`; `privacy_cleanup_health` watches the daily privacy cleanup, `20261113140000_privacy_cleanup_alert.sql`).
   - `analytics_people`: user lookups, audited in the same transaction.
   - `analytics_private`: helpers and materialized views.
   - `admin_app`: audit log, alert rules and events, refresh runs, catalog.

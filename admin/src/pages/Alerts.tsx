@@ -9,7 +9,10 @@ import { ApiError, useCatalog, type CatalogEntry } from "@/lib/api";
 import {
   findMeta,
   formatCondition,
+  isHighSeverity,
+  isPointInTime,
   readEvent,
+  ruleWindowLabel,
   targetLabel,
   useAckEvent,
   useAlertEvents,
@@ -17,7 +20,6 @@ import {
   useDeleteRule,
   useSaveRule,
   useToggleRule,
-  windowLabel,
   type AlertEvent,
   type AlertRule,
   type EventStatus,
@@ -57,6 +59,12 @@ const windowDates = (from: string | null, to: string | null) =>
 
 const actionError = (error: unknown) => (error instanceof ApiError ? error.message : errorCopy(error).title);
 
+const HighSeverityPill = () => (
+  <Pill tone="bad" title="Needs action today: account deletions are a legal obligation.">
+    High severity
+  </Pill>
+);
+
 // --- Events ------------------------------------------------------------------------------------------------
 
 function EventItem({ event, rule, catalog }: { event: AlertEvent; rule: AlertRule | undefined; catalog: CatalogEntry[] | undefined }) {
@@ -65,7 +73,8 @@ function EventItem({ event, rule, catalog }: { event: AlertEvent; rule: AlertRul
   const meta = findMeta(catalog, metric);
   const reading = readEvent(event, rule, meta);
   const measure = event.measure ?? rule?.measure;
-  const dates = windowDates(event.window_from, event.window_to);
+  // A point-in-time metric reports the state at firing time; its `today` window says nothing more.
+  const dates = isPointInTime(meta) ? null : windowDates(event.window_from, event.window_to);
   const name = event.rule_name ?? rule?.name ?? "Deleted rule";
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:gap-4">
@@ -73,6 +82,7 @@ function EventItem({ event, rule, catalog }: { event: AlertEvent; rule: AlertRul
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium">{name}</span>
           {event.acknowledged_at ? <Pill tone="muted">Acknowledged</Pill> : <Pill tone="bad">Open</Pill>}
+          {isHighSeverity(meta, measure) && <HighSeverityPill />}
         </div>
         <p className="text-xs text-muted-foreground">
           Fired <time dateTime={event.fired_at}>{formatTimestamp(event.fired_at)}</time>
@@ -192,7 +202,7 @@ function RuleItem({ rule, catalog, onEdit }: { rule: AlertRule; catalog: Catalog
   const meta = findMeta(catalog, rule.metric);
   const filters = filterSummary(rule);
   const details = [
-    windowLabel(rule.window),
+    ruleWindowLabel(rule.window, meta),
     formatCondition(rule, meta),
     `cooldown ${rule.cooldown_hours} h`,
     ...(rule.params.currency ? [rule.params.currency.toUpperCase()] : []),
@@ -204,6 +214,7 @@ function RuleItem({ rule, catalog, onEdit }: { rule: AlertRule; catalog: Catalog
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium">{rule.name}</span>
           {!rule.enabled && <Pill tone="muted">Disabled</Pill>}
+          {isHighSeverity(meta, rule.measure) && <HighSeverityPill />}
         </div>
         <p className="text-xs text-muted-foreground">{targetLabel(rule.metric, rule.measure, meta)}</p>
         <p className="text-sm">{details.join(" · ")}</p>

@@ -26,6 +26,7 @@ Read this before changing the admin analytics dashboard. It covers where the cod
 | `20261107120000_funnel_daily_stats.sql` | `public.funnel_daily_stats` (anonymous daily event counters, RLS on, no policies) and `public.bump_funnel_event` (service_role only), written by `POST /api/v1/funnel-events` (`backend/src/modules/funnel-events/`); `analytics_private.funnel_rows`; Acquisition metrics `visitor_trend`, `visitor_funnel`, `visitor_event_details`, plus `pre_signup_onboarding` and `onboarding_referrals` over `public.onboarding_monthly_stats` |
 | `20261112120000_trial_outcomes_charge_pending.sql` | `trial_outcomes` v2 (`converted_switch`, `charge_pending` group, `replacement_subscription_id`); `trial_to_paid` recreated with `charge_pending`; `kpi_overview` trial block reads `trial_outcomes` (body otherwise unchanged) |
 | `20261112130000_ai_cost_observability.sql` | `public.ai_usage_events` (append-only per-attempt AI usage ledger, RLS on, service_role select/insert only; segment derived on insert; links set null on run/account deletion), `public.backfill_ai_run_cost_estimates()`, `ai_model_prices.cache_write_usd`, `ai_runs.cost_usd_estimated`; `run_cost.segment`, `ai_segments`, `ai_usage_ledger`, `ai_ledger_start`; `ai_run_scope` / `ai_cost` / `ai_cost_anomalies` / `ai_tokens_by_model` / `ai_runs_by_user` on the `ai_segment` filter; metrics `ai_spend`, `ai_ledger_health` |
+| `20261113140000_privacy_cleanup_alert.sql` | `analytics.privacy_cleanup_health` (alertable, point-in-time kpi over `privacy_cleanup_health` / `privacy_jobs`); `analytics_private.alert_detail`; `validate_alert_rule` and `evaluate_alerts` recreated with the `point_in_time`, `alert_detail` and measure `severity` meta keys (unchanged otherwise); seeds the rules "Privacy cleanup unhealthy" and "Account deletion overdue" |
 | `20261112140000_kpi_overview_ai_segment.sql` | `kpi_overview` accepts `ai_segment` for its AI cost columns (`analytics_private.ai_segments`, same population as `ai_cost`); every other measure `ignores_filters` it; body otherwise the 20261112120000 one |
 
 **Tests:** `backend/tests/sql/analytics-*.sql`, run by `backend/scripts/verify-privacy-sql.sh`. That script creates a temporary local Postgres, stubs the Supabase roles and schemas, applies **all** migrations, then runs the test files it lists explicitly (a new file must be added to the list). Every test runs after the latest migration, so a later migration that changes a function can break an earlier phase's test.
@@ -144,6 +145,10 @@ Use the people signature. Call `analytics_private.assert_audited('<fn>', p_user_
 
 ### Make a metric alertable
 Shape `kpi` (one row) and `"alertable": true`. Rules reference one numeric column. Thresholds are stored in the column's unit; ratios as 0–1; `pct_change_*` as signed fractions.
+- A metric of the current state (it ignores the range, like `privacy_cleanup_health`) also sets `"point_in_time": true`: its rules must use `today` with `gt`/`lt` and re-fire after their cooldown while the condition holds.
+- To put context in the alert text, return a text column and name it in `"alert_detail"`. Keep it free of personal data: counts, ages, constants.
+- Mark a measure `"severity": "high"` for a "High severity" pill and a `[High severity]` message prefix.
+- A seeded rule is a plain `insert into admin_app.alert_rules` in the migration with params from `analytics_private.validate_alert_rule`; the SQL test then has to account for it (see `analytics-alerts.sql`, which deletes the seeded rules before the Phase 5 block).
 
 ### Add a precomputed (materialized-view) metric
 1. Create the MV in `analytics_private` with a **plain unique index**, so `REFRESH … CONCURRENTLY` works.
@@ -216,6 +221,7 @@ Deploy order is always **migration → backend → admin**. A push to `main` aut
 - Email delivery for alerts, and scheduled email reports (needs an email provider).
 
 **Known small gaps:**
+- Privacy cleanup alerts: a failed privacy job's error is not stored or logged (`PRIVACY_JOB_RETRY` carries only the kind), so the alert can name the stuck step but not the cause. On Vercel Hobby the 03:00 cron may start late in its hour, which can trip the 24-hour "no successful run" check by a few minutes (runbook "Privacy cleanup alerts").
 - `analytics-monetization.sql` (`in_trial wrong`) and `analytics-engagement.sql` (`monthly cohort grid must stop at the snapshot month`) depend on the current date and fail when "today − 3 days" crosses a month boundary (seen on 2026-11-02). They fail the same way without the visitor-funnel migration.
 - The visitor-funnel metrics count events, not people (no identifiers), and cannot exclude internal accounts; `utm_source` is kept only for the page session (lost on a reload or the Google sign-in redirect).
 - The drill drawer never forwards the page's `include_internal`, so drill lists always exclude admin accounts. The drill filters `outcome` (trial_conversions) and `reason_group` (churned_subscribers) are supported in SQL but not sent by the UI.

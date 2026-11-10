@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogEntry, MetricMeta } from "./api";
+import { catalogSchema, type CatalogEntry, type MetricMeta } from "./api";
 import {
   alertableMetrics,
+  allowedConditions,
+  allowedWindows,
   eventSchema,
   formatCondition,
   inputToThreshold,
+  isHighSeverity,
+  isPointInTime,
   measureOptions,
   parseFilterInput,
   readEvent,
+  ruleWindowLabel,
   rulesSchema,
   summarySchema,
   thresholdToInput,
@@ -111,5 +116,40 @@ describe("parsing", () => {
     ] as CatalogEntry[];
     expect(alertableMetrics(catalog).map((m) => m.name)).toEqual(["kpi_health", "kpi_overview"]);
     expect(measureOptions(meta()).map((m) => m.key)).toEqual(["ai_cost", "ai_failure_rate", "failed_payments"]);
+  });
+});
+
+describe("point-in-time metrics and severity", () => {
+  const privacy = meta({
+    title: "Privacy cleanup health",
+    filters: [],
+    point_in_time: true,
+    measures: {
+      cleanup_unhealthy: { label: "Cleanup unhealthy (1 = yes)", unit: "count" },
+      deletions_overdue: { label: "Account deletions pending over 24 h", unit: "count", severity: "high" },
+    },
+  });
+
+  it("reads point_in_time and measure severity from the catalog, dropping malformed values", () => {
+    const [entry, other] = catalogSchema.parse({
+      metrics: [
+        { name: "privacy_cleanup_health", kind: "metric", meta: { ...privacy, measures: { ...privacy.measures, guest_backlog: { label: "Backlog", severity: "urgent" } } } },
+        { name: "kpi_health", kind: "metric", meta: { ...meta(), point_in_time: "yes" } },
+      ],
+    }).metrics;
+    expect(isPointInTime(entry.meta)).toBe(true);
+    expect(isHighSeverity(entry.meta, "deletions_overdue")).toBe(true);
+    expect(isHighSeverity(entry.meta, "cleanup_unhealthy")).toBe(false);
+    expect(isHighSeverity(entry.meta, "guest_backlog")).toBe(false);
+    expect(isPointInTime(other.meta)).toBe(false);
+    expect(isHighSeverity(undefined, "deletions_overdue")).toBe(false);
+  });
+
+  it("limits point-in-time rules to the current state with above / below", () => {
+    expect(allowedWindows(privacy)).toEqual(["today"]);
+    expect(allowedConditions(privacy)).toEqual(["gt", "lt"]);
+    expect(allowedWindows(meta())).toEqual(["today", "1d", "7d", "30d"]);
+    expect(ruleWindowLabel("today", privacy)).toBe("Current state");
+    expect(ruleWindowLabel("today", meta())).toBe("Today so far");
   });
 });
