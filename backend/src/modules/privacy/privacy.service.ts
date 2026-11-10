@@ -259,7 +259,8 @@ export class PrivacyService {
       check((await this.db.from("job_status_history").delete().eq("changed_by_user_id", userId)).error);
       // Keeps anonymised billing history and deletes the subscriptions; safe to repeat on resume.
       check((await this.db.rpc("archive_billing_history", { p_user: userId })).error);
-      const tables = ["cover_letter_exports", "exports", "cv_score_improvements", "imports", "cv_block_revisions", "ai_suggestions", "tailoring_session_tasks", "tailoring_sessions", "ai_runs", "cover_letters", "tailored_cvs", "jobs", "master_cvs", "files", "usage_counters", "subscriptions"];
+      // imports follow ai_runs: their SET NULL FK would update ai_runs, which the AI privacy guard rejects for an erased user.
+      const tables = ["cover_letter_exports", "exports", "cv_score_improvements", "cv_block_revisions", "ai_suggestions", "tailoring_session_tasks", "tailoring_sessions", "ai_runs", "imports", "cover_letters", "tailored_cvs", "jobs", "master_cvs", "files", "usage_counters", "subscriptions"];
       for (let index = Number(job.manifest.database_cursor ?? 0); index < tables.length; index++) {
         withinBudget(deadline);
         check((await this.db.from(tables[index]).delete().eq("user_id", userId)).error);
